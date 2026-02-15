@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnyTransport - We save you money moving anything, anywhere</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/navbar.css">
+    <link rel="stylesheet" href="css/house-removal.css">
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js'></script>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-logo">
+                <img src="assets/logo.jpeg" alt="AnyTransport Logo" class="logo-img">
+                <span class="logo-text">AnyTransport</span>
+            </div>
+            <div class="navbar-menu">
+                <a href="#about" class="nav-link">About Us</a>
+                <a href="#services" class="nav-link">Our Services</a>
+                <a href="#how-it-works" class="nav-link">How it Works</a>
+                <a href="#pricing" class="nav-link">Pricing</a>
+                <a href="#faq" class="nav-link">FAQ</a>
+                <a href="#contact" class="nav-link">Contact Us</a>
+            </div>
+            <div class="navbar-right">
+                <!-- Auth menu (shown when NOT logged in) -->
+                <div id="auth-menu" style="display: flex;">
+                    <button class="btn btn-outline" onclick="openLoginModal()">Login</button>
+                </div>
+                <!-- User menu (shown when logged in) -->
+                <div id="user-menu" style="display: none;">
+                    <a href="dashboard.html" style="text-decoration: none;">
+                        <div class="navbar-avatar" id="navbar-user-avatar">U</div>
+                    </a>
+                    <button class="btn btn-primary" onclick="logout()" style="margin-left: 10px;">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeLoginModal()">&times;</span>
+            <h2>Log In</h2>
+            <form id="login-form">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" required placeholder="your@email.com">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" required placeholder="Your password">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Log In</button>
+            </form>
+            <p style="text-align: center; margin-top: 20px;">
+                Don't have an account? <a href="#" onclick="switchToSignup()" style="color: #4A90E2;">Sign Up</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- Signup Modal -->
+    <div id="signup-modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeSignupModal()">&times;</span>
+            <h2>Sign Up</h2>
+            <form id="signup-form">
+                <div class="form-group">
+                    <label>Full Name</label>
+                    <input type="text" name="name" required placeholder="John Doe">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="signup-email" name="email" required placeholder="your@email.com" onpaste="return false" oncopy="return false" oncut="return false" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Confirm Email</label>
+                    <input type="email" id="signup-email-confirm" required placeholder="Confirm your email" onpaste="return false" oncopy="return false" oncut="return false" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <div style="display: flex; gap: 8px; align-items: stretch;">
+                        <input type="password" id="signup-password" name="password" required placeholder="Create a password" style="flex: 1;" onpaste="return false" oncopy="return false" oncut="return false" autocomplete="new-password">
+                        <button type="button" style="padding: 8px 12px; background: #e8f0fe; border: 1px solid #cce5ff; border-radius: 4px; cursor: pointer; white-space: nowrap;" onclick="togglePasswordVisibility(this)">Show</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Confirm Password</label>
+                    <div style="display: flex; gap: 8px; align-items: stretch;">
+                        <input type="password" id="signup-password-confirm" required placeholder="Confirm your password" style="flex: 1;" onpaste="return false" oncopy="return false" oncut="return false" autocomplete="new-password">
+                        <button type="button" style="padding: 8px 12px; background: #e8f0fe; border: 1px solid #cce5ff; border-radius: 4px; cursor: pointer; white-space: nowrap;" onclick="togglePasswordVisibility(this)">Show</button>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Sign Up</button>
+            </form>
+            <p style="text-align: center; margin-top: 20px;">
+                Already have an account? <a href="#" onclick="switchToLogin()" style="color: #4A90E2;">Log In</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- Hero Section -->
+    <main>
+        <section class="hero-section">
+            <div class="hero-container">
+                <div class="hero-content">
+                    <div class="hero-content-box">
+                        <h1>Low Cost House Removals</h1>
+                        <p class="hero-subtitle">Get quotes from local transport companies and save up to 75%!</p>
+                        
+                        <div class="hero-cta-group">
+                            <button class="btn btn-cta btn-hero-cta" onclick="scrollToServicesSection()">
+                                A To B Move
+                            </button>
+                            <button class="btn btn-cta btn-hero-cta" onclick="scrollToServicesSection()">
+                                Multiple Stops Move
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="hero-image">
+                    <img src="https://images.unsplash.com/photo-1586864387634-27a89e72d4a9?w=600" alt="Transport Van" />
+                </div>
+            </div>
+        </section>
+
+        </section>
+
+        <!-- How We Work Section -->
+        <section class="how-we-work">
+            <div class="section-container">
+                <h2>How we work?</h2>
+                <div class="work-steps-wrapper">
+                    <div class="work-step">
+                        <div class="step-icon-wrapper">
+                            <div class="step-icon">
+                                <svg width="100" height="100" viewBox="0 0 100 100" fill="none">
+                                    <circle cx="50" cy="50" r="45" fill="#E3F2FD"/>
+                                    <circle cx="35" cy="38" r="5" fill="#4A90E2"/>
+                                    <circle cx="50" cy="32" r="5" fill="#4A90E2"/>
+                                    <circle cx="65" cy="38" r="5" fill="#4A90E2"/>
+                                    <rect x="35" y="52" width="30" height="16" rx="2" fill="#4A90E2"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="step-number">1</div>
+                        <p class="step-text">Tell us about<br>your job</p>
+                    </div>
+                    <div class="work-step-connector"></div>
+                    <div class="work-step">
+                        <div class="step-icon-wrapper">
+                            <div class="step-icon">
+                                <svg width="100" height="100" viewBox="0 0 100 100" fill="none">
+                                    <circle cx="50" cy="50" r="45" fill="#E3F2FD"/>
+                                    <rect x="28" y="32" width="16" height="22" rx="2" fill="none" stroke="#4A90E2" stroke-width="2.5"/>
+                                    <path d="M 34 38 L 37 41 L 42 36" stroke="#4A90E2" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <rect x="56" y="32" width="16" height="22" rx="2" fill="none" stroke="#4A90E2" stroke-width="2.5"/>
+                                    <circle cx="64" cy="40" r="2.5" fill="#4A90E2"/>
+                                    <rect x="40" y="60" width="20" height="14" rx="3" fill="#4A90E2"/>
+                                    <path d="M 50 67 L 50 74 M 46 71 L 50 74 L 54 71" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="step-number">2</div>
+                        <p class="step-text">Compare your<br>quotes</p>
+                    </div>
+                    <div class="work-step-connector"></div>
+                    <div class="work-step">
+                        <div class="step-icon-wrapper">
+                            <div class="step-icon">
+                                <svg width="100" height="100" viewBox="0 0 100 100" fill="none">
+                                    <circle cx="50" cy="50" r="45" fill="#E3F2FD"/>
+                                    <rect x="32" y="35" width="20" height="28" rx="2" fill="#4A90E2"/>
+                                    <text x="42" y="58" font-size="18" font-weight="bold" fill="white" text-anchor="middle">€</text>
+                                    <circle cx="64" cy="40" r="7" fill="#4A90E2"/>
+                                    <rect x="59" y="53" width="10" height="7" rx="1.5" fill="#4A90E2"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="step-number">3</div>
+                        <p class="step-text">The choice<br>is yours</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Services Section -->
+        <section class="services-section" id="services">
+            <div class="section-container">
+                <h2>Which service would you like to avail of?</h2>
+                <div class="services-grid">
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=House%20Removals'">
+                        <img src="https://images.unsplash.com/photo-1600518464441-9154a4dea21b?w=400" alt="House Removals">
+                        <div class="service-overlay">
+                            <h3>House Removals</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Customized%20Items'">
+                        <img src="https://images.unsplash.com/photo-1581783898377-1c85bf937427?w=400" alt="Customized Items">
+                        <div class="service-overlay">
+                            <h3>Customized Items</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Car%20Transport'">
+                        <img src="https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=400" alt="Car Transport">
+                        <div class="service-overlay">
+                            <h3>Car Transport</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Piano%20Transport'">
+                        <img src="https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=400" alt="Piano Transport">
+                        <div class="service-overlay">
+                            <h3>Piano Transport</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Trailers%20%26%20Campervans%20Transport'">
+                        <img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400" alt="Trailers & Campervans Transport">
+                        <div class="service-overlay">
+                            <h3>Trailers & Campervans Transport</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Motorbike%20Transport'">
+                        <img src="https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=400" alt="Motorbike Transport">
+                        <div class="service-overlay">
+                            <h3>Motorbike Transport</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Specialist%20%26%20Antiques'">
+                        <img src="https://images.unsplash.com/photo-1513694203232-719a280e022f?w=400" alt="Special & Antiques Items">
+                        <div class="service-overlay">
+                            <h3>Special & Antiques Items</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Packaging'">
+                        <img src="https://images.unsplash.com/photo-1586864387634-27a89e72d4a9?w=400" alt="Packaged Items & Parcels">
+                        <div class="service-overlay">
+                            <h3>Packaged Items & Parcels</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Vehicle%20Parts'">
+                        <img src="https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?w=400" alt="Vehicle Parts">
+                        <div class="service-overlay">
+                            <h3>Vehicle Parts</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Freight'">
+                        <img src="https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400" alt="Freight">
+                        <div class="service-overlay">
+                            <h3>Freight</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Clearance'">
+                        <img src="https://images.unsplash.com/photo-1581783898377-1c85bf937427?w=400" alt="Clearance">
+                        <div class="service-overlay">
+                            <h3>Clearance</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Boats'">
+                        <img src="https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400" alt="Boats">
+                        <div class="service-overlay">
+                            <h3>Boats</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Office%20Removals'">
+                        <img src="https://images.unsplash.com/photo-1497366216548-37526070297c?w=400" alt="Office Removals">
+                        <div class="service-overlay">
+                            <h3>Office Removals</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Industrial'">
+                        <img src="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=400" alt="Industrial">
+                        <div class="service-overlay">
+                            <h3>Industrial</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Man%20Power%20Only'">
+                        <img src="https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=400" alt="Man Power Only">
+                        <div class="service-overlay">
+                            <h3>Man Power Only</h3>
+                        </div>
+                    </div>
+                    <div class="service-card" onclick="window.location.href='create-job.html?service=Other'">
+                        <img src="https://images.unsplash.com/photo-1586864387967-d02ef85d93e8?w=400" alt="Others">
+                        <div class="service-overlay">
+                            <h3>Others</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- House Removal Quote Modal -->
+        <div id="house-removal-modal" class="modal">
+            <div class="modal-content modal-large">
+                <span class="modal-close" onclick="closeHouseRemovalModal()">&times;</span>
+                <h2>Get Free Removal Quotes</h2>
+                <form id="house-removal-form" class="house-removal-form">
+                    <!-- Service Type -->
+                    <div class="form-group">
+                        <label>Service Type</label>
+                        <select id="removal-service-type" class="form-input" required>
+                            <option value="">Select Service Type</option>
+                            <option value="Home Removals">Home Removals</option>
+                            <option value="Office Removals">Office Removals</option>
+                            <option value="Commercial">Commercial</option>
+                        </select>
+                    </div>
+
+                    <!-- Moving From and To -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div class="form-group">
+                            <label>Moving from:</label>
+                            <select id="moving-from-type" class="form-input" required>
+                                <option value="">Choose property type</option>
+                                <option value="Flat">Flat</option>
+                                <option value="Detached House">Detached House</option>
+                                <option value="Semi-Detached">Semi-Detached</option>
+                                <option value="Terraced">Terraced</option>
+                                <option value="Bungalow">Bungalow</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Moving to:</label>
+                            <select id="moving-to-type" class="form-input" required>
+                                <option value="">Choose property type</option>
+                                <option value="Flat">Flat</option>
+                                <option value="Detached House">Detached House</option>
+                                <option value="Semi-Detached">Semi-Detached</option>
+                                <option value="Terraced">Terraced</option>
+                                <option value="Bungalow">Bungalow</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Room Selection Tabs -->
+                    <div class="room-tabs">
+                        <button type="button" class="room-tab-btn active" data-room="living">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 13h2v8H3z"/><path d="M19 13h2v8h-2z"/><path d="M5 21h14v2H5z"/><path d="M5 9h14v10H5z"/><path d="M3 5h18v4H3z"/>
+                            </svg>
+                            Living
+                        </button>
+                        <button type="button" class="room-tab-btn" data-room="dining">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <rect x="3" y="7" width="18" height="10" rx="2"/><line x1="3" y1="9" x2="21" y2="9" stroke="white" stroke-width="2"/>
+                            </svg>
+                            Dining
+                        </button>
+                        <button type="button" class="room-tab-btn" data-room="kitchen">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <rect x="2" y="7" width="20" height="13" rx="2"/><line x1="8" y1="7" x2="8" y2="20" stroke="white" stroke-width="2"/><line x1="16" y1="7" x2="16" y2="20" stroke="white" stroke-width="2"/>
+                            </svg>
+                            Kitchen
+                        </button>
+                        <button type="button" class="room-tab-btn" data-room="office">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="9" x2="9" y2="15" stroke="white" stroke-width="2"/><line x1="15" y1="9" x2="15" y2="15" stroke="white" stroke-width="2"/>
+                            </svg>
+                            Office
+                        </button>
+                        <button type="button" class="room-tab-btn" data-room="bedrooms">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <rect x="2" y="4" width="20" height="16" rx="2"/><rect x="6" y="8" width="8" height="6" fill="white"/>
+                            </svg>
+                            Bedrooms
+                        </button>
+                        <button type="button" class="room-tab-btn" data-room="bathrooms">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M4 4h16v2H4zM6 6h12v12H6zM9 10h6v2H9z"/>
+                            </svg>
+                            Bathrooms
+                        </button>
+                        <button type="button" class="room-tab-btn" data-room="garden">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6z"/>
+                            </svg>
+                            Garden
+                        </button>
+                        <button type="button" class="room-tab-btn" data-room="boxes">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
+                            </svg>
+                            Boxes & Other
+                        </button>
+                    </div>
+
+                    <!-- Room Items Container -->
+                    <div id="room-items-container" class="room-items-list">
+                        <!-- Items will be dynamically loaded here -->
+                    </div>
+
+                    <!-- Packing Options -->
+                    <div class="form-section">
+                        <h3>Do you require packing? Tick relevant options.</h3>
+                        <div class="form-group checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="packing" value="full">
+                                <span>Full packing service including packing materials</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="packing" value="dismantle">
+                                <span>Dismantling and Assembly required</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="packing" value="one-person">
+                                <span>Only require 1 person (happy to help myself if needed)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Estimated Move Date -->
+                    <div class="form-group">
+                        <label>Estimated move date</label>
+                        <input type="date" id="move-date" class="form-input" required>
+                    </div>
+
+                    <!-- Special Instructions -->
+                    <div class="form-section expandable">
+                        <h3>Additional information - (Optional)</h3>
+                        <div class="expandable-content">
+                            <label>Special instructions</label>
+                            <textarea id="special-instructions" class="form-input" placeholder="Enter any special instructions here" rows="4"></textarea>
+                            
+                            <label style="margin-top: 16px;">Add photos</label>
+                            <div class="photo-upload-grid">
+                                <div class="photo-upload-box">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
+                                    </svg>
+                                    <p>Drag photo here <span onclick="document.getElementById('photo-input-1').click(); return false;" style="cursor: pointer; text-decoration: underline;">upload</span></p>
+                                    <input type="file" id="photo-input-1" style="display: none;" accept="image/*">
+                                </div>
+                                <div class="photo-upload-box">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
+                                    </svg>
+                                    <p>Drag photo here <span onclick="document.getElementById('photo-input-2').click(); return false;" style="cursor: pointer; text-decoration: underline;">upload</span></p>
+                                    <input type="file" id="photo-input-2" style="display: none;" accept="image/*">
+                                </div>
+                                <div class="photo-upload-box">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
+                                    </svg>
+                                    <p>Drag photo here <span onclick="document.getElementById('photo-input-3').click(); return false;" style="cursor: pointer; text-decoration: underline;">upload</span></p>
+                                    <input type="file" id="photo-input-3" style="display: none;" accept="image/*">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Get Prices Button -->
+                    <button type="submit" class="btn btn-primary" style="width: 100%; background: #FF4081; margin-top: 24px; font-size: 1.1rem; padding: 14px;">Get Prices</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-container">
+                <div class="footer-content">
+                    <div class="footer-brand">
+                        <div class="footer-logo-container">
+                            <img src="assets/logo.jpeg" alt="AnyTransport Logo" class="footer-logo">
+                            <span class="footer-logo-text">AnyTransport</span>
+                        </div>
+                        <p>We're here to make moving anything easier, more affordable, and greener for everyone. And we're pretty good at it too - just ask the furniture.</p>
+                        <div class="social-icons">
+                            <a href="#" class="social-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                                </svg>
+                            </a>
+                            <a href="#" class="social-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                                </svg>
+                            </a>
+                            <a href="#" class="social-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
+                                </svg>
+                            </a>
+                            <a href="#" class="social-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                                </svg>
+                            </a>
+                            <a href="#" class="social-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                                </svg>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div class="footer-column">
+                        <h4>Company</h4>
+                        <ul>
+                            <li><a href="#about">About Us</a></li>
+                            <li><a href="#contact">Contact Us</a></li>
+                            <li><a href="#careers">Careers</a></li>
+                            <li><a href="#partners">Partners</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="footer-column">
+                        <h4>Services</h4>
+                        <ul>
+                            <li><a href="#man-van">Man With Van</a></li>
+                            <li><a href="#removals">Removals</a></li>
+                            <li><a href="#vehicle">Vehicle Transport</a></li>
+                            <li><a href="#international">International Movers</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="footer-column">
+                        <h4>Resources</h4>
+                        <ul>
+                            <li><a href="#faq">FAQs</a></li>
+                            <li><a href="#help">Help Centre</a></li>
+                            <li><a href="#blog">Blogs</a></li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="footer-newsletter">
+                    <input type="email" placeholder="Username" class="newsletter-input">
+                    <input type="password" placeholder="Password" class="newsletter-input">
+                    <button class="btn btn-newsletter">Driver Login</button>
+                </div>
+                
+                <div class="footer-bottom">
+                    <p>&copy; 2005-2026 AnyTransport Ltd. All rights reserved</p>
+                    <div class="footer-links">
+                        <a href="#privacy">Privacy</a>
+                        <a href="#terms">Terms of Use</a>
+                        <a href="#sitemap">Sitemap</a>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </main>
+<script>
+function scrollToServicesSection() {
+    const section = document.getElementById('services');
+    if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+</script>
+</body>
+<script>
+    // Custom dropdown functionality
+    (function() {
+        const toggle = document.getElementById('dropdown-toggle');
+        const menu = document.getElementById('dropdown-menu');
+        const label = document.getElementById('dropdown-label');
+        const itemTypeInput = document.getElementById('itemType');
+        const items = document.querySelectorAll('.dropdown-item');
+
+        if (!toggle || !menu || !label) {
+            return;
+        }
+
+        // Toggle menu
+        toggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            menu.classList.toggle('active');
+            toggle.classList.toggle('active');
+        });
+
+        // Select item
+        items.forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                const value = item.getAttribute('data-value');
+                const text = item.textContent.trim();
+                
+                label.textContent = text;
+                if (itemTypeInput) itemTypeInput.value = value;
+                
+                menu.classList.remove('active');
+                toggle.classList.remove('active');
+            });
+        });
+
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.custom-dropdown-wrapper')) {
+                menu.classList.remove('active');
+                toggle.classList.remove('active');
+            }
+        });
+    })();
+
+    // Step 1 capture and proceed to detailed form
+    (function() {
+        const startBtn = document.getElementById('start-quote-btn');
+        const itemTypeEl = document.getElementById('itemType');
+        const pickupEl = document.getElementById('pickupLocation');
+        const dropoffEl = document.getElementById('dropoffLocation');
+
+        if (startBtn) {
+            startBtn.addEventListener('click', () => {
+                const payload = {
+                    itemType: itemTypeEl ? itemTypeEl.value : '',
+                    pickup: pickupEl ? pickupEl.value : '',
+                    dropoff: dropoffEl ? dropoffEl.value : '',
+                    savedAt: Date.now()
+                };
+                localStorage.setItem('anytransport_quote_prefill', JSON.stringify(payload));
+                window.location.href = 'create-job.html';
+            });
+        }
+    })();
+</script>
+<script src="js/house-removal.js"></script>
+<script src="js/auth.js"></script>
+<script>
+    // Hide navbar on scroll down, show on scroll up
+    let lastScrollTop = 0;
+    const navbar = document.querySelector('.navbar');
+    
+    window.addEventListener('scroll', function() {
+        let scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        
+        if (scrollTop > lastScrollTop && scrollTop > 100) {
+            // Scrolling down
+            navbar.classList.add('hide');
+        } else {
+            // Scrolling up
+            navbar.classList.remove('hide');
+        }
+        lastScrollTop = scrollTop <= 0 ? 0 : scrollTop; // For Mobile or negative scrolling
+    });
+
+    // Check for #login hash in URL
+    if (window.location.hash === '#login') {
+        openLoginModal();
+        // Remove the hash from URL
+        history.replaceState(null, null, ' ');
+    }
+</script>
+</html>
