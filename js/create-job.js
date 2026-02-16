@@ -56,12 +56,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Floor options for each property type
     const propertyFloors = {
-        house: ['Ground', '1st', '2nd', '3rd'],
-        apartment: ['Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th', '13th', '14th', '15th', '16th', '17th', '18th', '19th', '20th'],
-        duplex: ['Ground', '1st', '2nd'],
-        warehouse: ['Ground', '1st', '2nd', '3rd', '4th'],
-        bungalow: ['Ground'],
-        'storage-unit': ['Ground', '1st', '2nd', '3rd', '4th', '5th']
+        house: ['Attic','Basement', 'Ground', '1st', '2nd', '3rd'],
+        apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th', '13th', '14th', '15th', '16th', '17th', '18th', '19th', '20th'],
+        duplex: ['attic','Basement', 'Ground', '1st', '2nd'],
+        warehouse: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
+        bungalow: ['Basement', 'Ground'],
+        'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
     };
 
     // SVG icon for floor (simple stairs/level icon)
@@ -356,12 +356,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Property type to available floors mapping
     const propertyFloors = {
-        house: ['Ground', '1st', '2nd', '3rd'],
-        apartment: ['Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th', '13th', '14th', '15th', '16th', '17th', '18th', '19th', '20th'],
-        duplex: ['Ground', '1st', '2nd'],
-        warehouse: ['Ground', '1st', '2nd', '3rd', '4th'],
-        bungalow: ['Ground'],
-        'storage-unit': ['Ground', '1st', '2nd', '3rd', '4th', '5th']
+        house: ['Basement', 'Ground', '1st', '2nd', '3rd'],
+        apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th', '13th', '14th', '15th', '16th', '17th', '18th', '19th', '20th'],
+        duplex: ['Basement', 'Ground', '1st', '2nd'],
+        warehouse: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
+        bungalow: ['Basement', 'Ground'],
+        'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
     };
 
     // Show modal, link floors to property type
