@@ -1,6 +1,6 @@
 // --- Show inventory only when both fields are filled ---
 document.addEventListener('DOMContentLoaded', function () {
-        const inventoryFloorTitle = document.getElementById('inventory-floor-title');
+        const inventoryFloorTitle = document.querySelector('.inventory-floor-title');
     // Property type icon selection step
     const propertyTypeBtns = document.querySelectorAll('.property-type-icon-btn');
     const propertyTypeHidden = document.getElementById('pickup-property-type');
@@ -56,11 +56,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Floor options for each property type
     const propertyFloors = {
-        house: ['Attic','Basement', 'Ground', '1st', '2nd', '3rd'],
-        apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th', '13th', '14th', '15th', '16th', '17th', '18th', '19th', '20th'],
-        duplex: ['attic','Basement', 'Ground', '1st', '2nd'],
+        house: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', 'Attic'],
+        apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'],
+        duplex: ['Basement', 'Ground', '1st', '2nd','Attic'],
         warehouse: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
-        bungalow: ['Basement', 'Ground'],
+        bungalow: ['Basement', 'Ground','Attic'],
         'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
     };
 
@@ -251,8 +251,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Title
         const title = document.createElement('h3');
+        title.className = 'inventory-floor-title';
         title.textContent = `Inventory for ${floorName} Floor`;
-        title.style.marginBottom = '18px';
         block.appendChild(title);
 
         // Inventory tabs (room type icons)
