@@ -1,11 +1,151 @@
 // --- Show inventory only when both fields are filled ---
 document.addEventListener('DOMContentLoaded', function () {
+        // Sticky Next button logic
+        const stickyNextBtn = document.getElementById('sticky-next-btn');
+        const stepNextBtn = document.getElementById('step-next-btn');
+        function showStickyNextBtn() {
+            if (stickyNextBtn) {
+                stickyNextBtn.classList.add('show');
+                stickyNextBtn.classList.remove('hide');
+            }
+        }
+        function hideStickyNextBtn() {
+            if (stickyNextBtn) {
+                stickyNextBtn.classList.remove('show');
+                stickyNextBtn.classList.add('hide');
+            }
+        }
+        // Requirements check for each step
+        function requirementsMetForStep(step) {
+            // Step 1: require all visible required fields
+            if (step === 1) {
+                const pickupAddress = document.getElementById('pickup-address');
+                const pickupCity = document.getElementById('pickup-city');
+                const deliveryAddress = document.getElementById('delivery-address');
+                const deliveryCity = document.getElementById('delivery-city');
+                return pickupAddress && pickupAddress.value.trim() &&
+                    pickupCity && pickupCity.value.trim() &&
+                    deliveryAddress && deliveryAddress.value.trim() &&
+                    deliveryCity && deliveryCity.value.trim();
+            }
+            // Step 2: property type required
+            if (step === 2) {
+                const propertyType = document.getElementById('pickup-property-type');
+                return propertyType && propertyType.value.trim();
+            }
+            // Step 3: floor required AND at least one inventory item
+            if (step === 3) {
+                const floor = document.getElementById('pickup-floor-select');
+                let inventoryList = [];
+                if (floor && floor.value.trim()) {
+                    // Find inventory block for selected floor
+                    let inventoryBlock = null;
+                    Array.from(document.querySelectorAll('.floors-inventory-container .floor-inventory-block')).forEach(b => {
+                        const title = b.querySelector('h3');
+                        if (title && title.textContent.trim() === `Add Inventory for ${floor.value.trim()} Floor`) {
+                            inventoryBlock = b;
+                        }
+                    });
+                    inventoryList = inventoryBlock ? inventoryBlock.querySelectorAll('.inventory-item.added') : [];
+                }
+                return floor && floor.value.trim() && inventoryList.length > 0;
+            }
+            // Step 4: delivery details required
+            if (step === 4) {
+                const deliveryDetails = document.getElementById('delivery-details');
+                return deliveryDetails && deliveryDetails.value.trim();
+            }
+            // Step 5: additional info (optional, always show button)
+            if (step === 5) {
+                return true;
+            }
+            return true;
+        }
+        // Scroll/visibility logic
+        function updateStickyNextBtnVisibility() {
+            const step = parseInt(document.body.dataset.formStep || '1', 10);
+            // Always show sticky button
+            showStickyNextBtn();
+        }
+        // Sync sticky button with normal Next button
+        if (stickyNextBtn) {
+            stickyNextBtn.onclick = function() {
+                const step = parseInt(document.body.dataset.formStep || '1', 10);
+                setFormStep(step + 1);
+            };
+        }
+        // Listen for input changes to update sticky button
+        document.querySelectorAll('input, select').forEach(el => {
+            el.addEventListener('input', updateStickyNextBtnVisibility);
+            el.addEventListener('change', updateStickyNextBtnVisibility);
+        });
+        // Listen for inventory changes
+        document.querySelectorAll('.inventory-item-add, .inventory-item-remove').forEach(el => {
+            el.addEventListener('click', updateStickyNextBtnVisibility);
+        });
+        // Initial visibility
+        updateStickyNextBtnVisibility();
+        // Scroll logic: hide sticky button if footer is visible
+        window.addEventListener('scroll', function() {
+            const footer = document.querySelector('footer');
+            if (!footer || !stickyNextBtn) return;
+            const rect = footer.getBoundingClientRect();
+            if (rect.top < window.innerHeight) {
+                stickyNextBtn.style.opacity = '0';
+                stickyNextBtn.style.pointerEvents = 'none';
+            } else {
+                stickyNextBtn.style.opacity = '1';
+                stickyNextBtn.style.pointerEvents = 'auto';
+            }
+        });
+    // Back button handler (support both step-back-btn and step-back-btn-top)
+    setTimeout(function() {
+        const backBtnTop = document.getElementById('step-back-btn-top');
+        const backBtn = document.getElementById('step-back-btn');
+        const handleBackClick = function () {
+            let step = 1;
+            if (document.body.dataset && document.body.dataset.formStep) {
+                step = parseInt(document.body.dataset.formStep, 10);
+            }
+                // Step 1: always return to landing page
+                if (step === 1) {
+                    window.location.assign('index.html');
+                    return;
+                }
+                // Step 2: go to step 1 (no landing page reload)
+                if (step === 2) {
+                    if (typeof setFormStep === 'function') {
+                        setFormStep(1);
+                        document.body.dataset.formStep = '1';
+                        document.body.dataset.currentStep = '1';
+                    }
+                    return;
+                }
+                // Steps >2: go back one step (no landing page reload)
+                if (typeof setFormStep === 'function') {
+                    const prevStep = step - 1;
+                    setFormStep(prevStep);
+                    document.body.dataset.formStep = String(prevStep);
+                    document.body.dataset.currentStep = String(prevStep);
+                }
+        };
+        if (backBtnTop) {
+            backBtnTop.disabled = false;
+            backBtnTop.addEventListener('click', handleBackClick);
+        }
+        if (backBtn) {
+            backBtn.disabled = false;
+            backBtn.addEventListener('click', handleBackClick);
+        }
+    }, 100);
         const inventoryFloorTitle = document.querySelector('.inventory-floor-title');
     // Property type icon selection step
     const propertyTypeBtns = document.querySelectorAll('.property-type-icon-btn');
     const propertyTypeHidden = document.getElementById('pickup-property-type');
+    if (propertyTypeHidden) propertyTypeHidden.setAttribute('data-required', 'true');
     const floorIconGrid = document.getElementById('floor-icon-grid');
     const floorHiddenInput = document.getElementById('pickup-floor-select');
+    if (floorHiddenInput) floorHiddenInput.setAttribute('data-required', 'true');
     const inventoryCardContainer = document.getElementById('inventory-card-container');
     const elevatorOptionContainer = document.getElementById('elevator-option-container');
     const elevatorIconGridId = 'elevator-icon-grid';
@@ -59,7 +199,7 @@ document.addEventListener('DOMContentLoaded', function () {
         house: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', 'Attic'],
         apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'],
         duplex: ['Basement', 'Ground', '1st', '2nd','Attic'],
-        warehouse: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
+        'warehouse/Shop': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
         bungalow: ['Basement', 'Ground','Attic'],
         'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
     };
@@ -100,6 +240,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     // Fire change event for listeners
                     const event = new Event('change', { bubbles: true });
                     floorHiddenInput.dispatchEvent(event);
+                }
+                // Show inventory section automatically if in step 3
+                const body = document.body;
+                const inventoryCardContainer = document.getElementById('inventory-card-container');
+                const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
+                if (inventoryCardContainer && isStep3) {
+                    inventoryCardContainer.style.display = '';
+                    // Scroll to inventory section
+                    setTimeout(() => {
+                        inventoryCardContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
                 }
                 // Ensure elevator field updates immediately
                 setTimeout(updateInventoryAndElevatorVisibility, 0);
@@ -175,6 +326,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Render floor icons for this property type
                 renderFloorIcons(propertyTypeHidden.value);
                 updateInventoryAndElevatorVisibility();
+
+                // Always advance to step 3 after selection
+                const step = parseInt(document.body.dataset.formStep, 10) || 1;
+                const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 5;
+                if (typeof setFormStep === 'function' && step === 2 && step + 1 <= totalSteps) {
+                    setFormStep(3);
+                }
             });
         });
     }
@@ -237,7 +395,11 @@ document.addEventListener('DOMContentLoaded', function () {
         'Book Case',
         'Rug',
         'Artwork',
-        'Lamps & Shades'
+        'Lamps & Shades',
+        'Small Boxes',
+        'Medium Boxes',
+        'Large Boxes',
+        'Extra Large Boxes',
     ];
     function createInventoryBlock(floorName) {
         // Block wrapper
@@ -252,7 +414,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Title
         const title = document.createElement('h3');
         title.className = 'inventory-floor-title';
-        title.textContent = `Inventory for ${floorName} Floor`;
+        title.textContent = `Add Inventory for ${floorName} Floor`;
         block.appendChild(title);
 
         // Inventory tabs (room type icons)
@@ -359,7 +521,7 @@ document.addEventListener('DOMContentLoaded', function () {
         house: ['Basement', 'Ground', '1st', '2nd', '3rd'],
         apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th', '13th', '14th', '15th', '16th', '17th', '18th', '19th', '20th'],
         duplex: ['Basement', 'Ground', '1st', '2nd'],
-        warehouse: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
+        'warehouse/Shop': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
         bungalow: ['Basement', 'Ground'],
         'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
     };
@@ -528,7 +690,7 @@ function getMultiStopLocationIconMarkup(value) {
             return '<path d="M6 3h12v18H6z" fill="currentColor"/><path d="M9 6h2v2H9zm4 0h2v2h-2zM9 10h2v2H9zm4 0h2v2h-2zM9 14h2v2H9zm4 0h2v2h-2z" fill="#fff"/>';
         case 'duplex':
             return '<path d="M3 10l9-6 9 6v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="currentColor"/><path d="M12 10v10" stroke="#fff" stroke-width="2"/>';
-        case 'warehouse':
+        case 'warehouse/shop':
             return '<path d="M3 9l9-5 9 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="currentColor"/><path d="M7 20v-6h10v6" stroke="#fff" stroke-width="2"/>';
         case 'bungalow':
             return '<path d="M4 12l8-6 8 6v8H4z" fill="currentColor"/><path d="M9 20v-5h6v5" stroke="#fff" stroke-width="2"/>';
@@ -683,7 +845,7 @@ function buildMultiStopFloorsSection(stopId) {
         { value: 'house', label: 'House' },
         { value: 'apartment', label: 'Apartment' },
         { value: 'duplex', label: 'Duplex' },
-        { value: 'warehouse', label: 'Warehouse' },
+        { value: 'warehouse/Shop', label: 'Warehouse/Shop' },
         { value: 'bungalow', label: 'Bungalow' },
         { value: 'storage-unit', label: 'Storage unit' }
     ]
@@ -709,7 +871,7 @@ function buildMultiStopFloorsSection(stopId) {
                             <option value="house">House</option>
                             <option value="apartment">Apartment</option>
                             <option value="duplex">Duplex</option>
-                            <option value="warehouse">Warehouse</option>
+                            <option value="warehouse/Shop">Warehouse/Shop</option>
                             <option value="bungalow">Bungalow</option>
                             <option value="storage-unit">Storage unit</option>
                         </select>
@@ -1403,7 +1565,7 @@ document.addEventListener('DOMContentLoaded', function() {
             { value: '1', label: '1st' },
             { value: '2', label: '2nd' }
         ],
-        'warehouse': [
+        'warehouse/Shop': [
             { value: 'ground', label: 'Ground' },
             { value: '1', label: '1st' },
             { value: '2', label: '2nd' },
@@ -1509,7 +1671,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const stepLinks = stepper ? Array.from(stepper.querySelectorAll('.stepper-link')) : [];
         const stepItems = stepper ? Array.from(stepper.querySelectorAll('.stepper-item')) : [];
         const stepTargets = Array.from(document.querySelectorAll('[data-form-step], [data-form-steps]'));
-        const stepBackBtn = document.getElementById('step-back-btn');
+        const stepBackBtn = document.getElementById('step-back-btn') || document.getElementById('step-back-btn-top');
         const stepNextBtn = document.getElementById('step-next-btn');
         const getPricesBtn = document.getElementById('get-prices-btn');
         const totalSteps = 4;
@@ -1564,7 +1726,10 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         const updateStepButtons = () => {
-            if (stepBackBtn) stepBackBtn.disabled = currentStep === 1;
+            if (stepBackBtn) {
+                const currentStepDom = parseInt(document.body.dataset.formStep, 10) || 1;
+                stepBackBtn.disabled = currentStepDom === 1;
+            }
             if (stepNextBtn) {
                 if (currentStep >= totalSteps) {
                     stepNextBtn.style.display = 'none';
@@ -1912,6 +2077,7 @@ document.addEventListener('DOMContentLoaded', function() {
         window.updateFormSummary = updateFormSummary;
 
         const setFormStep = (step) => {
+                window.setFormStep = setFormStep;
             if (step < 1 || step > totalSteps) return;
             currentStep = step;
             document.body.dataset.formStep = String(step);
@@ -1931,9 +2097,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         if (stepBackBtn) {
-            stepBackBtn.addEventListener('click', () => {
-                setFormStep(currentStep - 1);
-            });
+            // Handler moved to top for unified logic
         }
 
         if (stepNextBtn) {
@@ -2382,9 +2546,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         if (stepBackBtn) {
-            stepBackBtn.addEventListener('click', () => {
-                setFormStep(currentStep - 1);
-            });
+            // Removed duplicate handler to avoid conflict with main Back button handler
         }
 
         if (stepNextBtn) {
@@ -3480,9 +3642,9 @@ document.addEventListener('DOMContentLoaded', function() {
             itemLabel: 'What to deliver to this room',
             itemPlaceholder: 'e.g. Couch',
             limitedFloorTypes: ['house', 'duplex'],
-            noFloorTypes: ['warehouse'],
-            noRoomTypes: ['warehouse', 'storage-unit'],
-            noElevatorTypes: ['house', 'duplex', 'bungalow', 'warehouse']
+            noFloorTypes: ['warehouse/Shop'],
+            noRoomTypes: ['warehouse/Shop', 'storage-unit'],
+            noElevatorTypes: ['house', 'duplex', 'bungalow', 'warehouse/Shop']
         },
         {
             prefix: 'office-pickup',
@@ -4663,7 +4825,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (!stop.category || !stop.address || !stop.city) return true;
                     if (vehicleCategories.has(stop.category)) return false;
                     if (!stop.locationType) return true;
-                    const noFloorTypes = new Set(['warehouse']);
+                    const noFloorTypes = new Set(['warehouse/Shop']);
                     const hideFloor = noFloorTypes.has(stop.locationType)
                         || (stop.category === 'House Removals' && (stop.locationType === 'house' || stop.locationType === 'bungalow'));
                     return !hideFloor && !stop.floor;
@@ -6112,7 +6274,7 @@ function isMultiStopLocationReady(card, categoryValue) {
     const locationType = getVisibleField('.multi-stop-location-type')?.value.trim() || '';
     if (!locationType) return false;
 
-    const noFloorTypes = new Set(['warehouse']);
+    const noFloorTypes = new Set(['warehouse/Shop']);
     const hideFloor = noFloorTypes.has(locationType)
         || (category === 'House Removals' && (locationType === 'house' || locationType === 'bungalow'));
     if (!hideFloor) {
@@ -6151,7 +6313,7 @@ function isMultiStopDetailsReady(card, categoryValue) {
     const locationType = getVisibleField('.multi-stop-location-type')?.value.trim() || '';
     if (!locationType) return false;
 
-    const noFloorTypes = new Set(['warehouse']);
+    const noFloorTypes = new Set(['warehouse/Shop']);
     const hideFloor = noFloorTypes.has(locationType)
         || (category === 'House Removals' && (locationType === 'house' || locationType === 'bungalow'));
     if (!hideFloor) {
@@ -6362,8 +6524,8 @@ function updateMultiStopLocationDetails(card, typeValue) {
     const floorGroup = floorSelect ? floorSelect.closest('.floor-group') : card.querySelector('.multi-stop-location-meta[data-location-field="floor"]');
     const elevatorGroup = elevatorSelect ? elevatorSelect.closest('.elevator-group') : card.querySelector('.multi-stop-location-meta[data-location-field="elevator"]');
 
-    const noFloorTypes = new Set(['warehouse']);
-    const noElevatorTypes = new Set(['house', 'duplex', 'bungalow', 'warehouse']);
+    const noFloorTypes = new Set(['warehouse/Shop']);
+    const noElevatorTypes = new Set(['house', 'duplex', 'bungalow', 'warehouse/Shop']);
     const hasType = !!type;
     const resolvedServiceValue = document.getElementById('item-description-hidden')?.value || '';
     const serviceValue = isSingleForm || isFloorBlockCard
