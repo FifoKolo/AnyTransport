@@ -71,13 +71,32 @@ document.addEventListener('DOMContentLoaded', function () {
         if (stickyNextBtn) {
             stickyNextBtn.onclick = function() {
                 const step = parseInt(document.body.dataset.formStep || '1', 10);
+                if (!requirementsMetForStep(step)) {
+                    stickyNextBtn.disabled = true;
+                    stickyNextBtn.classList.add('disabled');
+                    stickyNextBtn.style.opacity = '0.5';
+                    return;
+                }
+                stickyNextBtn.disabled = false;
+                stickyNextBtn.classList.remove('disabled');
+                stickyNextBtn.style.opacity = '1';
                 setFormStep(step + 1);
             };
         }
         // Listen for input changes to update sticky button
         document.querySelectorAll('input, select').forEach(el => {
-            el.addEventListener('input', updateStickyNextBtnVisibility);
-            el.addEventListener('change', updateStickyNextBtnVisibility);
+            el.addEventListener('input', function() {
+                updateStickyNextBtnVisibility();
+                const step = parseInt(document.body.dataset.formStep || '1', 10);
+                stickyNextBtn.disabled = !requirementsMetForStep(step);
+                stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
+            });
+            el.addEventListener('change', function() {
+                updateStickyNextBtnVisibility();
+                const step = parseInt(document.body.dataset.formStep || '1', 10);
+                stickyNextBtn.disabled = !requirementsMetForStep(step);
+                stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
+            });
         });
         // Listen for inventory changes
         document.querySelectorAll('.inventory-item-add, .inventory-item-remove').forEach(el => {
@@ -85,6 +104,10 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         // Initial visibility
         updateStickyNextBtnVisibility();
+        // Set initial disabled state for Next button
+        const stepInit = parseInt(document.body.dataset.formStep || '1', 10);
+        stickyNextBtn.disabled = !requirementsMetForStep(stepInit);
+        stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
         // Scroll logic: hide sticky button if footer is visible
         window.addEventListener('scroll', function() {
             const footer = document.querySelector('footer');
@@ -100,6 +123,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     // Back button handler (support both step-back-btn and step-back-btn-top)
     setTimeout(function() {
+        const homeBtnTop = document.getElementById('step-home-btn-top');
         const backBtnTop = document.getElementById('step-back-btn-top');
         const backBtn = document.getElementById('step-back-btn');
         const handleBackClick = function () {
@@ -107,28 +131,21 @@ document.addEventListener('DOMContentLoaded', function () {
             if (document.body.dataset && document.body.dataset.formStep) {
                 step = parseInt(document.body.dataset.formStep, 10);
             }
-                // Step 1: always return to landing page
-                if (step === 1) {
-                    window.location.assign('index.html');
-                    return;
-                }
-                // Step 2: go to step 1 (no landing page reload)
-                if (step === 2) {
-                    if (typeof setFormStep === 'function') {
-                        setFormStep(1);
-                        document.body.dataset.formStep = '1';
-                        document.body.dataset.currentStep = '1';
-                    }
-                    return;
-                }
-                // Steps >2: go back one step (no landing page reload)
-                if (typeof setFormStep === 'function') {
-                    const prevStep = step - 1;
-                    setFormStep(prevStep);
-                    document.body.dataset.formStep = String(prevStep);
-                    document.body.dataset.currentStep = String(prevStep);
-                }
+            // Go back one step (no landing page reload)
+            if (step > 1 && typeof setFormStep === 'function') {
+                const prevStep = step - 1;
+                setFormStep(prevStep);
+                document.body.dataset.formStep = String(prevStep);
+                document.body.dataset.currentStep = String(prevStep);
+            }
         };
+        const handleHomeClick = function () {
+            window.location.assign('index.html');
+        };
+        if (homeBtnTop) {
+            homeBtnTop.disabled = false;
+            homeBtnTop.addEventListener('click', handleHomeClick);
+        }
         if (backBtnTop) {
             backBtnTop.disabled = false;
             backBtnTop.addEventListener('click', handleBackClick);
@@ -137,6 +154,28 @@ document.addEventListener('DOMContentLoaded', function () {
             backBtn.disabled = false;
             backBtn.addEventListener('click', handleBackClick);
         }
+
+        // Hide Back button in step 1
+        function updateBackBtnTopVisibility() {
+            let step = 1;
+            if (document.body.dataset && document.body.dataset.formStep) {
+                step = parseInt(document.body.dataset.formStep, 10);
+            }
+            if (backBtnTop) {
+                if (step === 1) {
+                    backBtnTop.style.display = 'none';
+                } else {
+                    backBtnTop.style.display = 'inline-block';
+                }
+            }
+        }
+        // Initial check
+        document.addEventListener('DOMContentLoaded', updateBackBtnTopVisibility);
+        updateBackBtnTopVisibility();
+        // Listen for step changes
+        document.addEventListener('formStepChanged', updateBackBtnTopVisibility);
+        // Also update on manual changes
+        setInterval(updateBackBtnTopVisibility, 200);
     }, 100);
         const inventoryFloorTitle = document.querySelector('.inventory-floor-title');
     // Property type icon selection step

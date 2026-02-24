@@ -1,0 +1,53 @@
+/* Home and Back Button Styles (copied from sticky-next-btn) */
+.sticky-action-btn {
+    background: #4A90E2;
+    color: #fff;
+    border-radius: 50px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    padding: 16px 32px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.2s;
+    min-width: 100px;
+    margin-left: 0;
+}
+.sticky-action-btn:not(:first-child) {
+    margin-left: 8px;
+}
+/* Sticky Next Button Styles */
+.sticky-next-btn {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    z-index: 1000;
+    opacity: 0;
+    transform: translateY(20px);
+    pointer-events: none;
+    background: #4A90E2;
+    color: #fff;
+    border-radius: 50px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    padding: 16px 32px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.2s;
+}
+.sticky-next-btn.show {
+    display: block;
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+.sticky-next-btn.hide {
+    display: none;
+    opacity: 0;
+    transform: translateY(20px);
+}
+.sticky-action-btn:focus {
+    outline: none;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}

@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="css/navbar.css">
     <link rel="stylesheet" href="css/create-job.css">
     <link rel="stylesheet" href="css/house-removal.css">
+    <link rel="stylesheet" href="css/sticky-next-btn.css">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js'></script>
 </head>
@@ -82,7 +83,8 @@
                 <form id="create-job-form" class="form-v2-main">
                     <div class="form-v2-main-grid">
                             <div class="form-top-actions" style="display: flex; align-items: flex-start; justify-content: flex-start; margin-bottom: 1.5rem;">
-                                <button type="button" class="btn btn-outline" id="step-back-btn-top" style="min-width: 100px;">Back</button>
+                                <button type="button" class="sticky-action-btn" id="step-home-btn-top">Home</button>
+                                <button type="button" class="sticky-action-btn" id="step-back-btn-top">Back</button>
                             </div>
                         <!-- Step 1 removed: Service selection now handled on landing page -->
                         <!-- Step 3 Title placed above the form, only visible for step 3 -->
@@ -165,7 +167,7 @@
                                 </button>
                                 <button type="button" class="property-type-icon-btn" data-value="warehouse" aria-pressed="false">
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-5 9 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="currentColor"/><path d="M7 20v-6h10v6" stroke="#fff" stroke-width="2"/></svg>
-                                    <span>Warehouse</span>
+                                    <span>Warehouse/Shop</span>
                                 </button>
                                 <button type="button" class="property-type-icon-btn" data-value="bungalow" aria-pressed="false">
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l8-6 8 6v8H4z" fill="currentColor"/><path d="M9 20v-5h6v5" stroke="#fff" stroke-width="2"/></svg>
@@ -821,12 +823,12 @@
                                                 </svg>
                                                 <span>Duplex</span>
                                             </button>
-                                            <button type="button" class="location-nav-btn" data-value="warehouse" role="radio" aria-checked="false">
+                                            <button type="button" class="location-nav-btn" data-value="warehouse/Shop" role="radio" aria-checked="false">
                                                 <svg viewBox="0 0 24 24" aria-hidden="true">
                                                     <path d="M3 9l9-5 9 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="currentColor"/>
                                                     <path d="M7 20v-6h10v6" stroke="#fff" stroke-width="2"/>
                                                 </svg>
-                                                <span>Warehouse</span>
+                                                <span>Warehouse/Shop</span>
                                             </button>
                                             <button type="button" class="location-nav-btn" data-value="bungalow" role="radio" aria-checked="false">
                                                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -848,7 +850,7 @@
                                                 <option value="house">House</option>
                                                 <option value="apartment">Apartment</option>
                                                 <option value="duplex">Duplex</option>
-                                                <option value="warehouse">Warehouse</option>
+                                                <option value="warehouse/Shop">Warehouse/Shop</option>
                                                 <option value="bungalow">Bungalow</option>
                                                 <option value="storage-unit">Storage unit</option>
                                             </select>
@@ -1871,10 +1873,10 @@
                         </div>
                     </div>
                     <div class="form-step-actions" id="form-step-actions" data-skip-progressive="true" style="display: flex !important; margin-top: 2rem;">
-                        
                         <div style="flex:1 1 auto;"></div>
-                        <button type="button" class="btn btn-primary" id="step-next-btn">Next</button>
+                        <!-- Old Next button removed; only sticky Next button remains -->
                     </div>
+                    <button type="button" class="sticky-next-btn" id="sticky-next-btn">Next</button>
                 </form>
                 <!-- Removed duplicate elevator-option-container. Only one instance should exist inside the form. -->
         </div>
