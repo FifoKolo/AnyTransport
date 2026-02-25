@@ -1,3 +1,29 @@
+.add-custom-inventory-btn {
+    display: block;
+    margin: 32px auto 0 auto;
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    padding: 12px 38px;
+    box-shadow: 0 2px 8px rgba(37,99,235,0.08);
+    cursor: pointer;
+    transition: background 0.18s, box-shadow 0.18s;
+}
+.add-custom-inventory-btn:hover, .add-custom-inventory-btn:focus {
+    background: #174bbd;
+    box-shadow: 0 4px 16px rgba(37,99,235,0.13);
+    outline: none;
+}
+.inventory-item.selected {
+    background: #e6f0ff;
+    border-left: 4px solid #2563eb;
+    color: #222;
+    font-weight: 500;
+    transition: background 0.2s, border 0.2s;
+}
 #form-step-actions {
     display: flex !important;
     align-items: center;
@@ -201,9 +227,12 @@ body[data-form-step="3"] .form-stepper, body[data-current-step="3"] .form-steppe
 /* Property type icon grid - match service selection style */
 .property-type-icon-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px 18px;
     margin-bottom: 16px;
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .property-type-icon-btn {
@@ -292,16 +321,17 @@ body[data-form-step="3"] .form-stepper, body[data-current-step="3"] .form-steppe
 }
 #house-removal-inventory-section {
     display: none;
-    position: absolute;
+    position: fixed;
     left: 0;
     right: 0;
+    top: 80px;
     width: 114.5vw !important;
     max-width: 114.5vw !important;
     border-radius: 0 !important;
     box-shadow: none !important;
     padding: 0 !important;
     margin: 0 !important;
-    z-index: 1;
+    z-index: 10;
 }
 .add-floor-btn {
     display: block;

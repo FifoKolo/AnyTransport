@@ -1,3 +1,306 @@
+// --- Auto-advance to inventory in step 3 when floor and elevator are selected ---
+let lastAutoAdvancedFloor = null;
+let lastAutoAdvancedElevator = null;
+function autoAdvanceToInventoryIfReady() {
+    const body = document.body;
+    const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
+    if (!isStep3) return;
+    const floorHiddenInput = document.getElementById('pickup-floor-select');
+    const elevatorOptionContainer = document.getElementById('elevator-option-container');
+    const elevatorHidden = elevatorOptionContainer ? elevatorOptionContainer.querySelector('#elevator-available') : null;
+    const inventoryCardContainer = document.getElementById('inventory-card-container');
+    const elevatorVisible = elevatorOptionContainer && elevatorOptionContainer.style.display !== 'none';
+    const floorSelected = floorHiddenInput && floorHiddenInput.value.trim();
+    const elevatorSelected = !elevatorVisible || (elevatorHidden && elevatorHidden.value);
+    // Only auto-advance if elevator is not visible, or if visible AND a value is selected
+    // Prevent duplicate scrolls for same selection
+    if (floorSelected && (
+        !elevatorVisible || (elevatorHidden && elevatorHidden.value)
+    ) && inventoryCardContainer && isStep3) {
+        const floorVal = floorHiddenInput.value.trim();
+        const elevatorVal = elevatorHidden ? elevatorHidden.value : '';
+        if (lastAutoAdvancedFloor === floorVal && lastAutoAdvancedElevator === elevatorVal && inventoryCardContainer.style.display !== 'none') {
+            return;
+        }
+        lastAutoAdvancedFloor = floorVal;
+        lastAutoAdvancedElevator = elevatorVal;
+        // Do not show inventory or scroll here; only update state. Display is handled in updateInventoryAndElevatorVisibility.
+    }
+}
+
+// Attach plus/minus logic to all inventory items (default and custom) after DOM loads
+function attachInventoryItemToggles() {
+    document.querySelectorAll('.inventory-items-list').forEach(ul => {
+        ul.querySelectorAll('.inventory-item').forEach(li => {
+            // Remove any existing controls
+            const oldControls = li.querySelector('.inventory-item-controls');
+            if (oldControls) oldControls.remove();
+            // Remove any old count span or minus button
+            const oldCount = li.querySelector('.inventory-item-count');
+            if (oldCount) oldCount.remove();
+            const oldMinus = li.querySelector('.inventory-item-minus');
+            if (oldMinus) oldMinus.remove();
+            // Label
+            let label = li.querySelector('.inventory-item-label');
+            if (!label) {
+                // If not present, wrap the text node in a span
+                const text = li.childNodes[0];
+                label = document.createElement('span');
+                label.className = 'inventory-item-label';
+                label.textContent = text.textContent || text.nodeValue;
+                li.textContent = '';
+                li.appendChild(label);
+            }
+            // Add count span
+            const countSpan = document.createElement('span');
+            countSpan.className = 'inventory-item-count';
+            countSpan.style.marginLeft = '12px';
+            countSpan.style.fontWeight = 'bold';
+            countSpan.style.color = '#2563eb';
+            countSpan.style.display = 'none';
+            li.appendChild(countSpan);
+            // Add minus button
+            const minusBtn = document.createElement('button');
+            minusBtn.className = 'inventory-item-minus';
+            minusBtn.type = 'button';
+            minusBtn.textContent = '−';
+            minusBtn.style.marginLeft = '8px';
+            minusBtn.style.display = 'none';
+            minusBtn.style.background = 'transparent';
+            minusBtn.style.border = 'none';
+            minusBtn.style.color = '#2563eb';
+            minusBtn.style.fontWeight = 'bold';
+            minusBtn.style.fontSize = '1.1em';
+            minusBtn.style.cursor = 'pointer';
+            li.appendChild(minusBtn);
+            // Make the whole li clickable as a toggle
+            li.style.cursor = 'pointer';
+            let count = 0;
+            li.onclick = function(e) {
+                // Prevent minus button from triggering li click
+                if (e.target === minusBtn) return;
+                e.preventDefault();
+                if (!li.classList.contains('selected')) {
+                    li.classList.add('selected');
+                    count = 1;
+                    countSpan.textContent = count;
+                    countSpan.style.display = '';
+                    minusBtn.style.display = '';
+                } else {
+                    count++;
+                    countSpan.textContent = count;
+                }
+            };
+            minusBtn.onclick = function(e) {
+                e.preventDefault();
+                if (li.classList.contains('selected')) {
+                    count--;
+                    if (count <= 0) {
+                        li.classList.remove('selected');
+                        countSpan.style.display = 'none';
+                        minusBtn.style.display = 'none';
+                        count = 0;
+                    } else {
+                        countSpan.textContent = count;
+                    }
+                }
+            };
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+
+    // Removed duplicate autoAdvanceToInventoryIfReady definition. Only the top-level version is used.
+
+    attachInventoryItemToggles();
+});
+// Attach modal logic to static Add Custom Item button (for static HTML button)
+document.addEventListener('DOMContentLoaded', function () {
+    const staticCustomBtn = document.querySelector('.add-custom-inventory-btn');
+    if (staticCustomBtn && !document.getElementById('static-custom-inventory-modal')) {
+        // Create modal
+        const customModal = document.createElement('div');
+        customModal.id = 'static-custom-inventory-modal';
+        customModal.style.display = 'none';
+        customModal.style.position = 'fixed';
+        customModal.style.left = '0';
+        customModal.style.top = '0';
+        customModal.style.width = '100vw';
+        customModal.style.height = '100vh';
+        customModal.style.background = 'rgba(0,0,0,0.2)';
+        customModal.style.zIndex = '10000';
+        customModal.style.justifyContent = 'center';
+        customModal.style.alignItems = 'center';
+        customModal.style.display = 'flex';
+        customModal.innerHTML = `
+            <div style="background:#fff;padding:24px 32px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);min-width:300px;max-width:90vw;">
+                <label style="display:block;margin-bottom:8px;">Custom Item Name</label>
+                <input type="text" class="custom-inventory-input" style="width:100%;padding:8px 12px;margin-bottom:16px;" placeholder="Enter item name">
+                <div style="margin-top:18px; text-align:right; display:flex; gap:12px; justify-content:flex-end;">
+                    <button type="button" class="custom-inventory-cancel" style="padding:7px 18px; border-radius:5px; border:1px solid #e5e7eb; background:#f3f4f6; color:#444; font-weight:600; font-size:1.1rem;">Cancel</button>
+                    <button type="button" class="custom-inventory-add" style="padding:7px 18px; border-radius:5px; border:none; background:#2563eb; color:#fff; font-weight:600; font-size:1.1rem;">Add</button>
+                </div>
+            </div>
+        `;
+        customModal.style.display = 'none';
+        document.body.appendChild(customModal);
+
+        staticCustomBtn.addEventListener('click', function() {
+            customModal.style.display = 'flex';
+            customModal.querySelector('.custom-inventory-input').value = '';
+            customModal.querySelector('.custom-inventory-input').focus();
+        });
+        customModal.querySelector('.custom-inventory-cancel').addEventListener('click', function() {
+            customModal.style.display = 'none';
+        });
+        customModal.querySelector('.custom-inventory-add').addEventListener('click', function() {
+            const input = customModal.querySelector('.custom-inventory-input');
+            const customName = input.value.trim();
+            if (!customName) return;
+            // Find the visible inventory list
+            const ul = document.querySelector('.inventory-items-list');
+            if (ul) {
+                // Prevent duplicates
+                const exists = Array.from(ul.children).some(li => li.querySelector('.inventory-item-label')?.textContent.trim().toLowerCase() === customName.toLowerCase());
+                if (!exists) {
+                    const li = document.createElement('li');
+                    li.className = 'inventory-item';
+                    // Label
+                    const label = document.createElement('span');
+                    label.className = 'inventory-item-label';
+                    label.textContent = customName;
+                    // Controls
+                    const controls = document.createElement('div');
+                    controls.className = 'inventory-item-controls';
+                    // Remove button
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'inventory-item-remove';
+                    removeBtn.title = 'Remove';
+                    removeBtn.innerHTML = '<span aria-hidden="true">&#8722;</span>';
+                    removeBtn.style.display = 'none';
+                    // Count span
+                    const countSpan = document.createElement('span');
+                    countSpan.className = 'inventory-item-count';
+                    countSpan.textContent = '0';
+                    countSpan.style.display = 'none';
+                    // Add button
+                    const addBtn = document.createElement('button');
+                    addBtn.className = 'inventory-item-add';
+                    addBtn.title = 'Add';
+                    addBtn.innerHTML = '<span aria-hidden="true">&#43;</span>';
+                    addBtn.style.display = 'inline-flex';
+                    // Item count state
+                    let count = 0;
+                    function updateControls() {
+                        if (count > 0) {
+                            removeBtn.style.display = 'inline-flex';
+                            countSpan.style.display = 'inline-block';
+                            countSpan.textContent = count;
+                            li.classList.add('added');
+                        } else {
+                            removeBtn.style.display = 'none';
+                            countSpan.style.display = 'none';
+                            countSpan.textContent = '0';
+                            li.classList.remove('added');
+                        }
+                    }
+                    addBtn.onclick = function(e) {
+                        e.preventDefault();
+                        count++;
+                        updateControls();
+                    };
+                    removeBtn.onclick = function(e) {
+                        e.preventDefault();
+                        if (count > 0) {
+                            count--;
+                            updateControls();
+                        }
+                    };
+                    controls.appendChild(removeBtn);
+                    controls.appendChild(countSpan);
+                    controls.appendChild(addBtn);
+                    li.appendChild(label);
+                    li.appendChild(controls);
+                    ul.appendChild(li);
+                    // Attach toggle to new custom item
+                    attachInventoryItemToggles();
+                }
+            }
+            customModal.style.display = 'none';
+        });
+    }
+});
+// --- Floor config and icon rendering (top-level, global) ---
+const propertyFloors = {
+    house: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', 'Attic'],
+    apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'],
+    duplex: ['Basement', 'Ground', '1st', '2nd','Attic'],
+    'warehouse/Shop': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
+    bungalow: ['Basement', 'Ground','Attic'],
+    'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
+};
+
+function getFloorIconSvg(floor) {
+    if (floor === 'Ground') {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="16" width="14" height="3" rx="1.5" fill="currentColor"/></svg>';
+    }
+    const num = floor.replace(/[^0-9]/g, '');
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="18" text-anchor="middle" font-size="14" fill="currentColor" font-family="Arial, sans-serif">${num}</text></svg>`;
+}
+
+function renderFloorIcons(propertyType) {
+    const floorIconGrid = document.getElementById('floor-icon-grid');
+    const floorHiddenInput = document.getElementById('pickup-floor-select');
+    if (!floorIconGrid) return;
+    floorIconGrid.innerHTML = '';
+    const floors = propertyFloors[propertyType] || [];
+    const usedFloors = new Set();
+    const floorsContainer = document.querySelector('.floors-inventory-container');
+    if (floorsContainer) {
+        Array.from(floorsContainer.children).forEach(block => {
+            const title = block.querySelector('h3');
+            if (title) {
+                let match = title.textContent.match(/Add Inventory for (.+) Floor/);
+                if (!match) match = title.textContent.match(/Inventory for (.+) Floor/);
+                if (match && match[1]) {
+                    usedFloors.add(match[1].trim());
+                }
+            }
+        });
+    }
+    floors.forEach(floor => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'floor-icon-btn';
+        btn.setAttribute('data-value', floor);
+        btn.innerHTML = `${getFloorIconSvg(floor)}<span>${floor}</span>`;
+        btn.setAttribute('aria-pressed', 'false');
+        if (usedFloors.has(floor)) {
+            btn.disabled = true;
+            btn.classList.add('disabled');
+        } else {
+            btn.addEventListener('click', function () {
+                floorIconGrid.querySelectorAll('.floor-icon-btn').forEach(b => {
+                    b.classList.remove('selected');
+                    b.setAttribute('aria-pressed', 'false');
+                });
+                btn.classList.add('selected');
+                btn.setAttribute('aria-pressed', 'true');
+                if (floorHiddenInput) {
+                    floorHiddenInput.value = floor;
+                    const event = new Event('change', { bubbles: true });
+                    floorHiddenInput.dispatchEvent(event);
+                }
+                setTimeout(updateInventoryAndElevatorVisibility, 0);
+            });
+        }
+        floorIconGrid.appendChild(btn);
+    });
+    if (floorHiddenInput) floorHiddenInput.value = '';
+    if (typeof renderElevatorIcons === 'function') renderElevatorIcons();
+}
+
 // --- Show inventory only when both fields are filled ---
 document.addEventListener('DOMContentLoaded', function () {
         // Sticky Next button logic
@@ -185,8 +488,16 @@ document.addEventListener('DOMContentLoaded', function () {
     const floorIconGrid = document.getElementById('floor-icon-grid');
     const floorHiddenInput = document.getElementById('pickup-floor-select');
     if (floorHiddenInput) floorHiddenInput.setAttribute('data-required', 'true');
-    const inventoryCardContainer = document.getElementById('inventory-card-container');
+
+    // Ensure elevatorOptionContainer is defined before use
     const elevatorOptionContainer = document.getElementById('elevator-option-container');
+    if (floorHiddenInput) {
+        floorHiddenInput.addEventListener('change', autoAdvanceToInventoryIfReady);
+    }
+    if (elevatorOptionContainer) {
+        elevatorOptionContainer.addEventListener('change', autoAdvanceToInventoryIfReady, true);
+    }
+    const inventoryCardContainer = document.getElementById('inventory-card-container');
     const elevatorIconGridId = 'elevator-icon-grid';
     const elevatorHiddenInputId = 'elevator-available';
 
@@ -195,7 +506,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (inventoryFloorTitle && floorHiddenInput) {
                     const floor = floorHiddenInput.value;
                     if (floor) {
-                        inventoryFloorTitle.textContent = `Inventory for ${floor} Floor`;
+                        inventoryFloorTitle.textContent = ` Add Inventory for ${floor} Floor`;
                     } else {
                         inventoryFloorTitle.textContent = '';
                     }
@@ -206,11 +517,55 @@ document.addEventListener('DOMContentLoaded', function () {
         if (propertyTypeHidden && floorHiddenInput && inventoryCardContainer) {
             const propertyPrompt = propertyTypeHidden.value === '';
             const floorPrompt = floorHiddenInput.value === '';
+            // Elevator logic: only show inventory if elevator is not visible, or if visible AND selected
+            let elevatorReady = true;
+            if (elevatorOptionContainer && elevatorOptionContainer.style.display !== 'none') {
+                const elevatorHidden = elevatorOptionContainer.querySelector('#elevator-available');
+                elevatorReady = !!(elevatorHidden && elevatorHidden.value);
+            }
             if (!propertyPrompt && !floorPrompt && isStep3) {
-                inventoryCardContainer.style.display = '';
+                // Only show inventory if elevator is not visible, or if visible AND selected
+                let shouldShow = false;
+                if (elevatorOptionContainer && elevatorOptionContainer.style.display !== 'none') {
+                    const elevatorHidden = elevatorOptionContainer.querySelector('#elevator-available');
+                    shouldShow = !!(elevatorHidden && elevatorHidden.value);
+                } else {
+                    shouldShow = true;
+                }
+                if (shouldShow) {
+                    inventoryCardContainer.style.display = '';
+                } else {
+                    inventoryCardContainer.style.display = 'none';
+                }
             } else {
                 inventoryCardContainer.style.display = 'none';
             }
+        // --- Scroll to inventory on elevator or floor selection ---
+        if (floorHiddenInput) {
+            floorHiddenInput.addEventListener('change', function() {
+                // Only scroll if elevator is not visible for this floor
+                if (!elevatorOptionContainer || elevatorOptionContainer.style.display === 'none') {
+                    if (inventoryCardContainer && inventoryCardContainer.style.display !== 'none') {
+                        setTimeout(() => {
+                            inventoryCardContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 100);
+                    }
+                }
+            });
+        }
+        if (elevatorOptionContainer) {
+            elevatorOptionContainer.addEventListener('change', function() {
+                // Only scroll if elevator is visible and selected
+                if (elevatorOptionContainer.style.display !== 'none') {
+                    const elevatorHidden = elevatorOptionContainer.querySelector('#elevator-available');
+                    if (elevatorHidden && elevatorHidden.value && inventoryCardContainer && inventoryCardContainer.style.display !== 'none') {
+                        setTimeout(() => {
+                            inventoryCardContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 100);
+                    }
+                }
+            }, true);
+        }
         }
         // Elevator logic: show for any property type when floor is 1 or above (not ground)
         if (propertyTypeHidden && elevatorOptionContainer && floorHiddenInput) {
@@ -255,17 +610,39 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Render floor icon grid
-    function renderFloorIcons(propertyType) {
-        if (!floorIconGrid) return;
-        floorIconGrid.innerHTML = '';
-        const floors = propertyFloors[propertyType] || [];
-        floors.forEach(floor => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'floor-icon-btn';
-            btn.setAttribute('data-value', floor);
-            btn.innerHTML = `${getFloorIconSvg(floor)}<span>${floor}</span>`;
-            btn.setAttribute('aria-pressed', 'false');
+// --- Floor Icon Rendering (moved to top-level for global access) ---
+function renderFloorIcons(propertyType) {
+    const floorIconGrid = document.getElementById('floor-icon-grid');
+    const floorHiddenInput = document.getElementById('pickup-floor-select');
+    if (!floorIconGrid) return;
+    floorIconGrid.innerHTML = '';
+    const floors = propertyFloors[propertyType] || [];
+    // Get already added floors
+    const usedFloors = new Set();
+    const floorsContainer = document.querySelector('.floors-inventory-container');
+    if (floorsContainer) {
+        Array.from(floorsContainer.children).forEach(block => {
+            const title = block.querySelector('h3');
+            if (title) {
+                let match = title.textContent.match(/Add Inventory for (.+) Floor/);
+                if (!match) match = title.textContent.match(/Inventory for (.+) Floor/);
+                if (match && match[1]) {
+                    usedFloors.add(match[1].trim());
+                }
+            }
+        });
+    }
+    floors.forEach(floor => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'floor-icon-btn';
+        btn.setAttribute('data-value', floor);
+        btn.innerHTML = `${getFloorIconSvg(floor)}<span>${floor}</span>`;
+        btn.setAttribute('aria-pressed', 'false');
+        if (usedFloors.has(floor)) {
+            btn.disabled = true;
+            btn.classList.add('disabled');
+        } else {
             btn.addEventListener('click', function () {
                 // Deselect all
                 floorIconGrid.querySelectorAll('.floor-icon-btn').forEach(b => {
@@ -280,27 +657,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     const event = new Event('change', { bubbles: true });
                     floorHiddenInput.dispatchEvent(event);
                 }
-                // Show inventory section automatically if in step 3
-                const body = document.body;
-                const inventoryCardContainer = document.getElementById('inventory-card-container');
-                const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
-                if (inventoryCardContainer && isStep3) {
-                    inventoryCardContainer.style.display = '';
-                    // Scroll to inventory section
-                    setTimeout(() => {
-                        inventoryCardContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }, 100);
-                }
-                // Ensure elevator field updates immediately
+                // Only update elevator/inventory visibility, do not scroll or show inventory here
                 setTimeout(updateInventoryAndElevatorVisibility, 0);
             });
-            floorIconGrid.appendChild(btn);
-        });
-        // Reset hidden input if property type changes
-        if (floorHiddenInput) floorHiddenInput.value = '';
-        // Render elevator icon grid if needed
-        renderElevatorIcons();
-    }
+        }
+        floorIconGrid.appendChild(btn);
+    });
+    // Reset hidden input if property type changes
+    if (floorHiddenInput) floorHiddenInput.value = '';
+    // Render elevator icon grid if needed
+    if (typeof renderElevatorIcons === 'function') renderElevatorIcons();
+}
 
     // Render elevator icon grid (Yes/No icons)
     function renderElevatorIcons() {
@@ -366,10 +733,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 renderFloorIcons(propertyTypeHidden.value);
                 updateInventoryAndElevatorVisibility();
 
-                // Always advance to step 3 after selection
-                const step = parseInt(document.body.dataset.formStep, 10) || 1;
+                // Always advance to step 3 after selection if not already there or past
                 const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 5;
-                if (typeof setFormStep === 'function' && step === 2 && step + 1 <= totalSteps) {
+                const currentStep = parseInt(document.body.dataset.formStep, 10) || 1;
+                if (typeof setFormStep === 'function' && 3 <= totalSteps && currentStep < 3) {
                     setFormStep(3);
                 }
             });
@@ -408,6 +775,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Store which floors have been added
     const addedFloors = new Set();
 
+    // Use the main propertyFloors object from the top of the file
     // Room types and SVGs for inventory-tabs
     const roomTypes = [
         { name: 'Hallway', svg: '<svg viewBox="0 0 24 24" fill="none"><rect x="5" y="7" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/><rect x="9" y="3" width="6" height="4" rx="1" stroke="currentColor" stroke-width="2"/></svg>' },
@@ -464,6 +832,7 @@ document.addEventListener('DOMContentLoaded', function () {
             btn.className = 'inventory-tab';
             btn.type = 'button';
             btn.innerHTML = `<span>${room.svg}</span>${room.name}`;
+            btn.setAttribute('data-room-name', room.name);
             btn.addEventListener('click', function() {
                 tabs.querySelectorAll('.inventory-tab').forEach(tab => tab.classList.remove('active'));
                 btn.classList.add('active');
@@ -478,90 +847,160 @@ document.addEventListener('DOMContentLoaded', function () {
         // Item list with robust + and - controls
         const ul = document.createElement('ul');
         ul.className = 'inventory-items-list';
-        const itemCounts = {};
-        inventoryItems.forEach(itemName => {
-            itemCounts[itemName] = 0;
-            const li = document.createElement('li');
-            li.className = 'inventory-item';
-            const label = document.createElement('span');
-            label.className = 'inventory-item-label';
-            label.textContent = itemName;
-            const controls = document.createElement('div');
-            controls.className = 'inventory-item-controls';
-
-            // Remove button
-            const removeBtn = document.createElement('button');
-            removeBtn.className = 'inventory-item-remove';
-            removeBtn.title = 'Remove';
-            removeBtn.innerHTML = '<span aria-hidden="true">&#8722;</span>';
-            removeBtn.style.display = 'none';
-            removeBtn.onclick = function(e) {
-                e.preventDefault();
-                if (itemCounts[itemName] > 0) {
-                    itemCounts[itemName]--;
-                    updateControls();
-                }
-            };
-
-            // Count span
-            const countSpan = document.createElement('span');
-            countSpan.className = 'inventory-item-count';
-            countSpan.textContent = '0';
-            countSpan.style.display = 'none';
-
-            // Add button
-            const addBtn = document.createElement('button');
-            addBtn.className = 'inventory-item-add';
-            addBtn.title = 'Add';
-            addBtn.innerHTML = '<span aria-hidden="true">&#43;</span>';
-            addBtn.style.display = 'inline-flex';
-            addBtn.onclick = function(e) {
-                e.preventDefault();
-                itemCounts[itemName]++;
-                updateControls();
-            };
-
-            function updateControls() {
-                if (itemCounts[itemName] > 0) {
-                    removeBtn.style.display = 'inline-flex';
-                    countSpan.style.display = 'inline-block';
-                    countSpan.textContent = itemCounts[itemName];
-                    li.classList.add('added');
-                } else {
-                    removeBtn.style.display = 'none';
-                    countSpan.style.display = 'none';
-                    countSpan.textContent = '0';
-                    li.classList.remove('added');
-                }
-            }
-
-            controls.appendChild(removeBtn);
-            controls.appendChild(countSpan);
-            controls.appendChild(addBtn);
-            li.appendChild(label);
-            li.appendChild(controls);
-            ul.appendChild(li);
-        });
+        // Always show all inventory items, regardless of tab
+        function getItemsForTab(tabName) {
+            return inventoryItems;
+        }
+        // Track current tab
+        // Set initial tab to the first tab's data-room-name
+        let currentTab = tabs.querySelector('.inventory-tab')?.getAttribute('data-room-name') || 'Hallway';
+        function renderItems(tabName) {
+            ul.innerHTML = '';
+            getItemsForTab(tabName).forEach(itemName => {
+                const li = document.createElement('li');
+                li.className = 'inventory-item';
+                const label = document.createElement('span');
+                label.className = 'inventory-item-label';
+                label.textContent = itemName;
+                li.appendChild(label);
+                li.style.cursor = 'pointer';
+                li.onclick = function(e) {
+                    e.preventDefault();
+                    li.classList.toggle('selected');
+                };
+                ul.appendChild(li);
+            });
+        }
+        renderItems(currentTab);
         block.appendChild(ul);
+        // Update items on tab click
+        tabs.querySelectorAll('.inventory-tab').forEach(tabBtn => {
+            tabBtn.addEventListener('click', function() {
+                currentTab = tabBtn.getAttribute('data-room-name');
+                renderItems(currentTab);
+            });
+        });
 
-        // Search input
-        const search = document.createElement('input');
-        search.className = 'inventory-search';
-        search.type = 'text';
-        search.placeholder = 'Enter more house items here';
-        search.style.marginTop = '18px';
-        block.appendChild(search);
+        // Add custom item button
+        const addCustomBtn = document.createElement('button');
+        addCustomBtn.className = 'add-custom-inventory-btn';
+        addCustomBtn.type = 'button';
+        addCustomBtn.textContent = '+ Add Custom Item';
+        addCustomBtn.style.marginTop = '18px';
+        block.appendChild(addCustomBtn);
 
+        // Modal for custom item
+        const customModal = document.createElement('div');
+        customModal.className = 'custom-inventory-modal';
+        customModal.style.display = 'none';
+        customModal.style.position = 'fixed';
+        customModal.style.left = '0';
+        customModal.style.top = '0';
+        customModal.style.width = '100vw';
+        customModal.style.height = '100vh';
+        customModal.style.background = 'rgba(0,0,0,0.2)';
+        customModal.style.zIndex = '10000';
+        customModal.style.justifyContent = 'center';
+        customModal.style.alignItems = 'center';
+        customModal.style.display = 'flex';
+        customModal.innerHTML = `
+            <div style="background:#fff;padding:24px 32px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);min-width:300px;max-width:90vw;">
+                <label style="display:block;margin-bottom:8px;">Custom Item Name</label>
+                <input type="text" class="custom-inventory-input" style="width:100%;padding:8px 12px;margin-bottom:16px;" placeholder="Enter item name">
+                <div style="text-align:right;">
+                    <button type="button" class="custom-inventory-cancel" style="margin-right:12px;">Cancel</button>
+                    <button type="button" class="custom-inventory-add">Add</button>
+                </div>
+            </div>
+        `;
+        customModal.style.display = 'none';
+        document.body.appendChild(customModal);
+
+        addCustomBtn.addEventListener('click', function() {
+            customModal.style.display = 'flex';
+            customModal.querySelector('.custom-inventory-input').value = '';
+            customModal.querySelector('.custom-inventory-input').focus();
+        });
+        customModal.querySelector('.custom-inventory-cancel').addEventListener('click', function() {
+            customModal.style.display = 'none';
+        });
+        customModal.querySelector('.custom-inventory-add').addEventListener('click', function() {
+            const input = customModal.querySelector('.custom-inventory-input');
+            const customName = input.value.trim();
+            if (!customName) return;
+            // Prevent duplicates
+            const exists = Array.from(ul.children).some(li => li.querySelector('.inventory-item-label')?.textContent === customName);
+            if (!exists) {
+                const li = document.createElement('li');
+                li.className = 'inventory-item';
+                const label = document.createElement('span');
+                label.className = 'inventory-item-label';
+                label.textContent = customName;
+                const controls = document.createElement('div');
+                controls.className = 'inventory-item-controls';
+                // Remove button
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'inventory-item-remove';
+                removeBtn.title = 'Remove';
+                removeBtn.innerHTML = '<span aria-hidden="true">&#8722;</span>';
+                removeBtn.style.display = 'none';
+                // Count span
+                const countSpan = document.createElement('span');
+                countSpan.className = 'inventory-item-count';
+                countSpan.textContent = '0';
+                countSpan.style.display = 'none';
+                // Add button
+                const addBtn = document.createElement('button');
+                addBtn.className = 'inventory-item-add';
+                addBtn.title = 'Add';
+                addBtn.innerHTML = '<span aria-hidden="true">&#43;</span>';
+                addBtn.style.display = 'inline-flex';
+                // Item count state
+                let count = 0;
+                function updateControls() {
+                    if (count > 0) {
+                        removeBtn.style.display = 'inline-flex';
+                        countSpan.style.display = 'inline-block';
+                        countSpan.textContent = count;
+                        li.classList.add('added');
+                    } else {
+                        removeBtn.style.display = 'none';
+                        countSpan.style.display = 'none';
+                        countSpan.textContent = '0';
+                        li.classList.remove('added');
+                    }
+                }
+                addBtn.onclick = function(e) {
+                    e.preventDefault();
+                    count++;
+                    updateControls();
+                };
+                removeBtn.onclick = function(e) {
+                    e.preventDefault();
+                    if (count > 0) {
+                        count--;
+                        updateControls();
+                    }
+                };
+                controls.appendChild(removeBtn);
+                controls.appendChild(countSpan);
+                controls.appendChild(addBtn);
+                li.appendChild(label);
+                li.appendChild(controls);
+                ul.appendChild(li);
+            }
+            customModal.style.display = 'none';
+        });
         return block;
     }
 
     // Property type to available floors mapping
     const propertyFloors = {
-        house: ['Basement', 'Ground', '1st', '2nd', '3rd'],
+        house: ['Basement', 'Ground', '1st', '2nd', '3rd','Attic'],
         apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th', '13th', '14th', '15th', '16th', '17th', '18th', '19th', '20th'],
-        duplex: ['Basement', 'Ground', '1st', '2nd'],
-        'warehouse/Shop': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
-        bungalow: ['Basement', 'Ground'],
+        duplex: ['Basement', 'Ground', '1st', '2nd','Attic'],
+        'warehouse/Shop': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th','Attic'],
+        bungalow: ['Basement', 'Ground','Attic'],
         'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
     };
 
@@ -570,7 +1009,25 @@ document.addEventListener('DOMContentLoaded', function () {
         const propertyTypeSelect = document.getElementById('pickup-property-type');
         const propertyType = propertyTypeSelect ? propertyTypeSelect.value : '';
         let floors = propertyFloors[propertyType] || propertyFloors['apartment'];
-        floorSelect.innerHTML = '<option value="">Choose floor</option>' + floors.map(f => `<option value="${f}">${f}</option>`).join('');
+        // Get already added floors robustly
+        const usedFloors = new Set();
+        Array.from(floorsContainer.children).forEach(block => {
+            const title = block.querySelector('h3');
+            if (title) {
+                let match = title.textContent.match(/Add Inventory for (.+) Floor/);
+                if (!match) match = title.textContent.match(/Inventory for (.+) Floor/);
+                if (match && match[1]) {
+                    usedFloors.add(match[1].trim());
+                }
+            }
+        });
+        // Also add the currently selected floor (from the icon grid) if any
+        const floorHiddenInput = document.getElementById('pickup-floor-select');
+        if (floorHiddenInput && floorHiddenInput.value) {
+            usedFloors.add(floorHiddenInput.value.trim());
+        }
+        // Only show floors not already used
+        floorSelect.innerHTML = '<option value="">Choose floor</option>' + floors.filter(f => !usedFloors.has(f)).map(f => `<option value="${f}">${f}</option>`).join('');
         floorModal.style.display = 'flex';
         floorSelect.value = '';
     });
@@ -579,19 +1036,16 @@ document.addEventListener('DOMContentLoaded', function () {
     const propertyTypeSelect = document.getElementById('pickup-property-type');
     if (propertyTypeSelect) {
         propertyTypeSelect.addEventListener('change', function () {
-            const propertyType = propertyTypeSelect.value;
-            let validFloors = propertyFloors[propertyType] || propertyFloors['apartment'];
-            // Remove floor blocks for floors not in validFloors
-            Array.from(floorsContainer.children).forEach(block => {
-                const title = block.querySelector('h3');
-                if (title) {
-                    const match = title.textContent.match(/Inventory for (.+) Floor/);
-                    if (match && !validFloors.includes(match[1])) {
-                        block.remove();
-                        addedFloors.delete(match[1]);
-                    }
-                }
-            });
+            // Remove all floor blocks and reset addedFloors when property type changes
+            while (floorsContainer.firstChild) {
+                floorsContainer.removeChild(floorsContainer.firstChild);
+            }
+            addedFloors.clear();
+            // Also clear the selected floor in the icon grid and dropdown
+            const floorHiddenInput = document.getElementById('pickup-floor-select');
+            if (floorHiddenInput) floorHiddenInput.value = '';
+            // Re-render floor icons for the new property type
+            renderFloorIcons(propertyTypeSelect.value);
         });
     }
     // Cancel modal
@@ -606,11 +1060,16 @@ document.addEventListener('DOMContentLoaded', function () {
         const block = createInventoryBlock(floor);
         floorsContainer.appendChild(block);
         floorModal.style.display = 'none';
+        // Force update of floor icon grid and modal dropdown
+        const propertyTypeSelect = document.getElementById('pickup-property-type');
+        if (propertyTypeSelect) {
+            renderFloorIcons(propertyTypeSelect.value);
+        }
     });
 });
 // --- Inventory UI Functionality ---
 document.addEventListener('DOMContentLoaded', function () {
-    // Inventory item data (can be expanded)
+    // Use the unified inventoryItems array from the multi-floor section
     const inventoryItems = [
         '2 seater sofa',
         '3 seater sofa',
@@ -622,14 +1081,16 @@ document.addEventListener('DOMContentLoaded', function () {
         'Book Case',
         'Rug',
         'Artwork',
-        'Lamps & Shades'
+        'Lamps & Shades',
+        'Small Boxes',
+        'Medium Boxes',
+        'Large Boxes',
+        'Extra Large Boxes',
     ];
 
     const inventoryList = document.querySelector('#house-removal-inventory-section .inventory-items-list');
     const searchInput = document.querySelector('#house-removal-inventory-section .inventory-search');
 
-    // Add item to selected list (for demo, just alert or visually mark)
-    // Add/remove logic for counter UI (same as multi-floor)
     function handleAddClick(e) {
         e.preventDefault();
         const item = e.currentTarget.closest('.inventory-item');
@@ -673,7 +1134,6 @@ document.addEventListener('DOMContentLoaded', function () {
             btn.addEventListener('click', handleRemoveClick);
         });
     }
-    // Filter inventory items by search
     function filterInventoryList() {
         const query = searchInput.value.trim().toLowerCase();
         inventoryList.innerHTML = '';
@@ -696,9 +1156,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     if (searchInput && inventoryList) {
         searchInput.addEventListener('input', filterInventoryList);
-        filterInventoryList(); // Initial render
+        filterInventoryList();
     }
-    // Initial add button listeners for static HTML
     attachAddListeners();
 });
 /**
