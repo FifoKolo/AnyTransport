@@ -149,6 +149,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let currentRoom = '';
     let selectedItems = {};
     let itemQuantities = {};
+    window.itemQuantities = itemQuantities; // Expose globally for drag-drop system
     // customItemsPerRoom is defined globally below
     var customItems = {};
 
@@ -387,6 +388,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 modal.style.display = 'none';
             };
         };
+        
+        // Update next button state after inventory changes
+        if (typeof updateNextButtonState === 'function') {
+            updateNextButtonState();
+        }
     }
 
     // Room tab logic
@@ -477,6 +483,7 @@ const propertyFloors = {
     apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'],
     duplex: ['Basement', 'Ground', '1st', '2nd','Attic'],
     'warehouse/Shop': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
+    'warehouse': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
     bungalow: ['Basement', 'Ground','Attic'],
     'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
 };
@@ -484,6 +491,12 @@ const propertyFloors = {
 function getFloorIconSvg(floor) {
     if (floor === 'Ground') {
         return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="16" width="14" height="3" rx="1.5" fill="currentColor"/></svg>';
+    }
+    if (floor === 'Basement') {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="18" text-anchor="middle" font-size="12" fill="currentColor" font-family="Arial, sans-serif" font-weight="bold">B</text></svg>';
+    }
+    if (floor === 'Attic') {
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="18" text-anchor="middle" font-size="12" fill="currentColor" font-family="Arial, sans-serif" font-weight="bold">A</text></svg>';
     }
     const num = floor.replace(/[^0-9]/g, '');
     return `<svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="18" text-anchor="middle" font-size="14" fill="currentColor" font-family="Arial, sans-serif">${num}</text></svg>`;
@@ -493,6 +506,10 @@ function renderFloorIcons(propertyType) {
     const floorIconGrid = document.getElementById('floor-icon-grid');
     const floorHiddenInput = document.getElementById('pickup-floor-select');
     if (!floorIconGrid) return;
+    
+    // Save the currently selected floor before clearing
+    const previouslySelectedFloor = floorHiddenInput ? floorHiddenInput.value : '';
+    
     floorIconGrid.innerHTML = '';
     const floors = propertyFloors[propertyType] || [];
     const usedFloors = new Set();
@@ -535,9 +552,19 @@ function renderFloorIcons(propertyType) {
                 setTimeout(updateInventoryAndElevatorVisibility, 0);
             });
         }
+        // Restore the previously selected floor if it matches this button and isn't in usedFloors
+        if (previouslySelectedFloor && previouslySelectedFloor === floor && !usedFloors.has(floor)) {
+            btn.classList.add('selected');
+            btn.setAttribute('aria-pressed', 'true');
+        }
         floorIconGrid.appendChild(btn);
     });
-    if (floorHiddenInput) floorHiddenInput.value = '';
+    // Restore the previously selected floor value
+    if (floorHiddenInput && previouslySelectedFloor && !usedFloors.has(previouslySelectedFloor)) {
+        floorHiddenInput.value = previouslySelectedFloor;
+    } else if (floorHiddenInput) {
+        floorHiddenInput.value = '';
+    }
     if (typeof renderElevatorIcons === 'function') renderElevatorIcons();
 }
 
@@ -576,30 +603,34 @@ document.addEventListener('DOMContentLoaded', function () {
                 const propertyType = document.getElementById('pickup-property-type');
                 return propertyType && propertyType.value.trim();
             }
-            // Step 3: floor required AND at least one inventory item
+            // Step 3: floor required (inventory is optional for proceeding to next step)
             if (step === 3) {
                 const floor = document.getElementById('pickup-floor-select');
-                let inventoryList = [];
-                if (floor && floor.value.trim()) {
-                    // Find inventory block for selected floor
-                    let inventoryBlock = null;
-                    Array.from(document.querySelectorAll('.floors-inventory-container .floor-inventory-block')).forEach(b => {
-                        const title = b.querySelector('h3');
-                        if (title && title.textContent.trim() === `Add Inventory for ${floor.value.trim()} Floor`) {
-                            inventoryBlock = b;
-                        }
-                    });
-                    inventoryList = inventoryBlock ? inventoryBlock.querySelectorAll('.inventory-item.added') : [];
-                }
-                return floor && floor.value.trim() && inventoryList.length > 0;
+                return floor && floor.value.trim();
             }
-            // Step 4: delivery details required
+            // Step 4: delivery property type required
             if (step === 4) {
-                const deliveryDetails = document.getElementById('delivery-details');
-                return deliveryDetails && deliveryDetails.value.trim();
+                const deliveryPropertyType = document.getElementById('delivery-property-type');
+                return deliveryPropertyType && deliveryPropertyType.value.trim();
             }
-            // Step 5: additional info (optional, always show button)
+            // Step 5: delivery floor required, and elevator if apartment
             if (step === 5) {
+                const deliveryPropertyType = document.getElementById('delivery-property-type');
+                const deliveryFloor = document.getElementById('delivery-floor-select');
+                
+                // Floor must be selected
+                if (!deliveryFloor || !deliveryFloor.value.trim()) {
+                    return false;
+                }
+                
+                // If apartment, elevator must also be selected
+                if (deliveryPropertyType && deliveryPropertyType.value === 'apartment') {
+                    const deliveryElevator = document.getElementById('delivery-elevator-available');
+                    if (!deliveryElevator || !deliveryElevator.value.trim()) {
+                        return false;
+                    }
+                }
+                
                 return true;
             }
             return true;
@@ -610,6 +641,14 @@ document.addEventListener('DOMContentLoaded', function () {
             // Always show sticky button
             showStickyNextBtn();
         }
+        
+        // Global function to update next button state (can be called from renderRoomItems)
+        window.updateNextButtonState = function() {
+            if (!stickyNextBtn) return;
+            const step = parseInt(document.body.dataset.formStep || '1', 10);
+            stickyNextBtn.disabled = !requirementsMetForStep(step);
+            stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
+        };
         // Sync sticky button with normal Next button
         if (stickyNextBtn) {
             stickyNextBtn.onclick = function() {
@@ -623,7 +662,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 stickyNextBtn.disabled = false;
                 stickyNextBtn.classList.remove('disabled');
                 stickyNextBtn.style.opacity = '1';
-                setFormStep(step + 1);
+                if (typeof window.setFormStep === 'function') {
+                    window.setFormStep(step + 1);
+                }
             };
         }
         // Listen for input changes to update sticky button
@@ -675,9 +716,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 step = parseInt(document.body.dataset.formStep, 10);
             }
             // Go back one step (no landing page reload)
-            if (step > 1 && typeof setFormStep === 'function') {
+            if (step > 1 && typeof window.setFormStep === 'function') {
                 const prevStep = step - 1;
-                setFormStep(prevStep);
+                window.setFormStep(prevStep);
                 document.body.dataset.formStep = String(prevStep);
                 document.body.dataset.currentStep = String(prevStep);
             }
@@ -834,6 +875,7 @@ document.addEventListener('DOMContentLoaded', function () {
         apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'],
         duplex: ['Basement', 'Ground', '1st', '2nd','Attic'],
         'warehouse/Shop': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
+        'warehouse': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
         bungalow: ['Basement', 'Ground','Attic'],
         'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
     };
@@ -974,10 +1016,10 @@ function renderFloorIcons(propertyType) {
                 updateInventoryAndElevatorVisibility();
 
                 // Always advance to step 3 after selection if not already there or past
-                const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 5;
+                const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 6;
                 const currentStep = parseInt(document.body.dataset.formStep, 10) || 1;
-                if (typeof setFormStep === 'function' && 3 <= totalSteps && currentStep < 3) {
-                    setFormStep(3);
+                if (typeof window.setFormStep === 'function' && 3 <= totalSteps && currentStep < 3) {
+                    window.setFormStep(3);
                 }
             });
         });
@@ -998,6 +1040,473 @@ function renderFloorIcons(propertyType) {
     // No longer need to listen for floorSelect (dropdown) changes here
     updateInventoryAndElevatorVisibility();
 });
+
+// --- Delivery Property Type Selection ---
+document.addEventListener('DOMContentLoaded', function () {
+    const deliveryPropertyTypeSection = document.getElementById('delivery-property-type-selection-section');
+    if (!deliveryPropertyTypeSection) return;
+    
+    const deliveryPropertyTypeBtns = deliveryPropertyTypeSection.querySelectorAll('.property-type-icon-btn');
+    const deliveryPropertyTypeHidden = document.getElementById('delivery-property-type');
+    
+    if (deliveryPropertyTypeHidden) {
+        deliveryPropertyTypeHidden.setAttribute('data-required', 'true');
+    }
+    
+    if (deliveryPropertyTypeBtns && deliveryPropertyTypeHidden) {
+        deliveryPropertyTypeBtns.forEach(btn => {
+            btn.addEventListener('click', function () {
+                deliveryPropertyTypeBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                deliveryPropertyTypeBtns.forEach(b => b.setAttribute('aria-pressed', 'false'));
+                btn.setAttribute('aria-pressed', 'true');
+                deliveryPropertyTypeHidden.value = btn.getAttribute('data-value');
+                // Fire change event for hidden input so listeners update
+                const event = new Event('change', { bubbles: true });
+                deliveryPropertyTypeHidden.dispatchEvent(event);
+                
+                // Render delivery floor icons with elevator option based on property type
+                const propertyTypeValue = btn.getAttribute('data-value');
+                console.log('Property type selected in step 4:', propertyTypeValue);
+                setTimeout(() => {
+                    if (window.renderDeliveryFloorIconsWithElevator) {
+                        window.renderDeliveryFloorIconsWithElevator(propertyTypeValue);
+                    }
+                }, 100);
+                
+                // Advance to next step (step 5) after selection if not already there or past
+                const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 6;
+                const currentStep = parseInt(document.body.dataset.formStep, 10) || 1;
+                if (typeof window.setFormStep === 'function' && 5 <= totalSteps && currentStep <= 4) {
+                    window.setFormStep(5);
+                }
+            });
+        });
+    }
+});
+
+// --- Render Delivery Floor Icons (Step 5) ---
+
+// --- Delivery Floor Selection (Step 5) ---
+document.addEventListener('DOMContentLoaded', function () {
+    function renderDeliveryFloorIconsWithElevator(propertyType) {
+        const floorIconGrid = document.getElementById('delivery-floor-icon-grid');
+        const floorHiddenInput = document.getElementById('delivery-floor-select');
+        const elevatorOptionContainer = document.getElementById('delivery-elevator-option-container');
+        
+        if (!floorIconGrid) return;
+        floorIconGrid.innerHTML = '';
+        
+        const floors = propertyFloors[propertyType] || [];
+        floors.forEach(floor => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'floor-icon-btn';
+            btn.setAttribute('data-value', floor);
+            btn.innerHTML = `${getFloorIconSvg(floor)}<span>${floor}</span>`;
+            btn.setAttribute('aria-pressed', 'false');
+            btn.addEventListener('click', function () {
+                floorIconGrid.querySelectorAll('.floor-icon-btn').forEach(b => {
+                    b.classList.remove('selected');
+                    b.setAttribute('aria-pressed', 'false');
+                });
+                btn.classList.add('selected');
+                btn.setAttribute('aria-pressed', 'true');
+                if (floorHiddenInput) {
+                    floorHiddenInput.value = floor;
+                    const event = new Event('change', { bubbles: true });
+                    floorHiddenInput.dispatchEvent(event);
+                    
+                    // Show/hide elevator based on floor selection
+                    if (elevatorOptionContainer) {
+                        const floorVal = floor.toLowerCase();
+                        if (floorVal && floorVal !== 'ground') {
+                            elevatorOptionContainer.style.display = '';
+                        } else {
+                            elevatorOptionContainer.style.display = 'none';
+                        }
+                    }
+                    
+                    // Update next button state after floor selection
+                    if (typeof window.updateNextButtonState === 'function') {
+                        window.updateNextButtonState();
+                    }
+                    
+                    // Update organization section visibility
+                    if (typeof window.updateOrganizationSectionVisibility === 'function') {
+                        window.updateOrganizationSectionVisibility();
+                    }
+                }
+            });
+            floorIconGrid.appendChild(btn);
+        });
+        
+        if (floorHiddenInput) floorHiddenInput.value = '';
+        
+        // Initially hide elevator container until floor is selected
+        if (elevatorOptionContainer) {
+            elevatorOptionContainer.style.display = 'none';
+            renderDeliveryElevatorIcons();
+        }
+    }
+    
+    function renderDeliveryElevatorIcons() {
+        const elevatorOptionContainer = document.getElementById('delivery-elevator-option-container');
+        if (!elevatorOptionContainer) return;
+        
+        let grid = elevatorOptionContainer.querySelector('#delivery-elevator-icon-grid');
+        let hidden = elevatorOptionContainer.querySelector('#delivery-elevator-available');
+        
+        if (!grid) {
+            grid = document.createElement('div');
+            grid.className = 'elevator-icon-grid';
+            grid.id = 'delivery-elevator-icon-grid';
+            elevatorOptionContainer.appendChild(grid);
+        }
+        
+        if (!hidden) {
+            hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.id = 'delivery-elevator-available';
+            hidden.name = 'delivery-elevator-available';
+            elevatorOptionContainer.appendChild(hidden);
+        }
+        
+        grid.innerHTML = '';
+        const options = [
+            { value: 'yes', label: 'Yes', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#4A90E2"/><path d="M8 12l3 3 5-5" stroke="#fff" stroke-width="2" fill="none"/></svg>' },
+            { value: 'no', label: 'No', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e53e3e"/><path d="M8 8l8 8M16 8l-8 8" stroke="#fff" stroke-width="2" fill="none"/></svg>' }
+        ];
+        
+        options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'elevator-icon-btn';
+            btn.setAttribute('data-value', opt.value);
+            btn.innerHTML = `${opt.icon}<span>${opt.label}</span>`;
+            btn.setAttribute('aria-pressed', 'false');
+            btn.addEventListener('click', function () {
+                grid.querySelectorAll('.elevator-icon-btn').forEach(b => {
+                    b.classList.remove('selected');
+                    b.setAttribute('aria-pressed', 'false');
+                });
+                btn.classList.add('selected');
+                btn.setAttribute('aria-pressed', 'true');
+                hidden.value = opt.value;
+                const event = new Event('change', { bubbles: true });
+                hidden.dispatchEvent(event);
+                // Update next button state after elevator selection
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+                // Update organization section visibility
+                if (typeof window.updateOrganizationSectionVisibility === 'function') {
+                    window.updateOrganizationSectionVisibility();
+                }
+            });
+            grid.appendChild(btn);
+        });
+        
+        hidden.value = '';
+    }
+    
+    // Make functions globally accessible
+    window.renderDeliveryFloorIconsWithElevator = renderDeliveryFloorIconsWithElevator;
+    window.renderDeliveryElevatorIcons = renderDeliveryElevatorIcons;
+    
+    // Re-render delivery floors and elevator when navigating to step 5
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.attributeName === 'data-form-step') {
+                const currentStep = parseInt(document.body.dataset.formStep, 10);
+                if (currentStep === 5) {
+                    // Render delivery floors and elevator when entering step 5
+                    const deliveryPropType = document.getElementById('delivery-property-type');
+                    if (deliveryPropType && deliveryPropType.value) {
+                        window.renderDeliveryFloorIconsWithElevator(deliveryPropType.value);
+                    }
+                }
+            }
+        });
+    });
+    
+    observer.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['data-form-step']
+    });
+});
+
+// --- Drag and Drop Item Organization for Step 5 ---
+document.addEventListener('DOMContentLoaded', function () {
+    const itemsPool = document.getElementById('delivery-items-pool');
+    const roomsGrid = document.getElementById('delivery-rooms-grid');
+    const organizationSection = document.getElementById('item-organization-section');
+    
+    // Store room assignments
+    let roomAssignments = {};
+    
+    // Room definitions with icons
+    const deliveryRooms = [
+        { id: 'living', name: 'Living Room', icon: '🛋️' },
+        { id: 'dining', name: 'Dining Room', icon: '🍽️' },
+        { id: 'kitchen', name: 'Kitchen', icon: '🍳' },
+        { id: 'bedrooms', name: 'Bedrooms', icon: '🛏️' },
+        { id: 'bathrooms', name: 'Bathrooms', icon: '🚿' },
+        { id: 'hallway', name: 'Hallway', icon: '🚪' },
+        { id: 'office', name: 'Office', icon: '💼' },
+        { id: 'utility', name: 'Utility', icon: '🧺' },
+        { id: 'shed', name: 'Shed', icon: '🏠' },
+        { id: 'garden', name: 'Garden', icon: '🌳' }
+    ];
+    
+    // Initialize room assignments
+    deliveryRooms.forEach(room => {
+        roomAssignments[room.id] = [];
+    });
+    
+    // Render items pool with selected inventory items
+    function renderItemsPool() {
+        if (!itemsPool) return;
+        
+        itemsPool.innerHTML = '';
+        let hasItems = false;
+        
+        // Collect all items with quantities from both single-floor and multi-floor blocks
+        const allItems = {};
+        
+        // Get items with quantity > 0 from the global itemQuantities (single floor)
+        if (window.itemQuantities) {
+            Object.keys(window.itemQuantities).forEach(item => {
+                const qty = window.itemQuantities[item];
+                if (qty > 0) {
+                    allItems[item] = (allItems[item] || 0) + qty;
+                }
+            });
+        }
+        
+        // Get items from all multi-floor blocks using the global multiFloorInventory
+        if (window.multiFloorInventory) {
+            Object.keys(window.multiFloorInventory).forEach(floorName => {
+                const floorItems = window.multiFloorInventory[floorName];
+                Object.keys(floorItems).forEach(itemName => {
+                    const qty = floorItems[itemName];
+                    if (qty > 0) {
+                        allItems[itemName] = (allItems[itemName] || 0) + qty;
+                    }
+                });
+            });
+        }
+        
+        // Create draggable elements for all items
+        Object.keys(allItems).forEach(item => {
+            const qty = allItems[item];
+            if (qty > 0) {
+                // Check if item is already assigned to a room
+                let isAssigned = false;
+                Object.values(roomAssignments).forEach(roomItems => {
+                    if (roomItems.some(ri => ri.name === item)) {
+                        isAssigned = true;
+                    }
+                });
+                
+                if (!isAssigned) {
+                    hasItems = true;
+                    const itemEl = document.createElement('div');
+                    itemEl.className = 'draggable-item';
+                    itemEl.draggable = true;
+                    itemEl.dataset.itemName = item;
+                    itemEl.dataset.itemQty = qty;
+                    itemEl.innerHTML = `
+                        <span>${item}</span>
+                        <span class="item-quantity-badge">×${qty}</span>
+                    `;
+                    
+                    // Add drag event listeners
+                    itemEl.addEventListener('dragstart', handleDragStart);
+                    itemEl.addEventListener('dragend', handleDragEnd);
+                    
+                    itemsPool.appendChild(itemEl);
+                }
+            }
+        });
+        
+        if (!hasItems) {
+            itemsPool.classList.add('empty');
+        } else {
+            itemsPool.classList.remove('empty');
+        }
+    }
+    
+    // Render room drop zones
+    function renderRoomZones() {
+        if (!roomsGrid) return;
+        
+        roomsGrid.innerHTML = '';
+        
+        deliveryRooms.forEach(room => {
+            const roomZone = document.createElement('div');
+            roomZone.className = 'room-drop-zone';
+            roomZone.dataset.roomId = room.id;
+            
+            const roomItems = roomAssignments[room.id] || [];
+            
+            roomZone.innerHTML = `
+                <div class="room-header">
+                    <span class="room-icon">${room.icon}</span>
+                    <span class="room-name">${room.name}</span>
+                </div>
+                <div class="room-items-list" id="room-items-${room.id}">
+                    ${roomItems.map(item => `
+                        <div class="room-item-chip" data-item-name="${item.name}">
+                            <span>${item.name} ×${item.qty}</span>
+                            <button type="button" class="room-item-remove" data-item-name="${item.name}" data-room-id="${room.id}">×</button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            // Add drop event listeners
+            roomZone.addEventListener('dragover', handleDragOver);
+            roomZone.addEventListener('dragleave', handleDragLeave);
+            roomZone.addEventListener('drop', handleDrop);
+            
+            roomsGrid.appendChild(roomZone);
+        });
+        
+        // Add remove button listeners
+        document.querySelectorAll('.room-item-remove').forEach(btn => {
+            btn.addEventListener('click', handleRemoveItem);
+        });
+    }
+    
+    // Drag event handlers
+    function handleDragStart(e) {
+        e.currentTarget.classList.add('dragging');
+        e.dataTransfer.effectAllowed ='move';
+        e.dataTransfer.setData('text/plain', e.currentTarget.dataset.itemName);
+        e.dataTransfer.setData('itemQty', e.currentTarget.dataset.itemQty);
+    }
+    
+    function handleDragEnd(e) {
+        e.currentTarget.classList.remove('dragging');
+    }
+    
+    function handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const dropZone = e.currentTarget.closest('.room-drop-zone');
+        if (dropZone) {
+            dropZone.classList.add('drag-over');
+        }
+    }
+    
+    function handleDragLeave(e) {
+        const dropZone = e.currentTarget.closest('.room-drop-zone');
+        if (dropZone && !dropZone.contains(e.relatedTarget)) {
+            dropZone.classList.remove('drag-over');
+        }
+    }
+    
+    function handleDrop(e) {
+        e.preventDefault();
+        const dropZone = e.currentTarget.closest('.room-drop-zone');
+        if (dropZone) {
+            dropZone.classList.remove('drag-over');
+            
+            const itemName = e.dataTransfer.getData('text/plain');
+            const itemQty = parseInt(e.dataTransfer.getData('itemQty'));
+            const roomId = dropZone.dataset.roomId;
+            
+            // Add item to room
+            if (!roomAssignments[roomId]) {
+                roomAssignments[roomId] = [];
+            }
+            roomAssignments[roomId].push({ name: itemName, qty: itemQty });
+            
+            // Re-render
+            renderItemsPool();
+            renderRoomZones();
+        }
+    }
+    
+    function handleRemoveItem(e) {
+        const itemName = e.currentTarget.dataset.itemName;
+        const roomId = e.currentTarget.dataset.roomId;
+        
+        // Remove from room assignments
+        if (roomAssignments[roomId]) {
+            roomAssignments[roomId] = roomAssignments[roomId].filter(item => item.name !== itemName);
+        }
+        
+        // Re-render
+        renderItemsPool();
+        renderRoomZones();
+    }
+    
+    // Function to check if organization section should be visible
+    function updateOrganizationSectionVisibility() {
+        if (!organizationSection) return;
+        
+        const currentStep = document.body.getAttribute('data-form-step');
+        if (currentStep !== '5') {
+            organizationSection.style.display = 'none';
+            return;
+        }
+        
+        // Check if floor and elevator (if needed) are selected
+        const deliveryFloor = document.getElementById('delivery-floor-select');
+        const deliveryElevatorContainer = document.getElementById('delivery-elevator-option-container');
+        const deliveryElevator = document.getElementById('delivery-elevator-available');
+        
+        // Floor must be selected
+        if (!deliveryFloor || !deliveryFloor.value.trim()) {
+            organizationSection.style.display = 'none';
+            return;
+        }
+        
+        // If elevator is visible (non-ground floor), it must be selected
+        if (deliveryElevatorContainer && deliveryElevatorContainer.style.display !== 'none') {
+            if (!deliveryElevator || !deliveryElevator.value.trim()) {
+                organizationSection.style.display = 'none';
+                return;
+            }
+        }
+        
+        // All requirements met - show section
+        organizationSection.style.display = 'block';
+        renderItemsPool();
+        renderRoomZones();
+    }
+    
+    // Make function globally accessible
+    window.updateOrganizationSectionVisibility = updateOrganizationSectionVisibility;
+    
+    // Show organization section when entering step 5
+    const stepObserver = new MutationObserver(() => {
+        updateOrganizationSectionVisibility();
+    });
+    
+    stepObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['data-form-step']
+    });
+    
+    // Listen for floor and elevator selection changes
+    const deliveryFloor = document.getElementById('delivery-floor-select');
+    const deliveryElevator = document.getElementById('delivery-elevator-available');
+    
+    if (deliveryFloor) {
+        deliveryFloor.addEventListener('change', updateOrganizationSectionVisibility);
+    }
+    
+    if (deliveryElevator) {
+        deliveryElevator.addEventListener('change', updateOrganizationSectionVisibility);
+    }
+    
+    // Initial check
+    updateOrganizationSectionVisibility();
+});
+
 // --- Multi-Floor Inventory Functionality ---
 document.addEventListener('DOMContentLoaded', function () {
     const addFloorBtn = document.querySelector('#house-removal-inventory-section .add-floor-btn');
@@ -1014,6 +1523,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Store which floors have been added
     const addedFloors = new Set();
+    
+    // Global storage for multi-floor inventory (floor name -> { item: qty, ... })
+    const multiFloorInventory = {};
+    window.multiFloorInventory = multiFloorInventory;  // Expose globally
 
     // Use the main propertyFloors object from the top of the file
     // Room types and SVGs for inventory-tabs
@@ -1120,6 +1633,22 @@ document.addEventListener('DOMContentLoaded', function () {
         title.className = 'inventory-floor-title';
         title.textContent = `Add Inventory for ${floorName} Floor`;
         block.appendChild(title);
+        
+        // Helper function to sync floor inventory to global storage
+        const syncFloorToGlobal = () => {
+            if (!multiFloorInventory[floorName]) {
+                multiFloorInventory[floorName] = {};
+            }
+            // Save all items with qty > 0
+            Object.keys(floorQuantities).forEach(itemName => {
+                const qty = floorQuantities[itemName] || 0;
+                if (qty > 0 && floorSelectedItems[itemName]) {
+                    multiFloorInventory[floorName][itemName] = qty;
+                } else {
+                    delete multiFloorInventory[floorName][itemName];
+                }
+            });
+        };
 
         // Inventory tabs (room type icons)
         const tabs = document.createElement('div');
@@ -1276,6 +1805,8 @@ document.addEventListener('DOMContentLoaded', function () {
                             delete floorQuantities[itemName];
                             delete floorSelectedItems[itemName];
                             renderItems(tabName);
+                            syncFloorToGlobal();
+                            updateOrganizationIfNeeded();
                         }
                     });
                     qtyDiv.appendChild(deleteBtn);
@@ -1291,6 +1822,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         floorQuantities[itemName] = 0;
                     }
                     renderItems(tabName);
+                    syncFloorToGlobal();
+                    updateOrganizationIfNeeded();
                 });
                 
                 ul.appendChild(li);
@@ -1304,6 +1837,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     floorQuantities[item] = (floorQuantities[item] || 0) + 1;
                     floorSelectedItems[item] = true;
                     renderItems(tabName);
+                    syncFloorToGlobal();
+                    updateOrganizationIfNeeded();
                 });
             });
             
@@ -1319,8 +1854,17 @@ document.addEventListener('DOMContentLoaded', function () {
                         floorSelectedItems[item] = false;
                     }
                     renderItems(tabName);
+                    syncFloorToGlobal();
+                    updateOrganizationIfNeeded();
                 });
             });
+        }
+        
+        function updateOrganizationIfNeeded() {
+            // Update the organization section if it's visible
+            if (typeof window.updateOrganizationSectionVisibility === 'function') {
+                window.updateOrganizationSectionVisibility();
+            }
         }
         
         renderItems(currentTab);
@@ -1331,6 +1875,7 @@ document.addEventListener('DOMContentLoaded', function () {
             tabBtn.addEventListener('click', function() {
                 currentTab = tabBtn.getAttribute('data-room-name');
                 renderItems(currentTab);
+                updateOrganizationIfNeeded();
             });
         });
 
@@ -1389,8 +1934,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 customFloorItems.push(customName);
                 // Initialize quantity to 1
                 floorQuantities[customName] = 1;
+                floorSelectedItems[customName] = true;
                 // Re-render to show the new item
                 renderItems(currentTab);
+                syncFloorToGlobal();
+                updateOrganizationIfNeeded();
             }
             customModal.style.display = 'none';
         });
@@ -1403,6 +1951,7 @@ document.addEventListener('DOMContentLoaded', function () {
         apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th', '13th', '14th', '15th', '16th', '17th', '18th', '19th', '20th'],
         duplex: ['Basement', 'Ground', '1st', '2nd','Attic'],
         'warehouse/Shop': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th','Attic'],
+        'warehouse': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th','Attic'],
         bungalow: ['Basement', 'Ground','Attic'],
         'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
     };
@@ -2486,7 +3035,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const stepBackBtn = document.getElementById('step-back-btn') || document.getElementById('step-back-btn-top');
         const stepNextBtn = document.getElementById('step-next-btn');
         const getPricesBtn = document.getElementById('get-prices-btn');
-        const totalSteps = 4;
+        const totalSteps = 6;
+        window.totalSteps = totalSteps;
         let currentStep = 1;
 
         const parseStepList = (el) => {
@@ -2889,7 +3439,6 @@ document.addEventListener('DOMContentLoaded', function() {
         window.updateFormSummary = updateFormSummary;
 
         const setFormStep = (step) => {
-                window.setFormStep = setFormStep;
             if (step < 1 || step > totalSteps) return;
             currentStep = step;
             document.body.dataset.formStep = String(step);
@@ -2906,7 +3455,13 @@ document.addEventListener('DOMContentLoaded', function() {
             if (step === 2 && typeof map !== 'undefined' && map && typeof map.resize === 'function') {
                 setTimeout(() => map.resize(), 200);
             }
+            // Update sticky next button state for new step
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
         };
+        
+        window.setFormStep = setFormStep;
 
         if (stepBackBtn) {
             // Handler moved to top for unified logic
@@ -2965,7 +3520,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const stepBackBtn = document.getElementById('step-back-btn');
         const stepNextBtn = document.getElementById('step-next-btn');
         const getPricesBtn = document.getElementById('get-prices-btn');
-        const totalSteps = 5;
+        const totalSteps = 6;
+        window.totalSteps = totalSteps;
         let currentStep = 1;
 
         const parseStepList = (el) => {
@@ -3355,7 +3911,13 @@ document.addEventListener('DOMContentLoaded', function() {
             if (step === 4 && typeof map !== 'undefined' && map && typeof map.resize === 'function') {
                 setTimeout(() => map.resize(), 200);
             }
+            // Update sticky next button state for new step
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
         };
+        
+        window.setFormStep = setFormStep;
 
         if (stepBackBtn) {
             // Removed duplicate handler to avoid conflict with main Back button handler
@@ -4443,21 +5005,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const locationRoomConfigs = [
         // Removed 'pickup' config to prevent old Pickup room fields from being generated
-        {
-            prefix: 'delivery',
-            typeSelectId: 'delivery-location-type',
-            detailsId: 'delivery-location-details',
-            floorSelectId: 'delivery-floor',
-            roomListId: 'delivery-room-list',
-            addButtonId: 'delivery-add-room-btn',
-            roomLabel: 'Delivery room',
-            itemLabel: 'What to deliver to this room',
-            itemPlaceholder: 'e.g. Couch',
-            limitedFloorTypes: ['house', 'duplex'],
-            noFloorTypes: ['warehouse/Shop'],
-            noRoomTypes: ['warehouse/Shop', 'storage-unit'],
-            noElevatorTypes: ['house', 'duplex', 'bungalow', 'warehouse/Shop']
-        },
         {
             prefix: 'office-pickup',
             typeSelectId: 'office-pickup-location-type',

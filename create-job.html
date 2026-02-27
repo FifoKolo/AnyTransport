@@ -65,12 +65,18 @@
                             <li class="stepper-item" data-step="4">
                                 <button type="button" class="stepper-link" data-step="4">
                                     <span class="stepper-index">4</span>
-                                    <span class="stepper-label">Delivery details</span>
+                                    <span class="stepper-label">Delivery Property Type</span>
                                 </button>
                             </li>
                             <li class="stepper-item" data-step="5">
                                 <button type="button" class="stepper-link" data-step="5">
                                     <span class="stepper-index">5</span>
+                                    <span class="stepper-label">Delivery details</span>
+                                </button>
+                            </li>
+                            <li class="stepper-item" data-step="6">
+                                <button type="button" class="stepper-link" data-step="6">
+                                    <span class="stepper-index">6</span>
                                     <span class="stepper-label">Additional info</span>
                                 </button>
                             </li>
@@ -186,10 +192,10 @@
                         <div class="card-section pickup-room-flex" id="pickup-room-list-wrapper" data-form-step="3">
                            
                             <div class="pickup-floors-image" id="pickup-floors-image">
-                                <img src="assets/floors.png" alt="Floors" />
+                                <img src="assets/floors.png" alt="Floors" class="clickable-image" style="cursor: pointer;" />
                             </div>
                             <div id="pickup-room-list">
-                                <!-- Duplicate Step 3 title removed -->
+                               
                                 <div class="form-group">
                                     <label class="form-label">Floor level</label>
                                     <div class="floor-icon-grid" id="floor-icon-grid">
@@ -203,6 +209,39 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Step 4: Delivery Property Type Selection -->
+                        <div class="card-section" id="delivery-property-type-selection-section" data-form-step="4">
+                            <h2 class="section-title">Step 4: Select Delivery Property Type</h2>
+                            <label class="form-label">Select Property Type <span class="required-text">(required)</span></label>
+                            <div class="property-type-icon-grid" id="delivery-property-type-icon-grid">
+                                <button type="button" class="property-type-icon-btn" data-value="house" aria-pressed="false">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z" fill="currentColor"/></svg>
+                                    <span>House</span>
+                                </button>
+                                <button type="button" class="property-type-icon-btn" data-value="apartment" aria-pressed="false">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3" width="12" height="18" fill="currentColor"/><rect x="9" y="6" width="2" height="2" fill="#fff"/><rect x="13" y="6" width="2" height="2" fill="#fff"/><rect x="9" y="10" width="2" height="2" fill="#fff"/><rect x="13" y="10" width="2" height="2" fill="#fff"/><rect x="9" y="14" width="2" height="2" fill="#fff"/><rect x="13" y="14" width="2" height="2" fill="#fff"/></svg>
+                                    <span>Apartment</span>
+                                </button>
+                                <button type="button" class="property-type-icon-btn" data-value="duplex" aria-pressed="false">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10l9-6 9 6v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="currentColor"/><path d="M12 10v10" stroke="#fff" stroke-width="2"/></svg>
+                                    <span>Duplex</span>
+                                </button>
+                                <button type="button" class="property-type-icon-btn" data-value="warehouse" aria-pressed="false">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-5 9 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="currentColor"/><path d="M7 20v-6h10v6" stroke="#fff" stroke-width="2"/></svg>
+                                    <span>Warehouse/Shop</span>
+                                </button>
+                                <button type="button" class="property-type-icon-btn" data-value="bungalow" aria-pressed="false">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l8-6 8 6v8H4z" fill="currentColor"/><path d="M9 20v-5h6v5" stroke="#fff" stroke-width="2"/></svg>
+                                    <span>Bungalow</span>
+                                </button>
+                                <button type="button" class="property-type-icon-btn" data-value="storage-unit" aria-pressed="false">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" fill="currentColor"/><path d="M4 10h16" stroke="#fff" stroke-width="2"/></svg>
+                                    <span>Storage unit</span>
+                                </button>
+                            </div>
+                            <input type="hidden" id="delivery-property-type" name="delivery-property-type" value="">
                         </div>
 
                             <!-- Inventory System (Step 3) - full width card at bottom of step 3 -->
@@ -230,10 +269,8 @@
     <button class="add-floor-btn" type="button" style="margin: 24px auto 0; display: block;">+ Add Floor</button>
     <!-- Floor selection modal -->
 <!-- Floor selection modal moved to end of body for proper overlay -->
-                </div> <!-- end .form-v2-main-grid -->
-            </form>
-        </div>
-    </main>
+                </div>
+                                                            </div>
 
     <div id="floor-modal" class="floor-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:2000; align-items:center; justify-content:center;">
         <div style="background:#fff; border-radius:8px; padding:32px 24px; min-width:320px; max-width:90vw; margin:auto; box-shadow:0 8px 32px rgba(0,0,0,0.18); display:flex; flex-direction:column; align-items:center;">
@@ -268,10 +305,6 @@
             </div>
         </div>
     </div>
-                                                            </div>
-                                                        </div>
-                            </div>
-                    </div>
                         
                         <div id="industrial-section" class="card-section" data-form-step="2" style="display: none;">
                             <h2 class="section-title">Step 2: Industrial Details</h2>
@@ -322,8 +355,8 @@
                         </div>
 
                         <!-- Estimated Move Date (for Office Removals) -->
-                        <div class="card-section" id="office-move-date-section" data-form-step="5" style="display: none;">
-                            <h2 class="section-title">Step 5: Move Date</h2>
+                        <div class="card-section" id="office-move-date-section" data-form-step="6" style="display: none;">
+                            <h2 class="section-title">Step 6: Move Date</h2>
                             <label for="office-move-date" class="form-label">Estimated move date</label>
                             <input type="date" id="office-move-date" class="form-input" placeholder="Select a Date Option" required>
                         </div>
@@ -433,10 +466,10 @@
                         </div>
 
                         <!-- Floors Section (for Office Removals - Delivery) -->
-                        <div class="card-section floors-row office-hidden" id="office-delivery-floors-section" data-form-step="4">
-                            <h2 class="section-title">Step 4: Office Delivery Floors</h2>
+                        <div class="card-section floors-row office-hidden" id="office-delivery-floors-section" data-form-step="5">
+                            <h2 class="section-title">Step 5: Office Delivery Floors</h2>
                             <div class="floors-fields">
-                                <div class="step-slice" data-step-slice="4">
+                                <div class="step-slice" data-step-slice="5">
                                     <div class="location-group" data-location-group="office-delivery">
                                         <label for="office-delivery-location-type" class="form-label">Office type</label>
                                         <div class="location-nav-wrapper">
@@ -482,7 +515,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="step-slice" data-step-slice="4">
+                                <div class="step-slice" data-step-slice="5">
                                     <div class="location-group" data-location-group="office-delivery-details">
                                         <label class="form-label">Delivery floors</label>
                                         <div class="location-details" id="office-delivery-location-details">
@@ -651,211 +684,52 @@
                             </div>
                         </div>
 
-                        <!-- Removed duplicate inventory UI block here. Only one instance should exist, inside the data-form-step=3 container below the image. -->
-                                                    <select id="pickup-floor" class="form-input location-nav-select" data-nav="true">
-                                                        <option value="">Choose floor</option>
-                                                        <option value="basement">Basement</option>
-                                                        <option value="ground">Ground</option>
-                                                        <option value="1">1st</option>
-                                                        <option value="2">2nd</option>
-                                                        <option value="3">3rd</option>
-                                                        <option value="4">4th</option>
-                                                        <option value="5">5th</option>
-                                                        <option value="6">6th</option>
-                                                        <option value="7">7th</option>
-                                                        <option value="8">8th</option>
-                                                        <option value="9">9th</option>
-                                                        <option value="10">10th</option>
-                                                        <option value="11">11th</option>
-                                                        <option value="12">12th</option>
-                                                        <option value="13">13th</option>
-                                                        <option value="14">14th</option>
-                                                        <option value="15">15th</option>
-                                                        <option value="16">16th</option>
-                                                        <option value="17">17th</option>
-                                                        <option value="18">18th</option>
-                                                        <option value="19">19th</option>
-                                                        <option value="20">20th</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <!-- Elevator available section removed -->
-                                        </div>
-                                        <div class="form-group" id="pickup-piano-type-group" style="display: none;">
-                                            <label for="piano-type-hidden" class="form-label">What kind of piano <span class="required-text" data-required-for="piano-type-hidden">(required)</span></label>
-                                            <div class="custom-dropdown-wrapper has-option-nav">
-                                                <div class="option-nav option-nav--compact" data-option-nav-for="piano-type-hidden" role="radiogroup" aria-label="Piano type">
-                                                    <button type="button" class="option-nav-btn" data-value="grand" role="radio" aria-checked="false">
-                                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                            <path d="M4 6h11a5 5 0 0 1 5 5v5H4z" fill="currentColor"/>
-                                                            <rect x="4" y="13" width="14" height="2" fill="#fff"/>
-                                                        </svg>
-                                                        <span>Grand</span>
-                                                    </button>
-                                                    <button type="button" class="option-nav-btn" data-value="baby-grand" role="radio" aria-checked="false">
-                                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                            <path d="M5 7h10a4 4 0 0 1 4 4v5H5z" fill="currentColor"/>
-                                                            <rect x="5" y="13" width="12" height="2" fill="#fff"/>
-                                                        </svg>
-                                                        <span>Baby grand</span>
-                                                    </button>
-                                                    <button type="button" class="option-nav-btn" data-value="upright" role="radio" aria-checked="false">
-                                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                            <rect x="5" y="4" width="14" height="14" rx="2" fill="currentColor"/>
-                                                            <rect x="6" y="12" width="12" height="2" fill="#fff"/>
-                                                        </svg>
-                                                        <span>Upright</span>
-                                                    </button>
-                                                    <button type="button" class="option-nav-btn" data-value="digital" role="radio" aria-checked="false">
-                                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                            <rect x="3" y="8" width="18" height="8" rx="2" fill="currentColor"/>
-                                                            <path d="M7 8v8M11 8v8M15 8v8M19 8v8" stroke="#fff" stroke-width="2"/>
-                                                        </svg>
-                                                        <span>Digital</span>
-                                                    </button>
-                                                </div>
-                                                <input type="hidden" id="piano-type-hidden" name="piano-type">
-                                            </div>
-                                        </div>
-                                        <div class="location-room-actions">
-                                            <!-- Add another room button removed -->
-                                        </div>
-                                    </div>
-                                    </div>
-                                </div>
-
+                        <!-- Step 5: Delivery Floor Selection (same as step 3) -->
+                        <div class="card-section pickup-room-flex" id="delivery-room-list-wrapper" data-form-step="5">
+                           
+                            <div class="delivery-floors-image" id="delivery-floors-image">
+                                <img src="assets/floors.png" alt="Delivery Floors" class="clickable-image" style="cursor: pointer;" />
                             </div>
-                        </div>
-
-
-                        <!-- Removed inventory-standalone-wrapper and inventory-standalone blocks. -->
-
-                        <!-- Floors Section (Delivery) -->
-                        <div class="card-section floors-row" id="delivery-floors-section" data-form-step="4">
-                            <div class="floors-fields">
-                                <div class="step-slice" data-step-slice="4">
-                                    <div class="location-group" data-location-group="delivery">
-                                        <label for="delivery-location-type" class="form-label">Delivery: Type of Home/Storage</label>
-                                        <div class="location-nav-wrapper">
-                                            <div class="location-nav location-type-nav" data-nav-for="delivery-location-type" role="radiogroup" aria-label="Delivery location type">
-                                            <button type="button" class="location-nav-btn" data-value="house" role="radio" aria-checked="false">
-                                                <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                    <path d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z" fill="currentColor"/>
-                                                </svg>
-                                                <span>House</span>
-                                            </button>
-                                            <button type="button" class="location-nav-btn" data-value="apartment" role="radio" aria-checked="false">
-                                                <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                    <path d="M6 3h12v18H6z" fill="currentColor"/>
-                                                    <path d="M9 6h2v2H9zm4 0h2v2h-2zM9 10h2v2H9zm4 0h2v2h-2zM9 14h2v2H9zm4 0h2v2h-2z" fill="#fff"/>
-                                                </svg>
-                                                <span>Apartment</span>
-                                            </button>
-                                            <button type="button" class="location-nav-btn" data-value="duplex" role="radio" aria-checked="false">
-                                                <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                    <path d="M3 10l9-6 9 6v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="currentColor"/>
-                                                    <path d="M12 10v10" stroke="#fff" stroke-width="2"/>
-                                                </svg>
-                                                <span>Duplex</span>
-                                            </button>
-                                            <button type="button" class="location-nav-btn" data-value="warehouse/Shop" role="radio" aria-checked="false">
-                                                <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                    <path d="M3 9l9-5 9 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="currentColor"/>
-                                                    <path d="M7 20v-6h10v6" stroke="#fff" stroke-width="2"/>
-                                                </svg>
-                                                <span>Warehouse/Shop</span>
-                                            </button>
-                                            <button type="button" class="location-nav-btn" data-value="bungalow" role="radio" aria-checked="false">
-                                                <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                    <path d="M4 12l8-6 8 6v8H4z" fill="currentColor"/>
-                                                    <path d="M9 20v-5h6v5" stroke="#fff" stroke-width="2"/>
-                                                </svg>
-                                                <span>Bungalow</span>
-                                            </button>
-                                            <button type="button" class="location-nav-btn" data-value="storage-unit" role="radio" aria-checked="false">
-                                                <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                    <rect x="4" y="5" width="16" height="14" rx="2" fill="currentColor"/>
-                                                    <path d="M4 10h16" stroke="#fff" stroke-width="2"/>
-                                                </svg>
-                                                <span>Storage unit</span>
-                                            </button>
-                                            </div>
-                                            <select id="delivery-location-type" class="form-input location-nav-select" data-nav="true">
-                                                <option value="">Choose location type</option>
-                                                <option value="house">House</option>
-                                                <option value="apartment">Apartment</option>
-                                                <option value="duplex">Duplex</option>
-                                                <option value="warehouse/Shop">Warehouse/Shop</option>
-                                                <option value="bungalow">Bungalow</option>
-                                                <option value="storage-unit">Storage unit</option>
-                                            </select>
-                                        </div>
+                            <div id="delivery-room-list">
+                               
+                                <div class="form-group">
+                                    <label class="form-label">Delivery Floor level</label>
+                                    <div class="floor-icon-grid" id="delivery-floor-icon-grid">
+                                        <!-- Floor icons will be injected here by JS based on property type -->
                                     </div>
-                                </div>
-                                <div class="step-slice" data-step-slice="4">
-                                    <div class="location-group" data-location-group="delivery-details">
-                                        <label class="form-label">Delivery floors</label>
-                                        <div class="location-details" id="delivery-location-details">
-                                            <div class="location-detail-row">
-                                                <div class="form-group floor-group">
-                                                    <label for="delivery-floor" class="form-label">Delivery floor</label>
-                                                    <div class="location-nav-wrapper">
-                                                        <div class="location-nav floor-nav" data-nav-for="delivery-floor" data-nav-type="floor" role="radiogroup" aria-label="Delivery floor"></div>
-                                                        <select id="delivery-floor" class="form-input location-nav-select" data-nav="true">
-                                                            <option value="">Choose floor</option>
-                                                            <option value="basement">Basement</option>
-                                                            <option value="ground">Ground</option>
-                                                            <option value="1">1st</option>
-                                                            <option value="2">2nd</option>
-                                                            <option value="3">3rd</option>
-                                                            <option value="4">4th</option>
-                                                            <option value="5">5th</option>
-                                                            <option value="6">6th</option>
-                                                            <option value="7">7th</option>
-                                                            <option value="8">8th</option>
-                                                            <option value="9">9th</option>
-                                                            <option value="10">10th</option>
-                                                            <option value="11">11th</option>
-                                                            <option value="12">12th</option>
-                                                            <option value="13">13th</option>
-                                                            <option value="14">14th</option>
-                                                            <option value="15">15th</option>
-                                                            <option value="16">16th</option>
-                                                            <option value="17">17th</option>
-                                                            <option value="18">18th</option>
-                                                            <option value="19">19th</option>
-                                                            <option value="20">20th</option>
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                                <div class="form-group elevator-group">
-                                                    <label for="delivery-elevator" class="form-label">Elevator available</label>
-                                                    <div class="location-nav-wrapper">
-                                                        <div class="location-nav elevator-nav" data-nav-for="delivery-elevator" data-nav-type="elevator" role="radiogroup" aria-label="Delivery elevator available"></div>
-                                                        <select id="delivery-elevator" class="form-input location-nav-select" data-nav="true">
-                                                            <option value="">Select</option>
-                                                            <option value="yes">Yes</option>
-                                                            <option value="no">No</option>
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="step-slice" data-step-slice="4">
-                                    <div class="location-group" data-location-group="delivery-rooms">
-                                        <label class="form-label">Delivery rooms</label>
-                                        <div class="location-room-list" id="delivery-room-list"></div>
-                                        <div class="location-room-actions">
-                                            <button type="button" class="btn btn-secondary btn-small" id="delivery-add-room-btn">Add another room</button>
-                                        </div>
+                                    <input type="hidden" id="delivery-floor-select" name="delivery-floor-select" value="">
+                                    <!-- Elevator Option (shown only for Apartment) - placed directly under floor field -->
+                                    <div id="delivery-elevator-option-container">
+                                        <label style="font-size: 1.05rem; font-weight: 600; display: block; margin-bottom: 8px;">Is there an elevator available in the building?</label>
+                                        <div id="delivery-elevator-icon-grid"></div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        
-                        <!-- House Removals Inventory Section removed duplicate. Only one instance should exist. -->
+
+                        <!-- Item Organization Section (Drag and Drop) -->
+                        <div class="card-section" id="item-organization-section" data-form-step="5" style="display: none;">
+                            <h2 class="section-title">Organize Items by Room</h2>
+                            
+                            <div class="drag-drop-container">
+                                <!-- Items Pool -->
+                                <div class="items-pool-section">
+                                    <h3 style="margin-bottom: 1rem; color: #374151; font-size: 1.1rem;">Selected Items</h3>
+                                    <p style="margin-bottom: 1rem; color: #6b7280; font-size: 0.95rem;">Drag items below into the rooms where you'd like them delivered</p>
+                                    <div class="items-pool" id="delivery-items-pool">
+                                        <!-- Draggable items will be populated here by JavaScript -->
+                                    </div>
+                                </div>
+
+                                <!-- Rooms Grid -->
+                                <div class="rooms-grid-section">
+                                    <h3 style="margin-bottom: 1rem; color: #374151; font-size: 1.1rem;">Delivery Rooms</h3>
+                                    <div class="delivery-rooms-grid" id="delivery-rooms-grid">
+                                        <!-- Room drop zones will be populated here by JavaScript -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
                         <!-- Car Transport Section (shown only for Car Transport) -->
                         <div id="car-transport-section" data-form-step="2" style="display: none;">
@@ -1703,7 +1577,7 @@
                         </div>
 
                         <!-- Generic Additional Information Section (shown for all services) -->
-                        <div id="generic-additional-info-section" data-form-step="5" style="display: none;">
+                        <div id="generic-additional-info-section" data-form-step="6" style="display: none;">
                             <div class="card-section">
                                 <!-- Additional Information (Expandable) -->
                                 <div class="collapsible-section" id="generic-additional" style="background: transparent; border: none; padding: 0; margin-top: 20px;">
@@ -1803,10 +1677,10 @@
                             </div>
                         </div>
 
-                        <div class="form-actions" data-form-step="5" data-skip-progressive="true">
+                        <div class="form-actions" data-form-step="6" data-skip-progressive="true">
                             <button type="submit" class="btn btn-primary btn-large v2" id="get-prices-btn" style="display: none;">Get Prices</button>
                         </div>
-                    </div>
+                    </div> <!-- end .form-v2-main-grid -->
                     <div class="form-step-actions" id="form-step-actions" data-skip-progressive="true" style="display: flex !important; margin-top: 2rem;">
                         <div style="flex:1 1 auto;"></div>
                         <!-- Old Next button removed; only sticky Next button remains -->
@@ -1868,7 +1742,49 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('stepChanged', updateStep3TitleVisibility);
 });
 </script>
+
+<!-- Image Fullscreen Modal -->
+<div id="image-fullscreen-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.95); z-index: 10000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
+    <button id="modal-close-btn" type="button" style="position: absolute; top: 20px; right: 20px; background: #fff; border: none; width: 40px; height: 40px; border-radius: 50%; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-weight: bold;">×</button>
+    <img id="modal-image" src="" alt="Fullscreen" style="max-width: 90%; max-height: 90%; object-fit: contain;">
+</div>
+
 <script>
+// Image fullscreen modal functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('image-fullscreen-modal');
+    const modalImage = document.getElementById('modal-image');
+    const closeBtn = document.getElementById('modal-close-btn');
+    
+    // Open modal when clicking any clickable image
+    document.querySelectorAll('.clickable-image').forEach(img => {
+        img.addEventListener('click', function(e) {
+            e.stopPropagation();
+            modalImage.src = this.src;
+            modal.style.display = 'flex';
+        });
+    });
+    
+    // Close modal when clicking close button
+    closeBtn.addEventListener('click', function() {
+        modal.style.display = 'none';
+    });
+    
+    // Close modal when clicking outside the image
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+    
+    // Close modal with Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.style.display === 'flex') {
+            modal.style.display = 'none';
+        }
+    });
+});
+
 // Show/hide floors image only in step 3
 function updateFloorsImageVisibility() {
     var step = document.body.getAttribute('data-current-step') || document.body.getAttribute('data-form-step');

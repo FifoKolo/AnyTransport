@@ -254,6 +254,26 @@ body[data-form-step="3"] .form-stepper, body[data-current-step="3"] .form-steppe
     max-width: 520px;
     margin-left: auto;
     margin-right: auto;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#property-type-selection-section,
+#delivery-property-type-selection-section {
+    display: block;
+    width: 100%;
+}
+
+#property-type-selection-section h2,
+#delivery-property-type-selection-section h2 {
+    text-align: left;
+    margin-bottom: 1rem;
+}
+
+#property-type-selection-section .form-label,
+#delivery-property-type-selection-section .form-label {
+    display: block;
+    margin-bottom: 1rem;
 }
 
 .property-type-icon-btn {
@@ -709,6 +729,90 @@ body[data-form-step="3"].house-removals-active #house-removal-inventory-section 
 body[data-form-step="3"] #house-removal-inventory-section.inventory-section {
     display: flex !important;
     flex-direction: column;
+}
+
+
+body[data-form-step="5"] .pickup-floors-image {
+    display: flex !important;
+}
+
+/* Delivery Floors Image Styling (Step 5) */
+.delivery-floors-image {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+}
+
+.delivery-floors-image img {
+    width: 100% !important;
+    max-width: 160px !important;
+    height: auto !important;
+    display: block;
+    margin: 0 auto;
+}
+
+.pickup-room-flex > .delivery-floors-image {
+    width: 160px !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin-right: 32px;
+    margin-left: 0;
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    background: none;
+    border: none;
+    border-radius: 16px;
+    box-shadow: none;
+    padding: 0;
+    overflow: visible;
+    z-index: 1;
+    flex-shrink: 0;
+}
+
+.pickup-room-flex > #delivery-room-list {
+    flex: 1 1 0%;
+    min-width: 600px;
+    max-width: 100%;
+    position: relative;
+    z-index: 2;
+    background: white;
+    box-shadow: none;
+    margin-left: -40px;
+    padding-left: 40px;
+    border-radius: 0 16px 16px 0;
+}
+
+body[data-form-step="5"] .delivery-floors-image {
+    display: flex !important;
+}
+
+body[data-form-step="5"] #delivery-room-list {
+    display: block !important;
+}
+
+@media (max-width: 900px) {
+    .pickup-room-flex > .delivery-floors-image {
+        margin: 0 auto 16px auto;
+        width: 120px !important;
+        max-width: 120px !important;
+    }
+    .pickup-room-flex > #delivery-room-list {
+        margin-left: 0;
+        padding-left: 0;
+        border-radius: 0 0 16px 16px;
+    }
+}
+
+/* Step 5 delivery floor layout: keep only delivery-specific controls visible */
+body[data-form-step="5"] #delivery-room-list .form-group {
+    margin-bottom: 12px;
+}
+body[data-form-step="5"] #delivery-room-list label.form-label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: block;
 }
 /* V2 Form Layout for Instant Prices */
 .job-form.v2 {
@@ -3174,4 +3278,190 @@ input[type="file"]:focus {
     -webkit-appearance: menulist !important;
     -moz-appearance: menulist !important;
     z-index: 1 !important;
+}
+
+/* Drag and Drop Item Organization Styles */
+.drag-drop-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.items-pool-section {
+    background: #f9fafb;
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 2px dashed #d1d5db;
+}
+
+#delivery-floor-icon-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+#delivery-room-list .form-group {
+    margin-bottom: 1.5rem;
+}
+
+.items-pool {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    min-height: 100px;
+    padding: 1rem;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.items-pool.empty::after {
+    content: 'All items have been organized!';
+    display: block;
+    width: 100%;
+    text-align: center;
+    color: #9ca3af;
+    font-style: italic;
+    padding: 2rem;
+}
+
+.draggable-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #3b82f6;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    cursor: grab;
+    user-select: none;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.draggable-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.draggable-item.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.item-quantity-badge {
+    background: rgba(255,255,255,0.3);
+    padding: 0.15rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.rooms-grid-section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.delivery-rooms-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+}
+
+.room-drop-zone {
+    background: #f9fafb;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1rem;
+    min-height: 150px;
+    transition: all 0.2s;
+}
+
+.room-drop-zone:hover {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.room-drop-zone.drag-over {
+    background: #dbeafe;
+    border-color: #3b82f6;
+    border-style: solid;
+}
+
+.room-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.room-icon {
+    width: 24px;
+    height: 24px;
+    color: #3b82f6;
+}
+
+.room-name {
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 1rem;
+}
+
+.room-items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.room-item-chip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    color: #374151;
+}
+
+.room-item-chip:hover {
+    background: #f3f4f6;
+}
+
+.room-item-remove {
+    background: none;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    padding: 0.25rem;
+    font-size: 1.1rem;
+    line-height: 1;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.room-item-remove:hover {
+    opacity: 1;
+}
+
+@media (max-width: 768px) {
+    .delivery-rooms-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .drag-drop-container {
+        gap: 1.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .delivery-rooms-grid {
+        grid-template-columns: 1fr;
+    }
 }
