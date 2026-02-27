@@ -1,3 +1,94 @@
+/* Inventory Navbar Tabs */
+.inventory-tabs {
+    display: flex;
+    gap: 18px;
+    margin-bottom: 18px;
+    border-bottom: 1.5px solid #e5e7eb;
+    padding-bottom: 8px;
+}
+.inventory-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 32px 8px 32px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 1.05rem;
+    color: #444;
+    border-right: 1px solid #e5e7eb;
+    min-width: 110px;
+    transition: background 0.15s, color 0.15s;
+}
+.inventory-tab:last-child {
+    border-right: none;
+}
+.inventory-tab.active, .inventory-tab:focus {
+    color: #2563eb;
+    background: #f3f6fa;
+    font-weight: 700;
+}
+.inventory-tab svg {
+    width: 32px !important;
+    height: 32px !important;
+    margin-bottom: 4px !important;
+    color: #888 !important;
+    fill: #888 !important;
+    display: inline-block !important;
+    opacity: 1 !important;
+    vertical-align: middle !important;
+}
+.inventory-tab.active svg {
+    color: #2563eb !important;
+    fill: #2563eb !important;
+}
+.room-tab-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 32px 8px 32px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 1.05rem;
+    color: #444;
+    border-right: 1px solid #e5e7eb;
+    min-width: 110px;
+    transition: background 0.15s, color 0.15s;
+}
+.room-tab-btn:last-child {
+    border-right: none;
+}
+.room-tab-btn:not(.active):hover {
+    background: #f3f4f6;
+    color: #2563eb;
+}
+.room-tab-btn.active {
+    color: #2563eb;
+    background: #f3f6fa;
+    font-weight: 700;
+}
+.room-tab-btn span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4px;
+}
+.room-tab-btn svg {
+    width: 32px !important;
+    height: 32px !important;
+    color: #888 !important;
+    fill: #888 !important;
+    display: inline-block !important;
+    opacity: 1 !important;
+    vertical-align: middle !important;
+}
+.room-tab-btn.active svg {
+    color: #2563eb !important;
+    fill: #2563eb !important;
+}
 /* Navbar Styles */
 .navbar {
     background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);

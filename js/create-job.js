@@ -29,91 +29,385 @@ function autoAdvanceToInventoryIfReady() {
 }
 
 // Attach plus/minus logic to all inventory items (default and custom) after DOM loads
-function attachInventoryItemToggles() {
-    document.querySelectorAll('.inventory-items-list').forEach(ul => {
-        ul.querySelectorAll('.inventory-item').forEach(li => {
-            // Remove any existing controls
-            const oldControls = li.querySelector('.inventory-item-controls');
-            if (oldControls) oldControls.remove();
-            // Remove any old count span or minus button
-            const oldCount = li.querySelector('.inventory-item-count');
-            if (oldCount) oldCount.remove();
-            const oldMinus = li.querySelector('.inventory-item-minus');
-            if (oldMinus) oldMinus.remove();
-            // Label
-            let label = li.querySelector('.inventory-item-label');
-            if (!label) {
-                // If not present, wrap the text node in a span
-                const text = li.childNodes[0];
-                label = document.createElement('span');
-                label.className = 'inventory-item-label';
-                label.textContent = text.textContent || text.nodeValue;
-                li.textContent = '';
-                li.appendChild(label);
-            }
-            // Add count span
-            const countSpan = document.createElement('span');
-            countSpan.className = 'inventory-item-count';
-            countSpan.style.marginLeft = '12px';
-            countSpan.style.fontWeight = 'bold';
-            countSpan.style.color = '#2563eb';
-            countSpan.style.display = 'none';
-            li.appendChild(countSpan);
-            // Add minus button
-            const minusBtn = document.createElement('button');
-            minusBtn.className = 'inventory-item-minus';
-            minusBtn.type = 'button';
-            minusBtn.textContent = '−';
-            minusBtn.style.marginLeft = '8px';
-            minusBtn.style.display = 'none';
-            minusBtn.style.background = 'transparent';
-            minusBtn.style.border = 'none';
-            minusBtn.style.color = '#2563eb';
-            minusBtn.style.fontWeight = 'bold';
-            minusBtn.style.fontSize = '1.1em';
-            minusBtn.style.cursor = 'pointer';
-            li.appendChild(minusBtn);
-            // Make the whole li clickable as a toggle
-            li.style.cursor = 'pointer';
-            let count = 0;
-            li.onclick = function(e) {
-                // Prevent minus button from triggering li click
-                if (e.target === minusBtn) return;
-                e.preventDefault();
-                if (!li.classList.contains('selected')) {
-                    li.classList.add('selected');
-                    count = 1;
-                    countSpan.textContent = count;
-                    countSpan.style.display = '';
-                    minusBtn.style.display = '';
-                } else {
-                    count++;
-                    countSpan.textContent = count;
-                }
-            };
-            minusBtn.onclick = function(e) {
-                e.preventDefault();
-                if (li.classList.contains('selected')) {
-                    count--;
-                    if (count <= 0) {
-                        li.classList.remove('selected');
-                        countSpan.style.display = 'none';
-                        minusBtn.style.display = 'none';
-                        count = 0;
-                    } else {
-                        countSpan.textContent = count;
-                    }
-                }
-            };
+
+// --- New Plus/Minus Inventory System ---
+// This system works for all inventory blocks (multi-floor and single-floor)
+document.addEventListener('DOMContentLoaded', function () {
+    function handleInventoryPlusMinus(container) {
+        if (!container) return;
+        // Attach listeners to all plus and minus buttons inside the container
+        container.querySelectorAll('.room-item-quantity-btn.plus').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const item = btn.getAttribute('data-item');
+                if (!item) return;
+                // Find the closest .room-item
+                const row = btn.closest('.room-item');
+                if (!row) return;
+                // Find the qty display
+                const qtyDisplay = row.querySelector('.room-item-quantity-display');
+                let qty = parseInt(qtyDisplay.textContent, 10) || 0;
+                qty++;
+                qtyDisplay.textContent = qty;
+                row.classList.add('selected');
+                // Update global itemQuantities if available
+                if (window.itemQuantities) window.itemQuantities[item] = qty;
+            });
         });
+        container.querySelectorAll('.room-item-quantity-btn.minus').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const item = btn.getAttribute('data-item');
+                if (!item) return;
+                const row = btn.closest('.room-item');
+                if (!row) return;
+                const qtyDisplay = row.querySelector('.room-item-quantity-display');
+                let qty = parseInt(qtyDisplay.textContent, 10) || 0;
+                qty = Math.max(0, qty - 1);
+                qtyDisplay.textContent = qty;
+                if (qty === 0) {
+                    row.classList.remove('selected');
+                }
+                // Update global itemQuantities if available
+                if (window.itemQuantities) window.itemQuantities[item] = qty;
+            });
+        });
+    }
+
+    // Patch all inventory containers on DOMContentLoaded and after each render
+    function patchAllInventoryBlocks() {
+        // Single-room inventory (step 3)
+        const roomItemsContainer = document.getElementById('room-items-container');
+        if (roomItemsContainer) handleInventoryPlusMinus(roomItemsContainer);
+        // Multi-floor inventory blocks
+        document.querySelectorAll('.floor-inventory-block').forEach(block => {
+            block.querySelectorAll('.inventory-items-list').forEach(list => {
+                handleInventoryPlusMinus(list);
+            });
+        });
+    }
+
+    // Patch after DOMContentLoaded
+    patchAllInventoryBlocks();
+
+    // Patch after every inventory render (monkey-patch renderRoomItems)
+    if (typeof renderRoomItems === 'function') {
+        const origRenderRoomItems = renderRoomItems;
+        window.renderRoomItems = function(room) {
+            origRenderRoomItems(room);
+            patchAllInventoryBlocks();
+        };
+    }
+
+    // Patch after custom item add (for multi-floor blocks)
+    const observer = new MutationObserver(() => {
+        patchAllInventoryBlocks();
     });
-}
+    observer.observe(document.body, { childList: true, subtree: true });
+});
 
 document.addEventListener('DOMContentLoaded', function () {
 
     // Removed duplicate autoAdvanceToInventoryIfReady definition. Only the top-level version is used.
+    // Room inventory logic
+    const ROOM_ITEMS = {
+        living: [
+            '2 seater sofa', '3 seater sofa', 'Armchair', 'Coffee table', 'TV', 'TV Unit', 'Side Tables', 'Book Case', 'Rug', 'Artwork', 'Lamps & Shades'
+        ],
+        dining: [
+            'Dining Table - 6 person', 'Dining Table - 8/10 person', 'Dining Chairs', 'Cabinet Dresser', 'Display Unit', 'Side Board', 'Rug'
+        ],
+        kitchen: [
+            'Kitchen Table', 'Chairs', 'Fridge', 'Fridge Freezer', 'Tumble Dryer', 'Washing Machine', 'Oven', 'Microwave', 'Shelving Unit', 'Bin', 'Vacuum Cleaner'
+        ],
+        office: [
+            'Desk', 'Chair', 'Pedestal', 'Filing cabinet', 'Desktop computer', 'Photocopier', 'Printer', 'Board room table', 'Boxes - large', 'Boxes - medium', 'Crates'
+        ],
+        bedrooms: [
+            'Kingsize Bed', 'Double Bed', 'Single Bed', 'Bedside Tables', 'Chest of Drawers', 'Wardrobe', 'Dressing Table', 'Mirror', 'Lamps & Shades', 'Suitcase', 'Wardrobe Boxes'
+        ],
+        bathrooms: [
+            'Bathroom Cabinet', 'Storage units', 'Mirror', 'Bath', 'Sink', 'Rug'
+        ],
+        hallway: [
+            'Console table', 'Coat rack', 'Shoe rack', 'Mirror', 'Runner rug', 'Umbrella stand', 'Storage bench'
+        ],
+        garden: [
+            'Garden table', 'Chairs', 'Bench', 'Parasol', 'Lawn mower', 'Barbecue', 'Bicycle'
+        ],
+        utility: [
+            'Washing Machine', 'Tumble Dryer', 'Ironing Board', 'Vacuum Cleaner', 'Shelving Unit', 'Laundry Basket'
+        ],
+        shed: [
+            'Tool Chest', 'Workbench', 'Lawn mower', 'Garden tools', 'Bike', 'Storage boxes'
+        ],
+        boxes: [
+            'Extra Large Boxes', 'Large Boxes', 'Medium Boxes', 'Small Boxes', 'Artwork', 'Bicycle', 'Suitcase', 'Wardrobe Boxes', 'Treadmill', 'Fish Tank'
+        ]
+    };
 
-    attachInventoryItemToggles();
+    let currentRoom = '';
+    let selectedItems = {};
+    let itemQuantities = {};
+    // customItemsPerRoom is defined globally below
+    var customItems = {};
+
+    function openEditCustomItemModal(itemName, room) {
+        let modal = document.getElementById('edit-custom-item-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'edit-custom-item-modal';
+            modal.style.display = 'none';
+            modal.style.position = 'fixed';
+            modal.style.left = '0';
+            modal.style.top = '0';
+            modal.style.width = '100vw';
+            modal.style.height = '100vh';
+            modal.style.background = 'rgba(0,0,0,0.2)';
+            modal.style.zIndex = '10000';
+            modal.style.justifyContent = 'center';
+            modal.style.alignItems = 'center';
+            modal.style.display = 'flex';
+            modal.innerHTML = `
+                <div style="background:#fff;padding:24px 32px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);min-width:300px;max-width:90vw;">
+                    <label style="display:block;margin-bottom:8px;">Edit Item Name</label>
+                    <input type="text" class="edit-custom-item-input" style="width:100%;padding:8px 12px;margin-bottom:16px;" placeholder="Enter new item name">
+                    <div style="margin-top:18px; text-align:right; display:flex; gap:12px; justify-content:flex-end;">
+                        <button type="button" class="edit-custom-item-cancel" style="padding:7px 18px; border-radius:5px; border:1px solid #e5e7eb; background:#f3f4f6; color:#444; font-weight:600; font-size:1.1rem;">Cancel</button>
+                        <button type="button" class="edit-custom-item-save" style="padding:7px 18px; border-radius:5px; border:none; background:#2563eb; color:#fff; font-weight:600; font-size:1.1rem;">Save</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+        
+        const input = modal.querySelector('.edit-custom-item-input');
+        input.value = itemName;
+        modal.style.display = 'flex';
+        input.focus();
+        input.select();
+        
+        modal.querySelector('.edit-custom-item-cancel').onclick = function() {
+            modal.style.display = 'none';
+        };
+        
+        modal.querySelector('.edit-custom-item-save').onclick = function() {
+            const newName = input.value.trim();
+            if (!newName) {
+                modal.style.display = 'none';
+                return;
+            }
+            // Check for duplicates (case-insensitive)
+            const allItems = ROOM_ITEMS[room] ? ROOM_ITEMS[room].concat(customItems[room] || []) : [];
+            if (newName.toLowerCase() !== itemName.toLowerCase() && allItems.some(item => item.toLowerCase() === newName.toLowerCase())) {
+                alert('An item with this name already exists.');
+                return;
+            }
+            // Update customItems array
+            if (customItems[room]) {
+                const index = customItems[room].indexOf(itemName);
+                if (index !== -1) {
+                    customItems[room][index] = newName;
+                }
+            }
+            // Update itemQuantities
+            if (itemName in itemQuantities) {
+                const qty = itemQuantities[itemName];
+                delete itemQuantities[itemName];
+                itemQuantities[newName] = qty;
+            }
+            renderRoomItems(room);
+            modal.style.display = 'none';
+        };
+    }
+
+    function renderRoomItems(room) {
+        const container = document.getElementById('room-items-container');
+        if (!container) return;
+        let items = room ? ROOM_ITEMS[room].slice() : null;
+        // Add custom items for this room
+        if (room && customItems[room]) {
+            items = items.concat(customItems[room]);
+        }
+        if (!items) {
+            container.innerHTML = '<div class="room-empty-state">Select a room icon to view items.</div>';
+            return;
+        }
+        let html = '<ul class="inventory-items-list">';
+        items.forEach(item => {
+            const selected = selectedItems[item] || false;
+            const qty = itemQuantities[item] || 0;
+            // Check if item is custom (exists in customItems for this room)
+            const isCustomItem = room && customItems[room] && customItems[room].includes(item);
+            const actionButtons = isCustomItem ? `
+                <button type="button" class="item-edit-btn" data-item="${item}" title="Edit item" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#3b82f6;font-weight:600;margin-left:8px;">✎</button>
+                <button type="button" class="item-delete-btn" data-item="${item}" title="Delete item" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#ef4444;font-weight:600;margin-left:4px;">✕</button>
+            ` : '';
+            
+            html += `
+                <li class="inventory-item${selected ? ' selected' : ''}" data-item="${item}">
+                    <span class="inventory-item-label">${item}</span>
+                    <div class="room-item-controls" data-item="${item}">
+                        <button type="button" class="room-item-quantity-btn room-item-qty-minus" data-item="${item}">−</button>
+                        <span class="room-item-quantity-display">${qty}</span>
+                        <button type="button" class="room-item-quantity-btn room-item-qty-plus" data-item="${item}">+</button>
+                        ${actionButtons}
+                    </div>
+                </li>
+            `;
+        });
+        html += '</ul>';
+        container.innerHTML = html;
+        
+        // Quantity plus button handlers
+        container.querySelectorAll('.room-item-qty-plus').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const item = btn.getAttribute('data-item');
+                itemQuantities[item] = (itemQuantities[item] || 0) + 1;
+                selectedItems[item] = true;
+                renderRoomItems(room);
+            });
+        });
+        
+        // Quantity minus button handlers
+        container.querySelectorAll('.room-item-qty-minus').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const item = btn.getAttribute('data-item');
+                if (itemQuantities[item] > 1) {
+                    itemQuantities[item]--;
+                } else {
+                    itemQuantities[item] = 0;
+                    selectedItems[item] = false;
+                }
+                renderRoomItems(room);
+            });
+        });
+        
+        // Make row clickable to select/deselect
+        container.querySelectorAll('.inventory-item').forEach(row => {
+            row.addEventListener('click', function(e) {
+                if (e.target.closest('.room-item-controls') || e.target.closest('.item-edit-btn') || e.target.closest('.item-delete-btn')) return;
+                const item = row.getAttribute('data-item');
+                selectedItems[item] = !selectedItems[item];
+                if (!selectedItems[item]) {
+                    itemQuantities[item] = 0;
+                }
+                renderRoomItems(room);
+            });
+        });
+        
+        // Edit button handlers
+        container.querySelectorAll('.item-edit-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const item = btn.getAttribute('data-item');
+                openEditCustomItemModal(item, room);
+            });
+        });
+        
+        // Delete button handlers
+        container.querySelectorAll('.item-delete-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const item = btn.getAttribute('data-item');
+                if (confirm(`Are you sure you want to delete "${item}"?`)) {
+                    // Remove from customItems array
+                    if (customItems[room]) {
+                        customItems[room] = customItems[room].filter(i => i !== item);
+                    }
+                    // Remove quantity tracking
+                    delete itemQuantities[item];
+                    delete selectedItems[item];
+                    renderRoomItems(room);
+                }
+            });
+        });
+        // Add custom item button
+        let customBtn = document.getElementById('custom-item-btn');
+        if (!customBtn) {
+            customBtn = document.createElement('button');
+            customBtn.id = 'custom-item-btn';
+            customBtn.type = 'button';
+            customBtn.textContent = '+ Add Custom Item';
+            customBtn.style.margin = '24px auto 0';
+            customBtn.style.display = 'block';
+            customBtn.style.maxWidth = '260px';
+            customBtn.style.width = '100%';
+            container.parentNode.insertBefore(customBtn, container.nextSibling);
+        }
+        customBtn.onclick = function() {
+            let modal = document.getElementById('custom-item-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'custom-item-modal';
+                modal.style.display = 'none';
+                modal.style.position = 'fixed';
+                modal.style.left = '0';
+                modal.style.top = '0';
+                modal.style.width = '100vw';
+                modal.style.height = '100vh';
+                modal.style.background = 'rgba(0,0,0,0.2)';
+                modal.style.zIndex = '10000';
+                modal.style.justifyContent = 'center';
+                modal.style.alignItems = 'center';
+                modal.style.display = 'flex';
+                modal.innerHTML = `
+                    <div style="background:#fff;padding:24px 32px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);min-width:300px;max-width:90vw;">
+                        <label style="display:block;margin-bottom:8px;">Custom Item Name</label>
+                        <input type="text" class="custom-item-input" style="width:100%;padding:8px 12px;margin-bottom:16px;" placeholder="Enter item name">
+                        <div style="margin-top:18px; text-align:right; display:flex; gap:12px; justify-content:flex-end;">
+                            <button type="button" class="custom-item-cancel" style="padding:7px 18px; border-radius:5px; border:1px solid #e5e7eb; background:#f3f4f6; color:#444; font-weight:600; font-size:1.1rem;">Cancel</button>
+                            <button type="button" class="custom-item-add" style="padding:7px 18px; border-radius:5px; border:none; background:#2563eb; color:#fff; font-weight:600; font-size:1.1rem;">Add</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+            modal.style.display = 'flex';
+            modal.querySelector('.custom-item-input').value = '';
+            modal.querySelector('.custom-item-input').focus();
+            modal.querySelector('.custom-item-cancel').onclick = function() {
+                modal.style.display = 'none';
+            };
+            modal.querySelector('.custom-item-add').onclick = function() {
+                const input = modal.querySelector('.custom-item-input');
+                const customName = input.value.trim();
+                if (!customName || !window.currentRoom || !ROOM_ITEMS[window.currentRoom]) return;
+                // Prevent duplicates
+                if (ROOM_ITEMS[window.currentRoom].some(item => item.toLowerCase() === customName.toLowerCase())) {
+                    modal.style.display = 'none';
+                    return;
+                }
+                if (!customItems[window.currentRoom]) customItems[window.currentRoom] = [];
+                customItems[window.currentRoom].push(customName);
+                itemQuantities[customName] = 1;
+                renderRoomItems(window.currentRoom);
+                modal.style.display = 'none';
+            };
+        };
+    }
+
+    // Room tab logic
+    const roomTabs = document.querySelectorAll('#room-tabs .inventory-tab');
+    roomTabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+            roomTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            const room = tab.getAttribute('data-room');
+            currentRoom = room;
+            window.currentRoom = room; // Make currentRoom accessible globally for custom item modal
+            renderRoomItems(room);
+        });
+    });
+
+    // Render default state
+    window.currentRoom = null;
+    renderRoomItems(null);
+
+    // (Optional) Attach plus/minus logic to all inventory items (default and custom) after DOM loads
+    // ...removed legacy attachInventoryItemToggles();
 });
 // Attach modal logic to static Add Custom Item button (for static HTML button)
 document.addEventListener('DOMContentLoaded', function () {
@@ -157,76 +451,22 @@ document.addEventListener('DOMContentLoaded', function () {
         customModal.querySelector('.custom-inventory-add').addEventListener('click', function() {
             const input = customModal.querySelector('.custom-inventory-input');
             const customName = input.value.trim();
-            if (!customName) return;
-            // Find the visible inventory list
-            const ul = document.querySelector('.inventory-items-list');
-            if (ul) {
-                // Prevent duplicates
-                const exists = Array.from(ul.children).some(li => li.querySelector('.inventory-item-label')?.textContent.trim().toLowerCase() === customName.toLowerCase());
-                if (!exists) {
-                    const li = document.createElement('li');
-                    li.className = 'inventory-item';
-                    // Label
-                    const label = document.createElement('span');
-                    label.className = 'inventory-item-label';
-                    label.textContent = customName;
-                    // Controls
-                    const controls = document.createElement('div');
-                    controls.className = 'inventory-item-controls';
-                    // Remove button
-                    const removeBtn = document.createElement('button');
-                    removeBtn.className = 'inventory-item-remove';
-                    removeBtn.title = 'Remove';
-                    removeBtn.innerHTML = '<span aria-hidden="true">&#8722;</span>';
-                    removeBtn.style.display = 'none';
-                    // Count span
-                    const countSpan = document.createElement('span');
-                    countSpan.className = 'inventory-item-count';
-                    countSpan.textContent = '0';
-                    countSpan.style.display = 'none';
-                    // Add button
-                    const addBtn = document.createElement('button');
-                    addBtn.className = 'inventory-item-add';
-                    addBtn.title = 'Add';
-                    addBtn.innerHTML = '<span aria-hidden="true">&#43;</span>';
-                    addBtn.style.display = 'inline-flex';
-                    // Item count state
-                    let count = 0;
-                    function updateControls() {
-                        if (count > 0) {
-                            removeBtn.style.display = 'inline-flex';
-                            countSpan.style.display = 'inline-block';
-                            countSpan.textContent = count;
-                            li.classList.add('added');
-                        } else {
-                            removeBtn.style.display = 'none';
-                            countSpan.style.display = 'none';
-                            countSpan.textContent = '0';
-                            li.classList.remove('added');
-                        }
-                    }
-                    addBtn.onclick = function(e) {
-                        e.preventDefault();
-                        count++;
-                        updateControls();
-                    };
-                    removeBtn.onclick = function(e) {
-                        e.preventDefault();
-                        if (count > 0) {
-                            count--;
-                            updateControls();
-                        }
-                    };
-                    controls.appendChild(removeBtn);
-                    controls.appendChild(countSpan);
-                    controls.appendChild(addBtn);
-                    li.appendChild(label);
-                    li.appendChild(controls);
-                    ul.appendChild(li);
-                    // Attach toggle to new custom item
-                    attachInventoryItemToggles();
-                }
+            if (!customName || !window.currentRoom || !ROOM_ITEMS[window.currentRoom]) return;
+            // Prevent duplicates
+            if (ROOM_ITEMS[window.currentRoom].some(item => item.toLowerCase() === customName.toLowerCase())) {
+                customModal.style.display = 'none';
+                return;
             }
+            // Store custom item in customItemsPerRoom for persistence
+            if (!customItemsPerRoom[window.currentRoom]) customItemsPerRoom[window.currentRoom] = [];
+            if (!customItemsPerRoom[window.currentRoom].includes(customName)) {
+                customItemsPerRoom[window.currentRoom].push(customName);
+            }
+            // Only set the new custom item to 1, preserve all other item quantities
+            if (typeof itemQuantities[customName] === 'undefined') {
+                itemQuantities[customName] = 1;
+            }
+            renderRoomItems(window.currentRoom);
             customModal.style.display = 'none';
         });
     }
@@ -808,15 +1048,72 @@ document.addEventListener('DOMContentLoaded', function () {
         'Large Boxes',
         'Extra Large Boxes',
     ];
+
+    function openEditMultiFloorCustomItemModal(labelElement, listItem, ul) {
+        let modal = document.getElementById('edit-multi-floor-custom-item-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'edit-multi-floor-custom-item-modal';
+            modal.style.display = 'none';
+            modal.style.position = 'fixed';
+            modal.style.left = '0';
+            modal.style.top = '0';
+            modal.style.width = '100vw';
+            modal.style.height = '100vh';
+            modal.style.background = 'rgba(0,0,0,0.2)';
+            modal.style.zIndex = '10000';
+            modal.style.justifyContent = 'center';
+            modal.style.alignItems = 'center';
+            modal.style.display = 'flex';
+            modal.innerHTML = `
+                <div style="background:#fff;padding:24px 32px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);min-width:300px;max-width:90vw;">
+                    <label style="display:block;margin-bottom:8px;">Edit Item Name</label>
+                    <input type="text" class="edit-multi-floor-custom-item-input" style="width:100%;padding:8px 12px;margin-bottom:16px;" placeholder="Enter new item name">
+                    <div style="margin-top:18px; text-align:right; display:flex; gap:12px; justify-content:flex-end;">
+                        <button type="button" class="edit-multi-floor-custom-item-cancel" style="padding:7px 18px; border-radius:5px; border:1px solid #e5e7eb; background:#f3f4f6; color:#444; font-weight:600; font-size:1.1rem;">Cancel</button>
+                        <button type="button" class="edit-multi-floor-custom-item-save" style="padding:7px 18px; border-radius:5px; border:none; background:#2563eb; color:#fff; font-weight:600; font-size:1.1rem;">Save</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+        
+        const input = modal.querySelector('.edit-multi-floor-custom-item-input');
+        const originalName = labelElement.textContent;
+        input.value = originalName;
+        modal.style.display = 'flex';
+        input.focus();
+        input.select();
+        
+        modal.querySelector('.edit-multi-floor-custom-item-cancel').onclick = function() {
+            modal.style.display = 'none';
+        };
+        
+        modal.querySelector('.edit-multi-floor-custom-item-save').onclick = function() {
+            const newName = input.value.trim();
+            if (!newName) {
+                modal.style.display = 'none';
+                return;
+            }
+            // Check for duplicates in the list
+            const exists = Array.from(ul.children).some(li => 
+                li !== listItem && 
+                li.querySelector('.inventory-item-label')?.textContent.toLowerCase() === newName.toLowerCase()
+            );
+            if (exists) {
+                alert('An item with this name already exists.');
+                return;
+            }
+            // Update the label
+            labelElement.textContent = newName;
+            modal.style.display = 'none';
+        };
+    }
+
     function createInventoryBlock(floorName) {
         // Block wrapper
         const block = document.createElement('div');
         block.className = 'floor-inventory-block';
-        block.style.margin = '32px 0';
-        block.style.background = '#fff';
-        block.style.borderRadius = '8px';
-        block.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)';
-        block.style.padding = '24px 18px 18px 18px';
 
         // Title
         const title = document.createElement('h3');
@@ -836,6 +1133,8 @@ document.addEventListener('DOMContentLoaded', function () {
             btn.addEventListener('click', function() {
                 tabs.querySelectorAll('.inventory-tab').forEach(tab => tab.classList.remove('active'));
                 btn.classList.add('active');
+                currentTab = room.name;
+                renderItems(currentTab);
             });
             tabs.appendChild(btn);
         });
@@ -844,35 +1143,189 @@ document.addEventListener('DOMContentLoaded', function () {
         if (firstTab) firstTab.classList.add('active');
         block.appendChild(tabs);
 
-        // Item list with robust + and - controls
+        // Item list
         const ul = document.createElement('ul');
         ul.className = 'inventory-items-list';
-        // Always show all inventory items, regardless of tab
+        const listWrap = document.createElement('div');
+        listWrap.className = 'room-items-list';
+        listWrap.appendChild(ul);
+        // Track custom items for this floor
+        const customFloorItems = [];
+        const floorSelectedItems = {};
+        const floorQuantities = {};
+        
+        const getRoomKey = (tabName) => {
+            const key = (tabName || '').toLowerCase();
+            if (key === 'utility room') return 'utility';
+            if (key === 'boxes & other') return 'boxes';
+            return key;
+        };
+
+        // Show room-specific items plus any custom items
         function getItemsForTab(tabName) {
-            return inventoryItems;
+            const roomKey = getRoomKey(tabName);
+            const baseItems = ROOM_ITEMS[roomKey] ? ROOM_ITEMS[roomKey] : inventoryItems;
+            return baseItems.concat(customFloorItems);
         }
-        // Track current tab
+        
         // Set initial tab to the first tab's data-room-name
         let currentTab = tabs.querySelector('.inventory-tab')?.getAttribute('data-room-name') || 'Hallway';
+        
         function renderItems(tabName) {
             ul.innerHTML = '';
             getItemsForTab(tabName).forEach(itemName => {
                 const li = document.createElement('li');
-                li.className = 'inventory-item';
+                const selected = floorSelectedItems[itemName] || false;
+                const qty = floorQuantities[itemName] || 0;
+                const isCustomItem = customFloorItems.includes(itemName);
+                li.className = 'inventory-item' + (selected ? ' selected' : '');
+                li.setAttribute('data-item', itemName);
+                
                 const label = document.createElement('span');
                 label.className = 'inventory-item-label';
                 label.textContent = itemName;
                 li.appendChild(label);
+                
+                // Quantity controls
+                const qtyDiv = document.createElement('div');
+                qtyDiv.className = 'room-item-controls';
+                qtyDiv.setAttribute('data-item', itemName);
+                
+                const minusBtn = document.createElement('button');
+                minusBtn.type = 'button';
+                minusBtn.className = 'room-item-quantity-btn room-item-qty-minus';
+                minusBtn.setAttribute('data-item', itemName);
+                minusBtn.textContent = '−';
+                
+                const qtyDisplay = document.createElement('span');
+                qtyDisplay.className = 'room-item-quantity-display';
+                qtyDisplay.textContent = qty;
+                
+                const plusBtn = document.createElement('button');
+                plusBtn.type = 'button';
+                plusBtn.className = 'room-item-quantity-btn room-item-qty-plus';
+                plusBtn.setAttribute('data-item', itemName);
+                plusBtn.textContent = '+';
+                
+                qtyDiv.appendChild(minusBtn);
+                qtyDiv.appendChild(qtyDisplay);
+                qtyDiv.appendChild(plusBtn);
+                
+                // Add edit/delete buttons for custom items
+                if (isCustomItem) {
+                    const editBtn = document.createElement('button');
+                    editBtn.type = 'button';
+                    editBtn.className = 'item-edit-btn';
+                    editBtn.title = 'Edit item';
+                    editBtn.textContent = '✎';
+                    editBtn.style.background = 'none';
+                    editBtn.style.border = 'none';
+                    editBtn.style.cursor = 'pointer';
+                    editBtn.style.padding = '4px 6px';
+                    editBtn.style.color = '#3b82f6';
+                    editBtn.style.fontWeight = '600';
+                    editBtn.style.marginLeft = '8px';
+                    editBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const newName = prompt('Edit item name:', itemName);
+                        if (newName && newName.trim() && newName.trim() !== itemName) {
+                            const trimmedName = newName.trim();
+                            const allItems = inventoryItems.concat(customFloorItems);
+                            const exists = allItems.some(item => item.toLowerCase() === trimmedName.toLowerCase());
+                            if (!exists) {
+                                const index = customFloorItems.indexOf(itemName);
+                                if (index > -1) {
+                                    customFloorItems[index] = trimmedName;
+                                }
+                                // Move quantities
+                                if (itemName in floorQuantities) {
+                                    floorQuantities[trimmedName] = floorQuantities[itemName];
+                                    delete floorQuantities[itemName];
+                                }
+                                if (itemName in floorSelectedItems) {
+                                    floorSelectedItems[trimmedName] = floorSelectedItems[itemName];
+                                    delete floorSelectedItems[itemName];
+                                }
+                                renderItems(tabName);
+                            } else {
+                                alert('An item with this name already exists.');
+                            }
+                        }
+                    });
+                    qtyDiv.appendChild(editBtn);
+                    
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.type = 'button';
+                    deleteBtn.className = 'item-delete-btn';
+                    deleteBtn.title = 'Delete item';
+                    deleteBtn.textContent = '✕';
+                    deleteBtn.style.background = 'none';
+                    deleteBtn.style.border = 'none';
+                    deleteBtn.style.cursor = 'pointer';
+                    deleteBtn.style.padding = '4px 6px';
+                    deleteBtn.style.color = '#ef4444';
+                    deleteBtn.style.fontWeight = '600';
+                    deleteBtn.style.marginLeft = '4px';
+                    deleteBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        if (confirm(`Are you sure you want to delete "${itemName}"?`)) {
+                            const index = customFloorItems.indexOf(itemName);
+                            if (index > -1) {
+                                customFloorItems.splice(index, 1);
+                            }
+                            delete floorQuantities[itemName];
+                            delete floorSelectedItems[itemName];
+                            renderItems(tabName);
+                        }
+                    });
+                    qtyDiv.appendChild(deleteBtn);
+                }
+                
+                li.appendChild(qtyDiv);
+                
                 li.style.cursor = 'pointer';
-                li.onclick = function(e) {
-                    e.preventDefault();
-                    li.classList.toggle('selected');
-                };
+                li.addEventListener('click', function(e) {
+                    if (e.target.closest('.room-item-controls') || e.target.closest('.item-edit-btn') || e.target.closest('.item-delete-btn')) return;
+                    floorSelectedItems[itemName] = !floorSelectedItems[itemName];
+                    if (!floorSelectedItems[itemName]) {
+                        floorQuantities[itemName] = 0;
+                    }
+                    renderItems(tabName);
+                });
+                
                 ul.appendChild(li);
             });
+            
+            // Quantity plus button handlers
+            ul.querySelectorAll('.room-item-qty-plus').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const item = btn.getAttribute('data-item');
+                    floorQuantities[item] = (floorQuantities[item] || 0) + 1;
+                    floorSelectedItems[item] = true;
+                    renderItems(tabName);
+                });
+            });
+            
+            // Quantity minus button handlers
+            ul.querySelectorAll('.room-item-qty-minus').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const item = btn.getAttribute('data-item');
+                    if (floorQuantities[item] > 1) {
+                        floorQuantities[item]--;
+                    } else {
+                        floorQuantities[item] = 0;
+                        floorSelectedItems[item] = false;
+                    }
+                    renderItems(tabName);
+                });
+            });
         }
+        
         renderItems(currentTab);
-        block.appendChild(ul);
+        block.appendChild(listWrap);
+        
         // Update items on tab click
         tabs.querySelectorAll('.inventory-tab').forEach(tabBtn => {
             tabBtn.addEventListener('click', function() {
@@ -929,65 +1382,15 @@ document.addEventListener('DOMContentLoaded', function () {
             const customName = input.value.trim();
             if (!customName) return;
             // Prevent duplicates
-            const exists = Array.from(ul.children).some(li => li.querySelector('.inventory-item-label')?.textContent === customName);
+            const allItems = inventoryItems.concat(customFloorItems);
+            const exists = allItems.some(item => item.toLowerCase() === customName.toLowerCase());
             if (!exists) {
-                const li = document.createElement('li');
-                li.className = 'inventory-item';
-                const label = document.createElement('span');
-                label.className = 'inventory-item-label';
-                label.textContent = customName;
-                const controls = document.createElement('div');
-                controls.className = 'inventory-item-controls';
-                // Remove button
-                const removeBtn = document.createElement('button');
-                removeBtn.className = 'inventory-item-remove';
-                removeBtn.title = 'Remove';
-                removeBtn.innerHTML = '<span aria-hidden="true">&#8722;</span>';
-                removeBtn.style.display = 'none';
-                // Count span
-                const countSpan = document.createElement('span');
-                countSpan.className = 'inventory-item-count';
-                countSpan.textContent = '0';
-                countSpan.style.display = 'none';
-                // Add button
-                const addBtn = document.createElement('button');
-                addBtn.className = 'inventory-item-add';
-                addBtn.title = 'Add';
-                addBtn.innerHTML = '<span aria-hidden="true">&#43;</span>';
-                addBtn.style.display = 'inline-flex';
-                // Item count state
-                let count = 0;
-                function updateControls() {
-                    if (count > 0) {
-                        removeBtn.style.display = 'inline-flex';
-                        countSpan.style.display = 'inline-block';
-                        countSpan.textContent = count;
-                        li.classList.add('added');
-                    } else {
-                        removeBtn.style.display = 'none';
-                        countSpan.style.display = 'none';
-                        countSpan.textContent = '0';
-                        li.classList.remove('added');
-                    }
-                }
-                addBtn.onclick = function(e) {
-                    e.preventDefault();
-                    count++;
-                    updateControls();
-                };
-                removeBtn.onclick = function(e) {
-                    e.preventDefault();
-                    if (count > 0) {
-                        count--;
-                        updateControls();
-                    }
-                };
-                controls.appendChild(removeBtn);
-                controls.appendChild(countSpan);
-                controls.appendChild(addBtn);
-                li.appendChild(label);
-                li.appendChild(controls);
-                ul.appendChild(li);
+                // Add to custom items for this floor
+                customFloorItems.push(customName);
+                // Initialize quantity to 1
+                floorQuantities[customName] = 1;
+                // Re-render to show the new item
+                renderItems(currentTab);
             }
             customModal.style.display = 'none';
         });
@@ -1059,6 +1462,8 @@ document.addEventListener('DOMContentLoaded', function () {
         addedFloors.add(floor);
         const block = createInventoryBlock(floor);
         floorsContainer.appendChild(block);
+        // Scroll to the newly added inventory block
+        block.scrollIntoView({ behavior: 'smooth', block: 'start' });
         floorModal.style.display = 'none';
         // Force update of floor icon grid and modal dropdown
         const propertyTypeSelect = document.getElementById('pickup-property-type');
@@ -1068,98 +1473,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 // --- Inventory UI Functionality ---
-document.addEventListener('DOMContentLoaded', function () {
-    // Use the unified inventoryItems array from the multi-floor section
-    const inventoryItems = [
-        '2 seater sofa',
-        '3 seater sofa',
-        'Armchair',
-        'Coffee table',
-        'TV',
-        'TV Unit',
-        'Side Tables',
-        'Book Case',
-        'Rug',
-        'Artwork',
-        'Lamps & Shades',
-        'Small Boxes',
-        'Medium Boxes',
-        'Large Boxes',
-        'Extra Large Boxes',
-    ];
-
-    const inventoryList = document.querySelector('#house-removal-inventory-section .inventory-items-list');
-    const searchInput = document.querySelector('#house-removal-inventory-section .inventory-search');
-
-    function handleAddClick(e) {
-        e.preventDefault();
-        const item = e.currentTarget.closest('.inventory-item');
-        if (item) {
-            const countSpan = item.querySelector('.inventory-item-count');
-            const removeBtn = item.querySelector('.inventory-item-remove');
-            let count = parseInt(countSpan.textContent, 10) || 0;
-            count++;
-            countSpan.textContent = count;
-            countSpan.style.display = 'inline-block';
-            removeBtn.style.display = 'inline-flex';
-            item.classList.add('added');
-        }
-    }
-    function handleRemoveClick(e) {
-        e.preventDefault();
-        const item = e.currentTarget.closest('.inventory-item');
-        if (item) {
-            const countSpan = item.querySelector('.inventory-item-count');
-            const removeBtn = item.querySelector('.inventory-item-remove');
-            let count = parseInt(countSpan.textContent, 10) || 0;
-            if (count > 1) {
-                count--;
-                countSpan.textContent = count;
-            } else {
-                count = 0;
-                countSpan.textContent = '';
-                countSpan.style.display = 'none';
-                removeBtn.style.display = 'none';
-                item.classList.remove('added');
-            }
-        }
-    }
-    function attachAddListeners() {
-        inventoryList.querySelectorAll('.inventory-item-add').forEach(btn => {
-            btn.removeEventListener('click', handleAddClick);
-            btn.addEventListener('click', handleAddClick);
-        });
-        inventoryList.querySelectorAll('.inventory-item-remove').forEach(btn => {
-            btn.removeEventListener('click', handleRemoveClick);
-            btn.addEventListener('click', handleRemoveClick);
-        });
-    }
-    function filterInventoryList() {
-        const query = searchInput.value.trim().toLowerCase();
-        inventoryList.innerHTML = '';
-        inventoryItems.forEach(itemName => {
-            if (!query || itemName.toLowerCase().includes(query)) {
-                const li = document.createElement('li');
-                li.className = 'inventory-item';
-                li.innerHTML = `
-                    <span class="inventory-item-label">${itemName}</span>
-                    <div class="inventory-item-controls">
-                        <button class="inventory-item-remove" title="Remove" style="display:none;"><span aria-hidden="true">−</span></button>
-                        <span class="inventory-item-count" style="display:none;"></span>
-                        <button class="inventory-item-add" title="Add"><span aria-hidden="true">+</span></button>
-                    </div>
-                `;
-                inventoryList.appendChild(li);
-            }
-        });
-        attachAddListeners();
-    }
-    if (searchInput && inventoryList) {
-        searchInput.addEventListener('input', filterInventoryList);
-        filterInventoryList();
-    }
-    attachAddListeners();
-});
+// (Legacy inventoryItems/inventoryList code removed as new inventory system is in use)
 /**
  * MAPBOX SETUP INSTRUCTIONS:
  * 
@@ -7193,13 +7507,14 @@ function renderMultiStopHouseItems(stopId, room) {
         }
         return visibleItems.map((item) => {
             const qty = quantities[item] || 0;
+            const isSelected = qty > 0;
             return `
-                <div class="room-item">
+                <div class="room-item ${isSelected ? 'selected' : ''}">
                     <span class="room-item-name">${item}</span>
-                    <div class="item-quantity-control">
-                        <button type="button" class="qty-btn minus multi-stop-house-qty" data-stop-id="${stopId}" data-item="${item}" data-room="${room}" data-subroom="${activeSubRoom}" data-action="minus" ${qty === 0 ? 'disabled' : ''}>−</button>
-                        <span class="qty-display">${qty}</span>
-                        <button type="button" class="qty-btn plus multi-stop-house-qty" data-stop-id="${stopId}" data-item="${item}" data-room="${room}" data-subroom="${activeSubRoom}" data-action="plus">+</button>
+                    <div class="room-item-controls">
+                        <button type="button" class="room-item-quantity-btn room-item-qty-minus multi-stop-house-qty" data-stop-id="${stopId}" data-item="${item}" data-room="${room}" data-subroom="${activeSubRoom}" data-action="minus" ${qty === 0 ? 'disabled' : ''}>−</button>
+                        <span class="room-item-quantity-display">${qty}</span>
+                        <button type="button" class="room-item-quantity-btn room-item-qty-plus multi-stop-house-qty" data-stop-id="${stopId}" data-item="${item}" data-room="${room}" data-subroom="${activeSubRoom}" data-action="plus">+</button>
                     </div>
                 </div>
             `;
@@ -7224,16 +7539,7 @@ function renderMultiStopHouseItems(stopId, room) {
         `
         : `${searchMarkup}${buildItemsMarkup()}`;
 
-    const customMarkup = `
-        <div class="custom-items-input">
-            <label>Enter more house items here</label>
-            <textarea class="multi-stop-house-custom" data-stop-id="${stopId}" placeholder="Enter any additional items" data-optional="true">${state.customItems || ''}</textarea>
-        </div>
-        <div class="custom-items-input">
-            <label>Enter any additional items</label>
-            <textarea class="multi-stop-house-extra" data-stop-id="${stopId}" placeholder="Add any other information" data-optional="true">${state.extraItems || ''}</textarea>
-        </div>
-    `;
+   
 
     container.innerHTML = `${subRoomMarkup}${customMarkup}`;
 }
@@ -7283,12 +7589,12 @@ function renderMultiStopOfficeInventory(stopId) {
         const isSelected = qty > 0;
         const isAddMore = item.name === 'Add more items';
         html += `
-            <div class="room-item">
+            <div class="room-item ${isSelected ? 'selected' : ''}">
                 <span class="room-item-name">${item.name}</span>
-                <div class="item-quantity-control">
-                    <button type="button" class="qty-btn minus multi-stop-office-qty" data-stop-id="${stopId}" data-item="${item.name}" data-action="minus" ${qty === 0 ? 'disabled' : ''}>−</button>
-                    <span class="qty-display">${qty}</span>
-                    <button type="button" class="qty-btn plus multi-stop-office-qty" data-stop-id="${stopId}" data-item="${item.name}" data-action="plus">+</button>
+                <div class="room-item-controls">
+                    <button type="button" class="room-item-quantity-btn room-item-qty-minus multi-stop-office-qty" data-stop-id="${stopId}" data-item="${item.name}" data-action="minus" ${qty === 0 ? 'disabled' : ''}>−</button>
+                    <span class="room-item-quantity-display">${qty}</span>
+                    <button type="button" class="room-item-quantity-btn room-item-qty-plus multi-stop-office-qty" data-stop-id="${stopId}" data-item="${item.name}" data-action="plus">+</button>
                 </div>
             </div>
             ${isAddMore && isSelected ? `

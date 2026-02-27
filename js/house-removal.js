@@ -242,28 +242,20 @@ function renderRoomItems(room) {
 
     items.forEach(item => {
         const qty = itemQuantities[item] || 0;
+        const isSelected = qty > 0;
         html += `
-            <div class="room-item">
+            <li class="room-item ${isSelected ? 'selected' : ''}">
                 <span class="room-item-name">${item}</span>
-                <div class="item-quantity-control">
-                    <button type="button" class="qty-btn minus" onclick="decreaseQuantity('${item}')" ${qty === 0 ? 'disabled' : ''}>−</button>
-                    <span class="qty-display">${qty}</span>
-                    <button type="button" class="qty-btn plus" onclick="increaseQuantity('${item}')">+</button>
+                <div class="room-item-controls">
+                    <button type="button" class="room-item-quantity-btn minus" data-item="${item}" onclick="decreaseQuantity('${item}')" ${qty === 0 ? 'disabled' : ''}>−</button>
+                    <span class="room-item-quantity-display">${qty}</span>
+                    <button type="button" class="room-item-quantity-btn plus" data-item="${item}" onclick="increaseQuantity('${item}')">+</button>
                 </div>
-            </div>
+            </li>
         `;
     });
 
-    html += `
-        <div class="custom-items-input">
-            <label>Enter more house items here</label>
-            <textarea id="custom-items-textarea" placeholder="Enter any additional items" data-optional="true"></textarea>
-        </div>
-        <div class="custom-items-input">
-            <label>Enter any additional items</label>
-            <textarea id="extra-items-textarea" placeholder="Add any other information" data-optional="true"></textarea>
-        </div>
-    `;
+
 
     container.innerHTML = html;
 }
