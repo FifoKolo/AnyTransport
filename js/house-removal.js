@@ -12,7 +12,11 @@ const ROOM_ITEMS = {
         'Book Case',
         'Rug',
         'Artwork',
-        'Lamps & Shades'
+        'Lamps & Shades',
+        'Small Boxes',
+        'Medium Boxes',
+        'Large Boxes',
+        'XL Boxes'
     ],
     dining: [
         'Dining Table - 6 person',
@@ -21,7 +25,11 @@ const ROOM_ITEMS = {
         'Cabinet Dresser',
         'Display Unit',
         'Side Board',
-        'Rug'
+        'Rug',
+        'Small Boxes',
+        'Medium Boxes',
+        'Large Boxes',
+        'XL Boxes'
     ],
     kitchen: [
         'Kitchen Table',
@@ -34,7 +42,11 @@ const ROOM_ITEMS = {
         'Microwave',
         'Shelving Unit',
         'Bin',
-        'Vacuum Cleaner'
+        'Vacuum Cleaner',
+        'Small Boxes',
+        'Medium Boxes',
+        'Large Boxes',
+        'XL Boxes'
     ],
     office: [
         'Desk',
@@ -45,9 +57,11 @@ const ROOM_ITEMS = {
         'Photocopier',
         'Printer',
         'Board room table',
-        'Boxes - large',
-        'Boxes - medium',
-        'Crates'
+        'Crates',
+        'Small Boxes',
+        'Medium Boxes',
+        'Large Boxes',
+        'XL Boxes'
     ],
     bedrooms: [
         'Kingsize Bed',
@@ -60,7 +74,11 @@ const ROOM_ITEMS = {
         'Mirror',
         'Lamps & Shades',
         'Suitcase',
-        'Wardrobe Boxes'
+        'Wardrobe Boxes',
+        'Small Boxes',
+        'Medium Boxes',
+        'Large Boxes',
+        'XL Boxes'
     ],
     bathrooms: [
         'Bathroom Cabinet',
@@ -68,7 +86,11 @@ const ROOM_ITEMS = {
         'Mirror',
         'Bath',
         'Sink',
-        'Rug'
+        'Rug',
+        'Small Boxes',
+        'Medium Boxes',
+        'Large Boxes',
+        'XL Boxes'
     ],
     hallway: [
         'Console table',
@@ -77,7 +99,11 @@ const ROOM_ITEMS = {
         'Mirror',
         'Runner rug',
         'Umbrella stand',
-        'Storage bench'
+        'Storage bench',
+        'Small Boxes',
+        'Medium Boxes',
+        'Large Boxes',
+        'XL Boxes'
     ],
     garden: [
         'Garden table',
@@ -86,7 +112,11 @@ const ROOM_ITEMS = {
         'Parasol',
         'Lawn mower',
         'Barbecue',
-        'Bicycle'
+        'Bicycle',
+        'Small Boxes',
+        'Medium Boxes',
+        'Large Boxes',
+        'XL Boxes'
     ],
     utility: [
         'Washing Machine',
@@ -94,7 +124,11 @@ const ROOM_ITEMS = {
         'Ironing Board',
         'Vacuum Cleaner',
         'Shelving Unit',
-        'Laundry Basket'
+        'Laundry Basket',
+        'Small Boxes',
+        'Medium Boxes',
+        'Large Boxes',
+        'XL Boxes'
     ],
     shed: [
         'Tool Chest',
@@ -102,13 +136,17 @@ const ROOM_ITEMS = {
         'Lawn mower',
         'Garden tools',
         'Bike',
-        'Storage boxes'
+        'Storage boxes',
+        'Small Boxes',
+        'Medium Boxes',
+        'Large Boxes',
+        'XL Boxes'
     ],
     boxes: [
-        'Extra Large Boxes',
-        'Large Boxes',
-        'Medium Boxes',
         'Small Boxes',
+        'Medium Boxes',
+        'Large Boxes',
+        'XL Boxes',
         'Artwork',
         'Bicycle',
         'Suitcase',

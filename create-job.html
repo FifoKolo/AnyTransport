@@ -685,47 +685,84 @@
                         </div>
 
                         <!-- Step 5: Delivery Floor Selection (same as step 3) -->
-                        <div class="card-section pickup-room-flex" id="delivery-room-list-wrapper" data-form-step="5">
+                        <div class="card-section pickup-room-flex" id="delivery-room-list-wrapper" data-form-step="5" style="display: none; height: 0; overflow: hidden; padding: 0; margin: 0; border: none;">
                            
                             <div class="delivery-floors-image" id="delivery-floors-image">
                                 <img src="assets/floors.png" alt="Delivery Floors" class="clickable-image" style="cursor: pointer;" />
                             </div>
                             <div id="delivery-room-list">
-                               
-                                <div class="form-group">
-                                    <label class="form-label">Delivery Floor level</label>
-                                    <div class="floor-icon-grid" id="delivery-floor-icon-grid">
-                                        <!-- Floor icons will be injected here by JS based on property type -->
-                                    </div>
-                                    <input type="hidden" id="delivery-floor-select" name="delivery-floor-select" value="">
-                                    <!-- Elevator Option (shown only for Apartment) - placed directly under floor field -->
-                                    <div id="delivery-elevator-option-container">
-                                        <label style="font-size: 1.05rem; font-weight: 600; display: block; margin-bottom: 8px;">Is there an elevator available in the building?</label>
-                                        <div id="delivery-elevator-icon-grid"></div>
-                                    </div>
-                                </div>
                             </div>
                         </div>
 
-                        <!-- Item Organization Section (Drag and Drop) -->
-                        <div class="card-section" id="item-organization-section" data-form-step="5" style="display: none;">
-                            <h2 class="section-title">Organize Items by Room</h2>
+                        <!-- Item Organization Section (Floor-Based) -->
+                        <div class="card-section" id="item-organization-section" data-form-step="5">
+                            <h2 class="section-title">Organize Items by Delivery Floor</h2>
+                            <p style="color: #6b7280; margin-bottom: 20px; font-size: 0.95rem;">Select items from your inventory and assign them to delivery floors</p>
                             
-                            <div class="drag-drop-container">
-                                <!-- Items Pool -->
-                                <div class="items-pool-section">
-                                    <h3 style="margin-bottom: 1rem; color: #374151; font-size: 1.1rem;">Selected Items</h3>
-                                    <p style="margin-bottom: 1rem; color: #6b7280; font-size: 0.95rem;">Drag items below into the rooms where you'd like them delivered</p>
-                                    <div class="items-pool" id="delivery-items-pool">
-                                        <!-- Draggable items will be populated here by JavaScript -->
+                            <style>
+                                #item-organization-section {
+                                    overflow: visible !important;
+                                }
+                                
+                                .delivery-organization-container {
+                                    display: grid;
+                                    grid-template-columns: 400px 1fr;
+                                    gap: 24px;
+                                    align-items: start;
+                                    overflow: visible !important;
+                                }
+                                
+                                .selected-inventory-panel {
+                                    position: sticky;
+                                    top: 100px;
+                                    max-height: calc(100vh - 140px);
+                                    overflow-y: auto;
+                                    overflow-x: hidden;
+                                    border: 2px solid #e5e7eb;
+                                    border-radius: 12px;
+                                    background: #fff;
+                                    padding: 20px;
+                                    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+                                    z-index: 5;
+                                }
+                                
+                                .selected-inventory-panel h3 {
+                                    margin: 0 0 16px 0;
+                                    color: #1f2937;
+                                    font-size: 1.1rem;
+                                    font-weight: 600;
+                                }
+                                
+                                .delivery-floors-panel {
+                                    overflow: visible;
+                                }
+                                
+                                @media (max-width: 1024px) {
+                                    .delivery-organization-container {
+                                        grid-template-columns: 1fr;
+                                    }
+                                    
+                                    .selected-inventory-panel {
+                                        position: relative;
+                                        top: 0;
+                                        max-height: 400px;
+                                    }
+                                }
+                            </style>
+                            
+                            <div class="delivery-organization-container">
+                                <!-- Left: Selected Inventory (Sticky) -->
+                                <div class="selected-inventory-panel">
+                                    <h3>Your Inventory</h3>
+                                    <div id="delivery-inventory-list">
+                                        <!-- Items will be dynamically loaded here -->
                                     </div>
                                 </div>
-
-                                <!-- Rooms Grid -->
-                                <div class="rooms-grid-section">
-                                    <h3 style="margin-bottom: 1rem; color: #374151; font-size: 1.1rem;">Delivery Rooms</h3>
-                                    <div class="delivery-rooms-grid" id="delivery-rooms-grid">
-                                        <!-- Room drop zones will be populated here by JavaScript -->
+                                
+                                <!-- Right: Delivery Floors -->
+                                <div class="delivery-floors-panel">
+                                    <div id="delivery-floors-grid">
+                                        <!-- Floor sections will be dynamically rendered here -->
                                     </div>
                                 </div>
                             </div>

@@ -112,37 +112,37 @@ document.addEventListener('DOMContentLoaded', function () {
     // Room inventory logic
     const ROOM_ITEMS = {
         living: [
-            '2 seater sofa', '3 seater sofa', 'Armchair', 'Coffee table', 'TV', 'TV Unit', 'Side Tables', 'Book Case', 'Rug', 'Artwork', 'Lamps & Shades'
+            '2 seater sofa', '3 seater sofa', 'Armchair', 'Coffee table', 'TV', 'TV Unit', 'Side Tables', 'Book Case', 'Rug', 'Artwork', 'Lamps & Shades', 'Small Boxes', 'Medium Boxes', 'Large Boxes', 'XL Boxes'
         ],
         dining: [
-            'Dining Table - 6 person', 'Dining Table - 8/10 person', 'Dining Chairs', 'Cabinet Dresser', 'Display Unit', 'Side Board', 'Rug'
+            'Dining Table - 6 person', 'Dining Table - 8/10 person', 'Dining Chairs', 'Cabinet Dresser', 'Display Unit', 'Side Board', 'Rug', 'Small Boxes', 'Medium Boxes', 'Large Boxes', 'XL Boxes'
         ],
         kitchen: [
-            'Kitchen Table', 'Chairs', 'Fridge', 'Fridge Freezer', 'Tumble Dryer', 'Washing Machine', 'Oven', 'Microwave', 'Shelving Unit', 'Bin', 'Vacuum Cleaner'
+            'Kitchen Table', 'Chairs', 'Fridge', 'Fridge Freezer', 'Tumble Dryer', 'Washing Machine', 'Oven', 'Microwave', 'Shelving Unit', 'Bin', 'Vacuum Cleaner', 'Small Boxes', 'Medium Boxes', 'Large Boxes', 'XL Boxes'
         ],
         office: [
-            'Desk', 'Chair', 'Pedestal', 'Filing cabinet', 'Desktop computer', 'Photocopier', 'Printer', 'Board room table', 'Boxes - large', 'Boxes - medium', 'Crates'
+            'Desk', 'Chair', 'Pedestal', 'Filing cabinet', 'Desktop computer', 'Photocopier', 'Printer', 'Board room table', 'Crates', 'Small Boxes', 'Medium Boxes', 'Large Boxes', 'XL Boxes'
         ],
         bedrooms: [
-            'Kingsize Bed', 'Double Bed', 'Single Bed', 'Bedside Tables', 'Chest of Drawers', 'Wardrobe', 'Dressing Table', 'Mirror', 'Lamps & Shades', 'Suitcase', 'Wardrobe Boxes'
+            'Kingsize Bed', 'Double Bed', 'Single Bed', 'Bedside Tables', 'Chest of Drawers', 'Wardrobe', 'Dressing Table', 'Mirror', 'Lamps & Shades', 'Suitcase', 'Wardrobe Boxes', 'Small Boxes', 'Medium Boxes', 'Large Boxes', 'XL Boxes'
         ],
         bathrooms: [
-            'Bathroom Cabinet', 'Storage units', 'Mirror', 'Bath', 'Sink', 'Rug'
+            'Bathroom Cabinet', 'Storage units', 'Mirror', 'Bath', 'Sink', 'Rug', 'Small Boxes', 'Medium Boxes', 'Large Boxes', 'XL Boxes'
         ],
         hallway: [
-            'Console table', 'Coat rack', 'Shoe rack', 'Mirror', 'Runner rug', 'Umbrella stand', 'Storage bench'
+            'Console table', 'Coat rack', 'Shoe rack', 'Mirror', 'Runner rug', 'Umbrella stand', 'Storage bench', 'Small Boxes', 'Medium Boxes', 'Large Boxes', 'XL Boxes'
         ],
         garden: [
-            'Garden table', 'Chairs', 'Bench', 'Parasol', 'Lawn mower', 'Barbecue', 'Bicycle'
+            'Garden table', 'Chairs', 'Bench', 'Parasol', 'Lawn mower', 'Barbecue', 'Bicycle', 'Small Boxes', 'Medium Boxes', 'Large Boxes', 'XL Boxes'
         ],
         utility: [
-            'Washing Machine', 'Tumble Dryer', 'Ironing Board', 'Vacuum Cleaner', 'Shelving Unit', 'Laundry Basket'
+            'Washing Machine', 'Tumble Dryer', 'Ironing Board', 'Vacuum Cleaner', 'Shelving Unit', 'Laundry Basket', 'Small Boxes', 'Medium Boxes', 'Large Boxes', 'XL Boxes'
         ],
         shed: [
-            'Tool Chest', 'Workbench', 'Lawn mower', 'Garden tools', 'Bike', 'Storage boxes'
+            'Tool Chest', 'Workbench', 'Lawn mower', 'Garden tools', 'Bike', 'Storage boxes', 'Small Boxes', 'Medium Boxes', 'Large Boxes', 'XL Boxes'
         ],
         boxes: [
-            'Extra Large Boxes', 'Large Boxes', 'Medium Boxes', 'Small Boxes', 'Artwork', 'Bicycle', 'Suitcase', 'Wardrobe Boxes', 'Treadmill', 'Fish Tank'
+            'Small Boxes', 'Medium Boxes', 'Large Boxes', 'XL Boxes', 'Artwork', 'Bicycle', 'Suitcase', 'Wardrobe Boxes', 'Treadmill', 'Fish Tank'
         ]
     };
 
@@ -1236,45 +1236,78 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
-// --- Drag and Drop Item Organization for Step 5 ---
+// --- Floor-Based Item Organization for Step 5 (Delivery) ---
 document.addEventListener('DOMContentLoaded', function () {
-    const itemsPool = document.getElementById('delivery-items-pool');
-    const roomsGrid = document.getElementById('delivery-rooms-grid');
     const organizationSection = document.getElementById('item-organization-section');
+    const inventoryList = document.getElementById('delivery-inventory-list');
+    const floorsGrid = document.getElementById('delivery-floors-grid');
     
-    // Store room assignments
-    let roomAssignments = {};
+    // Store delivery floor assignments (floor name -> array of items with quantities)
+    let deliveryFloorAssignments = {};
+    window.deliveryFloorAssignments = deliveryFloorAssignments;
     
-    // Room definitions with icons
-    const deliveryRooms = [
-        { id: 'living', name: 'Living Room', icon: '🛋️' },
-        { id: 'dining', name: 'Dining Room', icon: '🍽️' },
-        { id: 'kitchen', name: 'Kitchen', icon: '🍳' },
-        { id: 'bedrooms', name: 'Bedrooms', icon: '🛏️' },
-        { id: 'bathrooms', name: 'Bathrooms', icon: '🚿' },
-        { id: 'hallway', name: 'Hallway', icon: '🚪' },
-        { id: 'office', name: 'Office', icon: '💼' },
-        { id: 'utility', name: 'Utility', icon: '🧺' },
-        { id: 'shed', name: 'Shed', icon: '🏠' },
-        { id: 'garden', name: 'Garden', icon: '🌳' }
-    ];
+    // Track selected items for assignment
+    let selectedItems = new Set();
     
-    // Initialize room assignments
-    deliveryRooms.forEach(room => {
-        roomAssignments[room.id] = [];
-    });
+    // Floor definitions - will be set based on delivery property type
+    let deliveryFloors = ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
     
-    // Render items pool with selected inventory items
-    function renderItemsPool() {
-        if (!itemsPool) return;
+    // Initialize delivery floor assignments with default floors
+    function initializeFloors(floorsArray) {
+        deliveryFloors = floorsArray || deliveryFloors;
+        deliveryFloorAssignments = {};
+        deliveryFloors.forEach(floor => {
+            deliveryFloorAssignments[floor] = [];
+        });
+        window.deliveryFloorAssignments = deliveryFloorAssignments;
+    }
+    
+    initializeFloors();
+    
+    // Listen for delivery property type changes
+    const deliveryPropertyTypeInput = document.getElementById('delivery-property-type');
+    if (deliveryPropertyTypeInput) {
+        deliveryPropertyTypeInput.addEventListener('change', function() {
+            const selectedType = this.value;
+            const propertyFloors = {
+                house: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', 'Attic'],
+                apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'],
+                duplex: ['Basement', 'Ground', '1st', '2nd','Attic'],
+                'warehouse/Shop': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
+                'warehouse': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
+                bungalow: ['Basement', 'Ground','Attic'],
+                'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
+            };
+            
+            // Reset all assignments and reinitialize with new floors
+            const newFloors = propertyFloors[selectedType] || propertyFloors['apartment'];
+            initializeFloors(newFloors);
+            
+            // Clear selections and re-render
+            selectedItems.clear();
+            renderInventoryList();
+            renderDeliveryFloors();
+        });
+    }
+    
+    // Function to get floor sort order
+    const getFloorSortOrder = (floor) => {
+        if (floor === 'Basement') return 0;
+        if (floor === 'Ground') return 1;
+        if (floor === 'Attic') return 1000;
         
-        itemsPool.innerHTML = '';
-        let hasItems = false;
+        const match = floor.match(/^(\d+)/);
+        if (match) {
+            return parseInt(match[1]) + 1;
+        }
         
-        // Collect all items with quantities from both single-floor and multi-floor blocks
+        return 999;
+    };
+    
+    // Function to get all unassigned items
+    function getUnassignedItems() {
         const allItems = {};
         
-        // Get items with quantity > 0 from the global itemQuantities (single floor)
         if (window.itemQuantities) {
             Object.keys(window.itemQuantities).forEach(item => {
                 const qty = window.itemQuantities[item];
@@ -1284,7 +1317,6 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
         
-        // Get items from all multi-floor blocks using the global multiFloorInventory
         if (window.multiFloorInventory) {
             Object.keys(window.multiFloorInventory).forEach(floorName => {
                 const floorItems = window.multiFloorInventory[floorName];
@@ -1297,193 +1329,362 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
         
-        // Create draggable elements for all items
+        // Filter out assigned items
+        const unassignedItems = {};
         Object.keys(allItems).forEach(item => {
-            const qty = allItems[item];
-            if (qty > 0) {
-                // Check if item is already assigned to a room
-                let isAssigned = false;
-                Object.values(roomAssignments).forEach(roomItems => {
-                    if (roomItems.some(ri => ri.name === item)) {
-                        isAssigned = true;
+            let isAssigned = false;
+            Object.values(deliveryFloorAssignments).forEach(floorItems => {
+                if (floorItems.some(fi => fi.name === item)) {
+                    isAssigned = true;
+                }
+            });
+            if (!isAssigned) {
+                unassignedItems[item] = allItems[item];
+            }
+        });
+        
+        return unassignedItems;
+    }
+    
+    // Function to render inventory list
+    function renderInventoryList() {
+        if (!inventoryList) return;
+        
+        const unassignedItems = getUnassignedItems();
+        inventoryList.innerHTML = '';
+        
+        if (Object.keys(unassignedItems).length === 0) {
+            inventoryList.innerHTML = '<p style="color: #9ca3af; font-size: 0.9rem; margin: 0;">All items have been assigned</p>';
+            return;
+        }
+        
+        Object.keys(unassignedItems).forEach(item => {
+            const qty = unassignedItems[item];
+            const isSelected = selectedItems.has(item);
+            
+            const itemEl = document.createElement('div');
+            itemEl.className = 'inventory-item-selectable';
+            itemEl.style.cssText = `
+                display: flex;
+                align-items: center;
+                padding: 12px;
+                margin-bottom: 8px;
+                border: 2px solid ${isSelected ? '#2563eb' : '#e5e7eb'};
+                border-radius: 8px;
+                background: ${isSelected ? '#eff6ff' : '#fff'};
+                cursor: pointer;
+                transition: all 0.2s ease;
+            `;
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = isSelected;
+            checkbox.style.cssText = `
+                width: 18px;
+                height: 18px;
+                margin-right: 12px;
+                cursor: pointer;
+                accent-color: #2563eb;
+            `;
+            checkbox.addEventListener('change', (e) => {
+                e.stopPropagation();
+                if (checkbox.checked) {
+                    selectedItems.add(item);
+                } else {
+                    selectedItems.delete(item);
+                }
+                renderInventoryList();
+                renderDeliveryFloors();
+            });
+            
+            const label = document.createElement('label');
+            label.style.cssText = `
+                flex: 1;
+                cursor: pointer;
+                font-size: 0.95rem;
+                font-weight: 500;
+                color: #374151;
+            `;
+            label.textContent = item;
+            label.addEventListener('click', () => {
+                checkbox.checked = !checkbox.checked;
+                checkbox.dispatchEvent(new Event('change'));
+            });
+            
+            const qtyBadge = document.createElement('span');
+            qtyBadge.style.cssText = `
+                background: #2563eb;
+                color: #fff;
+                padding: 4px 8px;
+                border-radius: 12px;
+                font-size: 0.85rem;
+                font-weight: 600;
+                margin-left: 8px;
+            `;
+            qtyBadge.textContent = '×' + qty;
+            
+            itemEl.appendChild(checkbox);
+            itemEl.appendChild(label);
+            itemEl.appendChild(qtyBadge);
+            
+            itemEl.addEventListener('click', (e) => {
+                if (e.target !== checkbox && e.target !== label) {
+                    checkbox.checked = !checkbox.checked;
+                    checkbox.dispatchEvent(new Event('change'));
+                }
+            });
+            
+            inventoryList.appendChild(itemEl);
+        });
+    }
+    
+    // Function to render delivery floors
+    function renderDeliveryFloors() {
+        if (!floorsGrid) return;
+        
+        floorsGrid.innerHTML = '';
+        const unassignedItems = getUnassignedItems();
+        const hasSelectedItems = selectedItems.size > 0;
+        
+        const sortedFloors = deliveryFloors.slice().sort((a, b) => getFloorSortOrder(a) - getFloorSortOrder(b));
+        
+        sortedFloors.forEach(floor => {
+            const section = document.createElement('div');
+            section.className = 'delivery-floor-section';
+            section.style.cssText = `
+                border: 1px solid #e5e7eb;
+                border-radius: 12px;
+                padding: 16px;
+                background: #f9fafb;
+                margin-bottom: 16px;
+            `;
+            section.setAttribute('data-floor', floor);
+            
+            // Header with floor name and buttons
+            const header = document.createElement('div');
+            header.style.cssText = `
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 12px;
+                padding-bottom: 12px;
+                border-bottom: 2px solid #e5e7eb;
+                flex-wrap: wrap;
+                gap: 8px;
+            `;
+            
+            const floorTitle = document.createElement('h4');
+            floorTitle.style.cssText = `
+                margin: 0;
+                color: #2563eb;
+                font-weight: 600;
+                font-size: 1.1rem;
+            `;
+            floorTitle.textContent = floor + ' Floor';
+            header.appendChild(floorTitle);
+            
+            const buttonGroup = document.createElement('div');
+            buttonGroup.style.cssText = `
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            `;
+            
+            // Add Selected button
+            if (hasSelectedItems) {
+                const addSelectedBtn = document.createElement('button');
+                addSelectedBtn.type = 'button';
+                addSelectedBtn.className = 'add-selected-btn';
+                addSelectedBtn.textContent = `+ Add Selected (${selectedItems.size})`;
+                addSelectedBtn.style.cssText = `
+                    padding: 6px 12px;
+                    background: #10b981;
+                    color: #fff;
+                    border: none;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 600;
+                    font-size: 0.9rem;
+                    transition: background 0.2s ease;
+                    white-space: nowrap;
+                `;
+                addSelectedBtn.addEventListener('mouseover', () => {
+                    addSelectedBtn.style.background = '#059669';
+                });
+                addSelectedBtn.addEventListener('mouseout', () => {
+                    addSelectedBtn.style.background = '#10b981';
+                });
+                addSelectedBtn.addEventListener('click', () => {
+                    // Add selected items to this floor
+                    selectedItems.forEach(item => {
+                        if (unassignedItems[item] && !deliveryFloorAssignments[floor].some(fi => fi.name === item)) {
+                            deliveryFloorAssignments[floor].push({ name: item, qty: unassignedItems[item] });
+                        }
+                    });
+                    selectedItems.clear();
+                    renderInventoryList();
+                    renderDeliveryFloors();
+                });
+                buttonGroup.appendChild(addSelectedBtn);
+            }
+            
+            // Add All button
+            const addAllBtn = document.createElement('button');
+            addAllBtn.type = 'button';
+            addAllBtn.className = 'add-all-btn';
+            addAllBtn.textContent = '+ Add All';
+            addAllBtn.style.cssText = `
+                padding: 6px 12px;
+                background: #2563eb;
+                color: #fff;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-weight: 600;
+                font-size: 0.9rem;
+                transition: background 0.2s ease;
+                white-space: nowrap;
+            `;
+            addAllBtn.addEventListener('mouseover', () => {
+                addAllBtn.style.background = '#1d4ed8';
+            });
+            addAllBtn.addEventListener('mouseout', () => {
+                addAllBtn.style.background = '#2563eb';
+            });
+            addAllBtn.addEventListener('click', () => {
+                // Add all unassigned items to this floor
+                Object.keys(unassignedItems).forEach(item => {
+                    if (!deliveryFloorAssignments[floor].some(fi => fi.name === item)) {
+                        deliveryFloorAssignments[floor].push({ name: item, qty: unassignedItems[item] });
                     }
                 });
-                
-                if (!isAssigned) {
-                    hasItems = true;
-                    const itemEl = document.createElement('div');
-                    itemEl.className = 'draggable-item';
-                    itemEl.draggable = true;
-                    itemEl.dataset.itemName = item;
-                    itemEl.dataset.itemQty = qty;
-                    itemEl.innerHTML = `
-                        <span>${item}</span>
-                        <span class="item-quantity-badge">×${qty}</span>
+                selectedItems.clear();
+                renderInventoryList();
+                renderDeliveryFloors();
+            });
+            buttonGroup.appendChild(addAllBtn);
+            
+            header.appendChild(buttonGroup);
+            section.appendChild(header);
+            
+            // Items list
+            const itemsList = document.createElement('div');
+            itemsList.className = 'delivery-floor-items-list';
+            itemsList.style.cssText = `
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            `;
+            
+            const floorItems = deliveryFloorAssignments[floor] || [];
+            if (floorItems.length === 0) {
+                const emptyMsg = document.createElement('p');
+                emptyMsg.style.cssText = `
+                    color: #9ca3af;
+                    font-size: 0.9rem;
+                    margin: 0;
+                    padding: 8px 0;
+                `;
+                emptyMsg.textContent = 'No items assigned yet';
+                itemsList.appendChild(emptyMsg);
+            } else {
+                floorItems.forEach(item => {
+                    const itemChip = document.createElement('div');
+                    itemChip.style.cssText = `
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        background: #fff;
+                        border: 1px solid #d1d5db;
+                        border-radius: 8px;
+                        padding: 10px 12px;
+                        font-size: 0.95rem;
                     `;
                     
-                    // Add drag event listeners
-                    itemEl.addEventListener('dragstart', handleDragStart);
-                    itemEl.addEventListener('dragend', handleDragEnd);
+                    const itemText = document.createElement('span');
+                    itemText.textContent = item.name + ' ×' + item.qty;
+                    itemChip.appendChild(itemText);
                     
-                    itemsPool.appendChild(itemEl);
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.textContent = '✕';
+                    removeBtn.style.cssText = `
+                        background: none;
+                        border: none;
+                        color: #ef4444;
+                        cursor: pointer;
+                        font-weight: bold;
+                        font-size: 1.2rem;
+                        padding: 0;
+                        margin-left: 8px;
+                    `;
+                    removeBtn.addEventListener('click', () => {
+                        // Remove item from floor
+                        deliveryFloorAssignments[floor] = deliveryFloorAssignments[floor].filter(fi => fi.name !== item.name);
+                        renderInventoryList();
+                        renderDeliveryFloors();
+                    });
+                    itemChip.appendChild(removeBtn);
+                    
+                    itemsList.appendChild(itemChip);
+                });
+            }
+            
+            section.appendChild(itemsList);
+            floorsGrid.appendChild(section);
+        });
+    }
+    
+    // Function to render both panels
+    function renderDeliveryOrganization() {
+        renderInventoryList();
+        renderDeliveryFloors();
+    }
+    
+    // Initialize and render the organization section when visible
+    function initializeOrganizationSection() {
+        if (!organizationSection) return;
+        
+        // Render the inventory and floors immediately
+        renderInventoryList();
+        renderDeliveryFloors();
+    }
+    
+    // Initialize when the organization section becomes visible
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.target === organizationSection) {
+                // Check if section became visible
+                if (organizationSection.offsetParent !== null) {
+                    setTimeout(initializeOrganizationSection, 100);
                 }
             }
         });
-        
-        if (!hasItems) {
-            itemsPool.classList.add('empty');
-        } else {
-            itemsPool.classList.remove('empty');
-        }
-    }
+    });
     
-    // Render room drop zones
-    function renderRoomZones() {
-        if (!roomsGrid) return;
-        
-        roomsGrid.innerHTML = '';
-        
-        deliveryRooms.forEach(room => {
-            const roomZone = document.createElement('div');
-            roomZone.className = 'room-drop-zone';
-            roomZone.dataset.roomId = room.id;
-            
-            const roomItems = roomAssignments[room.id] || [];
-            
-            roomZone.innerHTML = `
-                <div class="room-header">
-                    <span class="room-icon">${room.icon}</span>
-                    <span class="room-name">${room.name}</span>
-                </div>
-                <div class="room-items-list" id="room-items-${room.id}">
-                    ${roomItems.map(item => `
-                        <div class="room-item-chip" data-item-name="${item.name}">
-                            <span>${item.name} ×${item.qty}</span>
-                            <button type="button" class="room-item-remove" data-item-name="${item.name}" data-room-id="${room.id}">×</button>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-            
-            // Add drop event listeners
-            roomZone.addEventListener('dragover', handleDragOver);
-            roomZone.addEventListener('dragleave', handleDragLeave);
-            roomZone.addEventListener('drop', handleDrop);
-            
-            roomsGrid.appendChild(roomZone);
-        });
-        
-        // Add remove button listeners
-        document.querySelectorAll('.room-item-remove').forEach(btn => {
-            btn.addEventListener('click', handleRemoveItem);
+    if (organizationSection) {
+        observer.observe(organizationSection, { 
+            attributes: true, 
+            attributeFilter: ['class', 'style'] 
         });
     }
     
-    // Drag event handlers
-    function handleDragStart(e) {
-        e.currentTarget.classList.add('dragging');
-        e.dataTransfer.effectAllowed ='move';
-        e.dataTransfer.setData('text/plain', e.currentTarget.dataset.itemName);
-        e.dataTransfer.setData('itemQty', e.currentTarget.dataset.itemQty);
-    }
-    
-    function handleDragEnd(e) {
-        e.currentTarget.classList.remove('dragging');
-    }
-    
-    function handleDragOver(e) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        const dropZone = e.currentTarget.closest('.room-drop-zone');
-        if (dropZone) {
-            dropZone.classList.add('drag-over');
-        }
-    }
-    
-    function handleDragLeave(e) {
-        const dropZone = e.currentTarget.closest('.room-drop-zone');
-        if (dropZone && !dropZone.contains(e.relatedTarget)) {
-            dropZone.classList.remove('drag-over');
-        }
-    }
-    
-    function handleDrop(e) {
-        e.preventDefault();
-        const dropZone = e.currentTarget.closest('.room-drop-zone');
-        if (dropZone) {
-            dropZone.classList.remove('drag-over');
-            
-            const itemName = e.dataTransfer.getData('text/plain');
-            const itemQty = parseInt(e.dataTransfer.getData('itemQty'));
-            const roomId = dropZone.dataset.roomId;
-            
-            // Add item to room
-            if (!roomAssignments[roomId]) {
-                roomAssignments[roomId] = [];
-            }
-            roomAssignments[roomId].push({ name: itemName, qty: itemQty });
-            
-            // Re-render
-            renderItemsPool();
-            renderRoomZones();
-        }
-    }
-    
-    function handleRemoveItem(e) {
-        const itemName = e.currentTarget.dataset.itemName;
-        const roomId = e.currentTarget.dataset.roomId;
-        
-        // Remove from room assignments
-        if (roomAssignments[roomId]) {
-            roomAssignments[roomId] = roomAssignments[roomId].filter(item => item.name !== itemName);
-        }
-        
-        // Re-render
-        renderItemsPool();
-        renderRoomZones();
-    }
-    
-    // Function to check if organization section should be visible
+    // Function to check if organization section should be visible - DISABLED since we removed floor selection
     function updateOrganizationSectionVisibility() {
-        if (!organizationSection) return;
-        
-        const currentStep = document.body.getAttribute('data-form-step');
-        if (currentStep !== '5') {
-            organizationSection.style.display = 'none';
-            return;
-        }
-        
-        // Check if floor and elevator (if needed) are selected
-        const deliveryFloor = document.getElementById('delivery-floor-select');
-        const deliveryElevatorContainer = document.getElementById('delivery-elevator-option-container');
-        const deliveryElevator = document.getElementById('delivery-elevator-available');
-        
-        // Floor must be selected
-        if (!deliveryFloor || !deliveryFloor.value.trim()) {
-            organizationSection.style.display = 'none';
-            return;
-        }
-        
-        // If elevator is visible (non-ground floor), it must be selected
-        if (deliveryElevatorContainer && deliveryElevatorContainer.style.display !== 'none') {
-            if (!deliveryElevator || !deliveryElevator.value.trim()) {
-                organizationSection.style.display = 'none';
-                return;
-            }
-        }
-        
-        // All requirements met - show section
-        organizationSection.style.display = 'block';
-        renderItemsPool();
-        renderRoomZones();
+        // This function is no longer needed as we removed the delivery floor section
+        // The organization section is now the main way to assign items to delivery floors
     }
     
-    // Make function globally accessible
+    // Make function globally accessible for backward compatibility
     window.updateOrganizationSectionVisibility = updateOrganizationSectionVisibility;
     
     // Show organization section when entering step 5
     const stepObserver = new MutationObserver(() => {
-        updateOrganizationSectionVisibility();
+        // Initialize when step 5 is active
+        const currentStep = document.body.getAttribute('data-form-step');
+        if (currentStep === '5') {
+            setTimeout(initializeOrganizationSection, 100);
+        }
     });
     
     stepObserver.observe(document.body, {
@@ -1491,20 +1692,12 @@ document.addEventListener('DOMContentLoaded', function () {
         attributeFilter: ['data-form-step']
     });
     
-    // Listen for floor and elevator selection changes
-    const deliveryFloor = document.getElementById('delivery-floor-select');
-    const deliveryElevator = document.getElementById('delivery-elevator-available');
+    // Initialize on page load
+    setTimeout(initializeOrganizationSection, 500);
     
-    if (deliveryFloor) {
-        deliveryFloor.addEventListener('change', updateOrganizationSectionVisibility);
-    }
-    
-    if (deliveryElevator) {
-        deliveryElevator.addEventListener('change', updateOrganizationSectionVisibility);
-    }
-    
-    // Initial check
-    updateOrganizationSectionVisibility();
+    // Initial check - render the organization section content
+    renderInventoryList();
+    renderDeliveryFloors();
 });
 
 // --- Multi-Floor Inventory Functionality ---
@@ -1527,6 +1720,35 @@ document.addEventListener('DOMContentLoaded', function () {
     // Global storage for multi-floor inventory (floor name -> { item: qty, ... })
     const multiFloorInventory = {};
     window.multiFloorInventory = multiFloorInventory;  // Expose globally
+
+    // Function to get the sort order of a floor
+    const getFloorSortOrder = (floor) => {
+        if (floor === 'Basement') return 0;
+        if (floor === 'Ground') return 1;
+        if (floor === 'Attic') return 1000;  // Attic goes at the end
+        
+        // Handle numbered floors (1st, 2nd, 3rd, etc.)
+        const match = floor.match(/^(\d+)/);
+        if (match) {
+            return parseInt(match[1]) + 1;  // 1st = 2, 2nd = 3, etc. (so it comes after Ground)
+        }
+        
+        return 999;  // Unknown floors go before Attic
+    };
+
+    // Function to sort floors in the container
+    const sortFloorsInContainer = () => {
+        const blocks = Array.from(floorsContainer.children);
+        blocks.sort((a, b) => {
+            const floorA = a.getAttribute('data-floor');
+            const floorB = b.getAttribute('data-floor');
+            return getFloorSortOrder(floorA) - getFloorSortOrder(floorB);
+        });
+        
+        // Clear and re-add in sorted order
+        floorsContainer.innerHTML = '';
+        blocks.forEach(block => floorsContainer.appendChild(block));
+    };
 
     // Use the main propertyFloors object from the top of the file
     // Room types and SVGs for inventory-tabs
@@ -1623,29 +1845,232 @@ document.addEventListener('DOMContentLoaded', function () {
         };
     }
 
-    function createInventoryBlock(floorName) {
+    function createInventoryBlock(initialFloorName) {
         // Block wrapper
         const block = document.createElement('div');
         block.className = 'floor-inventory-block';
+        block.setAttribute('data-floor', initialFloorName);  // Store floor name as data attribute for easy access
+        
+        // Use a mutable reference for floor name so closures can access the updated value
+        const floorRef = { name: initialFloorName };
+
+        // Title wrapper with controls
+        const titleWrapper = document.createElement('div');
+        titleWrapper.style.display = 'flex';
+        titleWrapper.style.alignItems = 'center';
+        titleWrapper.style.justifyContent = 'space-between';
+        titleWrapper.style.marginBottom = '18px';
+        titleWrapper.style.gap = '12px';
 
         // Title
         const title = document.createElement('h3');
         title.className = 'inventory-floor-title';
-        title.textContent = `Add Inventory for ${floorName} Floor`;
-        block.appendChild(title);
+        title.textContent = `Add Inventory for ${floorRef.name} Floor`;
+        title.style.margin = '0';
+        title.style.flex = '1';
+        titleWrapper.appendChild(title);
+
+        // Edit floor button
+        const editFloorBtn = document.createElement('button');
+        editFloorBtn.type = 'button';
+        editFloorBtn.textContent = '✎ Change Floor';
+        editFloorBtn.style.padding = '6px 12px';
+        editFloorBtn.style.borderRadius = '4px';
+        editFloorBtn.style.border = '1px solid #ddd';
+        editFloorBtn.style.background = '#f3f4f6';
+        editFloorBtn.style.color = '#3b82f6';
+        editFloorBtn.style.fontWeight = '600';
+        editFloorBtn.style.fontSize = '0.9rem';
+        editFloorBtn.style.cursor = 'pointer';
+        editFloorBtn.style.transition = 'all 0.2s ease';
+        editFloorBtn.addEventListener('mouseover', function() {
+            this.style.background = '#e5e7eb';
+        });
+        editFloorBtn.addEventListener('mouseout', function() {
+            this.style.background = '#f3f4f6';
+        });
+        editFloorBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            // Show floor selection modal
+            const propertyTypeSelect = document.getElementById('pickup-property-type');
+            const propertyType = propertyTypeSelect ? propertyTypeSelect.value : '';
+            let floors = propertyFloors[propertyType] || propertyFloors['apartment'];
+            
+            // Get used floors - include the main floor and all other added floors
+            const usedFloors = new Set();
+            
+            // Add the main floor from the icon grid
+            const floorHiddenInput = document.getElementById('pickup-floor-select');
+            if (floorHiddenInput && floorHiddenInput.value) {
+                usedFloors.add(floorHiddenInput.value.trim());
+            }
+            
+            // Add all OTHER added floors (exclude the current block's floor)
+            Array.from(floorsContainer.children).forEach(blk => {
+                const floorData = blk.getAttribute('data-floor');
+                if (floorData && floorData !== floorRef.name) {
+                    usedFloors.add(floorData);
+                }
+            });
+            
+            // Create a simple modal for floor selection
+            const changeFloorModal = document.createElement('div');
+            changeFloorModal.style.position = 'fixed';
+            changeFloorModal.style.left = '0';
+            changeFloorModal.style.top = '0';
+            changeFloorModal.style.width = '100vw';
+            changeFloorModal.style.height = '100vh';
+            changeFloorModal.style.background = 'rgba(0,0,0,0.2)';
+            changeFloorModal.style.zIndex = '10000';
+            changeFloorModal.style.justifyContent = 'center';
+            changeFloorModal.style.alignItems = 'center';
+            changeFloorModal.style.display = 'flex';
+            
+            const modalContent = document.createElement('div');
+            modalContent.style.background = '#fff';
+            modalContent.style.padding = '24px 32px';
+            modalContent.style.borderRadius = '8px';
+            modalContent.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+            modalContent.style.minWidth = '300px';
+            modalContent.style.maxWidth = '90vw';
+            
+            const label = document.createElement('label');
+            label.style.display = 'block';
+            label.style.marginBottom = '12px';
+            label.style.fontWeight = '600';
+            label.textContent = 'Select a different floor';
+            modalContent.appendChild(label);
+            
+            const select = document.createElement('select');
+            select.style.width = '100%';
+            select.style.padding = '10px 8px';
+            select.style.marginBottom = '16px';
+            select.style.borderRadius = '4px';
+            select.style.border = '1px solid #e5e7eb';
+            select.style.fontSize = '1rem';
+            select.innerHTML = '<option value="">Choose floor</option>' + 
+                floors.filter(f => !usedFloors.has(f)).map(f => `<option value="${f}">${f}</option>`).join('');
+            modalContent.appendChild(select);
+            
+            const buttonDiv = document.createElement('div');
+            buttonDiv.style.textAlign = 'right';
+            buttonDiv.style.display = 'flex';
+            buttonDiv.style.gap = '12px';
+            buttonDiv.style.justifyContent = 'flex-end';
+            
+            const cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.style.padding = '7px 18px';
+            cancelBtn.style.borderRadius = '5px';
+            cancelBtn.style.border = '1px solid #e5e7eb';
+            cancelBtn.style.background = '#f3f4f6';
+            cancelBtn.style.color = '#444';
+            cancelBtn.style.fontWeight = '600';
+            cancelBtn.style.cursor = 'pointer';
+            cancelBtn.addEventListener('click', function() {
+                changeFloorModal.remove();
+            });
+            buttonDiv.appendChild(cancelBtn);
+            
+            const confirmBtn = document.createElement('button');
+            confirmBtn.type = 'button';
+            confirmBtn.textContent = 'Change';
+            confirmBtn.style.padding = '7px 18px';
+            confirmBtn.style.borderRadius = '5px';
+            confirmBtn.style.border = 'none';
+            confirmBtn.style.background = '#2563eb';
+            confirmBtn.style.color = '#fff';
+            confirmBtn.style.fontWeight = '600';
+            confirmBtn.style.cursor = 'pointer';
+            confirmBtn.addEventListener('click', function() {
+                const newFloor = select.value;
+                if (!newFloor) {
+                    alert('Please select a floor');
+                    return;
+                }
+                const oldFloor = floorRef.name;
+                
+                // Update addedFloors set
+                addedFloors.delete(oldFloor);
+                addedFloors.add(newFloor);
+                
+                // Update multiFloorInventory object
+                if (oldFloor in multiFloorInventory) {
+                    multiFloorInventory[newFloor] = multiFloorInventory[oldFloor];
+                    delete multiFloorInventory[oldFloor];
+                }
+                
+                // Update the mutable reference
+                floorRef.name = newFloor;
+                
+                // Update the data attribute on the block
+                block.setAttribute('data-floor', newFloor);
+                
+                // Update title
+                title.textContent = `Add Inventory for ${newFloor} Floor`;
+                
+                // Sort floors after changing
+                sortFloorsInContainer();
+                
+                changeFloorModal.remove();
+            });
+            buttonDiv.appendChild(confirmBtn);
+            modalContent.appendChild(buttonDiv);
+            
+            changeFloorModal.appendChild(modalContent);
+            document.body.appendChild(changeFloorModal);
+        });
+        titleWrapper.appendChild(editFloorBtn);
+
+        // Delete floor button
+        const deleteFloorBtn = document.createElement('button');
+        deleteFloorBtn.type = 'button';
+        deleteFloorBtn.textContent = '✕ Delete Floor';
+        deleteFloorBtn.style.padding = '6px 12px';
+        deleteFloorBtn.style.borderRadius = '4px';
+        deleteFloorBtn.style.border = '1px solid #ddd';
+        deleteFloorBtn.style.background = '#fef2f2';
+        deleteFloorBtn.style.color = '#ef4444';
+        deleteFloorBtn.style.fontWeight = '600';
+        deleteFloorBtn.style.fontSize = '0.9rem';
+        deleteFloorBtn.style.cursor = 'pointer';
+        deleteFloorBtn.style.transition = 'all 0.2s ease';
+        deleteFloorBtn.addEventListener('mouseover', function() {
+            this.style.background = '#fee2e2';
+        });
+        deleteFloorBtn.addEventListener('mouseout', function() {
+            this.style.background = '#fef2f2';
+        });
+        deleteFloorBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (confirm(`Are you sure you want to delete the ${floorRef.name} Floor inventory?`)) {
+                addedFloors.delete(floorRef.name);
+                delete multiFloorInventory[floorRef.name];
+                block.remove();
+                // Re-render floor icons and modal
+                const propertyTypeSelect = document.getElementById('pickup-property-type');
+                if (propertyTypeSelect) {
+                    renderFloorIcons(propertyTypeSelect.value);
+                }
+            }
+        });
+        titleWrapper.appendChild(deleteFloorBtn);
+
+        block.appendChild(titleWrapper);
         
         // Helper function to sync floor inventory to global storage
         const syncFloorToGlobal = () => {
-            if (!multiFloorInventory[floorName]) {
-                multiFloorInventory[floorName] = {};
+            if (!multiFloorInventory[floorRef.name]) {
+                multiFloorInventory[floorRef.name] = {};
             }
             // Save all items with qty > 0
             Object.keys(floorQuantities).forEach(itemName => {
                 const qty = floorQuantities[itemName] || 0;
                 if (qty > 0 && floorSelectedItems[itemName]) {
-                    multiFloorInventory[floorName][itemName] = qty;
+                    multiFloorInventory[floorRef.name][itemName] = qty;
                 } else {
-                    delete multiFloorInventory[floorName][itemName];
+                    delete multiFloorInventory[floorRef.name][itemName];
                 }
             });
         };
@@ -2011,6 +2436,10 @@ document.addEventListener('DOMContentLoaded', function () {
         addedFloors.add(floor);
         const block = createInventoryBlock(floor);
         floorsContainer.appendChild(block);
+        
+        // Sort floors in logical order
+        sortFloorsInContainer();
+        
         // Scroll to the newly added inventory block
         block.scrollIntoView({ behavior: 'smooth', block: 'start' });
         floorModal.style.display = 'none';

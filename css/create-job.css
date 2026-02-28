@@ -1156,6 +1156,7 @@ form.form-v2-main {
 .floor-inventory-block .room-items-list {
     background: transparent;
     box-shadow: none;
+    max-height: 500px !important;
 }
 
 .floor-inventory-block .inventory-items-list {
