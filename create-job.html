@@ -694,10 +694,10 @@
                             </div>
                         </div>
 
-                        <!-- Item Organization Section (Floor-Based) -->
+                        <!-- Item Organization Section (Room-Based) -->
                         <div class="card-section" id="item-organization-section" data-form-step="5">
                             <h2 class="section-title">Organize Items by Delivery Floor</h2>
-                            <p style="color: #6b7280; margin-bottom: 20px; font-size: 0.95rem;">Select items from your inventory and assign them to delivery floors</p>
+                            <p style="color: #6b7280; margin-bottom: 20px; font-size: 0.95rem;">Select which floor each item should be delivered to. Items are grouped by room for easy organization.</p>
                             
                             <style>
                                 #item-organization-section {
@@ -753,16 +753,16 @@
                             <div class="delivery-organization-container">
                                 <!-- Left: Selected Inventory (Sticky) -->
                                 <div class="selected-inventory-panel">
-                                    <h3>Your Inventory</h3>
+                                    <h3>Your Inventory Overview</h3>
                                     <div id="delivery-inventory-list">
-                                        <!-- Items will be dynamically loaded here -->
+                                        <!-- Items grouped by room will be dynamically loaded here -->
                                     </div>
                                 </div>
                                 
-                                <!-- Right: Delivery Floors -->
+                                <!-- Right: Room Sections -->
                                 <div class="delivery-floors-panel">
                                     <div id="delivery-floors-grid">
-                                        <!-- Floor sections will be dynamically rendered here -->
+                                        <!-- Room sections with individual item floor selectors will be dynamically rendered here -->
                                     </div>
                                 </div>
                             </div>
@@ -1613,104 +1613,133 @@
                             </div>
                         </div>
 
-                        <!-- Generic Additional Information Section (shown for all services) -->
-                        <div id="generic-additional-info-section" data-form-step="6" style="display: none;">
+                        <!-- Step 6: Service Requirements Section -->
+                        <div id="service-requirements-section" data-form-step="6" class="step-hidden">
+                            <h2 class="section-title" style="text-align: center; margin-bottom: 2rem;">Step 6: Service Requirements</h2>
                             <div class="card-section">
-                                <!-- Additional Information (Expandable) -->
-                                <div class="collapsible-section" id="generic-additional" style="background: transparent; border: none; padding: 0; margin-top: 20px;">
-                                    <div class="collapsible-header">
-                                        <span class="collapsible-title">Additional information - (Optional)</span>
-                                        <button type="button" class="collapsible-toggle" id="generic-additional-toggle">
-                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <circle cx="12" cy="12" r="10"></circle>
-                                                <line x1="12" y1="8" x2="12" y2="16"></line>
-                                                <line x1="8" y1="12" x2="16" y2="12"></line>
-                                            </svg>
-                                        </button>
+                                
+                                <!-- Packing Service -->
+                                <div class="service-requirement-card">
+                                    <div class="service-requirement-header">
+                                        <label class="service-requirement-label">
+                                            <span>Packing Service</span>
+                                            <div class="info-tooltip-wrapper">
+                                                <span class="info-icon">i</span>
+                                                <div class="info-tooltip">We'll pack your items safely with professional materials</div>
+                                            </div>
+                                        </label>
                                     </div>
-                                    <div class="collapsible-content" id="generic-additional-content">
-                                        <!-- Two porters required -->
-                                        <div class="additional-subsection">
-                                            <label class="checkbox-label" style="display: flex; align-items: center; gap: 10px;">
-                                                <input type="checkbox" id="additional-packing" name="additional-packing" value="yes">
-                                                <span>Packing service required</span>
-                                            </label>
-                                        </div>
-
-                                        <!-- Special instructions -->
-                                        <div class="additional-subsection">
-                                            <label class="form-label">Special instructions <span class="required-text required-text--conditional" data-required-for="generic-special-instructions">(required)</span></label>
-                                            <textarea id="generic-special-instructions" class="form-input" placeholder="Enter any special instructions here" rows="3"></textarea>
-                                        </div>
-
-                                        <!-- Add photos -->
-                                        <div class="additional-subsection">
-                                            <label class="form-label">Add photos</label>
-                                            <div class="photo-upload-grid">
-                                                <div class="photo-upload-area">
-                                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4A90E2" stroke-width="2">
-                                                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                                                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                                        <path d="M21 15l-5-5L5 21"></path>
-                                                    </svg>
-                                                    <span>Drag photo here <strong>upload</strong></span>
-                                                    <input type="file" class="photo-input" accept="image/*" multiple>
-                                                </div>
-                                                <div class="photo-upload-area">
-                                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4A90E2" stroke-width="2">
-                                                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                                                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                                        <path d="M21 15l-5-5L5 21"></path>
-                                                    </svg>
-                                                    <span>Drag photo here <strong>upload</strong></span>
-                                                    <input type="file" class="photo-input" accept="image/*" multiple>
-                                                </div>
-                                                <div class="photo-upload-area">
-                                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4A90E2" stroke-width="2">
-                                                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                                                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                                        <path d="M21 15l-5-5L5 21"></path>
-                                                    </svg>
-                                                    <span>Drag photo here <strong>upload</strong></span>
-                                                    <input type="file" class="photo-input" accept="image/*" multiple>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <!-- Add Dimensions -->
-                                        <div class="additional-subsection">
-                                            <label class="form-label">Add Dimensions</label>
-                                            <div id="generic-dimensions-list">
-                                                <div class="dimension-item">
-                                                    <input type="text" class="form-input dimension-description" placeholder="Enter Item Description here">
-                                                    <div class="dimension-inputs">
-                                                        <input type="number" class="form-input dimension-field" placeholder="Width" min="0" step="0.1">
-                                                        <input type="number" class="form-input dimension-field" placeholder="Depth" min="0" step="0.1">
-                                                        <input type="number" class="form-input dimension-field" placeholder="Height" min="0" step="0.1">
-                                                        <select class="form-input dimension-unit">
-                                                            <option value="cm">cm</option>
-                                                            <option value="m">m</option>
-                                                            <option value="in">in</option>
-                                                            <option value="ft">ft</option>
-                                                        </select>
-                                                        <input type="number" class="form-input dimension-field" placeholder="Weight" min="0" step="0.1">
-                                                        <select class="form-input dimension-unit">
-                                                            <option value="kg">kg</option>
-                                                            <option value="lbs">lbs</option>
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <button type="button" class="btn btn-secondary" id="add-generic-dimension-btn" style="margin-top: 10px;">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                    <circle cx="12" cy="12" r="10"></circle>
-                                                    <line x1="12" y1="8" x2="12" y2="16"></line>
-                                                    <line x1="8" y1="12" x2="16" y2="12"></line>
-                                                </svg>
-                                                Add Another Item
-                                            </button>
-                                        </div>
+                                    <div class="service-requirement-options">
+                                        <button type="button" class="service-option-btn" data-service="packing" data-value="no">No</button>
+                                        <button type="button" class="service-option-btn" data-service="packing" data-value="yes">Yes</button>
+                                    </div>
+                                    <input type="hidden" id="service-packing" name="service-packing" value="">
                                 </div>
+
+                                <!-- Movers at Pickup Location -->
+                                <div class="service-requirement-card">
+                                    <div class="service-requirement-header">
+                                        <label class="service-requirement-label">
+                                            <span>Movers at Pickup Location</span>
+                                            <div class="info-tooltip-wrapper">
+                                                <span class="info-icon">i</span>
+                                                <div class="info-tooltip">Enter number of additional movers needed at pickup location (0 if none)</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div class="service-requirement-input">
+                                        <input type="number" id="service-pickup-movers" class="service-number-input" name="service-pickup-movers" min="0" max="10" placeholder="0" value="">
+                                    </div>
+                                </div>
+
+                                <!-- Movers at Delivery Location -->
+                                <div class="service-requirement-card">
+                                    <div class="service-requirement-header">
+                                        <label class="service-requirement-label">
+                                            <span>Movers at Delivery Location</span>
+                                            <div class="info-tooltip-wrapper">
+                                                <span class="info-icon">i</span>
+                                                <div class="info-tooltip">Enter number of additional movers needed at delivery location (0 if none)</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div class="service-requirement-input">
+                                        <input type="number" id="service-delivery-movers" class="service-number-input" name="service-delivery-movers" min="0" max="10" placeholder="0" value="">
+                                    </div>
+                                </div>
+
+                                <!-- Insurance/Coverage -->
+                                <div class="service-requirement-card">
+                                    <div class="service-requirement-header">
+                                        <label class="service-requirement-label">
+                                            <span>Premium Insurance Coverage</span>
+                                            <div class="info-tooltip-wrapper">
+                                                <span class="info-icon">i</span>
+                                                <div class="info-tooltip">Full value coverage for your items against damage or loss</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div class="service-requirement-options">
+                                        <button type="button" class="service-option-btn" data-service="insurance" data-value="no">No</button>
+                                        <button type="button" class="service-option-btn" data-service="insurance" data-value="yes">Yes</button>
+                                    </div>
+                                    <input type="hidden" id="service-insurance" name="service-insurance" value="">
+                                </div>
+
+                                <!-- Storage Service -->
+                                <div class="service-requirement-card">
+                                    <div class="service-requirement-header">
+                                        <label class="service-requirement-label">
+                                            <span>Storage Service</span>
+                                            <div class="info-tooltip-wrapper">
+                                                <span class="info-icon">i</span>
+                                                <div class="info-tooltip">Secure, climate-controlled storage for your items before delivery</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div class="service-requirement-options">
+                                        <button type="button" class="service-option-btn" data-service="storage" data-value="no">No</button>
+                                        <button type="button" class="service-option-btn" data-service="storage" data-value="yes">Yes</button>
+                                    </div>
+                                    <input type="hidden" id="service-storage" name="service-storage" value="">
+                                </div>
+
+                                <!-- Furniture Disassembly/Assembly -->
+                                <div class="service-requirement-card">
+                                    <div class="service-requirement-header">
+                                        <label class="service-requirement-label">
+                                            <span>Furniture Disassembly & Assembly</span>
+                                            <div class="info-tooltip-wrapper">
+                                                <span class="info-icon">i</span>
+                                                <div class="info-tooltip">We'll disassemble furniture for transport and reassemble at your new location</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div class="service-requirement-options">
+                                        <button type="button" class="service-option-btn" data-service="disassembly" data-value="no">No</button>
+                                        <button type="button" class="service-option-btn" data-service="disassembly" data-value="yes">Yes</button>
+                                    </div>
+                                    <input type="hidden" id="service-disassembly" name="service-disassembly" value="">
+                                </div>
+
+                                <!-- Special Item Handling -->
+                                <div class="service-requirement-card">
+                                    <div class="service-requirement-header">
+                                        <label class="service-requirement-label">
+                                            <span>Special Item Handling</span>
+                                            <div class="info-tooltip-wrapper">
+                                                <span class="info-icon">i</span>
+                                                <div class="info-tooltip">Expert handling for pianos, artwork, antiques, or other fragile/valuable items</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div class="service-requirement-options">
+                                        <button type="button" class="service-option-btn" data-service="special-handling" data-value="no">No</button>
+                                        <button type="button" class="service-option-btn" data-service="special-handling" data-value="yes">Yes</button>
+                                    </div>
+                                    <input type="hidden" id="service-special-handling" name="service-special-handling" value="">
+                                </div>
+
                             </div>
                         </div>
 
