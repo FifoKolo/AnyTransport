@@ -204,7 +204,7 @@
                                     <input type="hidden" id="pickup-floor-select" name="pickup-floor-select" value="">
                                     <!-- Elevator Option (shown only for Apartment) - placed directly under floor field -->
                                     <div id="elevator-option-container">
-                                        <label style="font-size: 1.05rem; font-weight: 600; display: block; margin-bottom: 8px;">Is there an elevator available in the building?</label>
+                                        <label style="font-size: 1.05rem; font-weight: 600; display: block; margin-bottom: 8px;">Is there an elevator available in the building? <span class="required-text" data-required-for="elevator-available">(required)</span></label>
                                         <div id="elevator-icon-grid"></div>
                                     </div>
                                 </div>
@@ -299,6 +299,19 @@
                 <option value="19th">19th</option>
                 <option value="20th">20th</option>
             </select>
+            <div id="floor-elevator-selection" style="display:none; margin-top:18px; width:100%; text-align:left;">
+                <label style="display:block; font-size:0.95rem; color:#333; margin-bottom:12px;">Is an elevator available for this floor?</label>
+                <div style="display:flex; gap:12px;">
+                    <label style="display:flex; align-items:center; cursor:pointer;">
+                        <input type="radio" name="floor-elevator-option" value="yes" style="margin-right:8px; cursor:pointer;">
+                        <span>Yes</span>
+                    </label>
+                    <label style="display:flex; align-items:center; cursor:pointer;">
+                        <input type="radio" name="floor-elevator-option" value="no" style="margin-right:8px; cursor:pointer;">
+                        <span>No</span>
+                    </label>
+                </div>
+            </div>
             <div style="margin-top:18px; text-align:right;">
                 <button id="floor-modal-cancel" type="button" style="margin-right:12px; padding:7px 18px; border-radius:5px; border:1px solid #e5e7eb; background:#f3f4f6; color:#444;">Cancel</button>
                 <button id="floor-modal-add" type="button" style="padding:7px 18px; border-radius:5px; border:none; background:#2563eb; color:#fff;">Add</button>
@@ -697,7 +710,9 @@
                         <!-- Item Organization Section (Room-Based) -->
                         <div class="card-section" id="item-organization-section" data-form-step="5">
                             <h2 class="section-title">Organize Items by Delivery Floor</h2>
-                            <p style="color: #6b7280; margin-bottom: 20px; font-size: 0.95rem;">Select which floor each item should be delivered to. Items are grouped by room for easy organization.</p>
+                            <p style="color: #6b7280; margin-bottom: 20px; font-size: 0.95rem;">
+                                <strong>How to assign items:</strong> Items are grouped by room on the left so you can see where each item comes from. Select individual items or use "Select all from [Room]", then use <strong>+ Add Selected</strong> on a floor. Use <strong>+ Add All</strong> to place all remaining inventory on one floor.
+                            </p>
                             
                             <style>
                                 #item-organization-section {
@@ -751,18 +766,18 @@
                             </style>
                             
                             <div class="delivery-organization-container">
-                                <!-- Left: Selected Inventory (Sticky) -->
+                                <!-- Left: Unassigned Items (Sticky) -->
                                 <div class="selected-inventory-panel">
-                                    <h3>Your Inventory Overview</h3>
+                                    <h3>Unassigned Items</h3>
                                     <div id="delivery-inventory-list">
-                                        <!-- Items grouped by room will be dynamically loaded here -->
+                                        <!-- Items that need to be assigned will be dynamically loaded here -->
                                     </div>
                                 </div>
                                 
-                                <!-- Right: Room Sections -->
+                                <!-- Right: Delivery Floors -->
                                 <div class="delivery-floors-panel">
                                     <div id="delivery-floors-grid">
-                                        <!-- Room sections with individual item floor selectors will be dynamically rendered here -->
+                                        <!-- Floor sections with assigned items will be dynamically rendered here -->
                                     </div>
                                 </div>
                             </div>
