@@ -51,3 +51,19 @@
     outline: none;
     box-shadow: 0 4px 16px rgba(0,0,0,0.12);
 }
+
+@media (max-width: 768px) {
+    .sticky-next-btn {
+        right: 14px;
+        bottom: calc(14px + env(safe-area-inset-bottom));
+        padding: 12px 20px;
+        font-size: 1rem;
+        max-width: calc(100vw - 28px);
+    }
+
+    .sticky-action-btn {
+        padding: 10px 18px;
+        font-size: 1rem;
+        min-width: 86px;
+    }
+}

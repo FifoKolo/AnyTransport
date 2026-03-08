@@ -53,13 +53,13 @@
                             <li class="stepper-item" data-step="2">
                                 <button type="button" class="stepper-link" data-step="2">
                                     <span class="stepper-index">2</span>
-                                    <span class="stepper-label">Property Type</span>
+                                    <span class="stepper-label"> Select Property Type</span>
                                 </button>
                             </li>
                             <li class="stepper-item" data-step="3">
                                 <button type="button" class="stepper-link" data-step="3">
                                     <span class="stepper-index">3</span>
-                                    <span class="stepper-label">Select Floor</span>
+                                    <span class="stepper-label">Pickup Details</span>
                                 </button>
                             </li>
                             <li class="stepper-item" data-step="4">
@@ -77,7 +77,7 @@
                             <li class="stepper-item" data-step="6">
                                 <button type="button" class="stepper-link" data-step="6">
                                     <span class="stepper-index">6</span>
-                                    <span class="stepper-label">Additional info</span>
+                                    <span class="stepper-label">Additional Services</span>
                                 </button>
                             </li>
                         </ol>
@@ -95,7 +95,7 @@
                         <!-- Step 1 removed: Service selection now handled on landing page -->
                         <!-- Step 3 Title placed above the form, only visible for step 3 -->
                         <div class="step-title-wrapper" id="step3-title-wrapper" style="display:none;">
-                            <h2 class="section-title" style="text-align:center; margin-bottom:2rem;">Step 3: Please Select Floor</h2>
+                            <h2 class="section-title" style="text-align:center; margin-bottom:2rem;">Step 3: Please select the floors you are moving from</h2>
                         </div>
                         <!-- Step 1: Destinations (Map) -->
                         <div class="card-section map-step-card" data-form-step="1">
@@ -197,7 +197,34 @@
                             <div id="pickup-room-list">
                                
                                 <div class="form-group">
-                                    <label class="form-label">Floor level</label>
+                                    <label class="form-label">Select Pickup Floors</label>
+                                    <p style="font-size: 0.9rem; color: #6b7280; margin-bottom: 12px;">Select which floors have items you need to move</p>
+                                    <div id="pickup-floors-selector" style="display: flex; flex-wrap: wrap; gap: 4px;">
+                                        <!-- Floor buttons will be dynamically rendered here -->
+                                    </div>
+                                    
+                                    <!-- Confirm button -->
+                                    <button type="button" id="confirm-pickup-floors-btn" style="display: none; margin-top: 16px; padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.95rem;">
+                                        Confirm Selected Floors
+                                    </button>
+                                </div>
+                                
+                                <!-- Elevator availability question (shows after floors selected) -->
+                                <div class="form-group" id="pickup-elevator-question" style="display: none; margin-top: 16px; padding: 16px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px;">
+                                    <label style="font-size: 1rem; font-weight: 600; display: block; margin-bottom: 12px;">Is there a working elevator/lift for the selected floors?</label>
+                                    <div style="display: flex; gap: 12px;">
+                                        <button type="button" class="pickup-elevator-btn" data-value="yes" style="padding: 8px 16px; border: 2px solid #e5e7eb; background: white; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">
+                                            ✓ Yes, elevator available
+                                        </button>
+                                        <button type="button" class="pickup-elevator-btn" data-value="no" style="padding: 8px 16px; border: 2px solid #e5e7eb; background: white; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">
+                                            ✗ No elevator
+                                        </button>
+                                    </div>
+                                    <input type="hidden" id="pickup-elevator-available" name="pickup-elevator-available" value="">
+                                </div>
+                                
+                                <div class="form-group" style="margin-top: 16px; display: none;">
+                                    <label class="form-label">Floor level (deprecated - use selector above)</label>
                                     <div class="floor-icon-grid" id="floor-icon-grid">
                                         <!-- Floor icons will be injected here by JS based on property type -->
                                     </div>
@@ -242,6 +269,15 @@
                                 </button>
                             </div>
                             <input type="hidden" id="delivery-property-type" name="delivery-property-type" value="">
+                        </div>
+
+                        <!-- Delivery Elevator Section (Step 4) -->
+                        <div class="card-section" id="delivery-elevator-section" data-form-step="4" style="display: none;">
+                            <label class="form-label">Is an elevator available for delivery? <span class="required-text">(required)</span></label>
+                            <div id="delivery-elevator-option-container" style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px;">
+                                <!-- Elevator buttons will be dynamically rendered here -->
+                            </div>
+                            <input type="hidden" id="delivery-elevator-available" name="delivery-elevator-available" value="">
                         </div>
 
                             <!-- Inventory System (Step 3) - full width card at bottom of step 3 -->
@@ -707,9 +743,22 @@
                             </div>
                         </div>
 
-                        <!-- Item Organization Section (Room-Based) -->
+                        <!-- Step 5: Item Organization Section -->
                         <div class="card-section" id="item-organization-section" data-form-step="5">
-                            <h2 class="section-title">Organize Items by Delivery Floor</h2>
+                            <h2 class="section-title">Step 5: Organize Items by Delivery Floor</h2>
+                            
+                            <div style="margin-bottom: 24px; padding: 16px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981;">
+                                <label class="form-label" style="margin-bottom: 12px;">Select Delivery Floors</label>
+                                <p style="font-size: 0.9rem; color: #6b7280; margin-bottom: 12px;">Select the floor/floors you are delivering to</p>
+                                <div id="delivery-floors-selector" style="display: flex; flex-wrap: wrap; gap: 4px;">
+                                    <!-- Floor buttons will be dynamically rendered here -->
+                                </div>
+                                
+                                <!-- Confirm button -->
+                                <button type="button" id="confirm-delivery-floors-btn" style="display: none; margin-top: 16px; padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.95rem;">
+                                    Confirm Delivery Floors
+                                </button>
+                            </div>
                             <p style="color: #6b7280; margin-bottom: 20px; font-size: 0.95rem;">
                                 <strong>How to assign items:</strong> Items are grouped by room on the left so you can see where each item comes from. Select individual items or use "Select all from [Room]", then use <strong>+ Add Selected</strong> on a floor. Use <strong>+ Add All</strong> to place all remaining inventory on one floor.
                             </p>
@@ -730,9 +779,6 @@
                                 .selected-inventory-panel {
                                     position: sticky;
                                     top: 100px;
-                                    max-height: calc(100vh - 140px);
-                                    overflow-y: auto;
-                                    overflow-x: hidden;
                                     border: 2px solid #e5e7eb;
                                     border-radius: 12px;
                                     background: #fff;
@@ -748,6 +794,31 @@
                                     font-weight: 600;
                                 }
                                 
+                                #delivery-inventory-list {
+                                    max-height: 60vh;
+                                    overflow-y: auto;
+                                    overflow-x: hidden;
+                                    padding-right: 8px;
+                                }
+                                
+                                #delivery-inventory-list::-webkit-scrollbar {
+                                    width: 8px;
+                                }
+                                
+                                #delivery-inventory-list::-webkit-scrollbar-track {
+                                    background: #f3f4f6;
+                                    border-radius: 4px;
+                                }
+                                
+                                #delivery-inventory-list::-webkit-scrollbar-thumb {
+                                    background: #d1d5db;
+                                    border-radius: 4px;
+                                }
+                                
+                                #delivery-inventory-list::-webkit-scrollbar-thumb:hover {
+                                    background: #9ca3af;
+                                }
+                                
                                 .delivery-floors-panel {
                                     overflow: visible;
                                 }
@@ -760,7 +831,10 @@
                                     .selected-inventory-panel {
                                         position: relative;
                                         top: 0;
-                                        max-height: 400px;
+                                    }
+                                    
+                                    #delivery-inventory-list {
+                                        max-height: 50vh;
                                     }
                                 }
                             </style>
@@ -776,7 +850,10 @@
                                 
                                 <!-- Right: Delivery Floors -->
                                 <div class="delivery-floors-panel">
-                                    <div id="delivery-floors-grid">
+                                    <div id="delivery-floors-empty-state" style="text-align: center; padding: 40px 20px; color: #9ca3af;">
+                                        <p style="font-size: 1.05rem; margin: 0;">Select the floor/floors you are delivering to above to get started</p>
+                                    </div>
+                                    <div id="delivery-floors-grid" style="display: none;">
                                         <!-- Floor sections with assigned items will be dynamically rendered here -->
                                     </div>
                                 </div>

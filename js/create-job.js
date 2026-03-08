@@ -145,6 +145,9 @@ document.addEventListener('DOMContentLoaded', function () {
             'Small Boxes', 'Medium Boxes', 'Large Boxes', 'XL Boxes', 'Artwork', 'Bicycle', 'Suitcase', 'Wardrobe Boxes', 'Treadmill', 'Fish Tank'
         ]
     };
+    
+    // Expose ROOM_ITEMS globally
+    window.ROOM_ITEMS = ROOM_ITEMS;
 
     let currentRoom = '';
     let selectedItems = {};
@@ -665,6 +668,24 @@ function renderFloorIcons(propertyType) {
 
 // --- Show inventory only when both fields are filled ---
 function hasAnyInventorySelection() {
+    // Multi-floor pickup flow: every selected floor must have at least one item
+    if (window.selectedPickupFloors && window.selectedPickupFloors.size > 0) {
+        if (!window.multiFloorInventory || typeof window.multiFloorInventory !== 'object') {
+            return false;
+        }
+
+        const selectedFloors = Array.from(window.selectedPickupFloors);
+        const everySelectedFloorHasItems = selectedFloors.every((floorName) => {
+            const floorItems = window.multiFloorInventory[floorName];
+            if (!floorItems || typeof floorItems !== 'object') {
+                return false;
+            }
+            return Object.values(floorItems).some((qty) => (parseInt(qty, 10) || 0) > 0);
+        });
+
+        return everySelectedFloorHasItems;
+    }
+
     if (window.itemQuantities) {
         const singleFloorHasItems = Object.values(window.itemQuantities).some((qty) => (parseInt(qty, 10) || 0) > 0);
         if (singleFloorHasItems) return true;
@@ -681,14 +702,84 @@ function hasAnyInventorySelection() {
     return false;
 }
 
+function getSelectedPickupFloorsMissingInventory() {
+    if (!window.selectedPickupFloors || window.selectedPickupFloors.size === 0) {
+        return [];
+    }
+
+    const selectedFloors = Array.from(window.selectedPickupFloors);
+    return selectedFloors.filter((floorName) => {
+        const floorItems = window.multiFloorInventory && window.multiFloorInventory[floorName];
+        if (!floorItems || typeof floorItems !== 'object') {
+            return true;
+        }
+        return !Object.values(floorItems).some((qty) => (parseInt(qty, 10) || 0) > 0);
+    });
+}
+
+function updateStep3InventoryWarning() {
+    const inventoryCardContainer = document.getElementById('inventory-card-container');
+    if (!inventoryCardContainer) return;
+
+    let warningEl = document.getElementById('step3-inventory-warning');
+    if (!warningEl) {
+        warningEl = document.createElement('div');
+        warningEl.id = 'step3-inventory-warning';
+        warningEl.style.cssText = `
+            display: none;
+            margin: 10px 0 14px;
+            padding: 10px 12px;
+            border-left: 4px solid #f59e0b;
+            background: #fffbeb;
+            color: #92400e;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        `;
+        inventoryCardContainer.insertBefore(warningEl, inventoryCardContainer.firstChild);
+    }
+
+    const isStep3 = (document.body.getAttribute('data-form-step') === '3' || document.body.getAttribute('data-current-step') === '3');
+    const inventoryRequired = isInventoryInputRequiredForStep3();
+    const missingFloors = getSelectedPickupFloorsMissingInventory();
+
+    if (isStep3 && inventoryRequired && missingFloors.length > 0) {
+        warningEl.textContent = `Add at least 1 item to: ${missingFloors.join(', ')}`;
+        warningEl.style.display = 'block';
+    } else {
+        warningEl.style.display = 'none';
+    }
+}
+
 function isInventoryInputRequiredForStep3() {
     const inventoryCardContainer = document.getElementById('inventory-card-container');
     if (!inventoryCardContainer) return false;
     return inventoryCardContainer.style.display !== 'none' && inventoryCardContainer.offsetParent !== null;
 }
 
+function ensureMultiFloorInventoryVisible() {
+    const inventoryCardContainer = document.getElementById('inventory-card-container');
+    const multiFloorContainer = document.querySelector('#house-removal-inventory-section .floors-inventory-container');
+    if (!inventoryCardContainer || !multiFloorContainer) return;
+
+    if (inventoryCardContainer.style.display === 'none') return;
+
+    const hasBlocks = multiFloorContainer.children.length > 0;
+    if (!hasBlocks) return;
+
+    const basicRoomTabs = document.getElementById('room-tabs');
+    const basicRoomContainer = document.getElementById('room-items-container');
+
+    if (basicRoomTabs) basicRoomTabs.style.display = 'none';
+    if (basicRoomContainer) basicRoomContainer.style.display = 'none';
+    multiFloorContainer.style.display = '';
+    document.body.classList.add('multi-floor-inventory-mode');
+}
+
 window.hasAnyInventorySelection = hasAnyInventorySelection;
 window.isInventoryInputRequiredForStep3 = isInventoryInputRequiredForStep3;
+window.updateStep3InventoryWarning = updateStep3InventoryWarning;
+window.ensureMultiFloorInventoryVisible = ensureMultiFloorInventoryVisible;
 
 document.addEventListener('DOMContentLoaded', function () {
         // Sticky Next button logic
@@ -727,21 +818,15 @@ document.addEventListener('DOMContentLoaded', function () {
             // Step 3: floor required, elevator required if visible, and at least one inventory item when inventory is shown
             // Elevator also required if visible (when floor is not ground)
             if (step === 3) {
-                const floor = document.getElementById('pickup-floor-select');
-                
-                // Floor must be selected
-                if (!floor || !floor.value.trim()) {
+                const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                if (selectedFloors.length === 0) {
                     return false;
                 }
-                
-                // Elevator is required for any non-ground floor
-                const floorValue = (floor.value || '').trim().toLowerCase();
-                const elevatorRequired = !!floorValue && floorValue !== 'ground';
-                if (elevatorRequired) {
-                    const elevator = document.getElementById('elevator-available');
-                    if (!elevator || !elevator.value.trim()) {
-                        return false;
-                    }
+
+                // Multi-floor pickup elevator answer is required after floor selection
+                const pickupElevator = document.getElementById('pickup-elevator-available');
+                if (!pickupElevator || !pickupElevator.value.trim()) {
+                    return false;
                 }
 
                 if (isInventoryInputRequiredForStep3() && !hasAnyInventorySelection()) {
@@ -829,6 +914,8 @@ document.addEventListener('DOMContentLoaded', function () {
             const step = parseInt(document.body.dataset.formStep || '1', 10);
             stickyNextBtn.disabled = !requirementsMetForStep(step);
             stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
+            ensureMultiFloorInventoryVisible();
+            updateStep3InventoryWarning();
         };
         // Sync sticky button with normal Next button
         if (stickyNextBtn) {
@@ -855,12 +942,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 const step = parseInt(document.body.dataset.formStep || '1', 10);
                 stickyNextBtn.disabled = !requirementsMetForStep(step);
                 stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
+                updateStep3InventoryWarning();
             });
             el.addEventListener('change', function() {
                 updateStickyNextBtnVisibility();
                 const step = parseInt(document.body.dataset.formStep || '1', 10);
                 stickyNextBtn.disabled = !requirementsMetForStep(step);
                 stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
+                updateStep3InventoryWarning();
             });
         });
         // Listen for inventory changes
@@ -873,6 +962,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const stepInit = parseInt(document.body.dataset.formStep || '1', 10);
         stickyNextBtn.disabled = !requirementsMetForStep(stepInit);
         stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
+        updateStep3InventoryWarning();
         // Scroll logic: hide sticky button if footer is visible
         window.addEventListener('scroll', function() {
             const footer = document.querySelector('footer');
@@ -1070,10 +1160,444 @@ document.addEventListener('DOMContentLoaded', function () {
         
         window.initializeStep6 = initializeStep6;
     });
+
+// --- Global State for Floor Selection ---
+window.selectedPickupFloors = new Set();
+window.selectedDeliveryFloors = new Set();
+window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
+
+// --- Form Progress Persistence ---
+(function setupCreateJobProgressPersistence() {
+    const FORM_PROGRESS_KEY = 'anytransport_create_job_progress_v1';
+    let saveTimer = null;
+    let restoreAttempted = false;
+
+    const getStep = () => {
+        const raw = document.body?.dataset?.formStep || document.body?.dataset?.currentStep || '1';
+        const parsed = parseInt(raw, 10);
+        return Number.isFinite(parsed) ? parsed : 1;
+    };
+
+    const getFieldKey = (el, index) => {
+        if (el.id) return `id:${el.id}`;
+        if (el.name) return `name:${el.name}:${index}`;
+        return `idx:${index}`;
+    };
+
+    const scheduleSave = () => {
+        if (window.__isRestoringCreateJobProgress) return;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+            if (typeof window.saveCreateJobProgress === 'function') {
+                window.saveCreateJobProgress();
+            }
+        }, 120);
+    };
+
+    window.saveCreateJobProgress = function saveCreateJobProgress() {
+        if (window.__isRestoringCreateJobProgress) return;
+
+        const form = document.getElementById('create-job-form');
+        if (!form) return;
+
+        const elements = Array.from(form.querySelectorAll('input, select, textarea'));
+        const fields = {};
+
+        elements.forEach((el, index) => {
+            const key = getFieldKey(el, index);
+            const type = (el.type || '').toLowerCase();
+            fields[key] = {
+                type,
+                value: el.value,
+                checked: !!el.checked
+            };
+        });
+
+        const payload = {
+            savedAt: Date.now(),
+            step: getStep(),
+            fields,
+            selectedPickupFloors: Array.from(window.selectedPickupFloors || []),
+            selectedDeliveryFloors: Array.from(window.selectedDeliveryFloors || []),
+            multiFloorInventory: window.multiFloorInventory && typeof window.multiFloorInventory === 'object'
+                ? window.multiFloorInventory
+                : {}
+        };
+
+        try {
+            localStorage.setItem(FORM_PROGRESS_KEY, JSON.stringify(payload));
+        } catch (error) {
+            console.warn('Unable to save form progress:', error);
+        }
+    };
+
+    window.restoreCreateJobProgress = function restoreCreateJobProgress() {
+        if (restoreAttempted) return;
+        restoreAttempted = true;
+
+        const form = document.getElementById('create-job-form');
+        if (!form) return;
+
+        let raw = null;
+        try {
+            raw = localStorage.getItem(FORM_PROGRESS_KEY);
+        } catch (error) {
+            console.warn('Unable to access saved form progress:', error);
+            return;
+        }
+
+        if (!raw) return;
+
+        let payload;
+        try {
+            payload = JSON.parse(raw);
+        } catch (error) {
+            console.warn('Saved form progress is invalid JSON:', error);
+            return;
+        }
+
+        window.__isRestoringCreateJobProgress = true;
+        try {
+            if (Array.isArray(payload.selectedPickupFloors)) {
+                window.selectedPickupFloors = new Set(payload.selectedPickupFloors);
+            }
+            if (Array.isArray(payload.selectedDeliveryFloors)) {
+                window.selectedDeliveryFloors = new Set(payload.selectedDeliveryFloors);
+            }
+            if (payload.multiFloorInventory && typeof payload.multiFloorInventory === 'object') {
+                window.multiFloorInventory = payload.multiFloorInventory;
+            }
+
+            const elements = Array.from(form.querySelectorAll('input, select, textarea'));
+            elements.forEach((el, index) => {
+                const key = getFieldKey(el, index);
+                const saved = payload.fields ? payload.fields[key] : null;
+                if (!saved) return;
+
+                const type = (el.type || '').toLowerCase();
+                if (type === 'checkbox' || type === 'radio') {
+                    el.checked = !!saved.checked;
+                } else if (typeof saved.value !== 'undefined') {
+                    el.value = saved.value;
+                }
+            });
+
+            if (typeof window.renderPickupFloorSelector === 'function') {
+                window.renderPickupFloorSelector();
+            }
+            if (typeof window.renderDeliveryFloorSelector === 'function') {
+                window.renderDeliveryFloorSelector();
+            }
+
+            const pickupElevator = document.getElementById('pickup-elevator-available');
+            if (
+                window.selectedPickupFloors &&
+                window.selectedPickupFloors.size > 0 &&
+                pickupElevator &&
+                pickupElevator.value &&
+                typeof window.renderSelectedPickupFloorsInventory === 'function'
+            ) {
+                window.renderSelectedPickupFloorsInventory(pickupElevator.value);
+            }
+
+            if (typeof window.renderDeliveryFloors === 'function') {
+                window.renderDeliveryFloors();
+            }
+            if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
+                window.ensureMultiFloorInventoryVisible();
+            }
+
+            const targetStep = Number.isFinite(parseInt(payload.step, 10)) ? parseInt(payload.step, 10) : 1;
+            if (typeof window.setFormStep === 'function') {
+                window.setFormStep(targetStep);
+            } else {
+                document.body.dataset.formStep = String(targetStep);
+                document.body.dataset.currentStep = String(targetStep);
+            }
+
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
+
+            elements.forEach((el) => {
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        } finally {
+            window.__isRestoringCreateJobProgress = false;
+        }
+    };
+
+    const restoreStepUiIfReady = () => {
+        const activeStep = parseInt(document.body?.dataset?.formStep || document.body?.dataset?.currentStep || '1', 10);
+        if (activeStep === 3) {
+            const selectedFloors = Array.from(window.selectedPickupFloors || []);
+            const elevatorInput = document.getElementById('pickup-elevator-available');
+            if (selectedFloors.length > 0 && elevatorInput && elevatorInput.value) {
+                const inventoryCardContainer = document.getElementById('inventory-card-container');
+                if (inventoryCardContainer) {
+                    inventoryCardContainer.style.display = '';
+                }
+
+                if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
+                    window.renderSelectedPickupFloorsInventory(elevatorInput.value);
+                }
+
+                if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
+                    window.ensureMultiFloorInventoryVisible();
+                }
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+            }
+        }
+
+        if (activeStep === 4) {
+            const deliveryPropertyInput = document.getElementById('delivery-property-type');
+            const selectedProperty = deliveryPropertyInput ? deliveryPropertyInput.value : '';
+            const propertySection = document.getElementById('delivery-property-type-selection-section');
+            const propertyButtons = propertySection ? propertySection.querySelectorAll('.property-type-icon-btn') : [];
+
+            if (propertyButtons && propertyButtons.length > 0) {
+                propertyButtons.forEach((button) => {
+                    const isSelected = !!selectedProperty && button.getAttribute('data-value') === selectedProperty;
+                    button.classList.toggle('active', isSelected);
+                    button.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+                });
+            }
+
+            const elevatorSection = document.getElementById('delivery-elevator-section');
+            if (elevatorSection) {
+                elevatorSection.style.display = 'none';
+            }
+
+            if (typeof window.syncDeliveryStep4FromState === 'function') {
+                window.syncDeliveryStep4FromState();
+            }
+        }
+    };
+
+    const wrapSetFormStep = () => {
+        if (typeof window.setFormStep !== 'function') return false;
+        if (window.setFormStep.__progressWrapped) return true;
+
+        const originalSetFormStep = window.setFormStep;
+
+        const wrappedSetFormStep = function wrappedSetFormStep(step) {
+            if (typeof window.saveCreateJobProgress === 'function') {
+                window.saveCreateJobProgress();
+            }
+            const result = originalSetFormStep(step);
+            setTimeout(restoreStepUiIfReady, 0);
+            if (typeof window.saveCreateJobProgress === 'function') {
+                setTimeout(() => window.saveCreateJobProgress(), 0);
+            }
+            return result;
+        };
+
+        wrappedSetFormStep.__progressWrapped = true;
+        window.setFormStep = wrappedSetFormStep;
+        return true;
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        wrapSetFormStep();
+        window.restoreCreateJobProgress();
+        restoreStepUiIfReady();
+        setTimeout(restoreStepUiIfReady, 150);
+        setTimeout(restoreStepUiIfReady, 700);
+
+        const setFormStepWrapRetry = setInterval(() => {
+            if (wrapSetFormStep()) {
+                clearInterval(setFormStepWrapRetry);
+            }
+        }, 150);
+        setTimeout(() => clearInterval(setFormStepWrapRetry), 10000);
+
+        const stepStateObserver = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.attributeName === 'data-form-step' || mutation.attributeName === 'data-current-step') {
+                    setTimeout(restoreStepUiIfReady, 0);
+                    setTimeout(restoreStepUiIfReady, 120);
+                }
+            });
+        });
+        if (document.body) {
+            stepStateObserver.observe(document.body, {
+                attributes: true,
+                attributeFilter: ['data-form-step', 'data-current-step']
+            });
+        }
+
+        document.addEventListener('input', scheduleSave, true);
+        document.addEventListener('change', scheduleSave, true);
+        document.addEventListener('click', scheduleSave, true);
+        window.addEventListener('beforeunload', () => {
+            if (typeof window.saveCreateJobProgress === 'function') {
+                window.saveCreateJobProgress();
+            }
+        });
+    });
+})();
+
+// --- Global Floor Selection Functions (accessible before event listeners) ---
+const propertyFloors = {
+    house: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', 'Attic'],
+    apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'],
+    duplex: ['Basement', 'Ground', '1st', '2nd','Attic'],
+    'warehouse/Shop': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
+    'warehouse': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
+    bungalow: ['Basement', 'Ground','Attic'],
+    'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
+};
+
+function renderPickupFloorSelector() {
+    const selectorContainer = document.getElementById('pickup-floors-selector');
+    if (!selectorContainer) return;
     
+    const propertyType = document.getElementById('pickup-property-type')?.value || 
+                       document.getElementById('delivery-property-type')?.value || 'house';
+    const floors = propertyFloors[propertyType] || [];
+
+    // Keep selected floors in sync with currently available floors
+    Array.from(window.selectedPickupFloors).forEach((floorName) => {
+        if (!floors.includes(floorName)) {
+            window.selectedPickupFloors.delete(floorName);
+        }
+    });
+    
+    selectorContainer.innerHTML = '';
+    
+    floors.forEach(floor => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `pickup-floor-selector-btn ${window.selectedPickupFloors.has(floor) ? 'selected' : ''}`;
+        btn.textContent = floor;
+        btn.setAttribute('data-floor', floor);
+        btn.setAttribute('aria-pressed', window.selectedPickupFloors.has(floor) ? 'true' : 'false');
+        btn.style.cssText = `
+            padding: 8px 16px;
+            margin: 4px;
+            border: 2px solid ${window.selectedPickupFloors.has(floor) ? '#3b82f6' : '#e5e7eb'};
+            background: ${window.selectedPickupFloors.has(floor) ? '#dbeafe' : '#fff'};
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
+            color: ${window.selectedPickupFloors.has(floor) ? '#1e40af' : '#4b5563'};
+        `;
+        btn.addEventListener('click', () => {
+            if (window.togglePickupFloor) {
+                window.togglePickupFloor(floor);
+            }
+        });
+        selectorContainer.appendChild(btn);
+    });
+    
+    // Show/hide confirm button and elevator question based on selection
+    const confirmBtn = document.getElementById('confirm-pickup-floors-btn');
+    const elevatorQuestion = document.getElementById('pickup-elevator-question');
+    
+    if (confirmBtn) {
+        confirmBtn.style.display = window.selectedPickupFloors.size > 0 ? 'block' : 'none';
+    }
+    if (elevatorQuestion) {
+        elevatorQuestion.style.display = window.selectedPickupFloors.size > 0 ? 'block' : 'none';
+    }
+}
+
+// Step 5: Floor Selector Function (made global)
+window.renderDeliveryFloorSelector = function() {
+    const selectorContainer = document.getElementById('delivery-floors-selector');
+    if (!selectorContainer) {
+        console.warn('delivery-floors-selector container not found');
+        return;
+    }
+    
+    // Ensure selectedDeliveryFloors is initialized
+    if (!window.selectedDeliveryFloors) {
+        window.selectedDeliveryFloors = new Set();
+    }
+    
+    console.log('renderDeliveryFloorSelector called, selectedDeliveryFloors:', window.selectedDeliveryFloors);
+    
+    const deliveryFloors = ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
+    
+    selectorContainer.innerHTML = '';
+    
+    deliveryFloors.forEach(floor => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `delivery-floor-selector-btn ${window.selectedDeliveryFloors.has(floor) ? 'selected' : ''}`;
+        btn.textContent = floor;
+        btn.setAttribute('data-floor', floor);
+        btn.setAttribute('aria-pressed', window.selectedDeliveryFloors.has(floor) ? 'true' : 'false');
+        btn.style.cssText = `
+            padding: 8px 16px;
+            margin: 4px;
+            border: 2px solid ${window.selectedDeliveryFloors.has(floor) ? '#10b981' : '#e5e7eb'};
+            background: ${window.selectedDeliveryFloors.has(floor) ? '#d1fae5' : '#fff'};
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
+            color: ${window.selectedDeliveryFloors.has(floor) ? '#065f46' : '#4b5563'};
+        `;
+        btn.addEventListener('click', () => {
+            window.toggleDeliveryFloor(floor);
+        });
+        selectorContainer.appendChild(btn);
+    });
+    
+    console.log('Rendered', deliveryFloors.length, 'delivery floor buttons');
+    
+    // Show/hide confirm button based on selection
+    const confirmBtn = document.getElementById('confirm-delivery-floors-btn');
+    if (confirmBtn) {
+        confirmBtn.style.display = window.selectedDeliveryFloors.size > 0 ? 'block' : 'none';
+    }
+};
+
+// Toggle pickup floor selection (multi-select for source floors)
+window.togglePickupFloor = function(floor) {
+    const selectedPickupFloors = window.selectedPickupFloors || new Set();
+    if (selectedPickupFloors.has(floor)) {
+        selectedPickupFloors.delete(floor);
+    } else {
+        selectedPickupFloors.add(floor);
+    }
+    renderPickupFloorSelector();
+    if (window.renderInventoryByRoom) {
+        window.renderInventoryByRoom();
+    }
+    if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
+        window.ensureMultiFloorInventoryVisible();
+    }
+    if (typeof window.updateNextButtonState === 'function') {
+        window.updateNextButtonState();
+    }
+};
+
+// Toggle delivery floor selection (multi-select for destination floors)
+window.toggleDeliveryFloor = function(floor) {
+    const selectedDeliveryFloors = window.selectedDeliveryFloors || new Set();
+    if (selectedDeliveryFloors.has(floor)) {
+        selectedDeliveryFloors.delete(floor);
+    } else {
+        selectedDeliveryFloors.add(floor);
+    }
+    if (typeof renderDeliveryFloorSelector === 'function') {
+        renderDeliveryFloorSelector();
+    }
+    if (window.renderDeliveryFloors) {
+        window.renderDeliveryFloors();
+    }
+};
+
         const inventoryFloorTitle = document.querySelector('.inventory-floor-title');
     // Property type icon selection step
-    const propertyTypeBtns = document.querySelectorAll('.property-type-icon-btn');
+    const propertyTypeBtns = document.querySelectorAll('#property-type-selection-section .property-type-icon-btn');
     const propertyTypeHidden = document.getElementById('pickup-property-type');
     if (propertyTypeHidden) propertyTypeHidden.setAttribute('data-required', 'true');
     const floorIconGrid = document.getElementById('floor-icon-grid');
@@ -1177,18 +1701,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
     }
-
-    // Floor options for each property type
-    const propertyFloors = {
-        house: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', 'Attic'],
-        apartment: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'],
-        duplex: ['Basement', 'Ground', '1st', '2nd','Attic'],
-        'warehouse/Shop': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
-        'warehouse': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th'],
-        bungalow: ['Basement', 'Ground','Attic'],
-        'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
-    };
-
     // SVG icon for floor (simple stairs/level icon)
     function getFloorIconSvg(floor) {
         // Use a simple stairs or number icon for each floor
@@ -1323,8 +1835,14 @@ function renderFloorIcons(propertyType) {
     if (propertyTypeBtns && propertyTypeHidden) {
         propertyTypeBtns.forEach(btn => {
             btn.addEventListener('click', function () {
-                propertyTypeBtns.forEach(b => b.classList.remove('active'));
+                propertyTypeBtns.forEach(b => {
+                    b.classList.remove('active');
+                    b.classList.remove('selected');
+                    b.classList.remove('is-active');
+                });
                 btn.classList.add('active');
+                btn.classList.add('selected');
+                btn.classList.add('is-active');
                 propertyTypeBtns.forEach(b => b.setAttribute('aria-pressed', 'false'));
                 btn.setAttribute('aria-pressed', 'true');
                 propertyTypeHidden.value = btn.getAttribute('data-value');
@@ -1333,6 +1851,8 @@ function renderFloorIcons(propertyType) {
                 propertyTypeHidden.dispatchEvent(event);
                 // Render floor icons for this property type
                 renderFloorIcons(propertyTypeHidden.value);
+                // Render pickup floor selector for multi-floor selection
+                renderPickupFloorSelector();
                 updateInventoryAndElevatorVisibility();
 
                 // Always advance to step 3 after selection if not already there or past
@@ -1348,17 +1868,90 @@ function renderFloorIcons(propertyType) {
     // Render floor icons if property type is preselected
     if (propertyTypeHidden && propertyTypeHidden.value) {
         renderFloorIcons(propertyTypeHidden.value);
+        renderPickupFloorSelector();
     }
 
     // When property type changes (e.g. by code), re-render floor icons
     if (propertyTypeHidden) {
         propertyTypeHidden.addEventListener('change', function () {
             renderFloorIcons(propertyTypeHidden.value);
+            renderPickupFloorSelector();
         });
     }
 
     // No longer need to listen for floorSelect (dropdown) changes here
     updateInventoryAndElevatorVisibility();
+    
+    // Ensure original inventory UI is visible
+    function restoreOriginalInventoryUI() {
+        const basicRoomTabs = document.getElementById('room-tabs');
+        const basicRoomContainer = document.getElementById('room-items-container');
+        const customFloorsContainer = document.getElementById('floors-inventory-container');
+        const multiFloorContainer = document.querySelector('.floors-inventory-container');
+
+        if (basicRoomTabs) basicRoomTabs.style.display = '';
+        if (basicRoomContainer) basicRoomContainer.style.display = '';
+        if (customFloorsContainer) customFloorsContainer.remove();
+        if (multiFloorContainer) multiFloorContainer.style.display = 'none';
+        document.body.classList.remove('multi-floor-inventory-mode');
+    }
+    
+    // Event listeners for confirm button and elevator question
+    const confirmBtn = document.getElementById('confirm-pickup-floors-btn');
+    const elevatorBtns = document.querySelectorAll('.pickup-elevator-btn');
+    const elevatorInput = document.getElementById('pickup-elevator-available');
+    
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', function() {
+            // Check if elevator question was answered
+            if (window.selectedPickupFloors.size > 0 && !elevatorInput.value) {
+                alert('Please select whether an elevator is available before proceeding');
+                return;
+            }
+            // If floors selected, verify elevator is answered and proceed
+            if (window.selectedPickupFloors.size > 0 && elevatorInput.value) {
+                // Render one old-style inventory block per selected pickup floor
+                if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
+                    window.renderSelectedPickupFloorsInventory(elevatorInput.value);
+                } else {
+                    restoreOriginalInventoryUI();
+                }
+                
+                // Show inventory section
+                if (document.getElementById('inventory-card-container')) {
+                    document.getElementById('inventory-card-container').style.display = '';
+                }
+                // Scroll to inventory
+                setTimeout(() => {
+                    if (document.getElementById('inventory-card-container')) {
+                        document.getElementById('inventory-card-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                }, 100);
+
+                if (typeof window.updateNextButtonState === 'function') {
+                    setTimeout(() => window.updateNextButtonState(), 0);
+                }
+            }
+        });
+    }
+    
+    elevatorBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const value = this.getAttribute('data-value');
+            if (elevatorInput) {
+                elevatorInput.value = value;
+            }
+            // Update button styles
+            elevatorBtns.forEach(b => {
+                b.style.borderColor = '#e5e7eb';
+                b.style.background = 'white';
+                b.style.color = '#4b5563';
+            });
+            this.style.borderColor = value === 'yes' ? '#10b981' : '#ef4444';
+            this.style.background = value === 'yes' ? '#d1fae5' : '#fee2e2';
+            this.style.color = value === 'yes' ? '#065f46' : '#991b1b';
+        });
+    });
 });
 
 // --- Delivery Property Type Selection ---
@@ -1372,12 +1965,37 @@ document.addEventListener('DOMContentLoaded', function () {
     if (deliveryPropertyTypeHidden) {
         deliveryPropertyTypeHidden.setAttribute('data-required', 'true');
     }
+
+    function syncDeliveryStep4FromState() {
+        const savedProperty = deliveryPropertyTypeHidden ? deliveryPropertyTypeHidden.value : '';
+
+        deliveryPropertyTypeBtns.forEach((button) => {
+            const isSelected = !!savedProperty && button.getAttribute('data-value') === savedProperty;
+            button.classList.toggle('active', isSelected);
+            button.classList.toggle('selected', isSelected);
+            button.classList.toggle('is-active', isSelected);
+            button.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+        });
+
+        const elevatorSection = document.getElementById('delivery-elevator-section');
+        if (elevatorSection) {
+            elevatorSection.style.display = 'none';
+        }
+    }
+
+    window.syncDeliveryStep4FromState = syncDeliveryStep4FromState;
     
     if (deliveryPropertyTypeBtns && deliveryPropertyTypeHidden) {
         deliveryPropertyTypeBtns.forEach(btn => {
             btn.addEventListener('click', function () {
-                deliveryPropertyTypeBtns.forEach(b => b.classList.remove('active'));
+                deliveryPropertyTypeBtns.forEach(b => {
+                    b.classList.remove('active');
+                    b.classList.remove('selected');
+                    b.classList.remove('is-active');
+                });
                 btn.classList.add('active');
+                btn.classList.add('selected');
+                btn.classList.add('is-active');
                 deliveryPropertyTypeBtns.forEach(b => b.setAttribute('aria-pressed', 'false'));
                 btn.setAttribute('aria-pressed', 'true');
                 deliveryPropertyTypeHidden.value = btn.getAttribute('data-value');
@@ -1392,6 +2010,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (window.renderDeliveryFloorIconsWithElevator) {
                         window.renderDeliveryFloorIconsWithElevator(propertyTypeValue);
                     }
+                    // Render delivery floor selector for multi-floor selection
+                    if (typeof window.renderDeliveryFloorSelector === 'function') {
+                        window.renderDeliveryFloorSelector();
+                    }
+                    // Keep Step 4 focused on property selection only
+                    const elevatorSection = document.getElementById('delivery-elevator-section');
+                    if (elevatorSection) {
+                        elevatorSection.style.display = 'none';
+                    }
                 }, 100);
                 
                 // Advance to next step (step 5) after selection if not already there or past
@@ -1402,6 +2029,25 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         });
+    }
+
+    const deliveryStepObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.attributeName !== 'data-form-step') return;
+            const step = parseInt(document.body.dataset.formStep || '1', 10);
+            if (step === 4) {
+                syncDeliveryStep4FromState();
+            }
+        });
+    });
+
+    deliveryStepObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['data-form-step']
+    });
+
+    if (parseInt(document.body.dataset.formStep || '1', 10) === 4) {
+        syncDeliveryStep4FromState();
     }
 });
 
@@ -1492,6 +2138,8 @@ document.addEventListener('DOMContentLoaded', function () {
             elevatorOptionContainer.appendChild(hidden);
         }
         
+        const previousSelection = hidden.value || '';
+
         grid.innerHTML = '';
         const options = [
             { value: 'yes', label: 'Yes', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#4A90E2"/><path d="M8 12l3 3 5-5" stroke="#fff" stroke-width="2" fill="none"/></svg>' },
@@ -1504,7 +2152,11 @@ document.addEventListener('DOMContentLoaded', function () {
             btn.className = 'elevator-icon-btn';
             btn.setAttribute('data-value', opt.value);
             btn.innerHTML = `${opt.icon}<span>${opt.label}</span>`;
-            btn.setAttribute('aria-pressed', 'false');
+            const isSelected = previousSelection === opt.value;
+            if (isSelected) {
+                btn.classList.add('selected');
+            }
+            btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
             btn.addEventListener('click', function () {
                 grid.querySelectorAll('.elevator-icon-btn').forEach(b => {
                     b.classList.remove('selected');
@@ -1526,8 +2178,9 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             grid.appendChild(btn);
         });
-        
-        hidden.value = '';
+
+        const selectionExists = options.some((opt) => opt.value === previousSelection);
+        hidden.value = selectionExists ? previousSelection : '';
     }
     
     // Make functions globally accessible
@@ -1540,10 +2193,21 @@ document.addEventListener('DOMContentLoaded', function () {
             if (mutation.attributeName === 'data-form-step') {
                 const currentStep = parseInt(document.body.dataset.formStep, 10);
                 if (currentStep === 5) {
+                    console.log('Step 5 entered, rendering delivery floor selector');
                     // Render delivery floors and elevator when entering step 5
                     const deliveryPropType = document.getElementById('delivery-property-type');
                     if (deliveryPropType && deliveryPropType.value) {
                         window.renderDeliveryFloorIconsWithElevator(deliveryPropType.value);
+                    }
+
+                    // Always render floor selector buttons in Step 5
+                    if (typeof window.renderDeliveryFloorSelector === 'function') {
+                        window.renderDeliveryFloorSelector();
+                    }
+
+                    // Refresh delivery floor drop-zones if renderer is available
+                    if (typeof window.renderDeliveryFloors === 'function') {
+                        window.renderDeliveryFloors();
                     }
                 }
             }
@@ -1554,6 +2218,33 @@ document.addEventListener('DOMContentLoaded', function () {
         attributes: true,
         attributeFilter: ['data-form-step']
     });
+
+    // Initial render for cases where step 5 is already active
+    if (parseInt(document.body.dataset.formStep || '1', 10) === 5) {
+        const deliveryPropType = document.getElementById('delivery-property-type');
+        if (deliveryPropType && deliveryPropType.value && typeof window.renderDeliveryFloorIconsWithElevator === 'function') {
+            window.renderDeliveryFloorIconsWithElevator(deliveryPropType.value);
+        }
+        if (typeof window.renderDeliveryFloorSelector === 'function') {
+            window.renderDeliveryFloorSelector();
+        }
+    }
+    
+    // Event listener for delivery floor confirm button
+    const deliveryConfirmBtn = document.getElementById('confirm-delivery-floors-btn');
+    
+    if (deliveryConfirmBtn) {
+        deliveryConfirmBtn.addEventListener('click', function() {
+            // Check if floors are selected
+            if (window.selectedDeliveryFloors && window.selectedDeliveryFloors.size > 0) {
+                // Show the inventory organization section
+                const organizationSection = document.getElementById('item-organization-section');
+                if (organizationSection) {
+                    organizationSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }
+        });
+    }
 });
 
 // --- Room-Based Item Organization for Step 5 (Delivery) ---
@@ -1568,6 +2259,17 @@ document.addEventListener('DOMContentLoaded', function () {
     
     // Selected items for bulk assignment (Set of item names)
     let selectedItems = new Set();
+    
+    // Track expanded sections to restore state after re-render
+    let expandedSections = new Set();
+    
+    // Track which pickup floors (source) have been selected by user
+    const selectedPickupFloors = window.selectedPickupFloors || new Set();
+    window.selectedPickupFloors = selectedPickupFloors;
+    
+    // Track which delivery floors (destination) have been selected by user
+    const selectedDeliveryFloors = window.selectedDeliveryFloors || new Set();
+    window.selectedDeliveryFloors = selectedDeliveryFloors;
     
     // Floor definitions - will be set based on delivery property type
     let deliveryFloors = ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
@@ -1586,6 +2288,9 @@ document.addEventListener('DOMContentLoaded', function () {
         garden: { name: 'Garden', icon: '🌳' },
         boxes: { name: 'Boxes & Other', icon: '📦' }
     };
+    
+    // Expose ROOM_CATEGORIES globally
+    window.ROOM_CATEGORIES = ROOM_CATEGORIES;
     
     // Item to room mapping (from ROOM_ITEMS)
     const ROOM_ITEMS = {
@@ -1658,7 +2363,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return 'boxes'; // Default to boxes if not found
     }
     
-    // Function to get all items grouped by room
+    // Function to get all items grouped by room (keeping items from different source floors separate)
     function getItemsByRoom() {
         const roomItems = {};
         
@@ -1667,18 +2372,21 @@ document.addEventListener('DOMContentLoaded', function () {
             roomItems[roomKey] = {};
         });
         
-        // Get items from single-floor inventory
+        // Get items from single-floor inventory with source floor info
         if (window.itemQuantities) {
             Object.keys(window.itemQuantities).forEach(item => {
                 const qty = window.itemQuantities[item];
                 if (qty > 0) {
                     const room = getRoomForItem(item);
-                    roomItems[room][item] = (roomItems[room][item] || 0) + qty;
+                    const sourceFloor = document.getElementById('pickup-floor-select')?.value || 'Ground';
+                    // Use a unique key that includes the source floor to keep items separate
+                    const itemKey = `${item}||${sourceFloor}`;
+                    roomItems[room][itemKey] = qty;
                 }
             });
         }
         
-        // Get items from multi-floor inventory
+        // Get items from multi-floor inventory with source floor info
         if (window.multiFloorInventory) {
             Object.keys(window.multiFloorInventory).forEach(floorName => {
                 const floorItems = window.multiFloorInventory[floorName];
@@ -1686,13 +2394,25 @@ document.addEventListener('DOMContentLoaded', function () {
                     const qty = floorItems[itemName];
                     if (qty > 0) {
                         const room = getRoomForItem(itemName);
-                        roomItems[room][itemName] = (roomItems[room][itemName] || 0) + qty;
+                        // Use a unique key that includes the source floor to keep items separate
+                        const itemKey = `${itemName}||${floorName}`;
+                        roomItems[room][itemKey] = qty;
                     }
                 });
             });
         }
         
         return roomItems;
+    }
+    
+    // Helper function to extract item name from key
+    function getItemNameFromKey(itemKey) {
+        return itemKey.split('||')[0];
+    }
+    
+    // Helper function to extract source floor from key
+    function getSourceFloorFromKey(itemKey) {
+        return itemKey.split('||')[1] || 'Unknown';
     }
     
     // Helper function to get source floor(s) for an item
@@ -1719,39 +2439,51 @@ document.addEventListener('DOMContentLoaded', function () {
         return sources.length > 0 ? sources : ['Unknown'];
     }
     
-    // Helper function to get total assigned quantity for an item
-    function getAssignedQuantity(itemName) {
-        if (!itemFloorAssignments[itemName]) return 0;
-        return Object.values(itemFloorAssignments[itemName]).reduce((sum, qty) => sum + qty, 0);
+    // Helper function to get total assigned quantity for an item (using original item name)
+    function getAssignedQuantity(itemKey) {
+        const itemName = getItemNameFromKey(itemKey);
+        if (!itemFloorAssignments[itemKey] && !itemFloorAssignments[itemName]) return 0;
+        
+        // First check with the key
+        if (itemFloorAssignments[itemKey]) {
+            return Object.values(itemFloorAssignments[itemKey]).reduce((sum, qty) => sum + qty, 0);
+        }
+        
+        // Fall back to item name for backwards compatibility
+        if (itemFloorAssignments[itemName]) {
+            return Object.values(itemFloorAssignments[itemName]).reduce((sum, qty) => sum + qty, 0);
+        }
+        
+        return 0;
     }
     
     // Helper function to get remaining quantity for an item
-    function getRemainingQuantity(itemName, totalQty) {
-        return totalQty - getAssignedQuantity(itemName);
+    function getRemainingQuantity(itemKey, totalQty) {
+        return totalQty - getAssignedQuantity(itemKey);
     }
 
-    function assignItemsToFloor(itemNames, floor) {
+    function assignItemsToFloor(itemKeys, floor) {
         const roomItems = getItemsByRoom();
         const itemQtyMap = {};
 
         Object.keys(roomItems).forEach(roomKey => {
-            Object.keys(roomItems[roomKey]).forEach(itemName => {
-                itemQtyMap[itemName] = roomItems[roomKey][itemName];
+            Object.keys(roomItems[roomKey]).forEach(itemKey => {
+                itemQtyMap[itemKey] = roomItems[roomKey][itemKey];
             });
         });
 
-        itemNames.forEach(itemName => {
-            const totalQty = itemQtyMap[itemName] || 0;
+        itemKeys.forEach(itemKey => {
+            const totalQty = itemQtyMap[itemKey] || 0;
             if (totalQty <= 0) return;
 
-            if (!itemFloorAssignments[itemName]) {
-                itemFloorAssignments[itemName] = {};
+            if (!itemFloorAssignments[itemKey]) {
+                itemFloorAssignments[itemKey] = {};
             }
 
-            const remaining = getRemainingQuantity(itemName, totalQty);
+            const remaining = getRemainingQuantity(itemKey, totalQty);
             if (remaining > 0) {
-                itemFloorAssignments[itemName][floor] =
-                    (itemFloorAssignments[itemName][floor] || 0) + remaining;
+                itemFloorAssignments[itemKey][floor] =
+                    (itemFloorAssignments[itemKey][floor] || 0) + remaining;
             }
         });
     }
@@ -1766,23 +2498,76 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function assignAllItemsToFloor(floor) {
         const roomItems = getItemsByRoom();
-        const allItemNames = [];
+        const allItemKeys = [];
 
         Object.keys(roomItems).forEach(roomKey => {
-            Object.keys(roomItems[roomKey]).forEach(itemName => {
-                allItemNames.push(itemName);
+            Object.keys(roomItems[roomKey]).forEach(itemKey => {
+                allItemKeys.push(itemKey);
             });
         });
 
-        assignItemsToFloor(allItemNames, floor);
+        assignItemsToFloor(allItemKeys, floor);
         selectedItems.clear();
         renderInventoryByRoom();
         renderDeliveryFloors();
     }
     
+    // Function to save the expanded state of sections
+    function saveExpandedState() {
+        expandedSections.clear();
+        const roomSections = inventoryList?.querySelectorAll('[data-room-collapsed]') || [];
+        roomSections.forEach(section => {
+            if (section.getAttribute('data-room-collapsed') === 'false') {
+                const header = section.querySelector('[data-room-items]') ? section.textContent.split('\n')[0] : section.querySelector('button')?.textContent;
+                if (header && !section.getAttribute('data-room-collapsed')) {
+                    expandedSections.add(section.id || section.className);
+                }
+            }
+        });
+        
+        // Simple approach: check all room sections that have expanded items container
+        const allSections = inventoryList?.querySelectorAll('[data-room-items]') || [];
+        allSections.forEach(container => {
+            const roomSection = container.parentElement;
+            if (roomSection && roomSection.getAttribute('data-room-collapsed') === 'false') {
+                const roomName = roomSection.querySelector('span')?.textContent;
+                if (roomName) {
+                    expandedSections.add(roomName.trim());
+                }
+            }
+        });
+    }
+    
+    // Function to restore the expanded state of sections
+    function restoreExpandedState() {
+        setTimeout(() => {
+            const roomSections = inventoryList?.querySelectorAll('[data-room-collapsed]') || [];
+            roomSections.forEach(section => {
+                // Find the room name from the header
+                const headerBtn = section.querySelector('button');
+                if (headerBtn) {
+                    const headerText = section.textContent.trim();
+                    // Extract room name (first line of text)
+                    const roomName = headerText.split('\n')[0]?.trim();
+                    
+                    if (roomName && expandedSections.has(roomName)) {
+                        // Expand this section
+                        const itemsContainer = section.querySelector('[data-room-items]');
+                        if (itemsContainer && section.getAttribute('data-room-collapsed') === 'true') {
+                            headerBtn.click();
+                        }
+                    }
+                }
+            });
+        }, 0);
+    }
+    
     // Function to render inventory with unassigned items highlighted
     function renderInventoryByRoom() {
         if (!inventoryList) return;
+        
+        // Save the current expanded state before re-rendering
+        saveExpandedState();
         
         const roomItems = getItemsByRoom();
         
@@ -1790,15 +2575,25 @@ document.addEventListener('DOMContentLoaded', function () {
         const unassignedItems = [];
         Object.keys(roomItems).forEach(roomKey => {
             const items = roomItems[roomKey];
-            Object.keys(items).forEach(itemName => {
-                const qty = items[itemName];
-                const remaining = getRemainingQuantity(itemName, qty);
+            Object.keys(items).forEach(itemKey => {
+                const qty = items[itemKey];
+                const remaining = getRemainingQuantity(itemKey, qty);
                 if (remaining > 0) {
+                    const itemName = getItemNameFromKey(itemKey);
+                    const sourceFloor = getSourceFloorFromKey(itemKey);
+                    
+                    // Filter by selected pickup floors - if any floors selected, only show items from those floors
+                    if (selectedPickupFloors.size > 0 && !selectedPickupFloors.has(sourceFloor)) {
+                        return; // Skip items not on selected pickup floors
+                    }
+                    
                     unassignedItems.push({
+                        key: itemKey,
                         name: itemName,
+                        sourceFloor: sourceFloor,
                         qty: qty,
                         remaining: remaining,
-                        assigned: getAssignedQuantity(itemName),
+                        assigned: getAssignedQuantity(itemKey),
                         room: roomKey
                     });
                 }
@@ -1845,323 +2640,367 @@ document.addEventListener('DOMContentLoaded', function () {
         header.appendChild(headerHint);
         inventoryList.appendChild(header);
         
-        // Render unassigned items grouped by room
-        const itemsByRoom = {};
+        // Render unassigned items grouped by source floor, then by room
+        const itemsBySourceFloor = {};
         unassignedItems.forEach(item => {
-            if (!itemsByRoom[item.room]) {
-                itemsByRoom[item.room] = [];
+            if (!itemsBySourceFloor[item.sourceFloor]) {
+                itemsBySourceFloor[item.sourceFloor] = {};
             }
-            itemsByRoom[item.room].push(item);
+            if (!itemsBySourceFloor[item.sourceFloor][item.room]) {
+                itemsBySourceFloor[item.sourceFloor][item.room] = [];
+            }
+            itemsBySourceFloor[item.sourceFloor][item.room].push(item);
         });
         
-        Object.keys(itemsByRoom).sort((a, b) => {
-            const nameA = ROOM_CATEGORIES[a]?.name || a;
-            const nameB = ROOM_CATEGORIES[b]?.name || b;
-            return nameA.localeCompare(nameB);
-        }).forEach(roomKey => {
-            const items = itemsByRoom[roomKey];
-            let expandedState = { isExpanded: true };
+        // Sort floors in logical order
+        const floorOrder = ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
+        Object.keys(itemsBySourceFloor).sort((a, b) => {
+            const indexA = floorOrder.indexOf(a);
+            const indexB = floorOrder.indexOf(b);
+            return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+        }).forEach(sourceFloor => {
+            const roomsInFloor = itemsBySourceFloor[sourceFloor];
             
-            const roomSection = document.createElement('div');
-            roomSection.style.cssText = `
-                margin-bottom: 12px;
-                border: 1px solid #e5e7eb;
-                border-radius: 8px;
-                overflow: hidden;
-            `;
-            roomSection.setAttribute('data-room-collapsed', 'false');
-            
-            // Room header (clickable to expand/collapse)
-            const roomHeader = document.createElement('div');
-            roomHeader.style.cssText = `
-                background: #f3f4f6;
+            // Create floor section header
+            const floorSection = document.createElement('div');
+            floorSection.style.cssText = `
+                margin-bottom: 16px;
                 padding: 12px;
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                font-weight: 600;
-                color: #374151;
-                user-select: none;
-                transition: all 0.2s ease;
-            `;
-            
-            roomHeader.addEventListener('mouseover', () => {
-                roomHeader.style.background = '#e5e7eb';
-            });
-            
-            roomHeader.addEventListener('mouseout', () => {
-                roomHeader.style.background = '#f3f4f6';
-            });
-            
-            const roomHeaderLeft = document.createElement('div');
-            roomHeaderLeft.style.cssText = `
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            `;
-            
-            const roomIcon = document.createElement('span');
-            roomIcon.style.cssText = `
-                font-size: 1.1rem;
-            `;
-            roomIcon.textContent = ROOM_CATEGORIES[roomKey]?.icon || '📦';
-            
-            const roomNameAndCount = document.createElement('div');
-            
-            const roomName = document.createElement('span');
-            roomName.textContent = ROOM_CATEGORIES[roomKey]?.name || roomKey;
-            
-            const roomCount = document.createElement('span');
-            roomCount.style.cssText = `
-                background: #fcd34d;
-                color: #78350f;
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-size: 0.8rem;
-                font-weight: 600;
-                margin-left: 8px;
-            `;
-            roomCount.textContent = items.length;
-            
-            roomNameAndCount.appendChild(roomName);
-            roomNameAndCount.appendChild(roomCount);
-            
-            roomHeaderLeft.appendChild(roomIcon);
-            roomHeaderLeft.appendChild(roomNameAndCount);
-            
-            const expandBtn = document.createElement('button');
-            expandBtn.type = 'button';
-            expandBtn.style.cssText = `
-                background: none;
-                border: none;
-                cursor: pointer;
-                font-size: 0.9rem;
-                padding: 0;
-                color: #6b7280;
-            `;
-            expandBtn.textContent = expandedState.isExpanded ? '▼' : '▶';
-            
-            roomHeader.appendChild(roomHeaderLeft);
-            roomHeader.appendChild(expandBtn);
-            roomSection.appendChild(roomHeader);
-            
-            // Room items (collapsible)
-            const itemsContainer = document.createElement('div');
-            itemsContainer.style.cssText = `
-                display: flex;
-                flex-direction: column;
-                gap: 0;
-                padding: 8px;
-                background: #fff;
-                max-height: ${expandedState.isExpanded ? '1000px' : '0'};
-                overflow: hidden;
-                transition: max-height 0.3s ease;
-            `;
-            itemsContainer.setAttribute('data-room-items', roomKey);
-            
-            // Select all button
-            const selectAllBtn = document.createElement('button');
-            selectAllBtn.type = 'button';
-            const allInRoomSelected = items.every(item => selectedItems.has(item.name));
-            selectAllBtn.innerHTML = `<input type="checkbox" class="room-select-all" data-room="${roomKey}" ${allInRoomSelected ? 'checked' : ''} style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"> Select all from ${ROOM_CATEGORIES[roomKey]?.name || roomKey}`;
-            selectAllBtn.style.cssText = `
-                width: 100%;
-                padding: 8px 12px;
-                margin-bottom: 8px;
-                background: #ecfdf5;
-                border: 2px solid #10b981;
+                background: #dbeafe;
+                border-left: 4px solid #2563eb;
                 border-radius: 6px;
-                color: #065f46;
                 font-weight: 600;
-                font-size: 0.85rem;
-                cursor: pointer;
-                transition: all 0.2s ease;
-                display: flex;
-                align-items: center;
+                color: #1e40af;
+                font-size: 0.95rem;
             `;
+            floorSection.textContent = `📍 ${sourceFloor} Floor`;
+            inventoryList.appendChild(floorSection);
             
-            selectAllBtn.addEventListener('mouseover', () => {
-                selectAllBtn.style.background = '#d1fae5';
-            });
-            
-            selectAllBtn.addEventListener('mouseout', () => {
-                selectAllBtn.style.background = '#ecfdf5';
-            });
-            
-            selectAllBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const checkbox = selectAllBtn.querySelector('.room-select-all');
-                const clickedCheckbox = e.target && e.target.classList && e.target.classList.contains('room-select-all');
-                const nextChecked = clickedCheckbox ? checkbox.checked : !checkbox.checked;
-                checkbox.checked = nextChecked;
+            // Render rooms within this floor
+            Object.keys(roomsInFloor).sort((a, b) => {
+                const nameA = ROOM_CATEGORIES[a]?.name || a;
+                const nameB = ROOM_CATEGORIES[b]?.name || b;
+                return nameA.localeCompare(nameB);
+            }).forEach(roomKey => {
+                const items = roomsInFloor[roomKey];
+                let expandedState = { isExpanded: false };
                 
-                // Select/deselect all items in this room
-                items.forEach(item => {
-                    if (nextChecked) {
-                        selectedItems.add(item.name);
-                    } else {
-                        selectedItems.delete(item.name);
-                    }
-                });
+                const roomSection = document.createElement('div');
+                roomSection.style.cssText = `
+                    margin-bottom: 12px;
+                    margin-left: 12px;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    overflow: hidden;
+                `;
+                roomSection.setAttribute('data-room-collapsed', 'true');
                 
-                renderInventoryByRoom();
-                renderDeliveryFloors();
-            });
-            
-            itemsContainer.appendChild(selectAllBtn);
-            
-            // Individual items
-            items.forEach(item => {
-                const sourceFloors = getItemSourceFloors(item.name);
-                const isSelected = selectedItems.has(item.name);
-                
-                const itemEl = document.createElement('div');
-                itemEl.style.cssText = `
-                    font-size: 0.9rem;
-                    color: #6b7280;
-                    padding: 8px;
-                    background: ${isSelected ? '#dbeafe' : '#fef3c7'};
-                    border-left: 3px solid ${isSelected ? '#2563eb' : '#f59e0b'};
-                    border-radius: 4px;
+                // Room header (clickable to expand/collapse)
+                const roomHeader = document.createElement('div');
+                roomHeader.style.cssText = `
+                    background: #f3f4f6;
+                    padding: 12px;
+                    cursor: pointer;
                     display: flex;
-                    justify-content: space-between;
                     align-items: center;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    flex-wrap: wrap;
-                    gap: 8px;
-                `;
-                
-                itemEl.addEventListener('mouseover', () => {
-                    if (!isSelected) {
-                        itemEl.style.background = '#fde68a';
-                        itemEl.style.borderLeftColor = '#d97706';
-                    }
-                });
-                
-                itemEl.addEventListener('mouseout', () => {
-                    if (!isSelected) {
-                        itemEl.style.background = '#fef3c7';
-                        itemEl.style.borderLeftColor = '#f59e0b';
-                    }
-                });
-                
-                itemEl.addEventListener('click', (e) => {
-                    if (e.target.tagName === 'INPUT') return; // Let checkbox handle its own click
-                    
-                    // Toggle selection
-                    if (selectedItems.has(item.name)) {
-                        selectedItems.delete(item.name);
-                    } else {
-                        selectedItems.add(item.name);
-                    }
-                    renderInventoryByRoom();
-                    renderDeliveryFloors();
-                });
-                
-                // Checkbox
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.checked = isSelected;
-                checkbox.style.cssText = `
-                    width: 18px;
-                    height: 18px;
-                    cursor: pointer;
-                    margin-right: 8px;
-                `;
-                checkbox.addEventListener('change', (e) => {
-                    e.stopPropagation();
-                    if (e.target.checked) {
-                        selectedItems.add(item.name);
-                    } else {
-                        selectedItems.delete(item.name);
-                    }
-                    renderInventoryByRoom();
-                    renderDeliveryFloors();
-                });
-                
-                const itemNameAndSource = document.createElement('div');
-                itemNameAndSource.style.cssText = `
-                    display: flex;
-                    flex-direction: column;
-                    gap: 2px;
-                    flex: 1;
-                `;
-                
-                const itemName = document.createElement('div');
-                itemName.style.cssText = `
-                    font-weight: 500;
+                    justify-content: space-between;
+                    font-weight: 600;
                     color: #374151;
+                    user-select: none;
+                    transition: all 0.2s ease;
                 `;
-                itemName.textContent = item.name;
                 
-                const sourceInfo = document.createElement('div');
-                sourceInfo.style.cssText = `
-                    font-size: 0.75rem;
-                    color: #92400e;
-                    font-weight: 500;
-                `;
-                sourceInfo.textContent = `From pickup: ${sourceFloors.join(', ')}`;
+                roomHeader.addEventListener('mouseover', () => {
+                    roomHeader.style.background = '#e5e7eb';
+                });
                 
-                itemNameAndSource.appendChild(itemName);
-                itemNameAndSource.appendChild(sourceInfo);
+                roomHeader.addEventListener('mouseout', () => {
+                    roomHeader.style.background = '#f3f4f6';
+                });
                 
-                const qtyContainer = document.createElement('div');
-                qtyContainer.style.cssText = `
+                const roomHeaderLeft = document.createElement('div');
+                roomHeaderLeft.style.cssText = `
                     display: flex;
-                    flex-direction: column;
-                    align-items: flex-end;
-                    gap: 4px;
+                    align-items: center;
+                    gap: 10px;
                 `;
                 
-                const qty = document.createElement('span');
-                qty.style.cssText = `
-                    background: #f59e0b;
-                    color: #fff;
+                const roomIcon = document.createElement('span');
+                roomIcon.style.cssText = `
+                    font-size: 1.1rem;
+                `;
+                roomIcon.textContent = ROOM_CATEGORIES[roomKey]?.icon || '📦';
+                
+                const roomNameAndCount = document.createElement('div');
+                
+                const roomName = document.createElement('span');
+                roomName.textContent = ROOM_CATEGORIES[roomKey]?.name || roomKey;
+                
+                const roomCount = document.createElement('span');
+                roomCount.style.cssText = `
+                    background: #fcd34d;
+                    color: #78350f;
                     padding: 2px 8px;
                     border-radius: 4px;
-                    font-weight: 600;
                     font-size: 0.8rem;
-                    white-space: nowrap;
+                    font-weight: 600;
+                    margin-left: 8px;
                 `;
-                qty.textContent = '×' + item.qty;
+                roomCount.textContent = items.length;
                 
-                qtyContainer.appendChild(qty);
+                roomNameAndCount.appendChild(roomName);
+                roomNameAndCount.appendChild(roomCount);
                 
-                // Show assignment progress if partially assigned
-                if (item.assigned > 0) {
-                    const progress = document.createElement('span');
-                    progress.style.cssText = `
-                        font-size: 0.75rem;
-                        color: #059669;
-                        font-weight: 600;
+                roomHeaderLeft.appendChild(roomIcon);
+                roomHeaderLeft.appendChild(roomNameAndCount);
+                
+                const expandBtn = document.createElement('button');
+                expandBtn.type = 'button';
+                expandBtn.style.cssText = `
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    font-size: 0.9rem;
+                    padding: 0;
+                    color: #6b7280;
+                    font-weight: bold;
+                `;
+                expandBtn.textContent = expandedState.isExpanded ? '−' : '+';
+                
+                roomHeader.appendChild(roomHeaderLeft);
+                roomHeader.appendChild(expandBtn);
+                roomSection.appendChild(roomHeader);
+                
+                // Room items (collapsible)
+                const itemsContainer = document.createElement('div');
+                itemsContainer.style.cssText = `
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0;
+                    padding: 8px;
+                    background: #fff;
+                    max-height: ${expandedState.isExpanded ? '1000px' : '0'};
+                    overflow: hidden;
+                    transition: max-height 0.3s ease;
+                `;
+                itemsContainer.setAttribute('data-room-items', roomKey);
+                
+                // Select all button
+                const selectAllBtn = document.createElement('button');
+                selectAllBtn.type = 'button';
+                const allInRoomSelected = items.every(item => selectedItems.has(item.key));
+                selectAllBtn.innerHTML = `<input type="checkbox" class="room-select-all" data-room="${roomKey}" ${allInRoomSelected ? 'checked' : ''} style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"> Select all from ${ROOM_CATEGORIES[roomKey]?.name || roomKey}`;
+                selectAllBtn.style.cssText = `
+                    width: 100%;
+                    padding: 8px 12px;
+                    margin-bottom: 8px;
+                    background: #ecfdf5;
+                    border: 2px solid #10b981;
+                    border-radius: 6px;
+                    color: #065f46;
+                    font-weight: 600;
+                    font-size: 0.85rem;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    display: flex;
+                    align-items: center;
+                `;
+                
+                selectAllBtn.addEventListener('mouseover', () => {
+                    selectAllBtn.style.background = '#d1fae5';
+                });
+                
+                selectAllBtn.addEventListener('mouseout', () => {
+                    selectAllBtn.style.background = '#ecfdf5';
+                });
+                
+                selectAllBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const checkbox = selectAllBtn.querySelector('.room-select-all');
+                    const clickedCheckbox = e.target && e.target.classList && e.target.classList.contains('room-select-all');
+                    const nextChecked = clickedCheckbox ? checkbox.checked : !checkbox.checked;
+                    checkbox.checked = nextChecked;
+                    
+                    // Select/deselect all items in this room
+                    items.forEach(item => {
+                        if (nextChecked) {
+                            selectedItems.add(item.key);
+                        } else {
+                            selectedItems.delete(item.key);
+                        }
+                    });
+                    
+                    renderInventoryByRoom();
+                    renderDeliveryFloors();
+                });
+                
+                itemsContainer.appendChild(selectAllBtn);
+                
+                // Individual items
+                items.forEach(item => {
+                    const isSelected = selectedItems.has(item.key);
+                    
+                    const itemEl = document.createElement('div');
+                    itemEl.style.cssText = `
+                        font-size: 0.9rem;
+                        color: #6b7280;
+                        padding: 8px;
+                        background: ${isSelected ? '#dbeafe' : '#fef3c7'};
+                        border-left: 3px solid ${isSelected ? '#2563eb' : '#f59e0b'};
+                        border-radius: 4px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        cursor: pointer;
+                        transition: all 0.2s ease;
+                        flex-wrap: wrap;
+                        gap: 8px;
                     `;
-                    progress.textContent = `${item.assigned} assigned`;
-                    qtyContainer.appendChild(progress);
-                }
+                    
+                    itemEl.addEventListener('mouseover', () => {
+                        if (!isSelected) {
+                            itemEl.style.background = '#fde68a';
+                            itemEl.style.borderLeftColor = '#d97706';
+                        }
+                    });
+                    
+                    itemEl.addEventListener('mouseout', () => {
+                        if (!isSelected) {
+                            itemEl.style.background = '#fef3c7';
+                            itemEl.style.borderLeftColor = '#f59e0b';
+                        }
+                    });
+                    
+                    itemEl.addEventListener('click', (e) => {
+                        if (e.target.tagName === 'INPUT') return; // Let checkbox handle its own click
+                        
+                        // Toggle selection
+                        if (selectedItems.has(item.key)) {
+                            selectedItems.delete(item.key);
+                        } else {
+                            selectedItems.add(item.key);
+                        }
+                        renderInventoryByRoom();
+                        renderDeliveryFloors();
+                    });
+                    
+                    // Checkbox
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = isSelected;
+                    checkbox.style.cssText = `
+                        width: 18px;
+                        height: 18px;
+                        cursor: pointer;
+                        margin-right: 8px;
+                    `;
+                    checkbox.addEventListener('change', (e) => {
+                        e.stopPropagation();
+                        if (e.target.checked) {
+                            selectedItems.add(item.key);
+                        } else {
+                            selectedItems.delete(item.key);
+                        }
+                        renderInventoryByRoom();
+                        renderDeliveryFloors();
+                    });
+                    
+                    const itemNameAndSource = document.createElement('div');
+                    itemNameAndSource.style.cssText = `
+                        display: flex;
+                        flex-direction: column;
+                        gap: 2px;
+                        flex: 1;
+                    `;
+                    
+                    const itemName = document.createElement('div');
+                    itemName.style.cssText = `
+                        font-weight: 500;
+                        color: #374151;
+                    `;
+                    itemName.textContent = item.name;
+                    
+                    const sourceInfo = document.createElement('div');
+                    sourceInfo.style.cssText = `
+                        font-size: 0.75rem;
+                        color: #92400e;
+                        font-weight: 500;
+                    `;
+                    sourceInfo.textContent = `From ${ROOM_CATEGORIES[item.room]?.name || item.room}`;
+                    
+                    itemNameAndSource.appendChild(itemName);
+                    itemNameAndSource.appendChild(sourceInfo);
+                    
+                    const qtyContainer = document.createElement('div');
+                    qtyContainer.style.cssText = `
+                        display: flex;
+                        flex-direction: column;
+                        align-items: flex-end;
+                        gap: 4px;
+                    `;
+                    
+                    const qty = document.createElement('span');
+                    qty.style.cssText = `
+                        background: #f59e0b;
+                        color: #fff;
+                        padding: 2px 8px;
+                        border-radius: 4px;
+                        font-weight: 600;
+                        font-size: 0.8rem;
+                        white-space: nowrap;
+                    `;
+                    qty.textContent = '×' + item.qty;
+                    
+                    qtyContainer.appendChild(qty);
+                    
+                    // Show assignment progress if partially assigned
+                    if (item.assigned > 0) {
+                        const progress = document.createElement('span');
+                        progress.style.cssText = `
+                            font-size: 0.75rem;
+                            color: #059669;
+                            font-weight: 600;
+                        `;
+                        progress.textContent = `${item.assigned} assigned`;
+                        qtyContainer.appendChild(progress);
+                    }
+                    
+                    itemEl.appendChild(checkbox);
+                    itemEl.appendChild(itemNameAndSource);
+                    itemEl.appendChild(qtyContainer);
+                    itemsContainer.appendChild(itemEl);
+                });
                 
-                itemEl.appendChild(checkbox);
-                itemEl.appendChild(itemNameAndSource);
-                itemEl.appendChild(qtyContainer);
-                itemsContainer.appendChild(itemEl);
+                roomHeader.addEventListener('click', () => {
+                    expandedState.isExpanded = !expandedState.isExpanded;
+                    expandBtn.textContent = expandedState.isExpanded ? '−' : '+';
+                    itemsContainer.style.maxHeight = expandedState.isExpanded ? '1000px' : '0';
+                    roomSection.setAttribute('data-room-collapsed', !expandedState.isExpanded);
+                });
+                
+                roomSection.appendChild(itemsContainer);
+                inventoryList.appendChild(roomSection);
             });
-            
-            roomHeader.addEventListener('click', () => {
-                expandedState.isExpanded = !expandedState.isExpanded;
-                expandBtn.textContent = expandedState.isExpanded ? '▼' : '▶';
-                itemsContainer.style.maxHeight = expandedState.isExpanded ? '1000px' : '0';
-                roomSection.setAttribute('data-room-collapsed', !expandedState.isExpanded);
-            });
-            
-            roomSection.appendChild(itemsContainer);
-            inventoryList.appendChild(roomSection);
         });
+        
+        // Restore the expanded state after rendering
+        restoreExpandedState();
     }
     
     // Function to render room sections with floor-based delivery organization
     function renderDeliveryFloors() {
         if (!floorsGrid) return;
+        
+        // Show/hide empty state and grid based on selected floors
+        const emptyState = document.getElementById('delivery-floors-empty-state');
+        if (selectedDeliveryFloors.size === 0) {
+            if (emptyState) emptyState.style.display = 'block';
+            floorsGrid.style.display = 'none';
+            return;
+        } else {
+            if (emptyState) emptyState.style.display = 'none';
+            floorsGrid.style.display = 'block';
+        }
         
         floorsGrid.innerHTML = '';
         const roomItems = getItemsByRoom();
@@ -2170,11 +3009,15 @@ document.addEventListener('DOMContentLoaded', function () {
         const allItems = [];
         Object.keys(roomItems).forEach(roomKey => {
             const items = roomItems[roomKey];
-            Object.keys(items).forEach(itemName => {
-                const qty = items[itemName];
+            Object.keys(items).forEach(itemKey => {
+                const qty = items[itemKey];
                 if (qty > 0) {
+                    const itemName = getItemNameFromKey(itemKey);
+                    const sourceFloor = getSourceFloorFromKey(itemKey);
                     allItems.push({
+                        key: itemKey,
                         name: itemName,
+                        sourceFloor: sourceFloor,
                         qty: qty,
                         room: roomKey
                     });
@@ -2195,8 +3038,12 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         
-        // Render each delivery floor
-        deliveryFloors.forEach(floor => {
+        // Render each delivery floor (only selected ones)
+        const floorsToRender = selectedDeliveryFloors.size > 0 
+            ? Array.from(selectedDeliveryFloors).filter(floor => deliveryFloors.includes(floor))
+            : deliveryFloors;
+            
+        floorsToRender.forEach(floor => {
             const hasSelection = selectedItems.size > 0;
             
             const floorSection = document.createElement('div');
@@ -2307,11 +3154,11 @@ document.addEventListener('DOMContentLoaded', function () {
             
             // Items for this floor (check if this floor has any assigned quantity)
             const itemsForFloor = allItems.filter(item => {
-                return itemFloorAssignments[item.name] && itemFloorAssignments[item.name][floor] > 0;
+                return itemFloorAssignments[item.key] && itemFloorAssignments[item.key][floor] > 0;
             }).map(item => {
                 return {
                     ...item,
-                    assignedQty: itemFloorAssignments[item.name][floor]
+                    assignedQty: itemFloorAssignments[item.key][floor]
                 };
             });
             
@@ -2374,7 +3221,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         color: #374151;
                         font-weight: 500;
                     `;
-                    itemText.textContent = item.name;
+                    itemText.innerHTML = `${item.name}<br><span style="font-size: 0.75rem; color: #6b7280; font-weight: 400;">From pickup: ${item.sourceFloor}</span>`;
                     
                     const qtyBadge = document.createElement('span');
                     qtyBadge.style.cssText = `
@@ -2413,11 +3260,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     });
                     removeBtn.addEventListener('click', () => {
                         // Remove assignment from this floor only
-                        if (itemFloorAssignments[item.name]) {
-                            delete itemFloorAssignments[item.name][floor];
+                        if (itemFloorAssignments[item.key]) {
+                            delete itemFloorAssignments[item.key][floor];
                             // If no floors left, remove the item entirely
-                            if (Object.keys(itemFloorAssignments[item.name]).length === 0) {
-                                delete itemFloorAssignments[item.name];
+                            if (Object.keys(itemFloorAssignments[item.key]).length === 0) {
+                                delete itemFloorAssignments[item.key];
                             }
                         }
                         renderInventoryByRoom();
@@ -2494,6 +3341,10 @@ document.addEventListener('DOMContentLoaded', function () {
     
     // Initialize on page load
     setTimeout(initializeOrganizationSection, 500);
+    
+    // Export functions to window for global access
+    window.renderInventoryByRoom = renderInventoryByRoom;
+    window.renderDeliveryFloors = renderDeliveryFloors;
     
     // Initial check - render the organization section content
     renderInventoryByRoom();
@@ -2803,6 +3654,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     multiFloorInventory[newFloor] = multiFloorInventory[oldFloor];
                     delete multiFloorInventory[oldFloor];
                 }
+
+                // Sync selected pickup floors
+                if (window.selectedPickupFloors) {
+                    window.selectedPickupFloors.delete(oldFloor);
+                    window.selectedPickupFloors.add(newFloor);
+                }
                 
                 // Update the mutable reference
                 floorRef.name = newFloor;
@@ -2835,6 +3692,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 
                 // Sort floors after changing
                 sortFloorsInContainer();
+
+                if (typeof renderPickupFloorSelector === 'function') {
+                    renderPickupFloorSelector();
+                }
+                if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
+                    window.ensureMultiFloorInventoryVisible();
+                }
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
                 
                 changeFloorModal.remove();
             });
@@ -2871,11 +3738,25 @@ document.addEventListener('DOMContentLoaded', function () {
                 addedFloors.delete(floorRef.name);
                 delete multiFloorInventory[floorRef.name];
                 delete floorElevatorMap[floorRef.name];  // Also delete elevator info
+
+                if (window.selectedPickupFloors) {
+                    window.selectedPickupFloors.delete(floorRef.name);
+                }
+
                 block.remove();
                 // Re-render floor icons and modal
                 const propertyTypeSelect = document.getElementById('pickup-property-type');
                 if (propertyTypeSelect) {
                     renderFloorIcons(propertyTypeSelect.value);
+                }
+                if (typeof renderPickupFloorSelector === 'function') {
+                    renderPickupFloorSelector();
+                }
+                if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
+                    window.ensureMultiFloorInventoryVisible();
+                }
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
                 }
             }
         });
@@ -3397,6 +4278,57 @@ document.addEventListener('DOMContentLoaded', function () {
             renderFloorIcons(propertyTypeSelect.value);
         }
     });
+
+    function renderSelectedPickupFloorsInventory(elevatorValue) {
+        const selectedFloors = Array.from(window.selectedPickupFloors || []);
+
+        if (selectedFloors.length === 0) {
+            document.body.classList.remove('multi-floor-inventory-mode');
+            return;
+        }
+
+        // Hide single-floor static inventory UI and show old-style multi-floor blocks
+        const basicRoomTabs = document.getElementById('room-tabs');
+        const basicRoomContainer = document.getElementById('room-items-container');
+        if (basicRoomTabs) basicRoomTabs.style.display = 'none';
+        if (basicRoomContainer) basicRoomContainer.style.display = 'none';
+        floorsContainer.style.display = '';
+        document.body.classList.add('multi-floor-inventory-mode');
+
+        // Reset existing generated blocks before rebuilding from selected floors
+        while (floorsContainer.firstChild) {
+            floorsContainer.removeChild(floorsContainer.firstChild);
+        }
+        addedFloors.clear();
+
+        // Keep saved inventory/elevator state for selected floors and remove stale floors only
+        Object.keys(multiFloorInventory).forEach(key => {
+            if (!selectedFloors.includes(key)) {
+                delete multiFloorInventory[key];
+            }
+        });
+        Object.keys(floorElevatorMap).forEach(key => {
+            if (!selectedFloors.includes(key)) {
+                delete floorElevatorMap[key];
+            }
+        });
+
+        selectedFloors
+            .slice()
+            .sort((a, b) => getFloorSortOrder(a) - getFloorSortOrder(b))
+            .forEach(floor => {
+                addedFloors.add(floor);
+                if (floor !== 'Ground' && elevatorValue && !floorElevatorMap[floor]) {
+                    floorElevatorMap[floor] = elevatorValue;
+                }
+                const block = createInventoryBlock(floor);
+                floorsContainer.appendChild(block);
+            });
+
+        sortFloorsInContainer();
+    }
+
+    window.renderSelectedPickupFloorsInventory = renderSelectedPickupFloorsInventory;
 });
 // --- Inventory UI Functionality ---
 // (Legacy inventoryItems/inventoryList code removed as new inventory system is in use)
@@ -4016,8 +4948,6 @@ function initMultiStopDropdowns(card) {
                         label.textContent = text;
                         label.style.color = '#374151';
                     }
-                    menu.classList.remove('active');
-                    toggle.classList.remove('active');
                 });
             });
         }
@@ -11338,8 +12268,6 @@ function initCarTransportDropdowns() {
                         label.textContent = text;
                         label.style.color = '#374151';
                     }
-                    menu.classList.remove('active');
-                    toggle.classList.remove('active');
                 });
             });
         }
@@ -11426,8 +12354,6 @@ function initMotorbikeTransportDropdowns() {
                     label.textContent = text;
                     label.style.color = '#374151';
                 }
-                menu.classList.remove('active');
-                toggle.classList.remove('active');
             });
         });
     };
@@ -11509,8 +12435,6 @@ function initTrailerCampervanDropdowns() {
                     label.textContent = text;
                     label.style.color = '#374151';
                 }
-                menu.classList.remove('active');
-                toggle.classList.remove('active');
             });
         });
     };
