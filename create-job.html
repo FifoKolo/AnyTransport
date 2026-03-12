@@ -95,7 +95,7 @@
                         <!-- Step 1 removed: Service selection now handled on landing page -->
                         <!-- Step 3 Title placed above the form, only visible for step 3 -->
                         <div class="step-title-wrapper" id="step3-title-wrapper" style="display:none;">
-                            <h2 class="section-title" style="text-align:center; margin-bottom:2rem;">Step 3: Please select the floors you are moving from</h2>
+                            <h2 class="section-title" style="text-align:center; margin-bottom:2rem;">Step 3: Please select all the floors you are moving from (multiple selections available)</h2>
                         </div>
                         <!-- Step 1: Destinations (Map) -->
                         <div class="card-section map-step-card" data-form-step="1">
@@ -205,18 +205,18 @@
                                     
                                 </div>
                                 
-                                <!-- Elevator availability question (shows after floors selected) -->
-                                <div class="form-group" id="pickup-elevator-question" style="display: none; margin-top: 16px; padding: 16px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px;">
-                                    <label style="font-size: 1rem; font-weight: 600; display: block; margin-bottom: 12px;">Is there a working elevator/lift for the selected floors?</label>
+                                <!-- lift availability question (shows after floors selected) -->
+                                <div class="form-group" id="pickup-lift-question" style="display: none; margin-top: 16px; padding: 16px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px;">
+                                    <label style="font-size: 1rem; font-weight: 600; display: block; margin-bottom: 12px;">Is there a working lift for the selected floors?</label>
                                     <div style="display: flex; gap: 12px;">
-                                        <button type="button" class="pickup-elevator-btn" data-value="yes" style="padding: 8px 16px; border: 2px solid #e5e7eb; background: white; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">
-                                            ✓ Yes, elevator available
+                                        <button type="button" class="pickup-lift-btn" data-value="yes" style="padding: 8px 16px; border: 2px solid #e5e7eb; background: white; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">
+                                            ✓ Yes, lift available
                                         </button>
-                                        <button type="button" class="pickup-elevator-btn" data-value="no" style="padding: 8px 16px; border: 2px solid #e5e7eb; background: white; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">
-                                            ✗ No elevator
+                                        <button type="button" class="pickup-lift-btn" data-value="no" style="padding: 8px 16px; border: 2px solid #e5e7eb; background: white; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">
+                                            ✗ No lift
                                         </button>
                                     </div>
-                                    <input type="hidden" id="pickup-elevator-available" name="pickup-elevator-available" value="">
+                                    <input type="hidden" id="pickup-lift-available" name="pickup-lift-available" value="">
                                 </div>
 
                                 <!-- Confirm button -->
@@ -230,10 +230,10 @@
                                         <!-- Floor icons will be injected here by JS based on property type -->
                                     </div>
                                     <input type="hidden" id="pickup-floor-select" name="pickup-floor-select" value="">
-                                    <!-- Elevator Option (shown only for Apartment) - placed directly under floor field -->
-                                    <div id="elevator-option-container">
-                                        <label style="font-size: 1.05rem; font-weight: 600; display: block; margin-bottom: 8px;">Is there an elevator available in the building? <span class="required-text" data-required-for="elevator-available">(required)</span></label>
-                                        <div id="elevator-icon-grid"></div>
+                                    <!-- lift Option (shown only for Apartment) - placed directly under floor field -->
+                                    <div id="lift-option-container">
+                                        <label style="font-size: 1.05rem; font-weight: 600; display: block; margin-bottom: 8px;">Is there an lift available in the building? <span class="required-text" data-required-for="lift-available">(required)</span></label>
+                                        <div id="lift-icon-grid"></div>
                                     </div>
                                 </div>
                             </div>
@@ -272,13 +272,13 @@
                             <input type="hidden" id="delivery-property-type" name="delivery-property-type" value="">
                         </div>
 
-                        <!-- Delivery Elevator Section (Step 4) -->
-                        <div class="card-section" id="delivery-elevator-section" data-form-step="4" style="display: none;">
-                            <label class="form-label">Is an elevator available for delivery? <span class="required-text">(required)</span></label>
-                            <div id="delivery-elevator-option-container" style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px;">
-                                <!-- Elevator buttons will be dynamically rendered here -->
+                        <!-- Delivery lift Section (Step 4) -->
+                        <div class="card-section" id="delivery-lift-section" data-form-step="4" style="display: none;">
+                            <label class="form-label">Is an lift available for delivery? <span class="required-text">(required)</span></label>
+                            <div id="delivery-lift-option-container" style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px;">
+                                <!-- lift buttons will be dynamically rendered here -->
                             </div>
-                            <input type="hidden" id="delivery-elevator-available" name="delivery-elevator-available" value="">
+                            <input type="hidden" id="delivery-lift-available" name="delivery-lift-available" value="">
                         </div>
 
                             <!-- Inventory System (Step 3) - full width card at bottom of step 3 -->
@@ -336,15 +336,15 @@
                 <option value="19th">19th</option>
                 <option value="20th">20th</option>
             </select>
-            <div id="floor-elevator-selection" style="display:none; margin-top:18px; width:100%; text-align:left;">
-                <label style="display:block; font-size:0.95rem; color:#333; margin-bottom:12px;">Is an elevator available for this floor?</label>
+            <div id="floor-lift-selection" style="display:none; margin-top:18px; width:100%; text-align:left;">
+                <label style="display:block; font-size:0.95rem; color:#333; margin-bottom:12px;">Is an lift available for this floor?</label>
                 <div style="display:flex; gap:12px;">
                     <label style="display:flex; align-items:center; cursor:pointer;">
-                        <input type="radio" name="floor-elevator-option" value="yes" style="margin-right:8px; cursor:pointer;">
+                        <input type="radio" name="floor-lift-option" value="yes" style="margin-right:8px; cursor:pointer;">
                         <span>Yes</span>
                     </label>
                     <label style="display:flex; align-items:center; cursor:pointer;">
-                        <input type="radio" name="floor-elevator-option" value="no" style="margin-right:8px; cursor:pointer;">
+                        <input type="radio" name="floor-lift-option" value="no" style="margin-right:8px; cursor:pointer;">
                         <span>No</span>
                     </label>
                 </div>
@@ -497,11 +497,11 @@
                                                         </select>
                                                     </div>
                                                 </div>
-                                                <div class="form-group elevator-group">
-                                                    <label for="office-pickup-elevator" class="form-label">Elevator available</label>
+                                                <div class="form-group lift-group">
+                                                    <label for="office-pickup-lift" class="form-label">lift available</label>
                                                     <div class="location-nav-wrapper">
-                                                        <div class="location-nav elevator-nav" data-nav-for="office-pickup-elevator" data-nav-type="elevator" role="radiogroup" aria-label="Office pickup elevator"></div>
-                                                        <select id="office-pickup-elevator" class="form-input location-nav-select" data-nav="true">
+                                                        <div class="location-nav lift-nav" data-nav-for="office-pickup-lift" data-nav-type="lift" role="radiogroup" aria-label="Office pickup lift"></div>
+                                                        <select id="office-pickup-lift" class="form-input location-nav-select" data-nav="true">
                                                             <option value="">Select</option>
                                                             <option value="yes">Yes</option>
                                                             <option value="no">No</option>
@@ -601,11 +601,11 @@
                                                         </select>
                                                     </div>
                                                 </div>
-                                                <div class="form-group elevator-group">
-                                                    <label for="office-delivery-elevator" class="form-label">Elevator available</label>
+                                                <div class="form-group lift-group">
+                                                    <label for="office-delivery-lift" class="form-label">lift available</label>
                                                     <div class="location-nav-wrapper">
-                                                        <div class="location-nav elevator-nav" data-nav-for="office-delivery-elevator" data-nav-type="elevator" role="radiogroup" aria-label="Office delivery elevator"></div>
-                                                        <select id="office-delivery-elevator" class="form-input location-nav-select" data-nav="true">
+                                                        <div class="location-nav lift-nav" data-nav-for="office-delivery-lift" data-nav-type="lift" role="radiogroup" aria-label="Office delivery lift"></div>
+                                                        <select id="office-delivery-lift" class="form-input location-nav-select" data-nav="true">
                                                             <option value="">Select</option>
                                                             <option value="yes">Yes</option>
                                                             <option value="no">No</option>
@@ -749,7 +749,7 @@
                             <h2 class="section-title">Step 5: Organize Items by Delivery Floor</h2>
                             
                             <div style="margin-bottom: 24px; padding: 16px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981;">
-                                <label class="form-label" style="margin-bottom: 12px;">Select Delivery Floors</label>
+                                <label class="form-label" style="margin-bottom: 12px;">Select all Delivery Floors (multiple selections available)</label>
                                 <p style="font-size: 0.9rem; color: #6b7280; margin-bottom: 12px;">Select the floor/floors you are delivering to</p>
                                 <div id="delivery-floors-selector" style="display: flex; flex-wrap: wrap; gap: 4px;">
                                     <!-- Floor buttons will be dynamically rendered here -->
@@ -778,8 +778,8 @@
                                 }
                                 
                                 .selected-inventory-panel {
-                                    position: sticky;
-                                    top: 100px;
+                                    position: relative;
+                                    top: 0;
                                     border: 2px solid #e5e7eb;
                                     border-radius: 12px;
                                     background: #fff;
@@ -796,10 +796,9 @@
                                 }
                                 
                                 #delivery-inventory-list {
-                                    max-height: 60vh;
-                                    overflow-y: auto;
-                                    overflow-x: hidden;
-                                    padding-right: 8px;
+                                    max-height: none;
+                                    overflow: visible;
+                                    padding-right: 0;
                                 }
                                 
                                 #delivery-inventory-list::-webkit-scrollbar {
@@ -835,7 +834,7 @@
                                     }
                                     
                                     #delivery-inventory-list {
-                                        max-height: 50vh;
+                                        max-height: none;
                                     }
                                 }
                             </style>
@@ -1727,6 +1726,13 @@
                                         <button type="button" class="service-option-btn" data-service="packing" data-value="yes">Yes</button>
                                     </div>
                                     <input type="hidden" id="service-packing" name="service-packing" value="">
+                                    <input type="hidden" id="service-packing-items" name="service-packing-items" value="">
+                                    <div id="packing-items-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
+                                        <div style="font-weight:700; color:#1f2937; margin-bottom:4px; font-size:1rem;">Choose items to pack</div>
+                                        <div style="font-size:0.86rem; color:#4b5563; margin-bottom:8px;">Select items and set how many units you want packed.</div>
+                                        <div id="packing-items-list" style="display:flex; flex-direction:column; gap:6px;"></div>
+                                        <div id="packing-items-empty" style="display:none; color:#6b7280; font-size:0.9rem; padding:8px 0;">No inventory items available to pack yet.</div>
+                                    </div>
                                 </div>
 
                                 <!-- Movers at Pickup Location -->
@@ -1846,7 +1852,7 @@
                     </div>
                     <button type="button" class="sticky-next-btn" id="sticky-next-btn">Next</button>
                 </form>
-                <!-- Removed duplicate elevator-option-container. Only one instance should exist inside the form. -->
+                <!-- Removed duplicate lift-option-container. Only one instance should exist inside the form. -->
         </div>
     </main>
 

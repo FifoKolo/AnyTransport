@@ -1,30 +1,30 @@
-// --- Auto-advance to inventory in step 3 when floor and elevator are selected ---
+// --- Auto-advance to inventory in step 3 when floor and lift are selected ---
 let lastAutoAdvancedFloor = null;
-let lastAutoAdvancedElevator = null;
+let lastAutoAdvancedlift = null;
 function autoAdvanceToInventoryIfReady() {
     const body = document.body;
     const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
     if (!isStep3) return;
     const floorHiddenInput = document.getElementById('pickup-floor-select');
-    const elevatorOptionContainer = document.getElementById('elevator-option-container');
-    const elevatorHidden = elevatorOptionContainer ? elevatorOptionContainer.querySelector('#elevator-available') : null;
+    const liftOptionContainer = document.getElementById('lift-option-container');
+    const liftHidden = liftOptionContainer ? liftOptionContainer.querySelector('#lift-available') : null;
     const inventoryCardContainer = document.getElementById('inventory-card-container');
-    const elevatorVisible = elevatorOptionContainer && elevatorOptionContainer.style.display !== 'none';
+    const liftVisible = liftOptionContainer && liftOptionContainer.style.display !== 'none';
     const floorSelected = floorHiddenInput && floorHiddenInput.value.trim();
-    const elevatorSelected = !elevatorVisible || (elevatorHidden && elevatorHidden.value);
-    // Only auto-advance if elevator is not visible, or if visible AND a value is selected
+    const liftSelected = !liftVisible || (liftHidden && liftHidden.value);
+    // Only auto-advance if lift is not visible, or if visible AND a value is selected
     // Prevent duplicate scrolls for same selection
     if (floorSelected && (
-        !elevatorVisible || (elevatorHidden && elevatorHidden.value)
+        !liftVisible || (liftHidden && liftHidden.value)
     ) && inventoryCardContainer && isStep3) {
         const floorVal = floorHiddenInput.value.trim();
-        const elevatorVal = elevatorHidden ? elevatorHidden.value : '';
-        if (lastAutoAdvancedFloor === floorVal && lastAutoAdvancedElevator === elevatorVal && inventoryCardContainer.style.display !== 'none') {
+        const liftVal = liftHidden ? liftHidden.value : '';
+        if (lastAutoAdvancedFloor === floorVal && lastAutoAdvancedlift === liftVal && inventoryCardContainer.style.display !== 'none') {
             return;
         }
         lastAutoAdvancedFloor = floorVal;
-        lastAutoAdvancedElevator = elevatorVal;
-        // Do not show inventory or scroll here; only update state. Display is handled in updateInventoryAndElevatorVisibility.
+        lastAutoAdvancedlift = liftVal;
+        // Do not show inventory or scroll here; only update state. Display is handled in updateInventoryAndliftVisibility.
     }
 }
 
@@ -159,8 +159,20 @@ document.addEventListener('DOMContentLoaded', function () {
     // Helper function to get tracking key for items (prefixes boxes with room name)
     function getItemTrackingKey(itemName, roomName) {
         const boxTypes = ['Small Boxes', 'Medium Boxes', 'Large Boxes', 'XL Boxes'];
-        if (boxTypes.includes(itemName) && roomName) {
-            return roomName.charAt(0).toUpperCase() + roomName.slice(1) + ' - ' + itemName;
+        const roomKey = (roomName || '').toLowerCase();
+
+        // Keep room context for items that exist in multiple rooms (e.g., Mirror)
+        // so Step 5 can map them back to their source room correctly.
+        let roomOccurrenceCount = 0;
+        Object.keys(ROOM_ITEMS).forEach((key) => {
+            if (ROOM_ITEMS[key] && ROOM_ITEMS[key].includes(itemName)) {
+                roomOccurrenceCount++;
+            }
+        });
+        const isAmbiguousAcrossRooms = roomOccurrenceCount > 1;
+
+        if (roomKey && (boxTypes.includes(itemName) || roomKey === 'boxes' || isAmbiguousAcrossRooms)) {
+            return roomKey.charAt(0).toUpperCase() + roomKey.slice(1) + ' - ' + itemName;
         }
         return itemName;
     }
@@ -235,10 +247,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
             // Update itemQuantities
-            if (itemName in itemQuantities) {
-                const qty = itemQuantities[itemName];
-                delete itemQuantities[itemName];
-                itemQuantities[newName] = qty;
+            const oldTrackingKey = getItemTrackingKey(itemName, room);
+            const newTrackingKey = getItemTrackingKey(newName, room);
+            if (oldTrackingKey in itemQuantities) {
+                const qty = itemQuantities[oldTrackingKey];
+                delete itemQuantities[oldTrackingKey];
+                itemQuantities[newTrackingKey] = qty;
             }
             renderRoomItems(room);
             modal.style.display = 'none';
@@ -395,8 +409,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         customItems[room] = customItems[room].filter(i => i !== item);
                     }
                     // Remove quantity tracking
-                    delete itemQuantities[item];
-                    delete selectedItems[item];
+                    const trackingKey = getItemTrackingKey(item, room);
+                    delete itemQuantities[trackingKey];
+                    delete selectedItems[trackingKey];
                     renderRoomItems(room);
                 }
             });
@@ -459,7 +474,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 if (!customItems[window.currentRoom]) customItems[window.currentRoom] = [];
                 customItems[window.currentRoom].push(customName);
-                itemQuantities[customName] = 1;
+                const trackingKey = getItemTrackingKey(customName, window.currentRoom);
+                itemQuantities[trackingKey] = 1;
                 renderRoomItems(window.currentRoom);
                 modal.style.display = 'none';
                 
@@ -556,8 +572,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 customItemsPerRoom[window.currentRoom].push(customName);
             }
             // Only set the new custom item to 1, preserve all other item quantities
-            if (typeof itemQuantities[customName] === 'undefined') {
-                itemQuantities[customName] = 1;
+            const trackingKey = getItemTrackingKey(customName, window.currentRoom);
+            if (typeof itemQuantities[trackingKey] === 'undefined') {
+                itemQuantities[trackingKey] = 1;
             }
             renderRoomItems(window.currentRoom);
             customModal.style.display = 'none';
@@ -647,7 +664,7 @@ function renderFloorIcons(propertyType) {
                     const event = new Event('change', { bubbles: true });
                     floorHiddenInput.dispatchEvent(event);
                 }
-                setTimeout(updateInventoryAndElevatorVisibility, 0);
+                setTimeout(updateInventoryAndliftVisibility, 0);
             });
         }
         // Restore the previously selected floor if it matches this button and isn't in usedFloors
@@ -663,7 +680,7 @@ function renderFloorIcons(propertyType) {
     } else if (floorHiddenInput) {
         floorHiddenInput.value = '';
     }
-    if (typeof renderElevatorIcons === 'function') renderElevatorIcons();
+    if (typeof renderliftIcons === 'function') renderliftIcons();
 }
 
 // --- Show inventory only when both fields are filled ---
@@ -815,17 +832,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 const propertyType = document.getElementById('pickup-property-type');
                 return propertyType && propertyType.value.trim();
             }
-            // Step 3: floor required, elevator required if visible, and at least one inventory item when inventory is shown
-            // Elevator also required if visible (when floor is not ground)
+            // Step 3: floor required, lift required if visible, and at least one inventory item when inventory is shown
+            // lift also required if visible (when floor is not ground)
             if (step === 3) {
                 const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
                 if (selectedFloors.length === 0) {
                     return false;
                 }
 
-                // Multi-floor pickup elevator answer is required after floor selection
-                const pickupElevator = document.getElementById('pickup-elevator-available');
-                if (!pickupElevator || !pickupElevator.value.trim()) {
+                // Multi-floor pickup lift answer is required after floor selection
+                const pickuplift = document.getElementById('pickup-lift-available');
+                if (!pickuplift || !pickuplift.value.trim()) {
                     return false;
                 }
 
@@ -842,11 +859,18 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             // Step 5: delivery details - validation depends on service type
             if (step === 5) {
+                const organizationSection = document.getElementById('item-organization-section');
+                const isOrganizationVisible = !!(organizationSection && organizationSection.offsetParent !== null);
+
+                if (isOrganizationVisible && typeof window.isStep5DeliveryOrganizationComplete === 'function') {
+                    return window.isStep5DeliveryOrganizationComplete();
+                }
+
                 // Get the service type to validate appropriately
                 const cjHidden = document.getElementById('create-job-hidden');
                 const serviceType = cjHidden ? cjHidden.value : '';
                 
-                // If office removals selected, need delivery floor and elevator if needed
+                // If office removals selected, need delivery floor and lift if needed
                 if (serviceType === 'Office Removals') {
                     const deliveryFloor = document.getElementById('office-delivery-floor');
                     
@@ -855,11 +879,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         return false;
                     }
                     
-                    // Elevator must also be selected if visible
-                    const elevatorContainer = document.querySelector('[data-nav-for="office-delivery-elevator"]');
-                    if (elevatorContainer && elevatorContainer.style.display !== 'none') {
-                        const deliveryElevator = document.getElementById('office-delivery-elevator');
-                        if (!deliveryElevator || !deliveryElevator.value.trim()) {
+                    // lift must also be selected if visible
+                    const liftContainer = document.querySelector('[data-nav-for="office-delivery-lift"]');
+                    if (liftContainer && liftContainer.style.display !== 'none') {
+                        const deliverylift = document.getElementById('office-delivery-lift');
+                        if (!deliverylift || !deliverylift.value.trim()) {
                             return false;
                         }
                     }
@@ -895,6 +919,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 if (!deliveryMovers || deliveryMovers.value === '') {
                     return false;
+                }
+
+                const packingInput = document.getElementById('service-packing');
+                if (packingInput && packingInput.value === 'yes') {
+                    if (typeof window.hasValidPackingSelection === 'function' && !window.hasValidPackingSelection()) {
+                        return false;
+                    }
                 }
                 
                 return true;
@@ -1046,6 +1077,217 @@ document.addEventListener('DOMContentLoaded', function () {
             deliveryMovers.value = '0';
         }
     });
+
+    function parsePackingItemsSelection(raw) {
+        if (!raw) return {};
+        try {
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (error) {
+            return {};
+        }
+    }
+
+    function getPackingEligibleItems() {
+        const totals = {};
+
+        const addQty = (itemName, qtyValue) => {
+            const qty = parseInt(qtyValue, 10) || 0;
+            if (!itemName || qty <= 0) return;
+            totals[itemName] = (totals[itemName] || 0) + qty;
+        };
+
+        if (window.itemQuantities && typeof window.itemQuantities === 'object') {
+            Object.keys(window.itemQuantities).forEach((itemName) => {
+                addQty(itemName, window.itemQuantities[itemName]);
+            });
+        }
+
+        if (window.multiFloorInventory && typeof window.multiFloorInventory === 'object') {
+            Object.keys(window.multiFloorInventory).forEach((floorName) => {
+                const floorItems = window.multiFloorInventory[floorName];
+                if (!floorItems || typeof floorItems !== 'object') return;
+                Object.keys(floorItems).forEach((itemName) => {
+                    addQty(itemName, floorItems[itemName]);
+                });
+            });
+        }
+
+        return Object.keys(totals)
+            .sort((a, b) => a.localeCompare(b))
+            .map((name) => ({ name, total: totals[name] }));
+    }
+
+    function setPackingItemQty(itemName, qty, maxQty) {
+        const hiddenInput = document.getElementById('service-packing-items');
+        if (!hiddenInput) return;
+
+        const state = parsePackingItemsSelection(hiddenInput.value);
+        const clampedQty = Math.max(0, Math.min(maxQty, parseInt(qty, 10) || 0));
+
+        if (clampedQty > 0) {
+            state[itemName] = clampedQty;
+        } else {
+            delete state[itemName];
+        }
+
+        hiddenInput.value = Object.keys(state).length > 0 ? JSON.stringify(state) : '';
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function renderPackingItemsConfig() {
+        const packingInput = document.getElementById('service-packing');
+        const container = document.getElementById('packing-items-config');
+        const list = document.getElementById('packing-items-list');
+        const empty = document.getElementById('packing-items-empty');
+        const hiddenInput = document.getElementById('service-packing-items');
+
+        if (!packingInput || !container || !list || !empty || !hiddenInput) return;
+
+        const isPackingYes = packingInput.value === 'yes';
+        container.style.display = isPackingYes ? 'block' : 'none';
+
+        if (!isPackingYes) return;
+
+        const items = getPackingEligibleItems();
+        const currentState = parsePackingItemsSelection(hiddenInput.value);
+
+        list.innerHTML = '';
+
+        if (items.length === 0) {
+            empty.style.display = 'block';
+            hiddenInput.value = '';
+            return;
+        }
+
+        empty.style.display = 'none';
+
+        items.forEach((item) => {
+            const maxQty = item.total;
+            const selectedQty = Math.max(0, Math.min(maxQty, parseInt(currentState[item.name], 10) || 0));
+            const isChecked = selectedQty > 0;
+
+            const row = document.createElement('div');
+            row.style.cssText = `
+                display:flex;
+                align-items:center;
+                justify-content:space-between;
+                gap:8px;
+                padding:6px 8px;
+                border:1px solid #dbeafe;
+                border-radius:8px;
+                background:#fff;
+            `;
+
+            const left = document.createElement('label');
+            left.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer;';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = isChecked;
+            checkbox.style.cssText = 'width:16px;height:16px;';
+
+            const labelText = document.createElement('span');
+            labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
+            labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:break-word;font-size:0.95rem;">${item.name}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
+
+            left.appendChild(checkbox);
+            left.appendChild(labelText);
+
+            const controls = document.createElement('div');
+            controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+            const minusBtn = document.createElement('button');
+            minusBtn.type = 'button';
+            minusBtn.textContent = '-';
+            minusBtn.style.cssText = 'width:24px;height:24px;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:6px;cursor:pointer;font-weight:700;line-height:1;';
+
+            const qtyInput = document.createElement('input');
+            qtyInput.type = 'number';
+            qtyInput.min = '0';
+            qtyInput.max = String(maxQty);
+            qtyInput.value = String(selectedQty);
+            qtyInput.style.cssText = 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
+
+            const plusBtn = document.createElement('button');
+            plusBtn.type = 'button';
+            plusBtn.textContent = '+';
+            plusBtn.style.cssText = 'width:24px;height:24px;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:6px;cursor:pointer;font-weight:700;line-height:1;';
+
+            const applyDisabledState = () => {
+                const disabled = !checkbox.checked;
+                minusBtn.disabled = disabled;
+                plusBtn.disabled = disabled;
+                qtyInput.disabled = disabled;
+                minusBtn.style.opacity = disabled ? '0.5' : '1';
+                plusBtn.style.opacity = disabled ? '0.5' : '1';
+                qtyInput.style.opacity = disabled ? '0.7' : '1';
+            };
+
+            checkbox.addEventListener('change', () => {
+                if (checkbox.checked) {
+                    const nextQty = Math.max(1, parseInt(qtyInput.value, 10) || 0);
+                    setPackingItemQty(item.name, nextQty, maxQty);
+                } else {
+                    setPackingItemQty(item.name, 0, maxQty);
+                }
+                renderPackingItemsConfig();
+                if (window.updateNextButtonState) window.updateNextButtonState();
+            });
+
+            minusBtn.addEventListener('click', () => {
+                const nextQty = (parseInt(qtyInput.value, 10) || 0) - 1;
+                setPackingItemQty(item.name, nextQty, maxQty);
+                renderPackingItemsConfig();
+                if (window.updateNextButtonState) window.updateNextButtonState();
+            });
+
+            plusBtn.addEventListener('click', () => {
+                const nextQty = (parseInt(qtyInput.value, 10) || 0) + 1;
+                setPackingItemQty(item.name, nextQty, maxQty);
+                renderPackingItemsConfig();
+                if (window.updateNextButtonState) window.updateNextButtonState();
+            });
+
+            qtyInput.addEventListener('change', () => {
+                setPackingItemQty(item.name, qtyInput.value, maxQty);
+                renderPackingItemsConfig();
+                if (window.updateNextButtonState) window.updateNextButtonState();
+            });
+
+            controls.appendChild(minusBtn);
+            controls.appendChild(qtyInput);
+            controls.appendChild(plusBtn);
+
+            row.appendChild(left);
+            row.appendChild(controls);
+            list.appendChild(row);
+
+            applyDisabledState();
+        });
+    }
+
+    window.hasValidPackingSelection = function() {
+        const packingInput = document.getElementById('service-packing');
+        const hiddenInput = document.getElementById('service-packing-items');
+        if (!packingInput || packingInput.value !== 'yes') return true;
+        if (!hiddenInput) return false;
+
+        const state = parsePackingItemsSelection(hiddenInput.value);
+        return Object.values(state).some((qty) => (parseInt(qty, 10) || 0) > 0);
+    };
+
+    window.renderPackingItemsConfig = renderPackingItemsConfig;
+
+    document.addEventListener('change', function(e) {
+        if (!e.target) return;
+        if (e.target.id === 'service-packing' || e.target.id === 'service-packing-items') {
+            renderPackingItemsConfig();
+            if (window.updateNextButtonState) {
+                window.updateNextButtonState();
+            }
+        }
+    });
     
     // Use event delegation for service option buttons
     document.addEventListener('click', function(e) {
@@ -1071,6 +1313,10 @@ document.addEventListener('DOMContentLoaded', function () {
         
         // Trigger change event for button state updates
         hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+        if (service === 'packing' && typeof window.renderPackingItemsConfig === 'function') {
+            window.renderPackingItemsConfig();
+        }
         
         // Update sticky button state
         if (window.updateNextButtonState) {
@@ -1152,6 +1398,9 @@ document.addEventListener('DOMContentLoaded', function () {
             
             // Trigger button state update after a small delay to ensure DOM is ready
             setTimeout(() => {
+                if (typeof window.renderPackingItemsConfig === 'function') {
+                    window.renderPackingItemsConfig();
+                }
                 if (window.updateNextButtonState) {
                     window.updateNextButtonState();
                 }
@@ -1289,15 +1538,15 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 window.renderDeliveryFloorSelector();
             }
 
-            const pickupElevator = document.getElementById('pickup-elevator-available');
+            const pickuplift = document.getElementById('pickup-lift-available');
             if (
                 window.selectedPickupFloors &&
                 window.selectedPickupFloors.size > 0 &&
-                pickupElevator &&
-                pickupElevator.value &&
+                pickuplift &&
+                pickuplift.value &&
                 typeof window.renderSelectedPickupFloorsInventory === 'function'
             ) {
-                window.renderSelectedPickupFloorsInventory(pickupElevator.value);
+                window.renderSelectedPickupFloorsInventory(pickuplift.value);
             }
 
             if (typeof window.renderDeliveryFloors === 'function') {
@@ -1331,15 +1580,15 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         const activeStep = parseInt(document.body?.dataset?.formStep || document.body?.dataset?.currentStep || '1', 10);
         if (activeStep === 3) {
             const selectedFloors = Array.from(window.selectedPickupFloors || []);
-            const elevatorInput = document.getElementById('pickup-elevator-available');
-            if (selectedFloors.length > 0 && elevatorInput && elevatorInput.value) {
+            const liftInput = document.getElementById('pickup-lift-available');
+            if (selectedFloors.length > 0 && liftInput && liftInput.value) {
                 const inventoryCardContainer = document.getElementById('inventory-card-container');
                 if (inventoryCardContainer) {
                     inventoryCardContainer.style.display = '';
                 }
 
                 if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
-                    window.renderSelectedPickupFloorsInventory(elevatorInput.value);
+                    window.renderSelectedPickupFloorsInventory(liftInput.value);
                 }
 
                 if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
@@ -1365,9 +1614,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 });
             }
 
-            const elevatorSection = document.getElementById('delivery-elevator-section');
-            if (elevatorSection) {
-                elevatorSection.style.display = 'none';
+            const liftSection = document.getElementById('delivery-lift-section');
+            if (liftSection) {
+                liftSection.style.display = 'none';
             }
 
             if (typeof window.syncDeliveryStep4FromState === 'function') {
@@ -1459,9 +1708,11 @@ function renderPickupFloorSelector() {
     const floors = propertyFloors[propertyType] || [];
 
     // Keep selected floors in sync with currently available floors
+    let removedInvalidFloor = false;
     Array.from(window.selectedPickupFloors).forEach((floorName) => {
         if (!floors.includes(floorName)) {
             window.selectedPickupFloors.delete(floorName);
+            removedInvalidFloor = true;
         }
     });
     
@@ -1494,15 +1745,23 @@ function renderPickupFloorSelector() {
         selectorContainer.appendChild(btn);
     });
     
-    // Show/hide confirm button and elevator question based on selection
+    // Show/hide confirm button and lift question based on selection
     const confirmBtn = document.getElementById('confirm-pickup-floors-btn');
-    const elevatorQuestion = document.getElementById('pickup-elevator-question');
+    const liftQuestion = document.getElementById('pickup-lift-question');
     
     if (confirmBtn) {
         confirmBtn.style.display = window.selectedPickupFloors.size > 0 ? 'block' : 'none';
     }
-    if (elevatorQuestion) {
-        elevatorQuestion.style.display = window.selectedPickupFloors.size > 0 ? 'block' : 'none';
+    if (liftQuestion) {
+        liftQuestion.style.display = window.selectedPickupFloors.size > 0 ? 'block' : 'none';
+    }
+
+    // If selections were pruned, keep rendered multi-floor inventory blocks aligned.
+    if (removedInvalidFloor && typeof window.renderSelectedPickupFloorsInventory === 'function') {
+        const pickuplift = document.getElementById('pickup-lift-available');
+        if (pickuplift && pickuplift.value) {
+            window.renderSelectedPickupFloorsInventory(pickuplift.value);
+        }
     }
 }
 
@@ -1520,12 +1779,20 @@ window.renderDeliveryFloorSelector = function() {
     }
     
     console.log('renderDeliveryFloorSelector called, selectedDeliveryFloors:', window.selectedDeliveryFloors);
-    
-    const deliveryFloors = ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
+
+    const deliveryPropertyType = document.getElementById('delivery-property-type')?.value || 'house';
+    const availableDeliveryFloors = propertyFloors[deliveryPropertyType] || propertyFloors.house || ['Ground'];
+
+    // Keep selected floors aligned with currently available floors for the selected property type.
+    Array.from(window.selectedDeliveryFloors).forEach((floorName) => {
+        if (!availableDeliveryFloors.includes(floorName)) {
+            window.selectedDeliveryFloors.delete(floorName);
+        }
+    });
     
     selectorContainer.innerHTML = '';
     
-    deliveryFloors.forEach(floor => {
+    availableDeliveryFloors.forEach(floor => {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = `delivery-floor-selector-btn ${window.selectedDeliveryFloors.has(floor) ? 'selected' : ''}`;
@@ -1550,19 +1817,187 @@ window.renderDeliveryFloorSelector = function() {
         selectorContainer.appendChild(btn);
     });
     
-    console.log('Rendered', deliveryFloors.length, 'delivery floor buttons');
+    console.log('Rendered', availableDeliveryFloors.length, 'delivery floor buttons for property type:', deliveryPropertyType);
     
     // Show/hide confirm button based on selection
     const confirmBtn = document.getElementById('confirm-delivery-floors-btn');
     if (confirmBtn) {
         confirmBtn.style.display = window.selectedDeliveryFloors.size > 0 ? 'block' : 'none';
     }
+
+    if (typeof window.renderDeliveryFloors === 'function') {
+        window.renderDeliveryFloors();
+    }
 };
 
+function getAvailablePickupFloorsForCurrentPropertyType() {
+    const pickupPropertyType = document.getElementById('pickup-property-type')?.value || 'house';
+    return propertyFloors[pickupPropertyType] || propertyFloors.house || [];
+}
+
+function ensurePickupFloorInventoryActionModal() {
+    let modal = document.getElementById('pickup-floor-inventory-action-modal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'pickup-floor-inventory-action-modal';
+    modal.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 12000;
+        padding: 16px;
+    `;
+
+    modal.innerHTML = `
+        <div style="width:min(520px, 100%);background:#fff;border-radius:12px;padding:20px;box-shadow:0 18px 38px rgba(0,0,0,0.22);">
+            <h3 style="margin:0 0 8px 0;font-size:1.2rem;color:#111827;">Floor Has Inventory Items</h3>
+            <p id="pickup-floor-modal-message" style="margin:0 0 14px 0;color:#4b5563;font-size:0.95rem;line-height:1.45;"></p>
+
+            <div style="margin-bottom:14px;">
+                <label for="pickup-floor-modal-target" style="display:block;font-weight:600;color:#1f2937;margin-bottom:6px;">Move items to floor</label>
+                <select id="pickup-floor-modal-target" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:0.95rem;"></select>
+                <p id="pickup-floor-modal-hint" style="margin:8px 0 0 0;color:#6b7280;font-size:0.85rem;"></p>
+            </div>
+
+            <div id="pickup-floor-modal-error" style="display:none;margin:0 0 12px 0;padding:8px 10px;border-radius:8px;background:#fef2f2;color:#b91c1c;font-size:0.85rem;font-weight:600;"></div>
+
+            <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;">
+                <button type="button" data-action="cancel" style="padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;color:#374151;font-weight:600;cursor:pointer;">Cancel</button>
+                <button type="button" data-action="remove" style="padding:9px 12px;border:1px solid #fca5a5;border-radius:8px;background:#fee2e2;color:#b91c1c;font-weight:700;cursor:pointer;">Remove Floor & Items</button>
+                <button type="button" data-action="move" style="padding:9px 12px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">Move Items</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function openPickupFloorInventoryActionModal(sourceFloor, candidateFloors, selectedPickupFloors) {
+    return new Promise((resolve) => {
+        const modal = ensurePickupFloorInventoryActionModal();
+        const messageEl = modal.querySelector('#pickup-floor-modal-message');
+        const targetSelect = modal.querySelector('#pickup-floor-modal-target');
+        const hintEl = modal.querySelector('#pickup-floor-modal-hint');
+        const errorEl = modal.querySelector('#pickup-floor-modal-error');
+        const moveBtn = modal.querySelector('button[data-action="move"]');
+        const removeBtn = modal.querySelector('button[data-action="remove"]');
+        const cancelBtn = modal.querySelector('button[data-action="cancel"]');
+
+        messageEl.textContent = `${sourceFloor} Floor has items. You can move them to another floor or remove this floor and its items.`;
+        errorEl.style.display = 'none';
+        errorEl.textContent = '';
+
+        targetSelect.innerHTML = '';
+        candidateFloors.forEach((floorName) => {
+            const option = document.createElement('option');
+            option.value = floorName;
+            option.textContent = selectedPickupFloors.has(floorName)
+                ? `${floorName} (selected)`
+                : `${floorName} (not selected)`;
+            targetSelect.appendChild(option);
+        });
+
+        const hasTargets = candidateFloors.length > 0;
+        targetSelect.disabled = !hasTargets;
+        moveBtn.disabled = !hasTargets;
+        moveBtn.style.opacity = hasTargets ? '1' : '0.6';
+        moveBtn.style.cursor = hasTargets ? 'pointer' : 'not-allowed';
+        hintEl.textContent = hasTargets
+            ? 'If you choose a floor that is not selected, it will be selected automatically.'
+            : 'No other floors are available to move items to. You can only remove this floor and its items.';
+
+        modal.style.display = 'flex';
+
+        const cleanup = () => {
+            moveBtn.removeEventListener('click', onMove);
+            removeBtn.removeEventListener('click', onRemove);
+            cancelBtn.removeEventListener('click', onCancel);
+            modal.removeEventListener('click', onOverlayClick);
+            modal.style.display = 'none';
+        };
+
+        const finish = (result) => {
+            cleanup();
+            resolve(result);
+        };
+
+        const onMove = () => {
+            const targetFloor = targetSelect.value;
+            if (!targetFloor) {
+                errorEl.textContent = 'Please choose a floor to move items to.';
+                errorEl.style.display = 'block';
+                return;
+            }
+            finish({ action: 'move', targetFloor });
+        };
+
+        const onRemove = () => finish({ action: 'remove' });
+        const onCancel = () => finish(null);
+        const onOverlayClick = (event) => {
+            if (event.target === modal) {
+                finish(null);
+            }
+        };
+
+        moveBtn.addEventListener('click', onMove);
+        removeBtn.addEventListener('click', onRemove);
+        cancelBtn.addEventListener('click', onCancel);
+        modal.addEventListener('click', onOverlayClick);
+    });
+}
+
 // Toggle pickup floor selection (multi-select for source floors)
-window.togglePickupFloor = function(floor) {
+window.togglePickupFloor = async function(floor) {
     const selectedPickupFloors = window.selectedPickupFloors || new Set();
+
+    const floorItems = (window.multiFloorInventory && window.multiFloorInventory[floor]) || null;
+    const floorHasItems = !!(floorItems && Object.values(floorItems).some((qty) => (parseInt(qty, 10) || 0) > 0));
+
     if (selectedPickupFloors.has(floor)) {
+        if (floorHasItems) {
+            const candidateFloors = getAvailablePickupFloorsForCurrentPropertyType().filter((name) => name !== floor);
+            const decision = await openPickupFloorInventoryActionModal(floor, candidateFloors, selectedPickupFloors);
+
+            if (!decision) {
+                return;
+            }
+
+            if (decision.action === 'move') {
+                const targetFloor = decision.targetFloor;
+                if (!targetFloor) {
+                    return;
+                }
+
+                if (!window.multiFloorInventory) {
+                    window.multiFloorInventory = {};
+                }
+                if (!window.multiFloorInventory[targetFloor]) {
+                    window.multiFloorInventory[targetFloor] = {};
+                }
+
+                Object.keys(floorItems).forEach((itemKey) => {
+                    const qty = parseInt(floorItems[itemKey], 10) || 0;
+                    if (qty <= 0) return;
+                    window.multiFloorInventory[targetFloor][itemKey] =
+                        (parseInt(window.multiFloorInventory[targetFloor][itemKey], 10) || 0) + qty;
+                });
+
+                delete window.multiFloorInventory[floor];
+                selectedPickupFloors.add(targetFloor);
+            } else if (decision.action === 'remove') {
+                if (window.multiFloorInventory) {
+                    delete window.multiFloorInventory[floor];
+                }
+            } else {
+                return;
+            }
+        }
+
         selectedPickupFloors.delete(floor);
     } else {
         selectedPickupFloors.add(floor);
@@ -1576,6 +2011,15 @@ window.togglePickupFloor = function(floor) {
     }
     if (typeof window.updateNextButtonState === 'function') {
         window.updateNextButtonState();
+    }
+
+    // Keep multi-floor inventory blocks synced with current floor selection.
+    if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
+        const pickuplift = document.getElementById('pickup-lift-available');
+        const isStep3 = (document.body.getAttribute('data-form-step') === '3' || document.body.getAttribute('data-current-step') === '3');
+        if (isStep3 && pickuplift && pickuplift.value) {
+            window.renderSelectedPickupFloorsInventory(pickuplift.value);
+        }
     }
 };
 
@@ -1593,6 +2037,9 @@ window.toggleDeliveryFloor = function(floor) {
     if (window.renderDeliveryFloors) {
         window.renderDeliveryFloors();
     }
+    if (typeof window.updateNextButtonState === 'function') {
+        window.updateNextButtonState();
+    }
 };
 
         const inventoryFloorTitle = document.querySelector('.inventory-floor-title');
@@ -1604,25 +2051,25 @@ window.toggleDeliveryFloor = function(floor) {
     const floorHiddenInput = document.getElementById('pickup-floor-select');
     if (floorHiddenInput) floorHiddenInput.setAttribute('data-required', 'true');
 
-    // Ensure elevatorOptionContainer is defined before use
-    const elevatorOptionContainer = document.getElementById('elevator-option-container');
+    // Ensure liftOptionContainer is defined before use
+    const liftOptionContainer = document.getElementById('lift-option-container');
     if (floorHiddenInput) {
         floorHiddenInput.addEventListener('change', autoAdvanceToInventoryIfReady);
-        floorHiddenInput.addEventListener('change', updateInventoryAndElevatorVisibility);
+        floorHiddenInput.addEventListener('change', updateInventoryAndliftVisibility);
     }
-    if (elevatorOptionContainer) {
-        elevatorOptionContainer.addEventListener('change', autoAdvanceToInventoryIfReady, true);
-        elevatorOptionContainer.addEventListener('change', updateInventoryAndElevatorVisibility, true);
+    if (liftOptionContainer) {
+        liftOptionContainer.addEventListener('change', autoAdvanceToInventoryIfReady, true);
+        liftOptionContainer.addEventListener('change', updateInventoryAndliftVisibility, true);
     }
     const inventoryCardContainer = document.getElementById('inventory-card-container');
-    const elevatorIconGridId = 'elevator-icon-grid';
-    const elevatorHiddenInputId = 'elevator-available';
-    const isPickupElevatorRequired = () => {
+    const liftIconGridId = 'lift-icon-grid';
+    const liftHiddenInputId = 'lift-available';
+    const isPickupliftRequired = () => {
         const floorVal = (floorHiddenInput?.value || '').trim().toLowerCase();
         return !!floorVal && floorVal !== 'ground';
     };
 
-    function updateInventoryAndElevatorVisibility() {
+    function updateInventoryAndliftVisibility() {
                 // Update inventory title to match selected floor
                 if (inventoryFloorTitle && floorHiddenInput) {
                     const floor = floorHiddenInput.value;
@@ -1635,19 +2082,19 @@ window.toggleDeliveryFloor = function(floor) {
         // Inventory logic: only show in step 3 (now pickup details step)
         const body = document.body;
         const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
-        const elevatorRequired = isPickupElevatorRequired();
+        const liftRequired = isPickupliftRequired();
 
-        if (elevatorOptionContainer) {
-            if (elevatorRequired) {
-                elevatorOptionContainer.style.display = '';
+        if (liftOptionContainer) {
+            if (liftRequired) {
+                liftOptionContainer.style.display = '';
             } else {
-                elevatorOptionContainer.style.display = 'none';
-                const elevatorHidden = elevatorOptionContainer.querySelector('#elevator-available');
-                if (elevatorHidden) {
-                    elevatorHidden.value = '';
+                liftOptionContainer.style.display = 'none';
+                const liftHidden = liftOptionContainer.querySelector('#lift-available');
+                if (liftHidden) {
+                    liftHidden.value = '';
                 }
-                const elevatorButtons = elevatorOptionContainer.querySelectorAll('.elevator-icon-btn');
-                elevatorButtons.forEach((btn) => {
+                const liftButtons = liftOptionContainer.querySelectorAll('.lift-icon-btn');
+                liftButtons.forEach((btn) => {
                     btn.classList.remove('selected');
                     btn.setAttribute('aria-pressed', 'false');
                 });
@@ -1658,16 +2105,16 @@ window.toggleDeliveryFloor = function(floor) {
             const propertyPrompt = propertyTypeHidden.value === '';
             const floorPrompt = floorHiddenInput.value === '';
 
-            const elevatorHidden = elevatorOptionContainer ? elevatorOptionContainer.querySelector('#elevator-available') : null;
-            const elevatorSelected = !!(elevatorHidden && elevatorHidden.value);
-            const canShowInventory = !propertyPrompt && !floorPrompt && isStep3 && (!elevatorRequired || elevatorSelected);
+            const liftHidden = liftOptionContainer ? liftOptionContainer.querySelector('#lift-available') : null;
+            const liftSelected = !!(liftHidden && liftHidden.value);
+            const canShowInventory = !propertyPrompt && !floorPrompt && isStep3 && (!liftRequired || liftSelected);
 
             inventoryCardContainer.style.display = canShowInventory ? '' : 'none';
-        // --- Scroll to inventory on elevator or floor selection ---
+        // --- Scroll to inventory on lift or floor selection ---
         if (floorHiddenInput) {
             floorHiddenInput.addEventListener('change', function() {
-                // Only scroll if elevator is not visible for this floor
-                if (!elevatorOptionContainer || elevatorOptionContainer.style.display === 'none') {
+                // Only scroll if lift is not visible for this floor
+                if (!liftOptionContainer || liftOptionContainer.style.display === 'none') {
                     if (inventoryCardContainer && inventoryCardContainer.style.display !== 'none') {
                         setTimeout(() => {
                             inventoryCardContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1676,12 +2123,12 @@ window.toggleDeliveryFloor = function(floor) {
                 }
             });
         }
-        if (elevatorOptionContainer) {
-            elevatorOptionContainer.addEventListener('change', function() {
-                // Only scroll if elevator is visible and selected
-                if (elevatorOptionContainer.style.display !== 'none') {
-                    const elevatorHidden = elevatorOptionContainer.querySelector('#elevator-available');
-                    if (elevatorHidden && elevatorHidden.value && inventoryCardContainer && inventoryCardContainer.style.display !== 'none') {
+        if (liftOptionContainer) {
+            liftOptionContainer.addEventListener('change', function() {
+                // Only scroll if lift is visible and selected
+                if (liftOptionContainer.style.display !== 'none') {
+                    const liftHidden = liftOptionContainer.querySelector('#lift-available');
+                    if (liftHidden && liftHidden.value && inventoryCardContainer && inventoryCardContainer.style.display !== 'none') {
                         setTimeout(() => {
                             inventoryCardContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
                         }, 100);
@@ -1690,7 +2137,7 @@ window.toggleDeliveryFloor = function(floor) {
             }, true);
         }
         }
-        // Elevator visibility is handled by isPickupElevatorRequired logic above.
+        // lift visibility is handled by isPickupliftRequired logic above.
         // Add .house-removals-active to body if House Removals or Apartment is selected in step 3
         if (propertyTypeHidden && body) {
             const val = (propertyTypeHidden.value || '').toLowerCase().trim();
@@ -1760,8 +2207,8 @@ function renderFloorIcons(propertyType) {
                     const event = new Event('change', { bubbles: true });
                     floorHiddenInput.dispatchEvent(event);
                 }
-                // Only update elevator/inventory visibility, do not scroll or show inventory here
-                setTimeout(updateInventoryAndElevatorVisibility, 0);
+                // Only update lift/inventory visibility, do not scroll or show inventory here
+                setTimeout(updateInventoryAndliftVisibility, 0);
                 // Update next button state
                 if (typeof window.updateNextButtonState === 'function') {
                     window.updateNextButtonState();
@@ -1772,29 +2219,29 @@ function renderFloorIcons(propertyType) {
     });
     // Reset hidden input if property type changes
     if (floorHiddenInput) floorHiddenInput.value = '';
-    // Render elevator icon grid if needed
-    if (typeof renderElevatorIcons === 'function') renderElevatorIcons();
+    // Render lift icon grid if needed
+    if (typeof renderliftIcons === 'function') renderliftIcons();
 }
 
-    // Render elevator icon grid (Yes/No icons)
-    function renderElevatorIcons() {
-        if (!elevatorOptionContainer) return;
-        let grid = elevatorOptionContainer.querySelector(`#${elevatorIconGridId}`);
-        let hidden = elevatorOptionContainer.querySelector(`#${elevatorHiddenInputId}`);
+    // Render lift icon grid (Yes/No icons)
+    function renderliftIcons() {
+        if (!liftOptionContainer) return;
+        let grid = liftOptionContainer.querySelector(`#${liftIconGridId}`);
+        let hidden = liftOptionContainer.querySelector(`#${liftHiddenInputId}`);
         if (!grid) {
             grid = document.createElement('div');
-            grid.className = 'elevator-icon-grid';
-            grid.id = elevatorIconGridId;
-            elevatorOptionContainer.insertBefore(grid, elevatorOptionContainer.firstChild.nextSibling);
+            grid.className = 'lift-icon-grid';
+            grid.id = liftIconGridId;
+            liftOptionContainer.insertBefore(grid, liftOptionContainer.firstChild.nextSibling);
         }
         if (!hidden) {
             hidden = document.createElement('input');
             hidden.type = 'hidden';
-            hidden.id = elevatorHiddenInputId;
-            hidden.name = 'elevator-available';
+            hidden.id = liftHiddenInputId;
+            hidden.name = 'lift-available';
             hidden.setAttribute('data-required', 'true');
             hidden.setAttribute('aria-required', 'true');
-            elevatorOptionContainer.appendChild(hidden);
+            liftOptionContainer.appendChild(hidden);
         }
         grid.innerHTML = '';
         const options = [
@@ -1804,12 +2251,12 @@ function renderFloorIcons(propertyType) {
         options.forEach(opt => {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'elevator-icon-btn';
+            btn.className = 'lift-icon-btn';
             btn.setAttribute('data-value', opt.value);
             btn.innerHTML = `${opt.icon}<span>${opt.label}</span>`;
             btn.setAttribute('aria-pressed', 'false');
             btn.addEventListener('click', function () {
-                grid.querySelectorAll('.elevator-icon-btn').forEach(b => {
+                grid.querySelectorAll('.lift-icon-btn').forEach(b => {
                     b.classList.remove('selected');
                     b.setAttribute('aria-pressed', 'false');
                 });
@@ -1819,7 +2266,7 @@ function renderFloorIcons(propertyType) {
                 // Fire change event for listeners
                 const event = new Event('change', { bubbles: true });
                 hidden.dispatchEvent(event);
-                updateInventoryAndElevatorVisibility();
+                updateInventoryAndliftVisibility();
                 // Update next button state
                 if (typeof window.updateNextButtonState === 'function') {
                     window.updateNextButtonState();
@@ -1853,7 +2300,7 @@ function renderFloorIcons(propertyType) {
                 renderFloorIcons(propertyTypeHidden.value);
                 // Render pickup floor selector for multi-floor selection
                 renderPickupFloorSelector();
-                updateInventoryAndElevatorVisibility();
+                updateInventoryAndliftVisibility();
 
                 // Always advance to step 3 after selection if not already there or past
                 const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 6;
@@ -1880,7 +2327,7 @@ function renderFloorIcons(propertyType) {
     }
 
     // No longer need to listen for floorSelect (dropdown) changes here
-    updateInventoryAndElevatorVisibility();
+    updateInventoryAndliftVisibility();
     
     // Ensure original inventory UI is visible
     function restoreOriginalInventoryUI() {
@@ -1896,23 +2343,23 @@ function renderFloorIcons(propertyType) {
         document.body.classList.remove('multi-floor-inventory-mode');
     }
     
-    // Event listeners for confirm button and elevator question
+    // Event listeners for confirm button and lift question
     const confirmBtn = document.getElementById('confirm-pickup-floors-btn');
-    const elevatorBtns = document.querySelectorAll('.pickup-elevator-btn');
-    const elevatorInput = document.getElementById('pickup-elevator-available');
+    const liftBtns = document.querySelectorAll('.pickup-lift-btn');
+    const liftInput = document.getElementById('pickup-lift-available');
     
     if (confirmBtn) {
         confirmBtn.addEventListener('click', function() {
-            // Check if elevator question was answered
-            if (window.selectedPickupFloors.size > 0 && !elevatorInput.value) {
-                alert('Please select whether an elevator is available before proceeding');
+            // Check if lift question was answered
+            if (window.selectedPickupFloors.size > 0 && !liftInput.value) {
+                alert('Please select whether an lift is available before proceeding');
                 return;
             }
-            // If floors selected, verify elevator is answered and proceed
-            if (window.selectedPickupFloors.size > 0 && elevatorInput.value) {
+            // If floors selected, verify lift is answered and proceed
+            if (window.selectedPickupFloors.size > 0 && liftInput.value) {
                 // Render one old-style inventory block per selected pickup floor
                 if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
-                    window.renderSelectedPickupFloorsInventory(elevatorInput.value);
+                    window.renderSelectedPickupFloorsInventory(liftInput.value);
                 } else {
                     restoreOriginalInventoryUI();
                 }
@@ -1935,14 +2382,14 @@ function renderFloorIcons(propertyType) {
         });
     }
     
-    elevatorBtns.forEach(btn => {
+    liftBtns.forEach(btn => {
         btn.addEventListener('click', function() {
             const value = this.getAttribute('data-value');
-            if (elevatorInput) {
-                elevatorInput.value = value;
+            if (liftInput) {
+                liftInput.value = value;
             }
             // Update button styles
-            elevatorBtns.forEach(b => {
+            liftBtns.forEach(b => {
                 b.style.borderColor = '#e5e7eb';
                 b.style.background = 'white';
                 b.style.color = '#4b5563';
@@ -1977,9 +2424,9 @@ document.addEventListener('DOMContentLoaded', function () {
             button.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
         });
 
-        const elevatorSection = document.getElementById('delivery-elevator-section');
-        if (elevatorSection) {
-            elevatorSection.style.display = 'none';
+        const liftSection = document.getElementById('delivery-lift-section');
+        if (liftSection) {
+            liftSection.style.display = 'none';
         }
     }
 
@@ -2003,21 +2450,21 @@ document.addEventListener('DOMContentLoaded', function () {
                 const event = new Event('change', { bubbles: true });
                 deliveryPropertyTypeHidden.dispatchEvent(event);
                 
-                // Render delivery floor icons with elevator option based on property type
+                // Render delivery floor icons with lift option based on property type
                 const propertyTypeValue = btn.getAttribute('data-value');
                 console.log('Property type selected in step 4:', propertyTypeValue);
                 setTimeout(() => {
-                    if (window.renderDeliveryFloorIconsWithElevator) {
-                        window.renderDeliveryFloorIconsWithElevator(propertyTypeValue);
+                    if (window.renderDeliveryFloorIconsWithlift) {
+                        window.renderDeliveryFloorIconsWithlift(propertyTypeValue);
                     }
                     // Render delivery floor selector for multi-floor selection
                     if (typeof window.renderDeliveryFloorSelector === 'function') {
                         window.renderDeliveryFloorSelector();
                     }
                     // Keep Step 4 focused on property selection only
-                    const elevatorSection = document.getElementById('delivery-elevator-section');
-                    if (elevatorSection) {
-                        elevatorSection.style.display = 'none';
+                    const liftSection = document.getElementById('delivery-lift-section');
+                    if (liftSection) {
+                        liftSection.style.display = 'none';
                     }
                 }, 100);
                 
@@ -2055,10 +2502,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // --- Delivery Floor Selection (Step 5) ---
 document.addEventListener('DOMContentLoaded', function () {
-    function renderDeliveryFloorIconsWithElevator(propertyType) {
+    function renderDeliveryFloorIconsWithlift(propertyType) {
         const floorIconGrid = document.getElementById('delivery-floor-icon-grid');
         const floorHiddenInput = document.getElementById('delivery-floor-select');
-        const elevatorOptionContainer = document.getElementById('delivery-elevator-option-container');
+        const liftOptionContainer = document.getElementById('delivery-lift-option-container');
         
         if (!floorIconGrid) return;
         floorIconGrid.innerHTML = '';
@@ -2083,13 +2530,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     const event = new Event('change', { bubbles: true });
                     floorHiddenInput.dispatchEvent(event);
                     
-                    // Show/hide elevator based on floor selection
-                    if (elevatorOptionContainer) {
+                    // Show/hide lift based on floor selection
+                    if (liftOptionContainer) {
                         const floorVal = floor.toLowerCase();
                         if (floorVal && floorVal !== 'ground') {
-                            elevatorOptionContainer.style.display = '';
+                            liftOptionContainer.style.display = '';
                         } else {
-                            elevatorOptionContainer.style.display = 'none';
+                            liftOptionContainer.style.display = 'none';
                         }
                     }
                     
@@ -2109,33 +2556,33 @@ document.addEventListener('DOMContentLoaded', function () {
         
         if (floorHiddenInput) floorHiddenInput.value = '';
         
-        // Initially hide elevator container until floor is selected
-        if (elevatorOptionContainer) {
-            elevatorOptionContainer.style.display = 'none';
-            renderDeliveryElevatorIcons();
+        // Initially hide lift container until floor is selected
+        if (liftOptionContainer) {
+            liftOptionContainer.style.display = 'none';
+            renderDeliveryliftIcons();
         }
     }
     
-    function renderDeliveryElevatorIcons() {
-        const elevatorOptionContainer = document.getElementById('delivery-elevator-option-container');
-        if (!elevatorOptionContainer) return;
+    function renderDeliveryliftIcons() {
+        const liftOptionContainer = document.getElementById('delivery-lift-option-container');
+        if (!liftOptionContainer) return;
         
-        let grid = elevatorOptionContainer.querySelector('#delivery-elevator-icon-grid');
-        let hidden = elevatorOptionContainer.querySelector('#delivery-elevator-available');
+        let grid = liftOptionContainer.querySelector('#delivery-lift-icon-grid');
+        let hidden = liftOptionContainer.querySelector('#delivery-lift-available');
         
         if (!grid) {
             grid = document.createElement('div');
-            grid.className = 'elevator-icon-grid';
-            grid.id = 'delivery-elevator-icon-grid';
-            elevatorOptionContainer.appendChild(grid);
+            grid.className = 'lift-icon-grid';
+            grid.id = 'delivery-lift-icon-grid';
+            liftOptionContainer.appendChild(grid);
         }
         
         if (!hidden) {
             hidden = document.createElement('input');
             hidden.type = 'hidden';
-            hidden.id = 'delivery-elevator-available';
-            hidden.name = 'delivery-elevator-available';
-            elevatorOptionContainer.appendChild(hidden);
+            hidden.id = 'delivery-lift-available';
+            hidden.name = 'delivery-lift-available';
+            liftOptionContainer.appendChild(hidden);
         }
         
         const previousSelection = hidden.value || '';
@@ -2149,7 +2596,7 @@ document.addEventListener('DOMContentLoaded', function () {
         options.forEach(opt => {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'elevator-icon-btn';
+            btn.className = 'lift-icon-btn';
             btn.setAttribute('data-value', opt.value);
             btn.innerHTML = `${opt.icon}<span>${opt.label}</span>`;
             const isSelected = previousSelection === opt.value;
@@ -2158,7 +2605,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
             btn.addEventListener('click', function () {
-                grid.querySelectorAll('.elevator-icon-btn').forEach(b => {
+                grid.querySelectorAll('.lift-icon-btn').forEach(b => {
                     b.classList.remove('selected');
                     b.setAttribute('aria-pressed', 'false');
                 });
@@ -2167,7 +2614,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 hidden.value = opt.value;
                 const event = new Event('change', { bubbles: true });
                 hidden.dispatchEvent(event);
-                // Update next button state after elevator selection
+                // Update next button state after lift selection
                 if (typeof window.updateNextButtonState === 'function') {
                     window.updateNextButtonState();
                 }
@@ -2184,20 +2631,20 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     
     // Make functions globally accessible
-    window.renderDeliveryFloorIconsWithElevator = renderDeliveryFloorIconsWithElevator;
-    window.renderDeliveryElevatorIcons = renderDeliveryElevatorIcons;
+    window.renderDeliveryFloorIconsWithlift = renderDeliveryFloorIconsWithlift;
+    window.renderDeliveryliftIcons = renderDeliveryliftIcons;
     
-    // Re-render delivery floors and elevator when navigating to step 5
+    // Re-render delivery floors and lift when navigating to step 5
     const observer = new MutationObserver(function(mutations) {
         mutations.forEach(function(mutation) {
             if (mutation.attributeName === 'data-form-step') {
                 const currentStep = parseInt(document.body.dataset.formStep, 10);
                 if (currentStep === 5) {
                     console.log('Step 5 entered, rendering delivery floor selector');
-                    // Render delivery floors and elevator when entering step 5
+                    // Render delivery floors and lift when entering step 5
                     const deliveryPropType = document.getElementById('delivery-property-type');
                     if (deliveryPropType && deliveryPropType.value) {
-                        window.renderDeliveryFloorIconsWithElevator(deliveryPropType.value);
+                        window.renderDeliveryFloorIconsWithlift(deliveryPropType.value);
                     }
 
                     // Always render floor selector buttons in Step 5
@@ -2222,8 +2669,8 @@ document.addEventListener('DOMContentLoaded', function () {
     // Initial render for cases where step 5 is already active
     if (parseInt(document.body.dataset.formStep || '1', 10) === 5) {
         const deliveryPropType = document.getElementById('delivery-property-type');
-        if (deliveryPropType && deliveryPropType.value && typeof window.renderDeliveryFloorIconsWithElevator === 'function') {
-            window.renderDeliveryFloorIconsWithElevator(deliveryPropType.value);
+        if (deliveryPropType && deliveryPropType.value && typeof window.renderDeliveryFloorIconsWithlift === 'function') {
+            window.renderDeliveryFloorIconsWithlift(deliveryPropType.value);
         }
         if (typeof window.renderDeliveryFloorSelector === 'function') {
             window.renderDeliveryFloorSelector();
@@ -2262,6 +2709,10 @@ document.addEventListener('DOMContentLoaded', function () {
     
     // Track expanded sections to restore state after re-render
     let expandedSections = new Set();
+    let expandedSourceInventoryFloors = new Set();
+    let sourceInventoryFloorStateInitialized = false;
+    let expandedDeliveryFloors = new Set();
+    let expandedDeliveryRooms = new Set();
     
     // Track which pickup floors (source) have been selected by user
     const selectedPickupFloors = window.selectedPickupFloors || new Set();
@@ -2462,6 +2913,38 @@ document.addEventListener('DOMContentLoaded', function () {
         return totalQty - getAssignedQuantity(itemKey);
     }
 
+    function isStep5DeliveryOrganizationComplete() {
+        if (!selectedDeliveryFloors || selectedDeliveryFloors.size === 0) {
+            return false;
+        }
+
+        const roomItems = getItemsByRoom();
+        let hasAnyInventory = false;
+
+        for (const roomKey of Object.keys(roomItems)) {
+            const items = roomItems[roomKey];
+            for (const itemKey of Object.keys(items)) {
+                const totalQty = parseInt(items[itemKey], 10) || 0;
+                if (totalQty <= 0) continue;
+
+                const sourceFloor = getSourceFloorFromKey(itemKey);
+                if (selectedPickupFloors.size > 0 && !selectedPickupFloors.has(sourceFloor)) {
+                    continue;
+                }
+
+                hasAnyInventory = true;
+
+                if (getRemainingQuantity(itemKey, totalQty) > 0) {
+                    return false;
+                }
+            }
+        }
+
+        return hasAnyInventory;
+    }
+
+    window.isStep5DeliveryOrganizationComplete = isStep5DeliveryOrganizationComplete;
+
     function assignItemsToFloor(itemKeys, floor) {
         const roomItems = getItemsByRoom();
         const itemQtyMap = {};
@@ -2515,25 +2998,11 @@ document.addEventListener('DOMContentLoaded', function () {
     // Function to save the expanded state of sections
     function saveExpandedState() {
         expandedSections.clear();
-        const roomSections = inventoryList?.querySelectorAll('[data-room-collapsed]') || [];
+        const roomSections = inventoryList?.querySelectorAll('[data-room-expand-key][data-room-collapsed="false"]') || [];
         roomSections.forEach(section => {
-            if (section.getAttribute('data-room-collapsed') === 'false') {
-                const header = section.querySelector('[data-room-items]') ? section.textContent.split('\n')[0] : section.querySelector('button')?.textContent;
-                if (header && !section.getAttribute('data-room-collapsed')) {
-                    expandedSections.add(section.id || section.className);
-                }
-            }
-        });
-        
-        // Simple approach: check all room sections that have expanded items container
-        const allSections = inventoryList?.querySelectorAll('[data-room-items]') || [];
-        allSections.forEach(container => {
-            const roomSection = container.parentElement;
-            if (roomSection && roomSection.getAttribute('data-room-collapsed') === 'false') {
-                const roomName = roomSection.querySelector('span')?.textContent;
-                if (roomName) {
-                    expandedSections.add(roomName.trim());
-                }
+            const expandKey = section.getAttribute('data-room-expand-key');
+            if (expandKey) {
+                expandedSections.add(expandKey);
             }
         });
     }
@@ -2604,6 +3073,9 @@ document.addEventListener('DOMContentLoaded', function () {
         
         if (unassignedItems.length === 0) {
             inventoryList.innerHTML = '<p style="color: #10b981; font-size: 0.9rem; margin: 0; padding: 12px; background: #f0fdf4; border-radius: 6px; text-align: center; font-weight: 600;">✓ All items assigned!</p>';
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
             return;
         }
         
@@ -2654,12 +3126,26 @@ document.addEventListener('DOMContentLoaded', function () {
         
         // Sort floors in logical order
         const floorOrder = ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
-        Object.keys(itemsBySourceFloor).sort((a, b) => {
+        const sourceFloorsSorted = Object.keys(itemsBySourceFloor).sort((a, b) => {
             const indexA = floorOrder.indexOf(a);
             const indexB = floorOrder.indexOf(b);
             return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
-        }).forEach(sourceFloor => {
+        });
+
+        if (!sourceInventoryFloorStateInitialized) {
+            expandedSourceInventoryFloors.clear();
+            sourceInventoryFloorStateInitialized = true;
+        } else {
+            Array.from(expandedSourceInventoryFloors).forEach((floorName) => {
+                if (!sourceFloorsSorted.includes(floorName)) {
+                    expandedSourceInventoryFloors.delete(floorName);
+                }
+            });
+        }
+
+        sourceFloorsSorted.forEach(sourceFloor => {
             const roomsInFloor = itemsBySourceFloor[sourceFloor];
+            const sourceFloorExpanded = expandedSourceInventoryFloors.has(sourceFloor);
             
             // Create floor section header
             const floorSection = document.createElement('div');
@@ -2669,12 +3155,57 @@ document.addEventListener('DOMContentLoaded', function () {
                 background: #dbeafe;
                 border-left: 4px solid #2563eb;
                 border-radius: 6px;
-                font-weight: 600;
+                color: #1e40af;
+            `;
+
+            const floorToggleBtn = document.createElement('button');
+            floorToggleBtn.type = 'button';
+            floorToggleBtn.style.cssText = `
+                width: 100%;
+                border: none;
+                background: transparent;
+                padding: 0;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
                 color: #1e40af;
                 font-size: 0.95rem;
+                font-weight: 600;
+                text-align: left;
             `;
-            floorSection.textContent = `📍 ${sourceFloor} Floor`;
+
+            const floorToggleLabel = document.createElement('span');
+            floorToggleLabel.textContent = `📍 ${sourceFloor} Floor`;
+
+            const floorToggleIcon = document.createElement('span');
+            floorToggleIcon.style.cssText = `
+                font-weight: 700;
+                color: #1d4ed8;
+                font-size: 1rem;
+            `;
+            floorToggleIcon.textContent = sourceFloorExpanded ? '−' : '+';
+
+            floorToggleBtn.appendChild(floorToggleLabel);
+            floorToggleBtn.appendChild(floorToggleIcon);
+            floorSection.appendChild(floorToggleBtn);
             inventoryList.appendChild(floorSection);
+
+            const floorRoomsContainer = document.createElement('div');
+            floorRoomsContainer.style.cssText = `
+                display: ${sourceFloorExpanded ? 'block' : 'none'};
+                margin-bottom: 12px;
+            `;
+
+            floorToggleBtn.addEventListener('click', () => {
+                if (expandedSourceInventoryFloors.has(sourceFloor)) {
+                    expandedSourceInventoryFloors.delete(sourceFloor);
+                } else {
+                    expandedSourceInventoryFloors.add(sourceFloor);
+                }
+                renderInventoryByRoom();
+            });
             
             // Render rooms within this floor
             Object.keys(roomsInFloor).sort((a, b) => {
@@ -2683,7 +3214,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 return nameA.localeCompare(nameB);
             }).forEach(roomKey => {
                 const items = roomsInFloor[roomKey];
-                let expandedState = { isExpanded: false };
+                const roomExpandKey = `${sourceFloor}::${roomKey}`;
+                let expandedState = { isExpanded: expandedSections.has(roomExpandKey) };
                 
                 const roomSection = document.createElement('div');
                 roomSection.style.cssText = `
@@ -2693,7 +3225,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     border-radius: 8px;
                     overflow: hidden;
                 `;
-                roomSection.setAttribute('data-room-collapsed', 'true');
+                roomSection.setAttribute('data-room-expand-key', roomExpandKey);
+                roomSection.setAttribute('data-room-collapsed', expandedState.isExpanded ? 'false' : 'true');
                 
                 // Room header (clickable to expand/collapse)
                 const roomHeader = document.createElement('div');
@@ -2976,15 +3509,23 @@ document.addEventListener('DOMContentLoaded', function () {
                     expandBtn.textContent = expandedState.isExpanded ? '−' : '+';
                     itemsContainer.style.maxHeight = expandedState.isExpanded ? '1000px' : '0';
                     roomSection.setAttribute('data-room-collapsed', !expandedState.isExpanded);
+                    if (expandedState.isExpanded) {
+                        expandedSections.add(roomExpandKey);
+                    } else {
+                        expandedSections.delete(roomExpandKey);
+                    }
                 });
                 
                 roomSection.appendChild(itemsContainer);
-                inventoryList.appendChild(roomSection);
+                floorRoomsContainer.appendChild(roomSection);
             });
+
+            inventoryList.appendChild(floorRoomsContainer);
         });
         
-        // Restore the expanded state after rendering
-        restoreExpandedState();
+        if (typeof window.updateNextButtonState === 'function') {
+            window.updateNextButtonState();
+        }
     }
     
     // Function to render room sections with floor-based delivery organization
@@ -3045,6 +3586,7 @@ document.addEventListener('DOMContentLoaded', function () {
             
         floorsToRender.forEach(floor => {
             const hasSelection = selectedItems.size > 0;
+            const floorIsExpanded = expandedDeliveryFloors.has(floor);
             
             const floorSection = document.createElement('div');
             floorSection.className = 'floor-delivery-section';
@@ -3052,7 +3594,7 @@ document.addEventListener('DOMContentLoaded', function () {
             floorSection.style.cssText = `
                 border: 2px solid ${hasSelection ? '#3b82f6' : '#e5e7eb'};
                 border-radius: 12px;
-                padding: 20px;
+                padding: 14px;
                 background: ${hasSelection ? '#eff6ff' : '#fff'};
                 margin-bottom: 20px;
                 cursor: default;
@@ -3060,16 +3602,21 @@ document.addEventListener('DOMContentLoaded', function () {
                 position: relative;
             `;
             
-            // Header with floor name
-            const header = document.createElement('div');
-            header.style.cssText = `
+            // Header button for floor dropdown
+            const floorHeaderBtn = document.createElement('button');
+            floorHeaderBtn.type = 'button';
+            floorHeaderBtn.style.cssText = `
+                width: 100%;
+                border: none;
+                background: transparent;
+                padding: 4px 2px;
+                text-align: left;
+                cursor: pointer;
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 gap: 12px;
-                margin-bottom: 16px;
-                padding-bottom: 12px;
-                border-bottom: 2px solid #e5e7eb;
+                color: #1f2937;
             `;
 
             const headerLeft = document.createElement('div');
@@ -3098,9 +3645,38 @@ document.addEventListener('DOMContentLoaded', function () {
                 font-size: 1.2rem;
             `;
             floorName.textContent = floor + ' Floor';
+
+            const floorMeta = document.createElement('span');
+            floorMeta.style.cssText = `
+                font-size: 0.82rem;
+                color: #6b7280;
+                margin-left: 8px;
+                font-weight: 500;
+            `;
             
             headerLeft.appendChild(floorIcon);
             headerLeft.appendChild(floorName);
+            headerLeft.appendChild(floorMeta);
+
+            const floorChevron = document.createElement('span');
+            floorChevron.style.cssText = `
+                font-size: 1.1rem;
+                color: #6b7280;
+                font-weight: 700;
+            `;
+            floorChevron.textContent = floorIsExpanded ? '−' : '+';
+
+            floorHeaderBtn.appendChild(headerLeft);
+            floorHeaderBtn.appendChild(floorChevron);
+            floorSection.appendChild(floorHeaderBtn);
+
+            const floorContent = document.createElement('div');
+            floorContent.style.cssText = `
+                margin-top: 12px;
+                padding-top: 12px;
+                border-top: 2px solid #e5e7eb;
+                display: ${floorIsExpanded ? 'block' : 'none'};
+            `;
 
             const headerActions = document.createElement('div');
             headerActions.style.cssText = `
@@ -3108,6 +3684,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 align-items: center;
                 gap: 8px;
                 flex-wrap: wrap;
+                margin-bottom: 12px;
             `;
 
             const addSelectedBtn = document.createElement('button');
@@ -3144,13 +3721,6 @@ document.addEventListener('DOMContentLoaded', function () {
             addAllBtn.addEventListener('click', () => {
                 assignAllItemsToFloor(floor);
             });
-
-            headerActions.appendChild(addSelectedBtn);
-            headerActions.appendChild(addAllBtn);
-
-            header.appendChild(headerLeft);
-            header.appendChild(headerActions);
-            floorSection.appendChild(header);
             
             // Items for this floor (check if this floor has any assigned quantity)
             const itemsForFloor = allItems.filter(item => {
@@ -3161,6 +3731,53 @@ document.addEventListener('DOMContentLoaded', function () {
                     assignedQty: itemFloorAssignments[item.key][floor]
                 };
             });
+
+            floorMeta.textContent = `${itemsForFloor.length} item${itemsForFloor.length !== 1 ? 's' : ''}`;
+
+            const removeAllBtn = document.createElement('button');
+            removeAllBtn.type = 'button';
+            removeAllBtn.textContent = 'Undo / Remove All';
+            removeAllBtn.disabled = itemsForFloor.length === 0;
+            removeAllBtn.style.cssText = `
+                border: none;
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-size: 0.8rem;
+                font-weight: 600;
+                background: ${itemsForFloor.length > 0 ? '#dc2626' : '#fca5a5'};
+                color: #fff;
+                cursor: ${itemsForFloor.length > 0 ? 'pointer' : 'not-allowed'};
+            `;
+            removeAllBtn.addEventListener('click', () => {
+                if (itemsForFloor.length === 0) return;
+
+                const confirmed = confirm(`Remove all assigned items from ${floor} Floor?`);
+                if (!confirmed) return;
+
+                Object.keys(itemFloorAssignments).forEach((itemKey) => {
+                    if (itemFloorAssignments[itemKey] && itemFloorAssignments[itemKey][floor] > 0) {
+                        delete itemFloorAssignments[itemKey][floor];
+                        if (Object.keys(itemFloorAssignments[itemKey]).length === 0) {
+                            delete itemFloorAssignments[itemKey];
+                        }
+                    }
+                });
+
+                const roomPrefix = `${floor}::`;
+                expandedDeliveryRooms.forEach((key) => {
+                    if (key.startsWith(roomPrefix)) {
+                        expandedDeliveryRooms.delete(key);
+                    }
+                });
+
+                renderInventoryByRoom();
+                renderDeliveryFloors();
+            });
+
+            headerActions.appendChild(addSelectedBtn);
+            headerActions.appendChild(addAllBtn);
+            headerActions.appendChild(removeAllBtn);
+            floorContent.appendChild(headerActions);
             
             if (itemsForFloor.length === 0) {
                 const emptyFloorMsg = document.createElement('div');
@@ -3173,114 +3790,248 @@ document.addEventListener('DOMContentLoaded', function () {
                     border-radius: 8px;
                 `;
                 emptyFloorMsg.textContent = 'No items assigned to this floor yet';
-                floorSection.appendChild(emptyFloorMsg);
+                floorContent.appendChild(emptyFloorMsg);
             } else {
-                const itemsList = document.createElement('div');
-                itemsList.style.cssText = `
+                const itemsByRoom = {};
+                itemsForFloor.forEach((item) => {
+                    if (!itemsByRoom[item.room]) {
+                        itemsByRoom[item.room] = [];
+                    }
+                    itemsByRoom[item.room].push(item);
+                });
+
+                const roomList = document.createElement('div');
+                roomList.style.cssText = `
                     display: flex;
                     flex-direction: column;
                     gap: 8px;
                 `;
-                
-                itemsForFloor.forEach(item => {
-                    const itemEl = document.createElement('div');
-                    itemEl.style.cssText = `
+
+                Object.keys(itemsByRoom).sort((a, b) => {
+                    const nameA = ROOM_CATEGORIES[a]?.name || a;
+                    const nameB = ROOM_CATEGORIES[b]?.name || b;
+                    return nameA.localeCompare(nameB);
+                }).forEach((roomKey) => {
+                    const roomAccordionKey = `${floor}::${roomKey}`;
+                    const roomExpanded = expandedDeliveryRooms.has(roomAccordionKey);
+                    const roomItemsForFloor = itemsByRoom[roomKey];
+
+                    const roomSection = document.createElement('div');
+                    roomSection.style.cssText = `
+                        border: 1px solid #d1d5db;
+                        border-radius: 10px;
+                        background: #ffffff;
+                        overflow: hidden;
+                    `;
+
+                    const roomHeaderBtn = document.createElement('button');
+                    roomHeaderBtn.type = 'button';
+                    roomHeaderBtn.style.cssText = `
+                        width: 100%;
+                        border: none;
+                        background: #f8fafc;
+                        padding: 10px 12px;
+                        cursor: pointer;
                         display: flex;
                         align-items: center;
                         justify-content: space-between;
-                        background: #f0fdf4;
-                        border: 1px solid #86efac;
-                        border-radius: 8px;
-                        padding: 12px 16px;
-                        gap: 12px;
+                        gap: 10px;
+                        text-align: left;
                     `;
-                    
-                    const itemInfo = document.createElement('div');
-                    itemInfo.style.cssText = `
+
+                    const roomHeaderLeft = document.createElement('div');
+                    roomHeaderLeft.style.cssText = `
                         display: flex;
                         align-items: center;
-                        gap: 12px;
-                        flex: 1;
+                        gap: 8px;
                     `;
-                    
-                    const roomBadge = document.createElement('span');
-                    roomBadge.style.cssText = `
-                        font-size: 0.85rem;
-                        color: #374151;
+
+                    const roomIconBadge = document.createElement('span');
+                    roomIconBadge.textContent = ROOM_CATEGORIES[roomKey]?.icon || '📦';
+                    roomIconBadge.style.cssText = `
+                        font-size: 1rem;
+                    `;
+
+                    const roomTitle = document.createElement('span');
+                    roomTitle.style.cssText = `
+                        font-size: 0.92rem;
+                        font-weight: 600;
+                        color: #1f2937;
+                    `;
+                    roomTitle.textContent = ROOM_CATEGORIES[roomKey]?.name || roomKey;
+
+                    const roomCount = document.createElement('span');
+                    roomCount.style.cssText = `
+                        font-size: 0.78rem;
+                        color: #6b7280;
                         background: #e5e7eb;
-                        padding: 2px 8px;
-                        border-radius: 4px;
-                        font-weight: 500;
-                    `;
-                    const roomKey = item.room;
-                    roomBadge.textContent = ROOM_CATEGORIES[roomKey]?.name || item.room;
-                    
-                    const itemText = document.createElement('span');
-                    itemText.style.cssText = `
-                        flex: 1;
-                        color: #374151;
-                        font-weight: 500;
-                    `;
-                    itemText.innerHTML = `${item.name}<br><span style="font-size: 0.75rem; color: #6b7280; font-weight: 400;">From pickup: ${item.sourceFloor}</span>`;
-                    
-                    const qtyBadge = document.createElement('span');
-                    qtyBadge.style.cssText = `
-                        background: #10b981;
-                        color: #fff;
-                        padding: 4px 10px;
-                        border-radius: 6px;
-                        font-size: 0.85rem;
+                        padding: 2px 7px;
+                        border-radius: 999px;
                         font-weight: 600;
                     `;
-                    qtyBadge.textContent = '×' + item.assignedQty;
-                    
-                    itemInfo.appendChild(roomBadge);
-                    itemInfo.appendChild(itemText);
-                    itemInfo.appendChild(qtyBadge);
-                    
-                    // Remove button (removes assignment from this floor only)
-                    const removeBtn = document.createElement('button');
-                    removeBtn.type = 'button';
-                    removeBtn.textContent = '✕';
-                    removeBtn.style.cssText = `
-                        background: #fee2e2;
-                        color: #ef4444;
-                        border: 1px solid #fca5a5;
-                        border-radius: 6px;
-                        padding: 6px 10px;
-                        cursor: pointer;
-                        font-weight: 600;
-                        transition: all 0.2s ease;
+                    roomCount.textContent = `${roomItemsForFloor.length}`;
+
+                    roomHeaderLeft.appendChild(roomIconBadge);
+                    roomHeaderLeft.appendChild(roomTitle);
+                    roomHeaderLeft.appendChild(roomCount);
+
+                    const roomChevron = document.createElement('span');
+                    roomChevron.style.cssText = `
+                        color: #6b7280;
+                        font-weight: 700;
+                        font-size: 1rem;
                     `;
-                    removeBtn.addEventListener('mouseover', () => {
-                        removeBtn.style.background = '#fecaca';
-                    });
-                    removeBtn.addEventListener('mouseout', () => {
-                        removeBtn.style.background = '#fee2e2';
-                    });
-                    removeBtn.addEventListener('click', () => {
-                        // Remove assignment from this floor only
-                        if (itemFloorAssignments[item.key]) {
-                            delete itemFloorAssignments[item.key][floor];
-                            // If no floors left, remove the item entirely
-                            if (Object.keys(itemFloorAssignments[item.key]).length === 0) {
-                                delete itemFloorAssignments[item.key];
+                    roomChevron.textContent = roomExpanded ? '−' : '+';
+
+                    roomHeaderBtn.appendChild(roomHeaderLeft);
+                    roomHeaderBtn.appendChild(roomChevron);
+                    roomSection.appendChild(roomHeaderBtn);
+
+                    const roomItemsWrap = document.createElement('div');
+                    roomItemsWrap.style.cssText = `
+                        display: ${roomExpanded ? 'flex' : 'none'};
+                        flex-direction: column;
+                        gap: 8px;
+                        padding: 10px;
+                        background: #fff;
+                    `;
+
+                    roomItemsForFloor.forEach(item => {
+                        const itemEl = document.createElement('div');
+                        itemEl.style.cssText = `
+                            display: flex;
+                            align-items: center;
+                            justify-content: space-between;
+                            background: #f0fdf4;
+                            border: 1px solid #86efac;
+                            border-radius: 8px;
+                            padding: 12px 16px;
+                            gap: 12px;
+                        `;
+                    
+                        const itemInfo = document.createElement('div');
+                        itemInfo.style.cssText = `
+                            display: flex;
+                            align-items: center;
+                            gap: 12px;
+                            flex: 1;
+                        `;
+                    
+                        const roomBadge = document.createElement('span');
+                        roomBadge.style.cssText = `
+                            font-size: 0.85rem;
+                            color: #374151;
+                            background: #e5e7eb;
+                            padding: 2px 8px;
+                            border-radius: 4px;
+                            font-weight: 500;
+                        `;
+                        roomBadge.textContent = ROOM_CATEGORIES[item.room]?.name || item.room;
+                    
+                        const itemText = document.createElement('span');
+                        itemText.style.cssText = `
+                            flex: 1;
+                            color: #374151;
+                            font-weight: 500;
+                        `;
+                        itemText.innerHTML = `${item.name}<br><span style="font-size: 0.75rem; color: #6b7280; font-weight: 400;">From pickup: ${item.sourceFloor}</span>`;
+                    
+                        const qtyBadge = document.createElement('span');
+                        qtyBadge.style.cssText = `
+                            background: #10b981;
+                            color: #fff;
+                            padding: 4px 10px;
+                            border-radius: 6px;
+                            font-size: 0.85rem;
+                            font-weight: 600;
+                        `;
+                        qtyBadge.textContent = '×' + item.assignedQty;
+                    
+                        itemInfo.appendChild(roomBadge);
+                        itemInfo.appendChild(itemText);
+                        itemInfo.appendChild(qtyBadge);
+                    
+                        // Remove button (removes assignment from this floor only)
+                        const removeBtn = document.createElement('button');
+                        removeBtn.type = 'button';
+                        removeBtn.textContent = '✕';
+                        removeBtn.style.cssText = `
+                            background: #fee2e2;
+                            color: #ef4444;
+                            border: 1px solid #fca5a5;
+                            border-radius: 6px;
+                            padding: 6px 10px;
+                            cursor: pointer;
+                            font-weight: 600;
+                            transition: all 0.2s ease;
+                        `;
+                        removeBtn.addEventListener('mouseover', () => {
+                            removeBtn.style.background = '#fecaca';
+                        });
+                        removeBtn.addEventListener('mouseout', () => {
+                            removeBtn.style.background = '#fee2e2';
+                        });
+                        removeBtn.addEventListener('click', (event) => {
+                            event.stopPropagation();
+                            // Remove assignment from this floor only
+                            if (itemFloorAssignments[item.key]) {
+                                delete itemFloorAssignments[item.key][floor];
+                                // If no floors left, remove the item entirely
+                                if (Object.keys(itemFloorAssignments[item.key]).length === 0) {
+                                    delete itemFloorAssignments[item.key];
+                                }
                             }
+                            renderInventoryByRoom();
+                            renderDeliveryFloors();
+                        });
+                    
+                        itemEl.appendChild(itemInfo);
+                        itemEl.appendChild(removeBtn);
+                        roomItemsWrap.appendChild(itemEl);
+                    });
+
+                    roomHeaderBtn.addEventListener('click', () => {
+                        const willExpand = !expandedDeliveryRooms.has(roomAccordionKey);
+                        if (willExpand) {
+                            expandedDeliveryRooms.add(roomAccordionKey);
+                        } else {
+                            expandedDeliveryRooms.delete(roomAccordionKey);
                         }
-                        renderInventoryByRoom();
                         renderDeliveryFloors();
                     });
-                    
-                    itemEl.appendChild(itemInfo);
-                    itemEl.appendChild(removeBtn);
-                    itemsList.appendChild(itemEl);
+
+                    roomSection.appendChild(roomItemsWrap);
+                    roomList.appendChild(roomSection);
                 });
                 
-                floorSection.appendChild(itemsList);
+                floorContent.appendChild(roomList);
             }
+
+            floorHeaderBtn.addEventListener('click', () => {
+                const willExpand = !expandedDeliveryFloors.has(floor);
+                if (willExpand) {
+                    expandedDeliveryFloors.add(floor);
+                } else {
+                    expandedDeliveryFloors.delete(floor);
+                    // Collapse nested room dropdowns when floor collapses
+                    const roomPrefix = `${floor}::`;
+                    expandedDeliveryRooms.forEach((key) => {
+                        if (key.startsWith(roomPrefix)) {
+                            expandedDeliveryRooms.delete(key);
+                        }
+                    });
+                }
+                renderDeliveryFloors();
+            });
+
+            floorSection.appendChild(floorContent);
             
             floorsGrid.appendChild(floorSection);
         });
+
+        if (typeof window.updateNextButtonState === 'function') {
+            window.updateNextButtonState();
+        }
     }
     
     // Function to render both panels
@@ -3372,8 +4123,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const multiFloorInventory = {};
     window.multiFloorInventory = multiFloorInventory;  // Expose globally
 
-    // Storage for elevator availability per floor (floor name -> 'yes' or 'no')
-    const floorElevatorMap = {};
+    // Storage for lift availability per floor (floor name -> 'yes' or 'no')
+    const floorliftMap = {};
 
     // Function to get the sort order of a floor
     const getFloorSortOrder = (floor) => {
@@ -3670,26 +4421,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Update title
                 title.textContent = `Add Inventory for ${newFloor} Floor`;
                 
-                // Update elevator information display
-                let elevatorInfoDiv = block.querySelector('[style*="background"]');
-                if (elevatorInfoDiv && (elevatorInfoDiv.textContent.includes('Elevator available'))) {
-                    elevatorInfoDiv.remove();
-                }
-                
-                // Add elevator info if this is a non-ground floor with elevator info
-                if (newFloor !== 'Ground' && floorElevatorMap[newFloor]) {
-                    const elevatorInfo = document.createElement('div');
-                    elevatorInfo.style.padding = '12px 16px';
-                    elevatorInfo.style.marginBottom = '16px';
-                    elevatorInfo.style.borderRadius = '6px';
-                    elevatorInfo.style.background = floorElevatorMap[newFloor] === 'yes' ? '#d1fae5' : '#fed7aa';
-                    elevatorInfo.style.color = floorElevatorMap[newFloor] === 'yes' ? '#065f46' : '#92400e';
-                    elevatorInfo.style.fontSize = '0.9rem';
-                    elevatorInfo.style.fontWeight = '500';
-                    elevatorInfo.textContent = `Elevator available: ${floorElevatorMap[newFloor] === 'yes' ? 'Yes' : 'No'}`;
-                    titleWrapper.insertAdjacentElement('afterend', elevatorInfo);
-                }
-                
                 // Sort floors after changing
                 sortFloorsInContainer();
 
@@ -3737,7 +4468,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (confirm(`Are you sure you want to delete the ${floorRef.name} Floor inventory?`)) {
                 addedFloors.delete(floorRef.name);
                 delete multiFloorInventory[floorRef.name];
-                delete floorElevatorMap[floorRef.name];  // Also delete elevator info
+                delete floorliftMap[floorRef.name];  // Also delete lift info
 
                 if (window.selectedPickupFloors) {
                     window.selectedPickupFloors.delete(floorRef.name);
@@ -3763,20 +4494,6 @@ document.addEventListener('DOMContentLoaded', function () {
         titleWrapper.appendChild(deleteFloorBtn);
 
         block.appendChild(titleWrapper);
-        
-        // Display elevator information for non-ground floors
-        if (initialFloorName !== 'Ground' && floorElevatorMap[initialFloorName]) {
-            const elevatorInfo = document.createElement('div');
-            elevatorInfo.style.padding = '12px 16px';
-            elevatorInfo.style.marginBottom = '16px';
-            elevatorInfo.style.borderRadius = '6px';
-            elevatorInfo.style.background = floorElevatorMap[initialFloorName] === 'yes' ? '#d1fae5' : '#fed7aa';
-            elevatorInfo.style.color = floorElevatorMap[initialFloorName] === 'yes' ? '#065f46' : '#92400e';
-            elevatorInfo.style.fontSize = '0.9rem';
-            elevatorInfo.style.fontWeight = '500';
-            elevatorInfo.textContent = `Elevator available: ${floorElevatorMap[initialFloorName] === 'yes' ? 'Yes' : 'No'}`;
-            block.appendChild(elevatorInfo);
-        }
         
         // Helper function to sync floor inventory to global storage
         const syncFloorToGlobal = () => {
@@ -3826,6 +4543,17 @@ document.addEventListener('DOMContentLoaded', function () {
         const customFloorItems = [];
         const floorSelectedItems = {};
         const floorQuantities = {};
+
+        // Hydrate local UI state from persisted floor inventory so re-renders (including move actions)
+        // keep quantities visible in the destination floor block.
+        const existingFloorItems = multiFloorInventory[floorRef.name] || {};
+        Object.keys(existingFloorItems).forEach((itemKey) => {
+            const qty = parseInt(existingFloorItems[itemKey], 10) || 0;
+            if (qty > 0) {
+                floorQuantities[itemKey] = qty;
+                floorSelectedItems[itemKey] = true;
+            }
+        });
         
         const getRoomKey = (tabName) => {
             const key = (tabName || '').toLowerCase();
@@ -3841,7 +4569,17 @@ document.addEventListener('DOMContentLoaded', function () {
             return roomKey ? roomKey.charAt(0).toUpperCase() + roomKey.slice(1) : '';
         };
         const getMultiFloorTrackingKey = (itemName, tabName) => {
-            if (isBoxItemName(itemName)) {
+            const roomKey = getRoomKey(tabName);
+
+            let roomOccurrenceCount = 0;
+            Object.keys(ROOM_ITEMS).forEach((key) => {
+                if (ROOM_ITEMS[key] && ROOM_ITEMS[key].includes(itemName)) {
+                    roomOccurrenceCount++;
+                }
+            });
+            const isAmbiguousAcrossRooms = roomOccurrenceCount > 1;
+
+            if (isBoxItemName(itemName) || roomKey === 'boxes' || isAmbiguousAcrossRooms) {
                 const roomPrefix = getRoomPrefixForTab(tabName);
                 return roomPrefix ? `${roomPrefix} - ${itemName}` : itemName;
             }
@@ -4203,24 +4941,24 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         // Only show floors not already used
         floorSelect.innerHTML = '<option value="">Choose floor</option>' + floors.filter(f => !usedFloors.has(f)).map(f => `<option value="${f}">${f}</option>`).join('');
-        // Reset elevator selection
-        document.querySelectorAll('input[name="floor-elevator-option"]').forEach(radio => radio.checked = false);
+        // Reset lift selection
+        document.querySelectorAll('input[name="floor-lift-option"]').forEach(radio => radio.checked = false);
         floorModal.style.display = 'flex';
         floorSelect.value = '';
     });
 
-    // Show/hide elevator section based on floor selection
+    // Show/hide lift section based on floor selection
     floorSelect?.addEventListener('change', function () {
         const selectedFloor = floorSelect.value;
-        const elevatorSection = document.getElementById('floor-elevator-selection');
-        if (elevatorSection) {
-            // Show elevator section only for non-ground floors
+        const liftSection = document.getElementById('floor-lift-selection');
+        if (liftSection) {
+            // Show lift section only for non-ground floors
             if (selectedFloor && selectedFloor !== 'Ground') {
-                elevatorSection.style.display = 'block';
+                liftSection.style.display = 'block';
             } else {
-                elevatorSection.style.display = 'none';
-                // Clear elevator selection when hiding
-                document.querySelectorAll('input[name="floor-elevator-option"]').forEach(radio => radio.checked = false);
+                liftSection.style.display = 'none';
+                // Clear lift selection when hiding
+                document.querySelectorAll('input[name="floor-lift-option"]').forEach(radio => radio.checked = false);
             }
         }
     });
@@ -4234,8 +4972,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 floorsContainer.removeChild(floorsContainer.firstChild);
             }
             addedFloors.clear();
-            // Clear elevator map for all floors
-            Object.keys(floorElevatorMap).forEach(key => delete floorElevatorMap[key]);
+            // Clear lift map for all floors
+            Object.keys(floorliftMap).forEach(key => delete floorliftMap[key]);
             // Also clear the selected floor in the icon grid and dropdown
             const floorHiddenInput = document.getElementById('pickup-floor-select');
             if (floorHiddenInput) floorHiddenInput.value = '';
@@ -4252,14 +4990,14 @@ document.addEventListener('DOMContentLoaded', function () {
         const floor = floorSelect.value;
         if (!floor || addedFloors.has(floor)) return;
         
-        // Validate elevator selection for non-ground floors
+        // Validate lift selection for non-ground floors
         if (floor !== 'Ground') {
-            const elevatorSelection = document.querySelector('input[name="floor-elevator-option"]:checked');
-            if (!elevatorSelection) {
-                alert('Please select whether an elevator is available for this floor');
+            const liftSelection = document.querySelector('input[name="floor-lift-option"]:checked');
+            if (!liftSelection) {
+                alert('Please select whether an lift is available for this floor');
                 return;
             }
-            floorElevatorMap[floor] = elevatorSelection.value;
+            floorliftMap[floor] = liftSelection.value;
         }
         
         addedFloors.add(floor);
@@ -4279,7 +5017,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    function renderSelectedPickupFloorsInventory(elevatorValue) {
+    function renderSelectedPickupFloorsInventory(liftValue) {
         const selectedFloors = Array.from(window.selectedPickupFloors || []);
 
         if (selectedFloors.length === 0) {
@@ -4301,15 +5039,15 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         addedFloors.clear();
 
-        // Keep saved inventory/elevator state for selected floors and remove stale floors only
+        // Keep saved inventory/lift state for selected floors and remove stale floors only
         Object.keys(multiFloorInventory).forEach(key => {
             if (!selectedFloors.includes(key)) {
                 delete multiFloorInventory[key];
             }
         });
-        Object.keys(floorElevatorMap).forEach(key => {
+        Object.keys(floorliftMap).forEach(key => {
             if (!selectedFloors.includes(key)) {
-                delete floorElevatorMap[key];
+                delete floorliftMap[key];
             }
         });
 
@@ -4318,8 +5056,8 @@ document.addEventListener('DOMContentLoaded', function () {
             .sort((a, b) => getFloorSortOrder(a) - getFloorSortOrder(b))
             .forEach(floor => {
                 addedFloors.add(floor);
-                if (floor !== 'Ground' && elevatorValue && !floorElevatorMap[floor]) {
-                    floorElevatorMap[floor] = elevatorValue;
+                if (floor !== 'Ground' && liftValue && !floorliftMap[floor]) {
+                    floorliftMap[floor] = liftValue;
                 }
                 const block = createInventoryBlock(floor);
                 floorsContainer.appendChild(block);
@@ -4372,7 +5110,7 @@ function getMultiStopLocationIconMarkup(value) {
 }
 
 function getMultiStopNavIconMarkup(type, value) {
-    if (type === 'elevator') {
+    if (type === 'lift') {
         if (value === 'yes') {
             return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v18H7z" fill="currentColor"/><path d="M12 6l2 2h-4z" fill="#fff"/><path d="M12 18l-2-2h4z" fill="#fff"/></svg>';
         }
@@ -4507,7 +5245,7 @@ function buildMultiStopFloorsSection(stopId) {
     if (!stopId) return '';
     const typeId = `${stopId}-location-type`;
     const floorId = `${stopId}-floor`;
-    const elevatorId = `${stopId}-elevator`;
+    const liftId = `${stopId}-lift`;
 
     const typeButtons = [
         { value: 'house', label: 'House' },
@@ -4578,11 +5316,11 @@ function buildMultiStopFloorsSection(stopId) {
                                 </select>
                             </div>
                         </div>
-                        <div class="form-group elevator-group">
-                            <label class="form-label" for="${elevatorId}">Elevator available</label>
+                        <div class="form-group lift-group">
+                            <label class="form-label" for="${liftId}">lift available</label>
                             <div class="location-nav-wrapper">
-                                <div class="location-nav elevator-nav" data-nav-for="${elevatorId}" data-nav-type="elevator" role="radiogroup" aria-label="Elevator available"></div>
-                                <select id="${elevatorId}" class="form-input location-nav-select multi-stop-elevator">
+                                <div class="location-nav lift-nav" data-nav-for="${liftId}" data-nav-type="lift" role="radiogroup" aria-label="lift available"></div>
+                                <select id="${liftId}" class="form-input location-nav-select multi-stop-lift">
                                     <option value="">Select</option>
                                     <option value="yes">Yes</option>
                                     <option value="no">No</option>
@@ -4600,7 +5338,7 @@ function buildMultiStopOfficeFloorsSection(stopId) {
     if (!stopId) return '';
     const typeId = `${stopId}-office-location-type`;
     const floorId = `${stopId}-office-floor`;
-    const elevatorId = `${stopId}-office-elevator`;
+    const liftId = `${stopId}-office-lift`;
 
     const typeButtons = [
         { value: 'traditional', label: 'Traditional' },
@@ -4667,11 +5405,11 @@ function buildMultiStopOfficeFloorsSection(stopId) {
                                 </select>
                             </div>
                         </div>
-                        <div class="form-group elevator-group">
-                            <label class="form-label" for="${elevatorId}">Elevator available</label>
+                        <div class="form-group lift-group">
+                            <label class="form-label" for="${liftId}">lift available</label>
                             <div class="location-nav-wrapper">
-                                <div class="location-nav elevator-nav" data-nav-for="${elevatorId}" data-nav-type="elevator" role="radiogroup" aria-label="Elevator available"></div>
-                                <select id="${elevatorId}" class="form-input location-nav-select multi-stop-elevator">
+                                <div class="location-nav lift-nav" data-nav-for="${liftId}" data-nav-type="lift" role="radiogroup" aria-label="lift available"></div>
+                                <select id="${liftId}" class="form-input location-nav-select multi-stop-lift">
                                     <option value="">Select</option>
                                     <option value="yes">Yes</option>
                                     <option value="no">No</option>
@@ -4845,7 +5583,7 @@ function initMultiStopLocationNavs(card) {
             if (!selectEl) return;
 
         const navType = nav.getAttribute('data-nav-type');
-        if (navType === 'floor' || navType === 'elevator') {
+        if (navType === 'floor' || navType === 'lift') {
             buildNavFromSelect(selectEl, nav, navType);
         } else {
             setNavState(nav, selectEl.value);
@@ -6938,8 +7676,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const setPickupFieldsOptional = (isOptional) => {
         const pickupType = document.getElementById('pickup-location-type');
         const pickupFloor = document.getElementById('pickup-floor');
-        const pickupElevator = document.getElementById('pickup-elevator');
-        [pickupType, pickupFloor, pickupElevator].forEach((field) => {
+        const pickuplift = document.getElementById('pickup-lift');
+        [pickupType, pickupFloor, pickuplift].forEach((field) => {
             if (!field) return;
             setFieldRequired(field, !isOptional);
             if (isOptional) {
@@ -7007,7 +7745,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 details.classList.add('is-visible');
                 details.style.display = 'flex';
             });
-            card.querySelectorAll('.floor-group, .elevator-group, .location-group').forEach((group) => {
+            card.querySelectorAll('.floor-group, .lift-group, .location-group').forEach((group) => {
                 group.style.cssText = 'display: block !important; visibility: visible !important;';
             });
             card.querySelectorAll('.form-group').forEach((group) => {
@@ -7137,7 +7875,7 @@ document.addEventListener('DOMContentLoaded', function() {
             ${floorsMarkup}
             ${houseMarkup}
             ${officeMarkup}
-            <div class="floor-block-elevator">
+            <div class="floor-block-lift">
             </div>
         `;
 
@@ -7148,10 +7886,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         block.querySelectorAll('.office-hidden').forEach((node) => node.classList.remove('office-hidden'));
 
-        const elevatorGroup = block.querySelector('.elevator-group');
-        const elevatorWrap = block.querySelector('.floor-block-elevator');
-        if (elevatorGroup && elevatorWrap) {
-            elevatorWrap.appendChild(elevatorGroup);
+        const liftGroup = block.querySelector('.lift-group');
+        const liftWrap = block.querySelector('.floor-block-lift');
+        if (liftGroup && liftWrap) {
+            liftWrap.appendChild(liftGroup);
         }
 
         syncFloorBlockInventory(block, serviceValue);
@@ -7486,7 +8224,7 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     const getNavIconMarkup = (type, value) => {
-        if (type === 'elevator') {
+        if (type === 'lift') {
             if (value === 'yes') {
                 return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v18H7z" fill="currentColor"/><path d="M12 6l2 2h-4z" fill="#fff"/><path d="M12 18l-2-2h4z" fill="#fff"/></svg>';
             }
@@ -7527,7 +8265,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const nav = getLocationNavForSelect(selectEl);
         if (!nav) return;
         const navType = nav.getAttribute('data-nav-type');
-        if (navType === 'floor' || navType === 'elevator') {
+        if (navType === 'floor' || navType === 'lift') {
             buildNavFromSelect(selectEl, nav, navType);
         } else {
             setNavButtonState(nav, selectEl.value);
@@ -7542,7 +8280,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!selectEl) return;
 
             const navType = nav.getAttribute('data-nav-type');
-            if (navType === 'floor' || navType === 'elevator') {
+            if (navType === 'floor' || navType === 'lift') {
                 buildNavFromSelect(selectEl, nav, navType);
             } else {
                 setNavButtonState(nav, selectEl.value);
@@ -7719,7 +8457,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const setLocationDetailsState = (config, show, options = {}) => {
         const showFloor = options.showFloor !== undefined ? options.showFloor : show;
         const showRooms = options.showRooms !== undefined ? options.showRooms : show;
-        const showElevator = options.showElevator !== undefined ? options.showElevator : show;
+        const showlift = options.showlift !== undefined ? options.showlift : show;
         const details = document.getElementById(config.detailsId);
         if (!details) return;
         details.classList.toggle('is-visible', show);
@@ -7744,18 +8482,18 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        const elevatorSelect = details.querySelector('select[id$="-elevator"]');
-        if (elevatorSelect) {
-            const elevatorGroup = elevatorSelect.closest('.form-group');
-            if (elevatorGroup) {
-                elevatorGroup.style.display = show && showElevator ? '' : 'none';
+        const liftSelect = details.querySelector('select[id$="-lift"]');
+        if (liftSelect) {
+            const liftGroup = liftSelect.closest('.form-group');
+            if (liftGroup) {
+                liftGroup.style.display = show && showlift ? '' : 'none';
             }
-            elevatorSelect.disabled = !show || !showElevator;
-            setFieldRequired(elevatorSelect, show && showElevator);
-            if (!show || !showElevator) {
-                elevatorSelect.value = '';
-                clearFieldError(elevatorSelect);
-                syncNavWithSelect(elevatorSelect);
+            liftSelect.disabled = !show || !showlift;
+            setFieldRequired(liftSelect, show && showlift);
+            if (!show || !showlift) {
+                liftSelect.value = '';
+                clearFieldError(liftSelect);
+                syncNavWithSelect(liftSelect);
             }
         }
 
@@ -7827,7 +8565,7 @@ document.addEventListener('DOMContentLoaded', function() {
             || (isPianoTransport && config.prefix === 'pickup')
             || config.prefix === 'pickup'
             || isVehicleNoFloor;
-        const hideElevator = (config.noElevatorTypes || []).includes(typeValue) || isVehicleNoFloor;
+        const hidelift = (config.noliftTypes || []).includes(typeValue) || isVehicleNoFloor;
 
         const floorSelect = config.floorSelectId ? document.getElementById(config.floorSelectId) : null;
         const floorSelected = floorSelect ? !!floorSelect.value : true;
@@ -7865,7 +8603,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setLocationDetailsState(config, shouldShow, {
             showFloor: !hideFloor,
             showRooms: !hideRooms,
-            showElevator: !hideElevator
+            showlift: !hidelift
         });
 
         if (isPianoTransport && config.prefix === 'delivery') {
@@ -8369,7 +9107,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     index: index + 1,
                     locationType: block.querySelector('.multi-stop-location-type')?.value.trim() || '',
                     floor: block.querySelector('.multi-stop-floor')?.value.trim() || '',
-                    elevator: block.querySelector('.multi-stop-elevator')?.value.trim() || '',
+                    lift: block.querySelector('.multi-stop-lift')?.value.trim() || '',
                     houseInventory: houseState ? {
                         selectedRooms: Array.from(houseState.selectedRooms || []),
                         items: houseState.quantities || {},
@@ -10246,9 +10984,9 @@ function updateMultiStopLocationDetails(card, typeValue) {
     ]);
     if (vehicleNoFloorCategories.has(category)) {
         const floorGroup = card.querySelector('.floor-group');
-        const elevatorGroup = card.querySelector('.elevator-group');
+        const liftGroup = card.querySelector('.lift-group');
         if (floorGroup) floorGroup.style.display = 'none';
-        if (elevatorGroup) elevatorGroup.style.display = 'none';
+        if (liftGroup) liftGroup.style.display = 'none';
         return;
     }
 
@@ -10267,12 +11005,12 @@ function updateMultiStopLocationDetails(card, typeValue) {
     const typeSelect = getVisibleField('.multi-stop-location-type');
     const type = typeValue || typeSelect?.value || '';
     const floorSelect = getVisibleField('.multi-stop-floor');
-    const elevatorSelect = getVisibleField('.multi-stop-elevator');
+    const liftSelect = getVisibleField('.multi-stop-lift');
     const floorGroup = floorSelect ? floorSelect.closest('.floor-group') : card.querySelector('.multi-stop-location-meta[data-location-field="floor"]');
-    const elevatorGroup = elevatorSelect ? elevatorSelect.closest('.elevator-group') : card.querySelector('.multi-stop-location-meta[data-location-field="elevator"]');
+    const liftGroup = liftSelect ? liftSelect.closest('.lift-group') : card.querySelector('.multi-stop-location-meta[data-location-field="lift"]');
 
     const noFloorTypes = new Set(['warehouse/Shop']);
-    const noElevatorTypes = new Set(['house', 'duplex', 'bungalow', 'warehouse/Shop']);
+    const noliftTypes = new Set(['house', 'duplex', 'bungalow', 'warehouse/Shop']);
     const hasType = !!type;
     const resolvedServiceValue = document.getElementById('item-description-hidden')?.value || '';
     const serviceValue = isSingleForm || isFloorBlockCard
@@ -10285,7 +11023,7 @@ function updateMultiStopLocationDetails(card, typeValue) {
         || noFloorTypes.has(type)
         || hideHouseFloor
         || vehicleNoFloorCategories.has(serviceValue);
-    const hideElevator = !hasType || noElevatorTypes.has(type) || vehicleNoFloorCategories.has(serviceValue);
+    const hidelift = !hasType || noliftTypes.has(type) || vehicleNoFloorCategories.has(serviceValue);
 
     const floorsSection = card.querySelector('[data-stop-section="floors"], [data-stop-section="office-floors"]');
     const detailsBlock = floorsSection
@@ -10323,12 +11061,12 @@ function updateMultiStopLocationDetails(card, typeValue) {
         }
     }
 
-    if (elevatorGroup) elevatorGroup.style.display = hideElevator ? 'none' : '';
-    if (elevatorSelect) {
-        if (hideElevator) {
-            elevatorSelect.value = '';
-            setMultiStopFieldRequired(elevatorSelect, false);
-            const nav = elevatorGroup ? elevatorGroup.querySelector('.location-nav') : null;
+    if (liftGroup) liftGroup.style.display = hidelift ? 'none' : '';
+    if (liftSelect) {
+        if (hidelift) {
+            liftSelect.value = '';
+            setMultiStopFieldRequired(liftSelect, false);
+            const nav = liftGroup ? liftGroup.querySelector('.location-nav') : null;
             if (nav) {
                 nav.querySelectorAll('.location-nav-btn').forEach((btn) => {
                     btn.classList.remove('is-active');
@@ -10336,7 +11074,7 @@ function updateMultiStopLocationDetails(card, typeValue) {
                 });
             }
         } else {
-            setMultiStopFieldRequired(elevatorSelect, false);
+            setMultiStopFieldRequired(liftSelect, false);
         }
     }
 
@@ -10632,7 +11370,7 @@ function updateMultiStopCategorySections(card, category) {
                     });
                 }
             } else {
-                setMultiStopFieldRequired(field, fieldType !== 'elevator');
+                setMultiStopFieldRequired(field, fieldType !== 'lift');
             }
         }
     });
@@ -11821,7 +12559,7 @@ function collectMultiStopStops() {
             postcode: getValueById('postcode'),
             locationType: getValue('.multi-stop-location-type'),
             floor: getValue('.multi-stop-floor'),
-            elevator: getValue('.multi-stop-elevator'),
+            lift: getValue('.multi-stop-lift'),
             rooms,
             items,
             notes: specialInstructions,
