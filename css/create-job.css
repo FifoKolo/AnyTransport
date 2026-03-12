@@ -165,14 +165,14 @@ body[data-form-step="3"] .form-stepper, body[data-current-step="3"] .form-steppe
     text-shadow: 0 2px 8px rgba(37,99,235,0.08);
     text-align: center;
 }
-/* Elevator icon grid - match icon style */
-.elevator-icon-grid {
+/* lift icon grid - match icon style */
+.lift-icon-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(80px, 1fr));
     gap: 12px;
     margin-bottom: 8px;
 }
-.elevator-icon-btn {
+.lift-icon-btn {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -191,16 +191,16 @@ body[data-form-step="3"] .form-stepper, body[data-current-step="3"] .form-steppe
     transition: border-color 0.2s, box-shadow 0.2s, color 0.2s, background 0.2s;
     text-align: center;
 }
-.elevator-icon-btn svg {
+.lift-icon-btn svg {
     width: 22px;
     height: 22px;
 }
-.elevator-icon-btn:hover {
+.lift-icon-btn:hover {
     border-color: #4A90E2;
     color: #4A90E2;
     background: #f0f7ff;
 }
-.elevator-icon-btn.selected, .elevator-icon-btn.is-active, .elevator-icon-btn:focus {
+.lift-icon-btn.selected, .lift-icon-btn.is-active, .lift-icon-btn:focus {
     border-color: #4A90E2;
     color: #1f5fbf;
     background: #e3f2fd;
@@ -334,8 +334,8 @@ body[data-form-step="3"] .form-stepper, body[data-current-step="3"] .form-steppe
 .btn-outline:hover, .btn-primary:hover, .btn-primary.btn-large:hover, .btn-primary.btn-large.v2:hover {
     background: linear-gradient(90deg, #357ABD 0%, #4A90E2 100%) !important;
 }
-/* Elevator Option Styling */
-#elevator-option-container {
+/* lift Option Styling */
+#lift-option-container {
     width: 100%;
     max-width: 600px;
     margin: 40px auto 0 auto;
@@ -344,13 +344,13 @@ body[data-form-step="3"] .form-stepper, body[data-current-step="3"] .form-steppe
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
-#elevator-option-container label {
+#lift-option-container label {
     font-size: 1.15rem;
     font-weight: 600;
     display: block;
     margin-bottom: 12px;
 }
-#elevator-available.form-input {
+#lift-available.form-input {
     width: 100%;
     max-width: 300px;
     font-size: 1rem;
@@ -1331,14 +1331,14 @@ body:not([data-form-step="3"]) #office-removal-inventory-section {
     margin-bottom: 12px;
 }
 
-.floor-block-elevator {
+.floor-block-lift {
     background: #f9fafb;
     border: 1px solid #e5e7eb;
     border-radius: 10px;
     padding: 12px;
 }
 
-.floor-block-elevator .form-label {
+.floor-block-lift .form-label {
     margin-bottom: 8px;
 }
 
@@ -1354,7 +1354,7 @@ body:not([data-form-step="3"]) #office-removal-inventory-section {
 
 #generic-floors-section [data-location-group="pickup"],
 #generic-floors-section [data-location-group="pickup-details"] .floor-group,
-#generic-floors-section [data-location-group="pickup-details"] .elevator-group {
+#generic-floors-section [data-location-group="pickup-details"] .lift-group {
     display: none;
 }
 
@@ -2082,7 +2082,7 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     width: 20px;
     height: 20px;
 }
-.elevator-nav {
+.lift-nav {
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .location-nav-btn {
@@ -2250,14 +2250,14 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
-    --elevator-width: clamp(160px, 28vw, 220px);
+    --lift-width: clamp(160px, 28vw, 220px);
 }
 .location-detail-row.floors-layout {
     display: grid;
-    grid-template-columns: 1fr var(--elevator-width);
+    grid-template-columns: 1fr var(--lift-width);
     grid-template-rows: auto auto;
 }
-.location-detail-row.floors-layout .elevator-group {
+.location-detail-row.floors-layout .lift-group {
     grid-column: 2;
     grid-row: 1;
 }
@@ -2365,7 +2365,7 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
         grid-template-columns: 1fr;
         grid-template-rows: auto auto;
     }
-    .location-detail-row.floors-layout .elevator-group {
+    .location-detail-row.floors-layout .lift-group {
         grid-column: 1;
         grid-row: 1;
     }
