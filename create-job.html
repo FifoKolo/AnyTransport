@@ -1726,10 +1726,18 @@
                                         <button type="button" class="service-option-btn" data-service="packing" data-value="yes">Yes</button>
                                     </div>
                                     <input type="hidden" id="service-packing" name="service-packing" value="">
+                                    <input type="hidden" id="service-packing-mode" name="service-packing-mode" value="">
                                     <input type="hidden" id="service-packing-items" name="service-packing-items" value="">
+                                    <div id="packing-mode-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
+                                        <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">How would you like packing done?</div>
+                                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                            <button type="button" class="packing-mode-btn" data-value="all" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Pack everything</button>
+                                            <button type="button" class="packing-mode-btn" data-value="selected" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Select items</button>
+                                        </div>
+                                    </div>
                                     <div id="packing-items-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
                                         <div style="font-weight:700; color:#1f2937; margin-bottom:4px; font-size:1rem;">Choose items to pack</div>
-                                        <div style="font-size:0.86rem; color:#4b5563; margin-bottom:8px;">Select items and set how many units you want packed.</div>
+                                        <div style="font-size:0.86rem; color:#4b5563; margin-bottom:8px;">Items are grouped by pickup floor and room. Expand a floor, then a room, to select items and set how many units you want packed.</div>
                                         <div id="packing-items-list" style="display:flex; flex-direction:column; gap:6px;"></div>
                                         <div id="packing-items-empty" style="display:none; color:#6b7280; font-size:0.9rem; padding:8px 0;">No inventory items available to pack yet.</div>
                                     </div>

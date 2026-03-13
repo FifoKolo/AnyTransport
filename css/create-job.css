@@ -454,6 +454,39 @@ body.multi-floor-inventory-mode #house-removal-inventory-section > #room-tabs {
     color: #888 !important;
     fill: #888 !important;
 }
+
+/* Step 3 inventory: keep title and room navbar visible while scrolling */
+body[data-form-step="3"] #house-removal-inventory-section > .inventory-floor-title {
+    position: sticky;
+    top: 78px;
+    z-index: 35;
+    background: #f9fafb;
+    margin: 0 0 10px;
+    padding: 8px 0 10px;
+}
+
+body[data-form-step="3"] #house-removal-inventory-section > #room-tabs {
+    position: sticky;
+    top: 132px;
+    z-index: 34;
+    background: #ffffff;
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+}
+
+body[data-form-step="3"] #house-removal-inventory-section > #room-items-container {
+    position: relative;
+    z-index: 1;
+}
+
+@media (max-width: 900px) {
+    body[data-form-step="3"] #house-removal-inventory-section > .inventory-floor-title {
+        top: 70px;
+    }
+
+    body[data-form-step="3"] #house-removal-inventory-section > #room-tabs {
+        top: 118px;
+    }
+}
 .inventory-items-list {
     list-style: none;
     margin: 0;
@@ -520,20 +553,21 @@ body.multi-floor-inventory-mode #house-removal-inventory-section > #room-tabs {
 }
 
 .room-item-quantity-btn {
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
     padding: 0;
-    border: 1px solid #2563eb;
+    border: 2px solid #2563eb;
     background: #fff;
-    border-radius: 4px;
+    border-radius: 8px;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px;
+    font-size: 24px;
     color: #2563eb;
     transition: all 0.2s ease;
-    font-weight: bold;
+    font-weight: 900;
+    line-height: 1;
 }
 
 .room-item-quantity-btn:hover {

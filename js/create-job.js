@@ -290,7 +290,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 <li class="inventory-item${selected ? ' selected' : ''}" data-item="${item}" data-room="${room}">
                     <span class="inventory-item-label">${displayName}</span>
                     <div class="room-item-controls" data-item="${item}" data-room="${room}">
-                        <button type="button" class="room-item-quantity-btn room-item-qty-minus" data-item="${item}" data-room="${room}">−</button>
+                        <button type="button" class="room-item-quantity-btn room-item-qty-minus" data-item="${item}" data-room="${room}">-</button>
                         <input type="number" class="room-item-quantity-display" value="${qty}" min="0" data-item="${item}" data-room="${room}">
                         <button type="button" class="room-item-quantity-btn room-item-qty-plus" data-item="${item}" data-room="${room}">+</button>
                         ${actionButtons}
@@ -948,9 +948,124 @@ document.addEventListener('DOMContentLoaded', function () {
             ensureMultiFloorInventoryVisible();
             updateStep3InventoryWarning();
         };
+
+        function getStep5EmptySelectedDeliveryFloors() {
+            const selectedFloors = window.selectedDeliveryFloors;
+            const assignments = window.itemFloorAssignments || {};
+            if (!selectedFloors || !(selectedFloors instanceof Set) || selectedFloors.size === 0) {
+                return [];
+            }
+
+            return Array.from(selectedFloors).filter((floor) => {
+                let hasAssignedItems = false;
+
+                Object.keys(assignments).forEach((itemKey) => {
+                    if (hasAssignedItems) return;
+                    const perFloor = assignments[itemKey];
+                    const qty = perFloor ? (parseInt(perFloor[floor], 10) || 0) : 0;
+                    if (qty > 0) {
+                        hasAssignedItems = true;
+                    }
+                });
+
+                return !hasAssignedItems;
+            });
+        }
+
+        function showStep5EmptyFloorsConfirmation(emptyFloors) {
+            return new Promise((resolve) => {
+                const backdrop = document.createElement('div');
+                backdrop.style.cssText = `
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(15, 23, 42, 0.45);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 9999;
+                    padding: 16px;
+                `;
+
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    width: min(560px, 100%);
+                    background: #fff;
+                    border: 1px solid #dbeafe;
+                    border-radius: 12px;
+                    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.25);
+                    padding: 18px;
+                `;
+
+                const title = document.createElement('h3');
+                title.textContent = 'Some selected delivery floors are empty';
+                title.style.cssText = 'margin: 0 0 10px 0; color: #1e3a8a; font-size: 1.12rem; font-weight: 800;';
+
+                const body = document.createElement('p');
+                body.style.cssText = 'margin: 0 0 12px 0; color: #334155; line-height: 1.5; font-size: 0.95rem;';
+                body.textContent = `You selected ${emptyFloors.length} delivery floor${emptyFloors.length > 1 ? 's' : ''} with no assigned items: ${emptyFloors.join(', ')}.`;
+
+                const prompt = document.createElement('p');
+                prompt.style.cssText = 'margin: 0 0 16px 0; color: #475569; font-size: 0.92rem;';
+                prompt.textContent = 'Do you want to continue to Step 6 anyway, or go back and update your inventory assignments?';
+
+                const actions = document.createElement('div');
+                actions.style.cssText = 'display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap;';
+
+                const editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.textContent = 'Go back and change inventory';
+                editBtn.style.cssText = `
+                    border: 1px solid #93c5fd;
+                    background: #eff6ff;
+                    color: #1d4ed8;
+                    border-radius: 8px;
+                    padding: 9px 12px;
+                    font-size: 0.9rem;
+                    font-weight: 700;
+                    cursor: pointer;
+                `;
+
+                const continueBtn = document.createElement('button');
+                continueBtn.type = 'button';
+                continueBtn.textContent = 'Continue to Step 6';
+                continueBtn.style.cssText = `
+                    border: none;
+                    background: #1d4ed8;
+                    color: #fff;
+                    border-radius: 8px;
+                    padding: 9px 12px;
+                    font-size: 0.9rem;
+                    font-weight: 800;
+                    cursor: pointer;
+                `;
+
+                const closeModal = (shouldContinue) => {
+                    backdrop.remove();
+                    resolve(shouldContinue);
+                };
+
+                editBtn.addEventListener('click', () => closeModal(false));
+                continueBtn.addEventListener('click', () => closeModal(true));
+                backdrop.addEventListener('click', (event) => {
+                    if (event.target === backdrop) {
+                        closeModal(false);
+                    }
+                });
+
+                actions.appendChild(editBtn);
+                actions.appendChild(continueBtn);
+                modal.appendChild(title);
+                modal.appendChild(body);
+                modal.appendChild(prompt);
+                modal.appendChild(actions);
+                backdrop.appendChild(modal);
+                document.body.appendChild(backdrop);
+            });
+        }
+
         // Sync sticky button with normal Next button
         if (stickyNextBtn) {
-            stickyNextBtn.onclick = function() {
+            stickyNextBtn.onclick = async function() {
                 const step = parseInt(document.body.dataset.formStep || '1', 10);
                 if (!requirementsMetForStep(step)) {
                     stickyNextBtn.disabled = true;
@@ -958,6 +1073,21 @@ document.addEventListener('DOMContentLoaded', function () {
                     stickyNextBtn.style.opacity = '0.5';
                     return;
                 }
+
+                if (step === 5) {
+                    const organizationSection = document.getElementById('item-organization-section');
+                    const isOrganizationVisible = !!(organizationSection && organizationSection.offsetParent !== null);
+                    if (isOrganizationVisible) {
+                        const emptyFloors = getStep5EmptySelectedDeliveryFloors();
+                        if (emptyFloors.length > 0) {
+                            const shouldContinue = await showStep5EmptyFloorsConfirmation(emptyFloors);
+                            if (!shouldContinue) {
+                                return;
+                            }
+                        }
+                    }
+                }
+
                 stickyNextBtn.disabled = false;
                 stickyNextBtn.classList.remove('disabled');
                 stickyNextBtn.style.opacity = '1';
@@ -1078,6 +1208,50 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    // Persistent expand state for packing items floor/room tree
+    const packingExpandedFloors = new Set();
+    const packingExpandedRooms = new Set();
+
+    // Room definitions for packing item grouping (mirrors Step 5)
+    const PACKING_ROOM_CATS = {
+        hallway:  { name: 'Hallway',       icon: '🚪' },
+        shed:     { name: 'Shed',           icon: '🏚️' },
+        utility:  { name: 'Utility room',   icon: '🧺' },
+        living:   { name: 'Living',         icon: '🛋️' },
+        dining:   { name: 'Dining',         icon: '🍽️' },
+        kitchen:  { name: 'Kitchen',        icon: '🍳' },
+        office:   { name: 'Office',         icon: '💼' },
+        bedrooms: { name: 'Bedrooms',       icon: '🛏️' },
+        bathrooms:{ name: 'Bathrooms',      icon: '🚿' },
+        garden:   { name: 'Garden',         icon: '🌳' },
+        boxes:    { name: 'Boxes & Other',  icon: '📦' }
+    };
+
+    const PACKING_ROOM_ITEMS_MAP = {
+        living:    ['2 seater sofa','3 seater sofa','Armchair','Coffee table','TV','TV Unit','Side Tables','Book Case','Rug','Artwork','Lamps & Shades','Small Boxes','Medium Boxes','Large Boxes','XL Boxes'],
+        dining:    ['Dining Table - 6 person','Dining Table - 8/10 person','Dining Chairs','Cabinet Dresser','Display Unit','Side Board','Rug','Small Boxes','Medium Boxes','Large Boxes','XL Boxes'],
+        kitchen:   ['Kitchen Table','Chairs','Fridge','Fridge Freezer','Tumble Dryer','Washing Machine','Oven','Microwave','Shelving Unit','Bin','Vacuum Cleaner','Small Boxes','Medium Boxes','Large Boxes','XL Boxes'],
+        office:    ['Desk','Chair','Pedestal','Filing cabinet','Desktop computer','Photocopier','Printer','Board room table','Crates','Small Boxes','Medium Boxes','Large Boxes','XL Boxes'],
+        bedrooms:  ['Kingsize Bed','Double Bed','Single Bed','Bedside Tables','Chest of Drawers','Wardrobe','Dressing Table','Mirror','Lamps & Shades','Suitcase','Wardrobe Boxes','Small Boxes','Medium Boxes','Large Boxes','XL Boxes'],
+        bathrooms: ['Bathroom Cabinet','Storage units','Mirror','Bath','Sink','Rug','Small Boxes','Medium Boxes','Large Boxes','XL Boxes'],
+        hallway:   ['Console table','Coat rack','Shoe rack','Mirror','Runner rug','Umbrella stand','Storage bench','Small Boxes','Medium Boxes','Large Boxes','XL Boxes'],
+        garden:    ['Garden table','Chairs','Bench','Parasol','Lawn mower','Barbecue','Bicycle','Small Boxes','Medium Boxes','Large Boxes','XL Boxes'],
+        utility:   ['Washing Machine','Tumble Dryer','Ironing Board','Vacuum Cleaner','Shelving Unit','Laundry Basket','Small Boxes','Medium Boxes','Large Boxes','XL Boxes'],
+        shed:      ['Tool Chest','Workbench','Lawn mower','Garden tools','Bike','Storage boxes','Small Boxes','Medium Boxes','Large Boxes','XL Boxes'],
+        boxes:     ['Small Boxes','Medium Boxes','Large Boxes','XL Boxes','Artwork','Bicycle','Suitcase','Wardrobe Boxes','Treadmill','Fish Tank']
+    };
+
+    function getPackingRoomForItem(itemName) {
+        if (itemName.includes(' - ')) {
+            const prefix = itemName.split(' - ')[0].toLowerCase();
+            if (PACKING_ROOM_CATS[prefix]) return prefix;
+        }
+        for (const [roomKey, items] of Object.entries(PACKING_ROOM_ITEMS_MAP)) {
+            if (items.includes(itemName)) return roomKey;
+        }
+        return 'boxes';
+    }
+
     function parsePackingItemsSelection(raw) {
         if (!raw) return {};
         try {
@@ -1137,140 +1311,251 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function renderPackingItemsConfig() {
         const packingInput = document.getElementById('service-packing');
+        const packingModeInput = document.getElementById('service-packing-mode');
+        const packingModeConfig = document.getElementById('packing-mode-config');
         const container = document.getElementById('packing-items-config');
         const list = document.getElementById('packing-items-list');
         const empty = document.getElementById('packing-items-empty');
         const hiddenInput = document.getElementById('service-packing-items');
 
-        if (!packingInput || !container || !list || !empty || !hiddenInput) return;
+        if (!packingInput || !packingModeInput || !packingModeConfig || !container || !list || !empty || !hiddenInput) return;
 
         const isPackingYes = packingInput.value === 'yes';
-        container.style.display = isPackingYes ? 'block' : 'none';
+        packingModeConfig.style.display = isPackingYes ? 'block' : 'none';
 
-        if (!isPackingYes) return;
+        const modeButtons = Array.from(document.querySelectorAll('.packing-mode-btn'));
+        modeButtons.forEach((btn) => {
+            const isActive = btn.getAttribute('data-value') === packingModeInput.value;
+            btn.style.background = isActive ? '#1d4ed8' : '#eff6ff';
+            btn.style.color = isActive ? '#fff' : '#1d4ed8';
+            btn.style.borderColor = isActive ? '#1d4ed8' : '#93c5fd';
+        });
 
-        const items = getPackingEligibleItems();
+        if (!isPackingYes) {
+            container.style.display = 'none';
+            return;
+        }
+
+        const packingMode = packingModeInput.value;
+        const isSelectMode = packingMode === 'selected';
+        container.style.display = isSelectMode ? 'block' : 'none';
+
+        if (!isSelectMode) {
+            if (packingMode === 'all') {
+                hiddenInput.value = '';
+            }
+            return;
+        }
+
         const currentState = parsePackingItemsSelection(hiddenInput.value);
+
+        // Build byFloor: { floorName: { roomKey: { itemName: maxQty } } }
+        const byFloor = {};
+        const floorOrder = ['Basement','Ground','1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','Attic'];
+
+        const addItem = (floorName, itemName, qty) => {
+            const q = parseInt(qty, 10) || 0;
+            if (!itemName || q <= 0) return;
+            if (!byFloor[floorName]) byFloor[floorName] = {};
+            const room = getPackingRoomForItem(itemName);
+            if (!byFloor[floorName][room]) byFloor[floorName][room] = {};
+            byFloor[floorName][room][itemName] = (byFloor[floorName][room][itemName] || 0) + q;
+        };
+
+        if (window.itemQuantities && typeof window.itemQuantities === 'object') {
+            const sourceFloor = document.getElementById('pickup-floor-select')?.value || 'Ground';
+            Object.entries(window.itemQuantities).forEach(([name, qty]) => addItem(sourceFloor, name, qty));
+        }
+        if (window.multiFloorInventory && typeof window.multiFloorInventory === 'object') {
+            Object.entries(window.multiFloorInventory).forEach(([floor, items]) => {
+                if (items && typeof items === 'object') {
+                    Object.entries(items).forEach(([name, qty]) => addItem(floor, name, qty));
+                }
+            });
+        }
 
         list.innerHTML = '';
 
-        if (items.length === 0) {
+        const sortedFloors = Object.keys(byFloor).sort((a, b) => {
+            const ia = floorOrder.indexOf(a), ib = floorOrder.indexOf(b);
+            return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+        });
+
+        if (sortedFloors.length === 0) {
             empty.style.display = 'block';
             hiddenInput.value = '';
             return;
         }
-
         empty.style.display = 'none';
 
-        items.forEach((item) => {
-            const maxQty = item.total;
-            const selectedQty = Math.max(0, Math.min(maxQty, parseInt(currentState[item.name], 10) || 0));
-            const isChecked = selectedQty > 0;
+        sortedFloors.forEach(floor => {
+            const roomsInFloor = byFloor[floor];
+            const floorExpanded = packingExpandedFloors.has(floor);
 
-            const row = document.createElement('div');
-            row.style.cssText = `
-                display:flex;
-                align-items:center;
-                justify-content:space-between;
-                gap:8px;
-                padding:6px 8px;
-                border:1px solid #dbeafe;
-                border-radius:8px;
-                background:#fff;
-            `;
+            const floorEl = document.createElement('div');
+            floorEl.style.cssText = 'margin-bottom:10px;border:1px solid #bfdbfe;border-radius:10px;overflow:hidden;';
 
-            const left = document.createElement('label');
-            left.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer;';
+            const floorHeader = document.createElement('div');
+            floorHeader.style.cssText = 'padding:10px 14px;background:#dbeafe;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;';
 
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.checked = isChecked;
-            checkbox.style.cssText = 'width:16px;height:16px;';
+            const floorLabel = document.createElement('span');
+            floorLabel.style.cssText = 'font-weight:700;color:#1e40af;font-size:0.95rem;';
+            floorLabel.textContent = `📍 ${floor} Floor`;
 
-            const labelText = document.createElement('span');
-            labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
-            labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:break-word;font-size:0.95rem;">${item.name}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
+            const floorChevron = document.createElement('span');
+            floorChevron.style.cssText = 'font-weight:900;color:#1d4ed8;font-size:1.45rem;line-height:1;min-width:20px;text-align:center;';
+            floorChevron.textContent = floorExpanded ? '-' : '+';
 
-            left.appendChild(checkbox);
-            left.appendChild(labelText);
+            floorHeader.appendChild(floorLabel);
+            floorHeader.appendChild(floorChevron);
+            floorEl.appendChild(floorHeader);
 
-            const controls = document.createElement('div');
-            controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+            const floorContent = document.createElement('div');
+            floorContent.style.cssText = `max-height:${floorExpanded ? '2000px' : '0'};padding:${floorExpanded ? '10px' : '0'};background:#f8fbff;overflow:hidden;transition:max-height 0.35s ease, padding 0.35s ease;`;
 
-            const minusBtn = document.createElement('button');
-            minusBtn.type = 'button';
-            minusBtn.textContent = '-';
-            minusBtn.style.cssText = 'width:24px;height:24px;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:6px;cursor:pointer;font-weight:700;line-height:1;';
-
-            const qtyInput = document.createElement('input');
-            qtyInput.type = 'number';
-            qtyInput.min = '0';
-            qtyInput.max = String(maxQty);
-            qtyInput.value = String(selectedQty);
-            qtyInput.style.cssText = 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
-
-            const plusBtn = document.createElement('button');
-            plusBtn.type = 'button';
-            plusBtn.textContent = '+';
-            plusBtn.style.cssText = 'width:24px;height:24px;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:6px;cursor:pointer;font-weight:700;line-height:1;';
-
-            const applyDisabledState = () => {
-                const disabled = !checkbox.checked;
-                minusBtn.disabled = disabled;
-                plusBtn.disabled = disabled;
-                qtyInput.disabled = disabled;
-                minusBtn.style.opacity = disabled ? '0.5' : '1';
-                plusBtn.style.opacity = disabled ? '0.5' : '1';
-                qtyInput.style.opacity = disabled ? '0.7' : '1';
-            };
-
-            checkbox.addEventListener('change', () => {
-                if (checkbox.checked) {
-                    const nextQty = Math.max(1, parseInt(qtyInput.value, 10) || 0);
-                    setPackingItemQty(item.name, nextQty, maxQty);
+            floorHeader.addEventListener('click', () => {
+                const willExpand = !packingExpandedFloors.has(floor);
+                if (willExpand) {
+                    packingExpandedFloors.add(floor);
                 } else {
-                    setPackingItemQty(item.name, 0, maxQty);
+                    packingExpandedFloors.delete(floor);
                 }
-                renderPackingItemsConfig();
-                if (window.updateNextButtonState) window.updateNextButtonState();
+                floorChevron.textContent = willExpand ? '-' : '+';
+                floorContent.style.maxHeight = willExpand ? '2000px' : '0';
+                floorContent.style.padding = willExpand ? '10px' : '0';
             });
 
-            minusBtn.addEventListener('click', () => {
-                const nextQty = (parseInt(qtyInput.value, 10) || 0) - 1;
-                setPackingItemQty(item.name, nextQty, maxQty);
-                renderPackingItemsConfig();
-                if (window.updateNextButtonState) window.updateNextButtonState();
+            // Sort rooms by display name
+            Object.keys(roomsInFloor).sort((a, b) => {
+                return (PACKING_ROOM_CATS[a]?.name || a).localeCompare(PACKING_ROOM_CATS[b]?.name || b);
+            }).forEach(roomKey => {
+                const itemsInRoom = roomsInFloor[roomKey];
+                const roomStateKey = `${floor}::${roomKey}`;
+                const roomExpanded = packingExpandedRooms.has(roomStateKey);
+
+                const roomEl = document.createElement('div');
+                roomEl.style.cssText = 'margin-bottom:8px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;';
+
+                const roomHeader = document.createElement('div');
+                roomHeader.style.cssText = 'padding:8px 12px;background:#f3f4f6;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;';
+
+                const roomLabel = document.createElement('span');
+                roomLabel.style.cssText = 'font-weight:600;color:#374151;font-size:0.9rem;display:flex;align-items:center;gap:6px;';
+                roomLabel.textContent = `${PACKING_ROOM_CATS[roomKey]?.icon || '📦'} ${PACKING_ROOM_CATS[roomKey]?.name || roomKey}`;
+
+                const roomCount = document.createElement('span');
+                roomCount.style.cssText = 'font-size:0.78rem;color:#6b7280;background:#e5e7eb;padding:2px 7px;border-radius:999px;font-weight:600;margin-left:6px;';
+                roomCount.textContent = Object.keys(itemsInRoom).length;
+
+                const roomChevron = document.createElement('span');
+                roomChevron.style.cssText = 'font-weight:900;color:#374151;font-size:1.35rem;line-height:1;min-width:20px;text-align:center;margin-left:auto;';
+                roomChevron.textContent = roomExpanded ? '-' : '+';
+
+                const roomLabelWrap = document.createElement('div');
+                roomLabelWrap.style.cssText = 'display:flex;align-items:center;gap:4px;';
+                roomLabelWrap.appendChild(roomLabel);
+                roomLabelWrap.appendChild(roomCount);
+
+                roomHeader.appendChild(roomLabelWrap);
+                roomHeader.appendChild(roomChevron);
+                roomEl.appendChild(roomHeader);
+
+                const roomContent = document.createElement('div');
+                roomContent.style.cssText = `display:${roomExpanded ? 'flex' : 'none'};flex-direction:column;gap:4px;padding:8px;background:#fff;`;
+
+                roomHeader.addEventListener('click', () => {
+                    if (packingExpandedRooms.has(roomStateKey)) {
+                        packingExpandedRooms.delete(roomStateKey);
+                    } else {
+                        packingExpandedRooms.add(roomStateKey);
+                    }
+                    renderPackingItemsConfig();
+                });
+
+                // Render each item
+                Object.entries(itemsInRoom).forEach(([itemName, maxQty]) => {
+                    const selectedQty = Math.max(0, Math.min(maxQty, parseInt(currentState[itemName], 10) || 0));
+                    const isChecked = selectedQty > 0;
+
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;';
+
+                    const left = document.createElement('div');
+                    left.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
+
+                    const labelText = document.createElement('span');
+                    labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
+                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:break-word;font-size:0.95rem;">${itemName}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
+
+                    left.appendChild(labelText);
+
+                    const controls = document.createElement('div');
+                    controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+                    const minusBtn = document.createElement('button');
+                    minusBtn.type = 'button';
+                    minusBtn.textContent = '-';
+                    minusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
+
+                    const qtyInput = document.createElement('input');
+                    qtyInput.type = 'number';
+                    qtyInput.min = '0';
+                    qtyInput.max = String(maxQty);
+                    qtyInput.value = String(selectedQty);
+                    qtyInput.style.cssText = 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
+
+                    const plusBtn = document.createElement('button');
+                    plusBtn.type = 'button';
+                    plusBtn.textContent = '+';
+                    plusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
+
+                    minusBtn.addEventListener('click', () => {
+                        const nextQty = (parseInt(qtyInput.value, 10) || 0) - 1;
+                        setPackingItemQty(itemName, nextQty, maxQty);
+                        renderPackingItemsConfig();
+                        if (window.updateNextButtonState) window.updateNextButtonState();
+                    });
+
+                    plusBtn.addEventListener('click', () => {
+                        const nextQty = (parseInt(qtyInput.value, 10) || 0) + 1;
+                        setPackingItemQty(itemName, nextQty, maxQty);
+                        renderPackingItemsConfig();
+                        if (window.updateNextButtonState) window.updateNextButtonState();
+                    });
+
+                    qtyInput.addEventListener('change', () => {
+                        setPackingItemQty(itemName, qtyInput.value, maxQty);
+                        renderPackingItemsConfig();
+                        if (window.updateNextButtonState) window.updateNextButtonState();
+                    });
+
+                    controls.appendChild(minusBtn);
+                    controls.appendChild(qtyInput);
+                    controls.appendChild(plusBtn);
+                    row.appendChild(left);
+                    row.appendChild(controls);
+                    roomContent.appendChild(row);
+                });
+
+                roomEl.appendChild(roomContent);
+                floorContent.appendChild(roomEl);
             });
 
-            plusBtn.addEventListener('click', () => {
-                const nextQty = (parseInt(qtyInput.value, 10) || 0) + 1;
-                setPackingItemQty(item.name, nextQty, maxQty);
-                renderPackingItemsConfig();
-                if (window.updateNextButtonState) window.updateNextButtonState();
-            });
-
-            qtyInput.addEventListener('change', () => {
-                setPackingItemQty(item.name, qtyInput.value, maxQty);
-                renderPackingItemsConfig();
-                if (window.updateNextButtonState) window.updateNextButtonState();
-            });
-
-            controls.appendChild(minusBtn);
-            controls.appendChild(qtyInput);
-            controls.appendChild(plusBtn);
-
-            row.appendChild(left);
-            row.appendChild(controls);
-            list.appendChild(row);
-
-            applyDisabledState();
+            floorEl.appendChild(floorContent);
+            list.appendChild(floorEl);
         });
     }
 
     window.hasValidPackingSelection = function() {
         const packingInput = document.getElementById('service-packing');
+        const packingModeInput = document.getElementById('service-packing-mode');
         const hiddenInput = document.getElementById('service-packing-items');
         if (!packingInput || packingInput.value !== 'yes') return true;
+        if (!packingModeInput) return false;
+
+        const mode = packingModeInput.value;
+        if (mode === 'all') return true;
+        if (mode !== 'selected') return false;
         if (!hiddenInput) return false;
 
         const state = parsePackingItemsSelection(hiddenInput.value);
@@ -1281,11 +1566,35 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.addEventListener('change', function(e) {
         if (!e.target) return;
-        if (e.target.id === 'service-packing' || e.target.id === 'service-packing-items') {
+        if (e.target.id === 'service-packing' || e.target.id === 'service-packing-items' || e.target.id === 'service-packing-mode') {
             renderPackingItemsConfig();
             if (window.updateNextButtonState) {
                 window.updateNextButtonState();
             }
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        const modeBtn = e.target.closest('.packing-mode-btn');
+        if (!modeBtn) return;
+
+        e.preventDefault();
+        const modeInput = document.getElementById('service-packing-mode');
+        const itemsInput = document.getElementById('service-packing-items');
+        if (!modeInput) return;
+
+        const selectedMode = modeBtn.getAttribute('data-value');
+        modeInput.value = selectedMode;
+        modeInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+        if (selectedMode === 'all' && itemsInput) {
+            itemsInput.value = '';
+            itemsInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        renderPackingItemsConfig();
+        if (window.updateNextButtonState) {
+            window.updateNextButtonState();
         }
     });
     
@@ -1310,6 +1619,19 @@ document.addEventListener('DOMContentLoaded', function () {
         
         // Update hidden input
         hiddenInput.value = value;
+
+        if (service === 'packing') {
+            const modeInput = document.getElementById('service-packing-mode');
+            const itemsInput = document.getElementById('service-packing-items');
+            if (value === 'no') {
+                if (modeInput) modeInput.value = '';
+                if (itemsInput) itemsInput.value = '';
+            } else {
+                if (modeInput && !modeInput.value) {
+                    modeInput.value = 'all';
+                }
+            }
+        }
         
         // Trigger change event for button state updates
         hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
@@ -3181,11 +3503,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const floorToggleIcon = document.createElement('span');
             floorToggleIcon.style.cssText = `
-                font-weight: 700;
+                font-weight: 900;
                 color: #1d4ed8;
-                font-size: 1rem;
+                font-size: 1.45rem;
+                line-height: 1;
+                min-width: 20px;
+                text-align: center;
             `;
-            floorToggleIcon.textContent = sourceFloorExpanded ? '−' : '+';
+            floorToggleIcon.textContent = sourceFloorExpanded ? '-' : '+';
 
             floorToggleBtn.appendChild(floorToggleLabel);
             floorToggleBtn.appendChild(floorToggleIcon);
@@ -3194,17 +3519,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const floorRoomsContainer = document.createElement('div');
             floorRoomsContainer.style.cssText = `
-                display: ${sourceFloorExpanded ? 'block' : 'none'};
-                margin-bottom: 12px;
+                max-height: ${sourceFloorExpanded ? '2000px' : '0'};
+                padding: ${sourceFloorExpanded ? '0' : '0'};
+                margin-bottom: ${sourceFloorExpanded ? '12px' : '0'};
+                overflow: hidden;
+                transition: max-height 0.35s ease, margin-bottom 0.35s ease;
             `;
 
             floorToggleBtn.addEventListener('click', () => {
-                if (expandedSourceInventoryFloors.has(sourceFloor)) {
-                    expandedSourceInventoryFloors.delete(sourceFloor);
-                } else {
+                const willExpand = !expandedSourceInventoryFloors.has(sourceFloor);
+                if (willExpand) {
                     expandedSourceInventoryFloors.add(sourceFloor);
+                } else {
+                    expandedSourceInventoryFloors.delete(sourceFloor);
                 }
-                renderInventoryByRoom();
+                floorToggleIcon.textContent = willExpand ? '-' : '+';
+                floorRoomsContainer.style.maxHeight = willExpand ? '2000px' : '0';
+                floorRoomsContainer.style.marginBottom = willExpand ? '12px' : '0';
             });
             
             // Render rooms within this floor
@@ -3293,12 +3624,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     background: none;
                     border: none;
                     cursor: pointer;
-                    font-size: 0.9rem;
+                    font-size: 1.4rem;
                     padding: 0;
-                    color: #6b7280;
-                    font-weight: bold;
+                    color: #374151;
+                    font-weight: 900;
+                    line-height: 1;
+                    min-width: 20px;
+                    text-align: center;
                 `;
-                expandBtn.textContent = expandedState.isExpanded ? '−' : '+';
+                expandBtn.textContent = expandedState.isExpanded ? '-' : '+';
                 
                 roomHeader.appendChild(roomHeaderLeft);
                 roomHeader.appendChild(expandBtn);
@@ -3310,11 +3644,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     display: flex;
                     flex-direction: column;
                     gap: 0;
-                    padding: 8px;
+                    padding: ${expandedState.isExpanded ? '8px' : '0'};
                     background: #fff;
                     max-height: ${expandedState.isExpanded ? '1000px' : '0'};
                     overflow: hidden;
-                    transition: max-height 0.3s ease;
+                    transition: max-height 0.3s ease, padding 0.3s ease;
                 `;
                 itemsContainer.setAttribute('data-room-items', roomKey);
                 
@@ -3506,8 +3840,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 
                 roomHeader.addEventListener('click', () => {
                     expandedState.isExpanded = !expandedState.isExpanded;
-                    expandBtn.textContent = expandedState.isExpanded ? '−' : '+';
+                    expandBtn.textContent = expandedState.isExpanded ? '-' : '+';
                     itemsContainer.style.maxHeight = expandedState.isExpanded ? '1000px' : '0';
+                    itemsContainer.style.padding = expandedState.isExpanded ? '8px' : '0';
                     roomSection.setAttribute('data-room-collapsed', !expandedState.isExpanded);
                     if (expandedState.isExpanded) {
                         expandedSections.add(roomExpandKey);
@@ -3579,9 +3914,12 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         
-        // Render each delivery floor (only selected ones)
-        const floorsToRender = selectedDeliveryFloors.size > 0 
-            ? Array.from(selectedDeliveryFloors).filter(floor => deliveryFloors.includes(floor))
+        // Render each delivery floor (only selected ones), sorted in canonical floor order.
+        const floorSortOrder = new Map(deliveryFloors.map((floorName, index) => [floorName, index]));
+        const floorsToRender = selectedDeliveryFloors.size > 0
+            ? Array.from(selectedDeliveryFloors)
+                .filter(floor => floorSortOrder.has(floor))
+                .sort((a, b) => floorSortOrder.get(a) - floorSortOrder.get(b))
             : deliveryFloors;
             
         floorsToRender.forEach(floor => {
@@ -3660,11 +3998,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const floorChevron = document.createElement('span');
             floorChevron.style.cssText = `
-                font-size: 1.1rem;
-                color: #6b7280;
-                font-weight: 700;
+                font-size: 1.5rem;
+                color: #334155;
+                font-weight: 900;
+                line-height: 1;
+                min-width: 20px;
+                text-align: center;
             `;
-            floorChevron.textContent = floorIsExpanded ? '−' : '+';
+            floorChevron.textContent = floorIsExpanded ? '-' : '+';
 
             floorHeaderBtn.appendChild(headerLeft);
             floorHeaderBtn.appendChild(floorChevron);
@@ -3672,10 +4013,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const floorContent = document.createElement('div');
             floorContent.style.cssText = `
-                margin-top: 12px;
-                padding-top: 12px;
+                max-height: ${floorIsExpanded ? '3000px' : '0'};
+                overflow: hidden;
+                transition: max-height 0.35s ease, padding-top 0.35s ease, margin-top 0.35s ease;
+                margin-top: ${floorIsExpanded ? '12px' : '0'};
+                padding-top: ${floorIsExpanded ? '12px' : '0'};
                 border-top: 2px solid #e5e7eb;
-                display: ${floorIsExpanded ? 'block' : 'none'};
             `;
 
             const headerActions = document.createElement('div');
@@ -3877,11 +4220,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     const roomChevron = document.createElement('span');
                     roomChevron.style.cssText = `
-                        color: #6b7280;
-                        font-weight: 700;
-                        font-size: 1rem;
+                        color: #334155;
+                        font-weight: 900;
+                        font-size: 1.35rem;
+                        line-height: 1;
+                        min-width: 20px;
+                        text-align: center;
                     `;
-                    roomChevron.textContent = roomExpanded ? '−' : '+';
+                    roomChevron.textContent = roomExpanded ? '-' : '+';
 
                     roomHeaderBtn.appendChild(roomHeaderLeft);
                     roomHeaderBtn.appendChild(roomChevron);
@@ -4021,7 +4367,10 @@ document.addEventListener('DOMContentLoaded', function () {
                         }
                     });
                 }
-                renderDeliveryFloors();
+                floorChevron.textContent = willExpand ? '−' : '+';
+                floorContent.style.maxHeight = willExpand ? '3000px' : '0';
+                floorContent.style.paddingTop = willExpand ? '12px' : '0';
+                floorContent.style.marginTop = willExpand ? '12px' : '0';
             });
 
             floorSection.appendChild(floorContent);
@@ -4155,6 +4504,53 @@ document.addEventListener('DOMContentLoaded', function () {
         blocks.forEach(block => floorsContainer.appendChild(block));
     };
 
+    let inventoryStickyRaf = null;
+
+    const getInventoryStickyTopOffset = () => {
+        const nav = document.querySelector('.navbar');
+        const navHeight = nav ? Math.round(nav.getBoundingClientRect().height) : 72;
+        return navHeight + 6;
+    };
+
+    const updateInventoryStickyTracks = () => {
+        if (!floorsContainer) return;
+
+        const stickyTop = getInventoryStickyTopOffset();
+        const blocks = Array.from(floorsContainer.querySelectorAll('.floor-inventory-block'));
+
+        blocks.forEach((block) => {
+            const stickyTrack = block.querySelector('.inventory-sticky-track');
+            const stickySpacer = block.querySelector('.inventory-sticky-spacer');
+            const listWrap = block.querySelector('.room-items-list');
+            if (!stickyTrack || !listWrap || !stickySpacer) return;
+
+            const blockRect = block.getBoundingClientRect();
+            const blockTopAbs = window.scrollY + blockRect.top;
+            const blockHeight = block.offsetHeight;
+            const trackHeight = stickyTrack.offsetHeight;
+
+            let shift = window.scrollY + stickyTop - blockTopAbs;
+            const maxShift = Math.max(0, blockHeight - trackHeight - 8);
+
+            if (shift < 0) shift = 0;
+            if (shift > maxShift) shift = maxShift;
+
+            stickyTrack.style.transform = `translateY(${shift}px)`;
+            stickySpacer.style.height = `${trackHeight + 8}px`;
+        });
+    };
+
+    const scheduleInventoryStickyTracks = () => {
+        if (inventoryStickyRaf) return;
+        inventoryStickyRaf = requestAnimationFrame(() => {
+            inventoryStickyRaf = null;
+            updateInventoryStickyTracks();
+        });
+    };
+
+    window.addEventListener('scroll', scheduleInventoryStickyTracks, { passive: true });
+    window.addEventListener('resize', scheduleInventoryStickyTracks);
+
     // Use the main propertyFloors object from the top of the file
     // Room types and SVGs for inventory-tabs
     const roomTypes = [
@@ -4255,17 +4651,22 @@ document.addEventListener('DOMContentLoaded', function () {
         const block = document.createElement('div');
         block.className = 'floor-inventory-block';
         block.setAttribute('data-floor', initialFloorName);  // Store floor name as data attribute for easy access
+        block.style.overflow = 'visible';
+        block.style.position = 'relative';
         
         // Use a mutable reference for floor name so closures can access the updated value
         const floorRef = { name: initialFloorName };
 
         // Title wrapper with controls
         const titleWrapper = document.createElement('div');
+        titleWrapper.className = 'inventory-block-header';
         titleWrapper.style.display = 'flex';
         titleWrapper.style.alignItems = 'center';
         titleWrapper.style.justifyContent = 'space-between';
-        titleWrapper.style.marginBottom = '18px';
+        titleWrapper.style.marginBottom = '8px';
         titleWrapper.style.gap = '12px';
+        titleWrapper.style.background = '#f9fafb';
+        titleWrapper.style.paddingTop = '8px';
 
         // Title
         const title = document.createElement('h3');
@@ -4493,7 +4894,17 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         titleWrapper.appendChild(deleteFloorBtn);
 
-        block.appendChild(titleWrapper);
+        const stickyTrack = document.createElement('div');
+        stickyTrack.className = 'inventory-sticky-track';
+        stickyTrack.style.position = 'absolute';
+        stickyTrack.style.left = '0';
+        stickyTrack.style.right = '0';
+        stickyTrack.style.width = '100%';
+        stickyTrack.style.top = '0';
+        stickyTrack.style.zIndex = '95';
+        stickyTrack.style.willChange = 'transform';
+        stickyTrack.style.background = '#f9fafb';
+        stickyTrack.appendChild(titleWrapper);
         
         // Helper function to sync floor inventory to global storage
         const syncFloorToGlobal = () => {
@@ -4513,7 +4924,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Inventory tabs (room type icons)
         const tabs = document.createElement('div');
-        tabs.className = 'inventory-tabs';
+        tabs.className = 'inventory-tabs inventory-tabs-sticky';
+        tabs.style.background = '#fff';
+        tabs.style.boxShadow = '0 6px 16px rgba(15, 23, 42, 0.08)';
+        tabs.style.marginBottom = '0';
+        tabs.style.width = '100%';
         roomTypes.forEach((room, idx) => {
             const btn = document.createElement('button');
             btn.className = 'inventory-tab';
@@ -4531,13 +4946,23 @@ document.addEventListener('DOMContentLoaded', function () {
         // Set the first tab as active by default
         const firstTab = tabs.querySelector('.inventory-tab');
         if (firstTab) firstTab.classList.add('active');
-        block.appendChild(tabs);
+        stickyTrack.appendChild(tabs);
+        block.appendChild(stickyTrack);
+
+        const stickySpacer = document.createElement('div');
+        stickySpacer.className = 'inventory-sticky-spacer';
+        stickySpacer.style.width = '100%';
+        stickySpacer.style.height = '0';
+        block.appendChild(stickySpacer);
 
         // Item list
         const ul = document.createElement('ul');
         ul.className = 'inventory-items-list';
         const listWrap = document.createElement('div');
         listWrap.className = 'room-items-list';
+        listWrap.style.maxHeight = 'none';
+        listWrap.style.overflowY = 'visible';
+        listWrap.style.overflowX = 'visible';
         listWrap.appendChild(ul);
         // Track custom items for this floor
         const customFloorItems = [];
@@ -4627,7 +5052,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 minusBtn.className = 'room-item-quantity-btn room-item-qty-minus';
                 minusBtn.setAttribute('data-item', itemName);
                 minusBtn.setAttribute('data-tracking-key', trackingKey);
-                minusBtn.textContent = '−';
+                minusBtn.textContent = '-';
                 
                 const qtyDisplay = document.createElement('input');
                 qtyDisplay.type = 'number';
@@ -4822,6 +5247,8 @@ document.addEventListener('DOMContentLoaded', function () {
         
         renderItems(currentTab);
         block.appendChild(listWrap);
+
+        scheduleInventoryStickyTracks();
         
         // Update items on tab click
         tabs.querySelectorAll('.inventory-tab').forEach(tabBtn => {
@@ -5064,9 +5491,17 @@ document.addEventListener('DOMContentLoaded', function () {
             });
 
         sortFloorsInContainer();
+        scheduleInventoryStickyTracks();
+        scheduleInventoryStickyTracks();
     }
 
     window.renderSelectedPickupFloorsInventory = renderSelectedPickupFloorsInventory;
+
+    // Recalculate sticky track positions after DOM mutations in inventory blocks.
+    const inventoryStickyObserver = new MutationObserver(() => {
+        scheduleInventoryStickyTracks();
+    });
+    inventoryStickyObserver.observe(floorsContainer, { childList: true, subtree: true });
 });
 // --- Inventory UI Functionality ---
 // (Legacy inventoryItems/inventoryList code removed as new inventory system is in use)
@@ -11185,7 +11620,7 @@ function renderMultiStopHouseItems(stopId, room) {
                 <div class="room-item ${isSelected ? 'selected' : ''}">
                     <span class="room-item-name">${item}</span>
                     <div class="room-item-controls">
-                        <button type="button" class="room-item-quantity-btn room-item-qty-minus multi-stop-house-qty" data-stop-id="${stopId}" data-item="${item}" data-room="${room}" data-subroom="${activeSubRoom}" data-action="minus" ${qty === 0 ? 'disabled' : ''}>−</button>
+                        <button type="button" class="room-item-quantity-btn room-item-qty-minus multi-stop-house-qty" data-stop-id="${stopId}" data-item="${item}" data-room="${room}" data-subroom="${activeSubRoom}" data-action="minus" ${qty === 0 ? 'disabled' : ''}>-</button>
                         <input type="number" class="room-item-quantity-display" value="${qty}" min="0" data-stop-id="${stopId}" data-item="${item}" data-room="${room}" data-subroom="${activeSubRoom}">
                         <button type="button" class="room-item-quantity-btn room-item-qty-plus multi-stop-house-qty" data-stop-id="${stopId}" data-item="${item}" data-room="${room}" data-subroom="${activeSubRoom}" data-action="plus">+</button>
                     </div>
@@ -11265,7 +11700,7 @@ function renderMultiStopOfficeInventory(stopId) {
             <div class="room-item ${isSelected ? 'selected' : ''}">
                 <span class="room-item-name">${item.name}</span>
                 <div class="room-item-controls">
-                    <button type="button" class="room-item-quantity-btn room-item-qty-minus multi-stop-office-qty" data-stop-id="${stopId}" data-item="${item.name}" data-action="minus" ${qty === 0 ? 'disabled' : ''}>−</button>
+                    <button type="button" class="room-item-quantity-btn room-item-qty-minus multi-stop-office-qty" data-stop-id="${stopId}" data-item="${item.name}" data-action="minus" ${qty === 0 ? 'disabled' : ''}>-</button>
                     <input type="number" class="room-item-quantity-display" value="${qty}" min="0" data-stop-id="${stopId}" data-item="${item.name}">
                     <button type="button" class="room-item-quantity-btn room-item-qty-plus multi-stop-office-qty" data-stop-id="${stopId}" data-item="${item.name}" data-action="plus">+</button>
                 </div>
