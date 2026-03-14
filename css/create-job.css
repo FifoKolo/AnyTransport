@@ -19,6 +19,58 @@
     outline: none;
 }
 
+.step3-save-inventory-btn {
+    display: none;
+    margin: 12px auto 0;
+    width: min(100%, 260px);
+    padding: 12px 18px;
+    border: 1px solid #2563eb;
+    border-radius: 8px;
+    background: #fff;
+    color: #1e40af;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.step3-save-inventory-btn:hover,
+.step3-save-inventory-btn:focus {
+    background: #eff6ff;
+    border-color: #1d4ed8;
+    color: #1d4ed8;
+    outline: none;
+}
+
+.step3-floor-save-btn {
+    display: block;
+    margin: 12px auto 0;
+    width: min(100%, 260px);
+    padding: 10px 16px;
+    border: 1px solid #16a34a;
+    border-radius: 8px;
+    background: #f0fdf4;
+    color: #166534;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.step3-floor-save-btn:hover,
+.step3-floor-save-btn:focus {
+    background: #dcfce7;
+    border-color: #15803d;
+    color: #14532d;
+    outline: none;
+}
+
+@media (max-width: 768px) {
+    .step3-save-inventory-btn {
+        display: block;
+    }
+}
+
 .add-custom-inventory-btn {
     display: block;
     margin: 32px auto 0 auto;
@@ -3775,21 +3827,40 @@ input[type="file"]:focus {
         overflow-x: visible !important;
     }
 
-    #house-removal-inventory-section .inventory-tabs,
-    .floor-inventory-block .inventory-tabs,
-    .room-tabs--fullbleed {
-        display: flex !important;
-        flex-wrap: nowrap !important;
+    body[data-form-step="3"] #house-removal-inventory-section .floor-inventory-block .inventory-tabs,
+    body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-block .inventory-tabs,
+    body[data-form-step="3"] #house-removal-inventory-section .floor-inventory-block .inventory-tabs-sticky,
+    body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-block .inventory-tabs-sticky {
+        display: grid !important;
+        grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+        grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
+        grid-auto-flow: column !important;
+        grid-auto-columns: minmax(78px, 1fr) !important;
+        gap: 0 !important;
         overflow-x: auto !important;
         overflow-y: hidden !important;
         -webkit-overflow-scrolling: touch;
-        white-space: nowrap;
+        white-space: normal !important;
         touch-action: pan-x;
     }
 
-    #house-removal-inventory-section .inventory-tab,
-    .floor-inventory-block .inventory-tab {
-        flex: 0 0 auto !important;
+    body[data-form-step="3"] #house-removal-inventory-section .inventory-tab,
+    body[data-current-step="3"] #house-removal-inventory-section .inventory-tab {
+        width: 100% !important;
+        min-width: 0 !important;
+        flex: none !important;
+        margin: 0 !important;
+        min-height: 74px !important;
+        padding: 8px 6px !important;
+        font-size: 0.88rem !important;
+        line-height: 1.15 !important;
+    }
+
+    body[data-form-step="3"] #house-removal-inventory-section > #room-tabs.is-hidden-by-multi-floor,
+    body[data-current-step="3"] #house-removal-inventory-section > #room-tabs.is-hidden-by-multi-floor,
+    body[data-form-step="3"] #house-removal-inventory-section > #room-items-container.is-hidden-by-multi-floor,
+    body[data-current-step="3"] #house-removal-inventory-section > #room-items-container.is-hidden-by-multi-floor {
+        display: none !important;
     }
 
     #pickup-floors-selector,
@@ -3828,6 +3899,10 @@ input[type="file"]:focus {
         gap: 0.6rem !important;
     }
 
+    #property-type-icon-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
     .property-type-icon-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
@@ -3858,7 +3933,7 @@ input[type="file"]:focus {
         margin-top: 64px !important;
     }
 
-    .property-type-icon-grid {
-        grid-template-columns: 1fr !important;
+    #property-type-icon-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 }

@@ -498,6 +498,141 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function getInventoryRoomFromTrackingKey(trackingKey) {
+        if (!trackingKey || typeof trackingKey !== 'string') return null;
+
+        const prefixedMatch = trackingKey.match(/^([^\-]+)\s-\s(.+)$/);
+        if (prefixedMatch && prefixedMatch[1]) {
+            const roomFromPrefix = prefixedMatch[1].trim().toLowerCase();
+            if (ROOM_ITEMS[roomFromPrefix]) {
+                return roomFromPrefix;
+            }
+        }
+
+        const normalizedKey = trackingKey.trim().toLowerCase();
+        const knownRoom = Object.keys(ROOM_ITEMS).find((roomName) => {
+            return ROOM_ITEMS[roomName].some((itemName) => itemName.toLowerCase() === normalizedKey);
+        });
+        if (knownRoom) return knownRoom;
+
+        return null;
+    }
+
+    function buildStep3InventorySnapshot() {
+        const selectedRooms = new Set();
+
+        Object.keys(itemQuantities || {}).forEach((trackingKey) => {
+            const qty = parseInt(itemQuantities[trackingKey], 10) || 0;
+            if (qty <= 0) return;
+            const roomName = getInventoryRoomFromTrackingKey(trackingKey);
+            if (roomName) selectedRooms.add(roomName);
+        });
+
+        Object.keys(customItems || {}).forEach((roomName) => {
+            if (customItems[roomName] && customItems[roomName].length > 0) {
+                selectedRooms.add(roomName);
+            }
+        });
+
+        return {
+            savedAt: Date.now(),
+            selectedRooms: Array.from(selectedRooms),
+            itemQuantities: { ...(itemQuantities || {}) },
+            customItems: { ...(customItems || {}) },
+            selectedPickupFloors: Array.from(window.selectedPickupFloors || []),
+            multiFloorInventory: window.multiFloorInventory && typeof window.multiFloorInventory === 'object'
+                ? { ...window.multiFloorInventory }
+                : {}
+        };
+    }
+
+    window.saveStep3InventorySnapshot = function saveStep3InventorySnapshot(options = {}) {
+        const snapshot = buildStep3InventorySnapshot();
+        const floorName = typeof options.floorName === 'string' ? options.floorName.trim() : '';
+
+        // Keep per-floor save metadata so each floor save action is tracked independently.
+        let existingFloorSavedAt = {};
+        try {
+            const rawExisting = localStorage.getItem('house_removal_inventory');
+            if (rawExisting) {
+                const parsedExisting = JSON.parse(rawExisting);
+                if (parsedExisting && parsedExisting.floorSavedAt && typeof parsedExisting.floorSavedAt === 'object') {
+                    existingFloorSavedAt = parsedExisting.floorSavedAt;
+                }
+            }
+        } catch (error) {
+            existingFloorSavedAt = {};
+        }
+
+        snapshot.floorSavedAt = { ...existingFloorSavedAt };
+        if (floorName) {
+            snapshot.floorSavedAt[floorName] = Date.now();
+            snapshot.lastSavedFloor = floorName;
+        }
+
+        try {
+            localStorage.setItem('house_removal_inventory', JSON.stringify(snapshot));
+        } catch (error) {
+            console.warn('Unable to save step 3 inventory snapshot:', error);
+            return false;
+        }
+
+        if (!options.silent && typeof window.saveCreateJobProgress === 'function') {
+            window.saveCreateJobProgress();
+        }
+
+        return true;
+    };
+
+    function bindTouchAndClickSave(targetButton, onSave) {
+        if (!targetButton || typeof onSave !== 'function') return;
+
+        let suppressClick = false;
+
+        targetButton.addEventListener('touchend', (event) => {
+            suppressClick = true;
+            onSave(event);
+            setTimeout(() => {
+                suppressClick = false;
+            }, 350);
+        }, { passive: false });
+
+        targetButton.addEventListener('click', (event) => {
+            if (suppressClick) {
+                event.preventDefault();
+                return;
+            }
+            onSave(event);
+        });
+    }
+
+    const saveInventoryBtn = document.getElementById('step3-save-inventory-btn');
+    if (saveInventoryBtn) {
+        const defaultLabel = saveInventoryBtn.textContent || 'Save Inventory';
+
+        const showSavedState = () => {
+            saveInventoryBtn.textContent = 'Inventory Saved';
+            clearTimeout(saveInventoryBtn.__resetLabelTimer);
+            saveInventoryBtn.__resetLabelTimer = setTimeout(() => {
+                saveInventoryBtn.textContent = defaultLabel;
+            }, 1800);
+        };
+
+        const runInventorySave = (event) => {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            const didSave = window.saveStep3InventorySnapshot();
+            if (didSave) {
+                showSavedState();
+            }
+        };
+
+        bindTouchAndClickSave(saveInventoryBtn, runInventorySave);
+    }
+
     // Room tab logic
     const roomTabs = document.querySelectorAll('#room-tabs .inventory-tab');
     roomTabs.forEach(tab => {
@@ -631,10 +766,16 @@ function renderFloorIcons(propertyType) {
     const floorsContainer = document.querySelector('.floors-inventory-container');
     if (floorsContainer) {
         Array.from(floorsContainer.children).forEach(block => {
+            const floorFromData = block.getAttribute('data-floor');
+            if (floorFromData) {
+                usedFloors.add(floorFromData.trim());
+                return;
+            }
             const title = block.querySelector('h3');
             if (title) {
                 let match = title.textContent.match(/Add Inventory for (.+) Floor/);
                 if (!match) match = title.textContent.match(/Inventory for (.+) Floor/);
+                if (!match) match = title.textContent.match(/^(.+) Floor$/);
                 if (match && match[1]) {
                     usedFloors.add(match[1].trim());
                 }
@@ -2396,7 +2537,7 @@ window.toggleDeliveryFloor = function(floor) {
                 if (inventoryFloorTitle && floorHiddenInput) {
                     const floor = floorHiddenInput.value;
                     if (floor) {
-                        inventoryFloorTitle.textContent = ` Add Inventory for ${floor} Floor`;
+                        inventoryFloorTitle.textContent = `${floor} Floor`;
                     } else {
                         inventoryFloorTitle.textContent = '';
                     }
@@ -2494,10 +2635,16 @@ function renderFloorIcons(propertyType) {
     const floorsContainer = document.querySelector('.floors-inventory-container');
     if (floorsContainer) {
         Array.from(floorsContainer.children).forEach(block => {
+            const floorFromData = block.getAttribute('data-floor');
+            if (floorFromData) {
+                usedFloors.add(floorFromData.trim());
+                return;
+            }
             const title = block.querySelector('h3');
             if (title) {
                 let match = title.textContent.match(/Add Inventory for (.+) Floor/);
                 if (!match) match = title.textContent.match(/Inventory for (.+) Floor/);
+                if (!match) match = title.textContent.match(/^(.+) Floor$/);
                 if (match && match[1]) {
                     usedFloors.add(match[1].trim());
                 }
@@ -4472,6 +4619,25 @@ document.addEventListener('DOMContentLoaded', function () {
     const multiFloorInventory = {};
     window.multiFloorInventory = multiFloorInventory;  // Expose globally
 
+    const syncBaseRoomInventoryVisibility = () => {
+        const basicRoomTabs = document.getElementById('room-tabs');
+        const basicRoomContainer = document.getElementById('room-items-container');
+        const hasFloorBlocks = !!(floorsContainer && floorsContainer.children.length > 0);
+
+        if (basicRoomTabs) {
+            basicRoomTabs.style.display = hasFloorBlocks ? 'none' : '';
+            basicRoomTabs.classList.toggle('is-hidden-by-multi-floor', hasFloorBlocks);
+        }
+        if (basicRoomContainer) {
+            basicRoomContainer.style.display = hasFloorBlocks ? 'none' : '';
+            basicRoomContainer.classList.toggle('is-hidden-by-multi-floor', hasFloorBlocks);
+        }
+        if (floorsContainer) {
+            floorsContainer.style.display = hasFloorBlocks ? '' : 'none';
+        }
+        document.body.classList.toggle('multi-floor-inventory-mode', hasFloorBlocks);
+    };
+
     // Storage for lift availability per floor (floor name -> 'yes' or 'no')
     const floorliftMap = {};
 
@@ -4653,9 +4819,32 @@ document.addEventListener('DOMContentLoaded', function () {
         block.setAttribute('data-floor', initialFloorName);  // Store floor name as data attribute for easy access
         block.style.overflow = 'visible';
         block.style.position = 'relative';
+
+        const bindFloorSaveHandlers = (targetButton, onSave) => {
+            if (!targetButton || typeof onSave !== 'function') return;
+
+            let suppressClick = false;
+
+            targetButton.addEventListener('touchend', (event) => {
+                suppressClick = true;
+                onSave(event);
+                setTimeout(() => {
+                    suppressClick = false;
+                }, 350);
+            }, { passive: false });
+
+            targetButton.addEventListener('click', (event) => {
+                if (suppressClick) {
+                    event.preventDefault();
+                    return;
+                }
+                onSave(event);
+            });
+        };
         
         // Use a mutable reference for floor name so closures can access the updated value
         const floorRef = { name: initialFloorName };
+        let saveFloorBtn = null;
 
         // Title wrapper with controls
         const titleWrapper = document.createElement('div');
@@ -4671,7 +4860,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Title
         const title = document.createElement('h3');
         title.className = 'inventory-floor-title';
-        title.textContent = `Add Inventory for ${floorRef.name} Floor`;
+        title.textContent = `${floorRef.name} Floor`;
         title.style.margin = '0';
         title.style.flex = '1';
         titleWrapper.appendChild(title);
@@ -4820,7 +5009,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 block.setAttribute('data-floor', newFloor);
                 
                 // Update title
-                title.textContent = `Add Inventory for ${newFloor} Floor`;
+                title.textContent = `${newFloor} Floor`;
+
+                if (saveFloorBtn) {
+                    saveFloorBtn.textContent = `Save ${newFloor} Floor`;
+                }
                 
                 // Sort floors after changing
                 sortFloorsInContainer();
@@ -4890,6 +5083,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (typeof window.updateNextButtonState === 'function') {
                     window.updateNextButtonState();
                 }
+
+                syncBaseRoomInventoryVisibility();
             }
         });
         titleWrapper.appendChild(deleteFloorBtn);
@@ -5267,6 +5462,37 @@ document.addEventListener('DOMContentLoaded', function () {
         addCustomBtn.style.marginTop = '18px';
         block.appendChild(addCustomBtn);
 
+        saveFloorBtn = document.createElement('button');
+        saveFloorBtn.type = 'button';
+        saveFloorBtn.className = 'step3-floor-save-btn';
+        saveFloorBtn.textContent = `Save ${floorRef.name} Floor`;
+        block.appendChild(saveFloorBtn);
+
+        const showFloorSavedState = () => {
+            if (!saveFloorBtn) return;
+            saveFloorBtn.textContent = `${floorRef.name} Saved`;
+            clearTimeout(saveFloorBtn.__resetLabelTimer);
+            saveFloorBtn.__resetLabelTimer = setTimeout(() => {
+                saveFloorBtn.textContent = `Save ${floorRef.name} Floor`;
+            }, 1800);
+        };
+
+        const runFloorSave = (event) => {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            syncFloorToGlobal();
+            const didSave = typeof window.saveStep3InventorySnapshot === 'function'
+                ? window.saveStep3InventorySnapshot({ floorName: floorRef.name })
+                : false;
+            if (didSave) {
+                showFloorSavedState();
+            }
+        };
+
+        bindFloorSaveHandlers(saveFloorBtn, runFloorSave);
+
         // Modal for custom item
         const customModal = document.createElement('div');
         customModal.className = 'custom-inventory-modal';
@@ -5352,10 +5578,16 @@ document.addEventListener('DOMContentLoaded', function () {
         // Get already added floors robustly
         const usedFloors = new Set();
         Array.from(floorsContainer.children).forEach(block => {
+            const floorFromData = block.getAttribute('data-floor');
+            if (floorFromData) {
+                usedFloors.add(floorFromData.trim());
+                return;
+            }
             const title = block.querySelector('h3');
             if (title) {
                 let match = title.textContent.match(/Add Inventory for (.+) Floor/);
                 if (!match) match = title.textContent.match(/Inventory for (.+) Floor/);
+                if (!match) match = title.textContent.match(/^(.+) Floor$/);
                 if (match && match[1]) {
                     usedFloors.add(match[1].trim());
                 }
@@ -5406,6 +5638,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (floorHiddenInput) floorHiddenInput.value = '';
             // Re-render floor icons for the new property type
             renderFloorIcons(propertyTypeSelect.value);
+            syncBaseRoomInventoryVisibility();
         });
     }
     // Cancel modal
@@ -5430,6 +5663,7 @@ document.addEventListener('DOMContentLoaded', function () {
         addedFloors.add(floor);
         const block = createInventoryBlock(floor);
         floorsContainer.appendChild(block);
+        syncBaseRoomInventoryVisibility();
         
         // Sort floors in logical order
         sortFloorsInContainer();
@@ -5448,7 +5682,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const selectedFloors = Array.from(window.selectedPickupFloors || []);
 
         if (selectedFloors.length === 0) {
-            document.body.classList.remove('multi-floor-inventory-mode');
+            syncBaseRoomInventoryVisibility();
             return;
         }
 
@@ -5493,6 +5727,7 @@ document.addEventListener('DOMContentLoaded', function () {
         sortFloorsInContainer();
         scheduleInventoryStickyTracks();
         scheduleInventoryStickyTracks();
+        syncBaseRoomInventoryVisibility();
     }
 
     window.renderSelectedPickupFloorsInventory = renderSelectedPickupFloorsInventory;
@@ -5500,8 +5735,11 @@ document.addEventListener('DOMContentLoaded', function () {
     // Recalculate sticky track positions after DOM mutations in inventory blocks.
     const inventoryStickyObserver = new MutationObserver(() => {
         scheduleInventoryStickyTracks();
+        syncBaseRoomInventoryVisibility();
     });
     inventoryStickyObserver.observe(floorsContainer, { childList: true, subtree: true });
+
+    syncBaseRoomInventoryVisibility();
 });
 // --- Inventory UI Functionality ---
 // (Legacy inventoryItems/inventoryList code removed as new inventory system is in use)
