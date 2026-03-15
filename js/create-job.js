@@ -179,7 +179,12 @@ document.addEventListener('DOMContentLoaded', function () {
     
     // Helper function to get display name for items
     function getItemDisplayName(trackingKey) {
-        return trackingKey; // Display the full tracking key (e.g., "Living - Small Boxes")
+        if (!trackingKey || typeof trackingKey !== 'string') return trackingKey;
+        const boxPrefixMatch = trackingKey.match(/^([^\-]+)\s-\s(Small Boxes|Medium Boxes|Large Boxes|XL Boxes|Extra Large Boxes)$/i);
+        if (boxPrefixMatch && boxPrefixMatch[2]) {
+            return boxPrefixMatch[2];
+        }
+        return trackingKey;
     }
     
     // Helper function to check if an item is a box
@@ -283,8 +288,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 <button type="button" class="item-delete-btn" data-item="${item}" title="Delete item" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#ef4444;font-weight:600;margin-left:4px;">✕</button>
             ` : '';
             
-            // Display name shows room prefix for boxes
-            const displayName = isBoxItem(item) && room ? `${room.charAt(0).toUpperCase() + room.slice(1)} - ${item}` : item;
+            const displayName = getItemDisplayName(trackingKey);
             
             html += `
                 <li class="inventory-item${selected ? ' selected' : ''}" data-item="${item}" data-room="${room}">
@@ -1054,17 +1058,33 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Check mover quantity inputs
                 const pickupMovers = document.getElementById('service-pickup-movers');
                 const deliveryMovers = document.getElementById('service-delivery-movers');
+                const pickupMoversMode = document.getElementById('service-pickup-movers-mode');
+                const deliveryMoversMode = document.getElementById('service-delivery-movers-mode');
                 
-                if (!pickupMovers || pickupMovers.value === '') {
+                if (!pickupMovers || ((pickupMoversMode?.value || 'count') !== 'unsure' && pickupMovers.value === '')) {
                     return false;
                 }
-                if (!deliveryMovers || deliveryMovers.value === '') {
+                if (!deliveryMovers || ((deliveryMoversMode?.value || 'count') !== 'unsure' && deliveryMovers.value === '')) {
                     return false;
                 }
 
                 const packingInput = document.getElementById('service-packing');
                 if (packingInput && packingInput.value === 'yes') {
                     if (typeof window.hasValidPackingSelection === 'function' && !window.hasValidPackingSelection()) {
+                        return false;
+                    }
+                }
+
+                const storageInput = document.getElementById('service-storage');
+                if (storageInput && storageInput.value === 'yes') {
+                    if (typeof window.hasValidStorageSelection === 'function' && !window.hasValidStorageSelection()) {
+                        return false;
+                    }
+                }
+
+                const disassemblyInput = document.getElementById('service-disassembly');
+                if (disassemblyInput && disassemblyInput.value === 'yes') {
+                    if (typeof window.hasValidDisassemblySelection === 'function' && !window.hasValidDisassemblySelection()) {
                         return false;
                     }
                 }
@@ -1340,18 +1360,35 @@ document.addEventListener('DOMContentLoaded', function () {
         // Initialize all service inputs on page load
         const pickupMovers = document.getElementById('service-pickup-movers');
         const deliveryMovers = document.getElementById('service-delivery-movers');
+        const pickupMoversMode = document.getElementById('service-pickup-movers-mode');
+        const deliveryMoversMode = document.getElementById('service-delivery-movers-mode');
+
+        if (pickupMoversMode && !pickupMoversMode.value) {
+            pickupMoversMode.value = 'count';
+        }
+        if (deliveryMoversMode && !deliveryMoversMode.value) {
+            deliveryMoversMode.value = 'count';
+        }
         
-        if (pickupMovers && !pickupMovers.value) {
+        if (pickupMovers && (!pickupMoversMode || pickupMoversMode.value !== 'unsure') && !pickupMovers.value) {
             pickupMovers.value = '0';
         }
-        if (deliveryMovers && !deliveryMovers.value) {
+        if (deliveryMovers && (!deliveryMoversMode || deliveryMoversMode.value !== 'unsure') && !deliveryMovers.value) {
             deliveryMovers.value = '0';
         }
+
+        syncMoversUnsureUi();
     });
 
     // Persistent expand state for packing items floor/room tree
     const packingExpandedFloors = new Set();
     const packingExpandedRooms = new Set();
+    const storageExpandedFloors = new Set();
+    const storageExpandedRooms = new Set();
+    const disassemblyExpandedFloors = new Set();
+    const disassemblyExpandedRooms = new Set();
+    const assemblyExpandedFloors = new Set();
+    const assemblyExpandedRooms = new Set();
 
     // Room definitions for packing item grouping (mirrors Step 5)
     const PACKING_ROOM_CATS = {
@@ -1365,7 +1402,7 @@ document.addEventListener('DOMContentLoaded', function () {
         bedrooms: { name: 'Bedrooms',       icon: '🛏️' },
         bathrooms:{ name: 'Bathrooms',      icon: '🚿' },
         garden:   { name: 'Garden',         icon: '🌳' },
-        boxes:    { name: 'Boxes & Other',  icon: '📦' }
+        boxes:    { name: 'Custom Items',   icon: '📦' }
     };
 
     const PACKING_ROOM_ITEMS_MAP = {
@@ -1403,8 +1440,19 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function parseArraySelection(raw) {
+        if (!raw) return [];
+        try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+            return [];
+        }
+    }
+
     function getPackingEligibleItems() {
         const totals = {};
+        const useMultiFloorInventory = hasActiveMultiFloorInventory();
 
         const addQty = (itemName, qtyValue) => {
             const qty = parseInt(qtyValue, 10) || 0;
@@ -1412,13 +1460,13 @@ document.addEventListener('DOMContentLoaded', function () {
             totals[itemName] = (totals[itemName] || 0) + qty;
         };
 
-        if (window.itemQuantities && typeof window.itemQuantities === 'object') {
+        if (!useMultiFloorInventory && window.itemQuantities && typeof window.itemQuantities === 'object') {
             Object.keys(window.itemQuantities).forEach((itemName) => {
                 addQty(itemName, window.itemQuantities[itemName]);
             });
         }
 
-        if (window.multiFloorInventory && typeof window.multiFloorInventory === 'object') {
+        if (useMultiFloorInventory) {
             Object.keys(window.multiFloorInventory).forEach((floorName) => {
                 const floorItems = window.multiFloorInventory[floorName];
                 if (!floorItems || typeof floorItems !== 'object') return;
@@ -1450,19 +1498,132 @@ document.addEventListener('DOMContentLoaded', function () {
         hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
+    function parseDisassemblyItemsSelection(raw) {
+        if (!raw) return {};
+        try {
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+        } catch (error) {
+            return {};
+        }
+    }
+
+    function setDisassemblyItemQty(itemKey, qty, maxQty) {
+        const hiddenInput = document.getElementById('service-disassembly-items');
+        if (!hiddenInput) return;
+
+        const state = parseDisassemblyItemsSelection(hiddenInput.value);
+        const clampedQty = Math.max(0, Math.min(maxQty, parseInt(qty, 10) || 0));
+
+        if (clampedQty > 0) {
+            state[itemKey] = clampedQty;
+        } else {
+            delete state[itemKey];
+        }
+
+        hiddenInput.value = Object.keys(state).length > 0 ? JSON.stringify(state) : '';
+    }
+
+    function setAssembleItemQty(itemKey, qty, maxQty) {
+        const hiddenInput = document.getElementById('service-assemble-items');
+        if (!hiddenInput) return;
+
+        const state = parseDisassemblyItemsSelection(hiddenInput.value);
+        const clampedQty = Math.max(0, Math.min(maxQty, parseInt(qty, 10) || 0));
+
+        if (clampedQty > 0) {
+            state[itemKey] = clampedQty;
+        } else {
+            delete state[itemKey];
+        }
+
+        hiddenInput.value = Object.keys(state).length > 0 ? JSON.stringify(state) : '';
+    }
+
+    function parseStorageItemsSelection(raw) {
+        if (!raw) return {};
+        try {
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+        } catch (error) {
+            return {};
+        }
+    }
+
+    function setStorageItemQty(itemKey, qty, maxQty) {
+        const hiddenInput = document.getElementById('service-storage-items');
+        if (!hiddenInput) return;
+
+        const state = parseStorageItemsSelection(hiddenInput.value);
+        const clampedQty = Math.max(0, Math.min(maxQty, parseInt(qty, 10) || 0));
+
+        if (clampedQty > 0) {
+            state[itemKey] = clampedQty;
+        } else {
+            delete state[itemKey];
+        }
+
+        hiddenInput.value = Object.keys(state).length > 0 ? JSON.stringify(state) : '';
+    }
+
+    function hasActiveMultiFloorInventory() {
+        if (!window.multiFloorInventory || typeof window.multiFloorInventory !== 'object') {
+            return false;
+        }
+
+        return Object.values(window.multiFloorInventory).some((floorItems) => {
+            if (!floorItems || typeof floorItems !== 'object') return false;
+            return Object.values(floorItems).some((qty) => (parseInt(qty, 10) || 0) > 0);
+        });
+    }
+
+    function syncMoversUnsureUi() {
+        const config = [
+            { inputId: 'service-pickup-movers', modeId: 'service-pickup-movers-mode' },
+            { inputId: 'service-delivery-movers', modeId: 'service-delivery-movers-mode' }
+        ];
+
+        config.forEach(({ inputId, modeId }) => {
+            const input = document.getElementById(inputId);
+            const modeInput = document.getElementById(modeId);
+            const button = document.querySelector(`.movers-unsure-btn[data-target-input="${inputId}"]`);
+            if (!input || !modeInput || !button) return;
+
+            const isUnsure = modeInput.value === 'unsure';
+            input.disabled = isUnsure;
+            input.placeholder = isUnsure ? 'Movers will decide' : '0';
+
+            if (isUnsure) {
+                input.setAttribute('data-last-count-value', input.value || input.getAttribute('data-last-count-value') || '0');
+                input.value = '';
+            } else if (!input.value) {
+                input.value = input.getAttribute('data-last-count-value') || '0';
+            }
+
+            button.style.background = isUnsure ? '#1d4ed8' : '#eff6ff';
+            button.style.color = isUnsure ? '#fff' : '#1d4ed8';
+            button.style.borderColor = isUnsure ? '#1d4ed8' : '#93c5fd';
+            button.setAttribute('aria-pressed', isUnsure ? 'true' : 'false');
+            button.textContent = isUnsure ? 'Unsure selected' : 'Unsure';
+        });
+    }
+
     function renderPackingItemsConfig() {
         const packingInput = document.getElementById('service-packing');
         const packingModeInput = document.getElementById('service-packing-mode');
+        const packingBoxProviderInput = document.getElementById('service-packing-box-provider');
         const packingModeConfig = document.getElementById('packing-mode-config');
+        const packingBoxProviderConfig = document.getElementById('packing-box-provider-config');
         const container = document.getElementById('packing-items-config');
         const list = document.getElementById('packing-items-list');
         const empty = document.getElementById('packing-items-empty');
         const hiddenInput = document.getElementById('service-packing-items');
 
-        if (!packingInput || !packingModeInput || !packingModeConfig || !container || !list || !empty || !hiddenInput) return;
+        if (!packingInput || !packingModeInput || !packingBoxProviderInput || !packingModeConfig || !packingBoxProviderConfig || !container || !list || !empty || !hiddenInput) return;
 
         const isPackingYes = packingInput.value === 'yes';
         packingModeConfig.style.display = isPackingYes ? 'block' : 'none';
+        packingBoxProviderConfig.style.display = isPackingYes ? 'block' : 'none';
 
         const modeButtons = Array.from(document.querySelectorAll('.packing-mode-btn'));
         modeButtons.forEach((btn) => {
@@ -1472,16 +1633,27 @@ document.addEventListener('DOMContentLoaded', function () {
             btn.style.borderColor = isActive ? '#1d4ed8' : '#93c5fd';
         });
 
+        const boxProviderButtons = Array.from(document.querySelectorAll('.packing-box-provider-btn'));
+        boxProviderButtons.forEach((btn) => {
+            const isActive = btn.getAttribute('data-value') === packingBoxProviderInput.value;
+            btn.style.background = isActive ? '#1d4ed8' : '#eff6ff';
+            btn.style.color = isActive ? '#fff' : '#1d4ed8';
+            btn.style.borderColor = isActive ? '#1d4ed8' : '#93c5fd';
+        });
+
         if (!isPackingYes) {
+            packingBoxProviderConfig.style.display = 'none';
             container.style.display = 'none';
             return;
         }
 
         const packingMode = packingModeInput.value;
+        const boxProvider = packingBoxProviderInput.value;
         const isSelectMode = packingMode === 'selected';
-        container.style.display = isSelectMode ? 'block' : 'none';
+        const shouldShowItems = isSelectMode && !!boxProvider;
+        container.style.display = shouldShowItems ? 'block' : 'none';
 
-        if (!isSelectMode) {
+        if (!shouldShowItems) {
             if (packingMode === 'all') {
                 hiddenInput.value = '';
             }
@@ -1489,6 +1661,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const currentState = parsePackingItemsSelection(hiddenInput.value);
+        const useMultiFloorInventory = hasActiveMultiFloorInventory();
 
         // Build byFloor: { floorName: { roomKey: { itemName: maxQty } } }
         const byFloor = {};
@@ -1503,11 +1676,11 @@ document.addEventListener('DOMContentLoaded', function () {
             byFloor[floorName][room][itemName] = (byFloor[floorName][room][itemName] || 0) + q;
         };
 
-        if (window.itemQuantities && typeof window.itemQuantities === 'object') {
+        if (!useMultiFloorInventory && window.itemQuantities && typeof window.itemQuantities === 'object') {
             const sourceFloor = document.getElementById('pickup-floor-select')?.value || 'Ground';
             Object.entries(window.itemQuantities).forEach(([name, qty]) => addItem(sourceFloor, name, qty));
         }
-        if (window.multiFloorInventory && typeof window.multiFloorInventory === 'object') {
+        if (useMultiFloorInventory) {
             Object.entries(window.multiFloorInventory).forEach(([floor, items]) => {
                 if (items && typeof items === 'object') {
                     Object.entries(items).forEach(([name, qty]) => addItem(floor, name, qty));
@@ -1690,9 +1863,11 @@ document.addEventListener('DOMContentLoaded', function () {
     window.hasValidPackingSelection = function() {
         const packingInput = document.getElementById('service-packing');
         const packingModeInput = document.getElementById('service-packing-mode');
+        const packingBoxProviderInput = document.getElementById('service-packing-box-provider');
         const hiddenInput = document.getElementById('service-packing-items');
         if (!packingInput || packingInput.value !== 'yes') return true;
         if (!packingModeInput) return false;
+        if (!packingBoxProviderInput || !packingBoxProviderInput.value) return false;
 
         const mode = packingModeInput.value;
         if (mode === 'all') return true;
@@ -1703,16 +1878,1121 @@ document.addEventListener('DOMContentLoaded', function () {
         return Object.values(state).some((qty) => (parseInt(qty, 10) || 0) > 0);
     };
 
+    function getDisassemblyEligibleItems() {
+        const byFloor = {};
+        const floorOrder = ['Basement','Ground','1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','Attic'];
+        const useMultiFloorInventory = hasActiveMultiFloorInventory();
+
+        const addItem = (floorName, itemName, qty) => {
+            const q = parseInt(qty, 10) || 0;
+            if (!itemName || q <= 0) return;
+            if (!byFloor[floorName]) byFloor[floorName] = {};
+            const roomKey = getPackingRoomForItem(itemName);
+            if (!byFloor[floorName][roomKey]) byFloor[floorName][roomKey] = {};
+            byFloor[floorName][roomKey][itemName] = (byFloor[floorName][roomKey][itemName] || 0) + q;
+        };
+
+        if (!useMultiFloorInventory && window.itemQuantities && typeof window.itemQuantities === 'object') {
+            const sourceFloor = document.getElementById('pickup-floor-select')?.value || 'Ground';
+            Object.entries(window.itemQuantities).forEach(([name, qty]) => addItem(sourceFloor, name, qty));
+        }
+
+        if (useMultiFloorInventory) {
+            Object.entries(window.multiFloorInventory).forEach(([floor, items]) => {
+                if (!items || typeof items !== 'object') return;
+                Object.entries(items).forEach(([name, qty]) => addItem(floor, name, qty));
+            });
+        }
+
+        const sortedFloors = Object.keys(byFloor).sort((a, b) => {
+            const ia = floorOrder.indexOf(a);
+            const ib = floorOrder.indexOf(b);
+            return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+        });
+
+        return { byFloor, sortedFloors };
+    }
+
+    function getDisassemblyItemKey(floor, itemName) {
+        return `${floor}||${itemName}`;
+    }
+
+    function parseDisassemblyState(hiddenInput, validKeysSet) {
+        const nextSet = new Set();
+        parseArraySelection(hiddenInput?.value).forEach((key) => {
+            if (!validKeysSet || validKeysSet.has(key)) {
+                nextSet.add(key);
+            }
+        });
+        return nextSet;
+    }
+
+    function writeSetToHiddenInput(hiddenInput, setValue, shouldDispatch) {
+        if (!hiddenInput) return;
+        const sorted = Array.from(setValue).sort((a, b) => a.localeCompare(b));
+        const nextValue = sorted.length ? JSON.stringify(sorted) : '';
+        if (hiddenInput.value === nextValue) return;
+        hiddenInput.value = nextValue;
+        if (shouldDispatch) {
+            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+
+    function renderServiceItemsList(listEl, selectedSet, byFloor, sortedFloors, options) {
+        const {
+            checkboxAttr,
+            selectAllAttr,
+            emptyEl,
+            eligibleKeyFilter,
+            expandedFloorsSet,
+            expandedRoomsSet,
+            treeKey,
+            rerender
+        } = options;
+
+        listEl.innerHTML = '';
+
+        const allEligibleKeys = [];
+        sortedFloors.forEach((floor) => {
+            const rooms = byFloor[floor] || {};
+            Object.entries(rooms).forEach(([roomKey, items]) => {
+                Object.keys(items).forEach((itemName) => {
+                    const key = getDisassemblyItemKey(floor, itemName);
+                    if (!eligibleKeyFilter || eligibleKeyFilter.has(key)) {
+                        allEligibleKeys.push(key);
+                    }
+                });
+            });
+        });
+
+        if (allEligibleKeys.length === 0) {
+            if (emptyEl) emptyEl.style.display = 'block';
+            return { allEligibleKeys };
+        }
+
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        const allSelected = allEligibleKeys.every((key) => selectedSet.has(key));
+        const selectAllBtn = document.createElement('button');
+        selectAllBtn.type = 'button';
+        selectAllBtn.setAttribute(selectAllAttr, '1');
+        selectAllBtn.style.cssText = 'align-self:flex-start;border:1px solid #16a34a;background:#dcfce7;color:#166534;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;margin-bottom:6px;';
+        selectAllBtn.textContent = allSelected ? 'Clear all items' : 'Select all items';
+        listEl.appendChild(selectAllBtn);
+
+        sortedFloors.forEach((floor) => {
+            const rooms = byFloor[floor] || {};
+            const floorEligibleCount = Object.values(rooms).reduce((sum, items) => {
+                return sum + Object.keys(items).filter((itemName) => {
+                    const key = getDisassemblyItemKey(floor, itemName);
+                    return !eligibleKeyFilter || eligibleKeyFilter.has(key);
+                }).length;
+            }, 0);
+
+            if (floorEligibleCount === 0) return;
+
+            const floorExpanded = expandedFloorsSet.has(floor);
+
+            const floorEl = document.createElement('div');
+            floorEl.style.cssText = 'margin-bottom:10px;border:1px solid #bfdbfe;border-radius:10px;overflow:hidden;';
+
+            const floorHeader = document.createElement('div');
+            floorHeader.style.cssText = 'padding:10px 14px;background:#dbeafe;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;';
+
+            const floorLabelWrap = document.createElement('div');
+            floorLabelWrap.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+            const floorLabel = document.createElement('span');
+            floorLabel.style.cssText = 'font-weight:700;color:#1e40af;font-size:0.95rem;';
+            floorLabel.textContent = `📍 ${floor} Floor`;
+
+            const floorCount = document.createElement('span');
+            floorCount.style.cssText = 'font-size:0.78rem;color:#1e40af;background:#bfdbfe;padding:2px 7px;border-radius:999px;font-weight:700;';
+            floorCount.textContent = floorEligibleCount;
+
+            const floorChevron = document.createElement('span');
+            floorChevron.style.cssText = 'font-weight:900;color:#1d4ed8;font-size:1.45rem;line-height:1;min-width:20px;text-align:center;';
+            floorChevron.textContent = floorExpanded ? '-' : '+';
+
+            floorLabelWrap.appendChild(floorLabel);
+            floorLabelWrap.appendChild(floorCount);
+            floorHeader.appendChild(floorLabelWrap);
+            floorHeader.appendChild(floorChevron);
+            floorEl.appendChild(floorHeader);
+
+            const floorContent = document.createElement('div');
+            floorContent.style.cssText = `max-height:${floorExpanded ? '2000px' : '0'};padding:${floorExpanded ? '10px' : '0'};background:#f8fbff;overflow:hidden;transition:max-height 0.35s ease, padding 0.35s ease;`;
+
+            floorHeader.addEventListener('click', () => {
+                if (expandedFloorsSet.has(floor)) {
+                    expandedFloorsSet.delete(floor);
+                } else {
+                    expandedFloorsSet.add(floor);
+                }
+                if (typeof rerender === 'function') rerender();
+            });
+
+            Object.keys(rooms).sort((a, b) => {
+                return (PACKING_ROOM_CATS[a]?.name || a).localeCompare(PACKING_ROOM_CATS[b]?.name || b);
+            }).forEach((roomKey) => {
+                const items = rooms[roomKey] || {};
+                const roomEntries = Object.entries(items)
+                    .filter(([itemName]) => {
+                        const key = getDisassemblyItemKey(floor, itemName);
+                        return !eligibleKeyFilter || eligibleKeyFilter.has(key);
+                    });
+
+                if (roomEntries.length === 0) return;
+
+                const roomStateKey = `${treeKey}::${floor}::${roomKey}`;
+                const roomExpanded = expandedRoomsSet.has(roomStateKey);
+
+                const roomEl = document.createElement('div');
+                roomEl.style.cssText = 'margin-bottom:8px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;';
+
+                const roomHeader = document.createElement('div');
+                roomHeader.style.cssText = 'padding:8px 12px;background:#f3f4f6;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;';
+
+                const roomLabelWrap = document.createElement('div');
+                roomLabelWrap.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+                const roomLabel = document.createElement('span');
+                roomLabel.style.cssText = 'font-weight:600;color:#374151;font-size:0.9rem;display:flex;align-items:center;gap:6px;';
+                roomLabel.textContent = `${PACKING_ROOM_CATS[roomKey]?.icon || '📦'} ${PACKING_ROOM_CATS[roomKey]?.name || roomKey}`;
+
+                const roomCount = document.createElement('span');
+                roomCount.style.cssText = 'font-size:0.78rem;color:#6b7280;background:#e5e7eb;padding:2px 7px;border-radius:999px;font-weight:600;margin-left:6px;';
+                roomCount.textContent = roomEntries.length;
+
+                const roomChevron = document.createElement('span');
+                roomChevron.style.cssText = 'font-weight:900;color:#374151;font-size:1.35rem;line-height:1;min-width:20px;text-align:center;margin-left:auto;';
+                roomChevron.textContent = roomExpanded ? '-' : '+';
+
+                roomLabelWrap.appendChild(roomLabel);
+                roomLabelWrap.appendChild(roomCount);
+                roomHeader.appendChild(roomLabelWrap);
+                roomHeader.appendChild(roomChevron);
+                roomEl.appendChild(roomHeader);
+
+                const roomContent = document.createElement('div');
+                roomContent.style.cssText = `display:${roomExpanded ? 'flex' : 'none'};flex-direction:column;gap:4px;padding:8px;background:#fff;`;
+
+                roomHeader.addEventListener('click', () => {
+                    if (expandedRoomsSet.has(roomStateKey)) {
+                        expandedRoomsSet.delete(roomStateKey);
+                    } else {
+                        expandedRoomsSet.add(roomStateKey);
+                    }
+                    if (typeof rerender === 'function') rerender();
+                });
+
+                roomEntries.forEach(([itemName, qty]) => {
+                    const key = getDisassemblyItemKey(floor, itemName);
+
+                    const row = document.createElement('label');
+                    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;cursor:pointer;';
+
+                    const left = document.createElement('div');
+                    left.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
+
+                    const textWrap = document.createElement('span');
+                    textWrap.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
+
+                    const title = document.createElement('span');
+                    title.style.cssText = 'font-weight:600;color:#1f2937;word-break:break-word;font-size:0.95rem;';
+                    title.textContent = itemName;
+
+                    const sub = document.createElement('span');
+                    sub.style.cssText = 'font-size:0.75rem;color:#6b7280;';
+                    sub.textContent = `Available: ${qty}`;
+
+                    left.appendChild(textWrap);
+                    textWrap.appendChild(title);
+                    textWrap.appendChild(sub);
+
+                    const controls = document.createElement('div');
+                    controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = selectedSet.has(key);
+                    checkbox.setAttribute(checkboxAttr, key);
+                    checkbox.style.cssText = 'width:22px;height:22px;cursor:pointer;accent-color:#1d4ed8;';
+
+                    controls.appendChild(checkbox);
+                    row.appendChild(left);
+                    row.appendChild(controls);
+                    roomContent.appendChild(row);
+                });
+
+                roomEl.appendChild(roomContent);
+                floorContent.appendChild(roomEl);
+            });
+
+            floorEl.appendChild(floorContent);
+            listEl.appendChild(floorEl);
+        });
+
+        return { allEligibleKeys };
+    }
+
+    function getStorageDurationText(startDate, endDate) {
+        const diffMs = endDate.getTime() - startDate.getTime();
+        if (!Number.isFinite(diffMs) || diffMs <= 0) return '';
+
+        const totalMinutes = Math.floor(diffMs / 60000);
+        const days = Math.floor(totalMinutes / (60 * 24));
+        const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+        const minutes = totalMinutes % 60;
+
+        const parts = [];
+        if (days > 0) parts.push(`${days} day${days === 1 ? '' : 's'}`);
+        if (hours > 0) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+        if (minutes > 0) parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+        if (parts.length === 0) parts.push('less than 1 minute');
+
+        return `Storage duration: ${parts.join(', ')}`;
+    }
+
+    function roundNowToNext15Minutes() {
+        const now = new Date();
+        now.setSeconds(0, 0);
+        const minutes = now.getMinutes();
+        const rounded = Math.ceil(minutes / 15) * 15;
+        if (rounded >= 60) {
+            now.setHours(now.getHours() + 1);
+            now.setMinutes(0);
+        } else {
+            now.setMinutes(rounded);
+        }
+        return now;
+    }
+
+    function toDateTimeLocalValue(dateObj) {
+        const pad = (value) => String(value).padStart(2, '0');
+        const year = dateObj.getFullYear();
+        const month = pad(dateObj.getMonth() + 1);
+        const day = pad(dateObj.getDate());
+        const hours = pad(dateObj.getHours());
+        const minutes = pad(dateObj.getMinutes());
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    function renderStorageConfig() {
+        const storageInput = document.getElementById('service-storage');
+        const storageItemsInput = document.getElementById('service-storage-items');
+        const storageItemsConfig = document.getElementById('storage-items-config');
+        const storageItemsList = document.getElementById('storage-items-list');
+        const storageItemsEmpty = document.getElementById('storage-items-empty');
+        const storageDurationConfig = document.getElementById('storage-duration-config');
+        const storageStartInput = document.getElementById('service-storage-start-datetime');
+        const storageEndInput = document.getElementById('service-storage-end-datetime');
+        const storageDurationPreview = document.getElementById('storage-duration-preview');
+
+        if (!storageInput || !storageItemsInput || !storageItemsConfig || !storageItemsList || !storageItemsEmpty || !storageDurationConfig || !storageStartInput || !storageEndInput || !storageDurationPreview) {
+            return;
+        }
+
+        const isStorageYes = storageInput.value === 'yes';
+        storageItemsConfig.style.display = isStorageYes ? 'block' : 'none';
+        storageDurationConfig.style.display = isStorageYes ? 'block' : 'none';
+
+        if (!isStorageYes) {
+            storageItemsList.innerHTML = '';
+            storageItemsEmpty.style.display = 'none';
+            storageDurationPreview.textContent = '';
+            return;
+        }
+
+        if (!storageStartInput.value) {
+            const start = roundNowToNext15Minutes();
+            storageStartInput.value = toDateTimeLocalValue(start);
+        }
+        if (!storageEndInput.value) {
+            const defaultEnd = new Date(storageStartInput.value);
+            if (Number.isFinite(defaultEnd.getTime())) {
+                defaultEnd.setDate(defaultEnd.getDate() + 7);
+                storageEndInput.value = toDateTimeLocalValue(defaultEnd);
+            }
+        }
+
+        const startDate = new Date(storageStartInput.value);
+        const endDate = new Date(storageEndInput.value);
+        if (Number.isFinite(startDate.getTime()) && Number.isFinite(endDate.getTime()) && endDate > startDate) {
+            storageDurationPreview.textContent = getStorageDurationText(startDate, endDate);
+            storageDurationPreview.style.color = '#1e40af';
+        } else {
+            storageDurationPreview.textContent = 'Storage end date/time must be later than start date/time.';
+            storageDurationPreview.style.color = '#b91c1c';
+        }
+
+        const { byFloor, sortedFloors } = getDisassemblyEligibleItems();
+
+        // Build a set of item keys that are assigned to assembly at arrival — these should
+        // not appear in the storage picker because they are going to the delivery location.
+        const assembleItemsInput = document.getElementById('service-assemble-items');
+        const assembledState = parseDisassemblyItemsSelection(assembleItemsInput ? assembleItemsInput.value : '');
+
+        const currentState = parseStorageItemsSelection(storageItemsInput.value);
+
+        // Remove any previously-selected storage quantities that exceed the remaining quantity
+        // after assembly quantities are accounted for.
+        let stateChanged = false;
+        Object.entries(assembledState).forEach(([key, assembledQty]) => {
+            const [floor, itemName] = key.split('||');
+            const floorItems = byFloor[floor] || {};
+            let availableQty = 0;
+            Object.values(floorItems).forEach((items) => {
+                if (Object.prototype.hasOwnProperty.call(items, itemName)) {
+                    availableQty = items[itemName] || 0;
+                }
+            });
+            const remainingQty = Math.max(0, availableQty - (parseInt(assembledQty, 10) || 0));
+
+            if (!remainingQty && key in currentState) {
+                delete currentState[key];
+                stateChanged = true;
+                return;
+            }
+
+            if ((parseInt(currentState[key], 10) || 0) > remainingQty) {
+                if (remainingQty > 0) {
+                    currentState[key] = remainingQty;
+                } else {
+                    delete currentState[key];
+                }
+                stateChanged = true;
+            }
+        });
+        if (stateChanged) {
+            storageItemsInput.value = Object.keys(currentState).length > 0 ? JSON.stringify(currentState) : '';
+        }
+
+        storageItemsList.innerHTML = '';
+
+        if (sortedFloors.length === 0) {
+            storageItemsEmpty.style.display = 'block';
+            storageItemsInput.value = '';
+            return;
+        }
+        storageItemsEmpty.style.display = 'none';
+
+        sortedFloors.forEach(floor => {
+            const roomsInFloor = byFloor[floor] || {};
+            const floorExpanded = storageExpandedFloors.has(floor);
+
+            const floorEl = document.createElement('div');
+            floorEl.style.cssText = 'margin-bottom:10px;border:1px solid #bfdbfe;border-radius:10px;overflow:hidden;';
+
+            const floorHeader = document.createElement('div');
+            floorHeader.style.cssText = 'padding:10px 14px;background:#dbeafe;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;';
+
+            const floorLabelWrap = document.createElement('div');
+            floorLabelWrap.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+            const floorLabel = document.createElement('span');
+            floorLabel.style.cssText = 'font-weight:700;color:#1e40af;font-size:0.95rem;';
+            floorLabel.textContent = `📍 ${floor} Floor`;
+
+            const floorChevron = document.createElement('span');
+            floorChevron.style.cssText = 'font-weight:900;color:#1d4ed8;font-size:1.45rem;line-height:1;min-width:20px;text-align:center;';
+            floorChevron.textContent = floorExpanded ? '-' : '+';
+
+            floorLabelWrap.appendChild(floorLabel);
+            floorHeader.appendChild(floorLabelWrap);
+            floorHeader.appendChild(floorChevron);
+            floorEl.appendChild(floorHeader);
+
+            const floorContent = document.createElement('div');
+            floorContent.style.cssText = `max-height:${floorExpanded ? '2000px' : '0'};padding:${floorExpanded ? '10px' : '0'};background:#f8fbff;overflow:hidden;transition:max-height 0.35s ease, padding 0.35s ease;`;
+
+            floorHeader.addEventListener('click', () => {
+                const willExpand = !storageExpandedFloors.has(floor);
+                if (willExpand) {
+                    storageExpandedFloors.add(floor);
+                } else {
+                    storageExpandedFloors.delete(floor);
+                }
+                floorChevron.textContent = willExpand ? '-' : '+';
+                floorContent.style.maxHeight = willExpand ? '2000px' : '0';
+                floorContent.style.padding = willExpand ? '10px' : '0';
+            });
+
+            Object.keys(roomsInFloor).sort((a, b) => {
+                return (PACKING_ROOM_CATS[a]?.name || a).localeCompare(PACKING_ROOM_CATS[b]?.name || b);
+            }).forEach(roomKey => {
+                const itemsInRoom = roomsInFloor[roomKey] || {};
+                if (Object.keys(itemsInRoom).length === 0) return;
+
+                const roomStateKey = `storage::${floor}::${roomKey}`;
+                const roomExpanded = storageExpandedRooms.has(roomStateKey);
+
+                const roomEl = document.createElement('div');
+                roomEl.style.cssText = 'margin-bottom:8px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;';
+
+                const roomHeader = document.createElement('div');
+                roomHeader.style.cssText = 'padding:8px 12px;background:#f3f4f6;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;';
+
+                const roomLabelWrap = document.createElement('div');
+                roomLabelWrap.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+                const roomLabel = document.createElement('span');
+                roomLabel.style.cssText = 'font-weight:600;color:#374151;font-size:0.9rem;display:flex;align-items:center;gap:6px;';
+                roomLabel.textContent = `${PACKING_ROOM_CATS[roomKey]?.icon || '📦'} ${PACKING_ROOM_CATS[roomKey]?.name || roomKey}`;
+
+                const roomCount = document.createElement('span');
+                roomCount.style.cssText = 'font-size:0.78rem;color:#6b7280;background:#e5e7eb;padding:2px 7px;border-radius:999px;font-weight:600;margin-left:6px;';
+                roomCount.textContent = Object.keys(itemsInRoom).length;
+
+                const roomChevron = document.createElement('span');
+                roomChevron.style.cssText = 'font-weight:900;color:#374151;font-size:1.35rem;line-height:1;min-width:20px;text-align:center;margin-left:auto;';
+                roomChevron.textContent = roomExpanded ? '-' : '+';
+
+                roomLabelWrap.appendChild(roomLabel);
+                roomLabelWrap.appendChild(roomCount);
+                roomHeader.appendChild(roomLabelWrap);
+                roomHeader.appendChild(roomChevron);
+                roomEl.appendChild(roomHeader);
+
+                const roomContent = document.createElement('div');
+                roomContent.style.cssText = `display:${roomExpanded ? 'flex' : 'none'};flex-direction:column;gap:4px;padding:8px;background:#fff;`;
+
+                roomHeader.addEventListener('click', () => {
+                    if (storageExpandedRooms.has(roomStateKey)) {
+                        storageExpandedRooms.delete(roomStateKey);
+                    } else {
+                        storageExpandedRooms.add(roomStateKey);
+                    }
+                    renderStorageConfig();
+                });
+
+                Object.entries(itemsInRoom).forEach(([itemName, maxQty]) => {
+                    const itemKey = getDisassemblyItemKey(floor, itemName);
+                    const assembledQty = Math.max(0, parseInt(assembledState[itemKey], 10) || 0);
+                    const availableForStorage = Math.max(0, maxQty - assembledQty);
+                    if (availableForStorage === 0) return;
+                    const selectedQty = Math.max(0, Math.min(availableForStorage, parseInt(currentState[itemKey], 10) || 0));
+
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;';
+
+                    const left = document.createElement('div');
+                    left.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
+
+                    const labelText = document.createElement('span');
+                    labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
+                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:break-word;font-size:0.95rem;">${itemName}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${availableForStorage}</span>`;
+
+                    left.appendChild(labelText);
+
+                    const controls = document.createElement('div');
+                    controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+                    const minusBtn = document.createElement('button');
+                    minusBtn.type = 'button';
+                    minusBtn.textContent = '-';
+                    minusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
+
+                    const qtyInput = document.createElement('input');
+                    qtyInput.type = 'number';
+                    qtyInput.min = '0';
+                    qtyInput.max = String(availableForStorage);
+                    qtyInput.value = String(selectedQty);
+                    qtyInput.style.cssText = 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
+
+                    const plusBtn = document.createElement('button');
+                    plusBtn.type = 'button';
+                    plusBtn.textContent = '+';
+                    plusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
+
+                    minusBtn.addEventListener('click', () => {
+                        const nextQty = (parseInt(qtyInput.value, 10) || 0) - 1;
+                        setStorageItemQty(itemKey, nextQty, availableForStorage);
+                        renderStorageConfig();
+                        if (window.updateNextButtonState) window.updateNextButtonState();
+                    });
+
+                    plusBtn.addEventListener('click', () => {
+                        const nextQty = (parseInt(qtyInput.value, 10) || 0) + 1;
+                        setStorageItemQty(itemKey, nextQty, availableForStorage);
+                        renderStorageConfig();
+                        if (window.updateNextButtonState) window.updateNextButtonState();
+                    });
+
+                    qtyInput.addEventListener('change', () => {
+                        setStorageItemQty(itemKey, qtyInput.value, availableForStorage);
+                        renderStorageConfig();
+                        if (window.updateNextButtonState) window.updateNextButtonState();
+                    });
+
+                    controls.appendChild(minusBtn);
+                    controls.appendChild(qtyInput);
+                    controls.appendChild(plusBtn);
+                    row.appendChild(left);
+                    row.appendChild(controls);
+                    roomContent.appendChild(row);
+                });
+
+                roomEl.appendChild(roomContent);
+                floorContent.appendChild(roomEl);
+            });
+
+            floorEl.appendChild(floorContent);
+            storageItemsList.appendChild(floorEl);
+        });
+    }
+
+    function renderDisassemblyConfig() {
+        const disassemblyInput = document.getElementById('service-disassembly');
+        const disassemblyItemsInput = document.getElementById('service-disassembly-items');
+        const assembleChoiceInput = document.getElementById('service-assemble-at-arrival');
+        const assembleItemsInput = document.getElementById('service-assemble-items');
+        const disassemblyConfig = document.getElementById('disassembly-items-config');
+        const disassemblyList = document.getElementById('disassembly-items-list');
+        const disassemblyEmpty = document.getElementById('disassembly-items-empty');
+        const assembleChoiceConfig = document.getElementById('assemble-choice-config');
+        const assembleItemsConfig = document.getElementById('assemble-items-config');
+        const assembleList = document.getElementById('assemble-items-list');
+        const assembleEmpty = document.getElementById('assemble-items-empty');
+
+        if (!disassemblyInput || !disassemblyItemsInput || !assembleChoiceInput || !assembleItemsInput || !disassemblyConfig || !disassemblyList || !disassemblyEmpty || !assembleChoiceConfig || !assembleItemsConfig || !assembleList || !assembleEmpty) {
+            return;
+        }
+
+        const isDisassemblyYes = disassemblyInput.value === 'yes';
+        disassemblyConfig.style.display = isDisassemblyYes ? 'block' : 'none';
+        assembleChoiceConfig.style.display = isDisassemblyYes ? 'block' : 'none';
+
+        const assembleButtons = Array.from(document.querySelectorAll('.assemble-option-btn'));
+        assembleButtons.forEach((btn) => {
+            const isActive = btn.getAttribute('data-value') === assembleChoiceInput.value;
+            btn.style.background = isActive ? '#1d4ed8' : '#eff6ff';
+            btn.style.color = isActive ? '#fff' : '#1d4ed8';
+            btn.style.borderColor = isActive ? '#1d4ed8' : '#93c5fd';
+        });
+
+        if (!isDisassemblyYes) {
+            disassemblyList.innerHTML = '';
+            assembleList.innerHTML = '';
+            disassemblyEmpty.style.display = 'none';
+            assembleEmpty.style.display = 'none';
+            assembleItemsConfig.style.display = 'none';
+            return;
+        }
+
+        const { byFloor, sortedFloors } = getDisassemblyEligibleItems();
+        const disassemblyState = parseDisassemblyItemsSelection(disassemblyItemsInput.value);
+
+        // Remove stale keys no longer in inventory
+        const validKeySet = new Set();
+        sortedFloors.forEach((floor) => {
+            const rooms = byFloor[floor] || {};
+            Object.values(rooms).forEach((items) => {
+                Object.keys(items).forEach((itemName) => {
+                    validKeySet.add(getDisassemblyItemKey(floor, itemName));
+                });
+            });
+        });
+        Object.keys(disassemblyState).forEach(key => {
+            if (!validKeySet.has(key)) delete disassemblyState[key];
+        });
+        disassemblyItemsInput.value = Object.keys(disassemblyState).length > 0 ? JSON.stringify(disassemblyState) : '';
+
+        // Render +/- tree for disassembly
+        disassemblyList.innerHTML = '';
+        if (sortedFloors.length === 0) {
+            disassemblyEmpty.style.display = 'block';
+            disassemblyItemsInput.value = '';
+        } else {
+            disassemblyEmpty.style.display = 'none';
+
+            sortedFloors.forEach(floor => {
+                const roomsInFloor = byFloor[floor] || {};
+                const floorExpanded = disassemblyExpandedFloors.has(floor);
+
+                const floorEl = document.createElement('div');
+                floorEl.style.cssText = 'margin-bottom:10px;border:1px solid #bfdbfe;border-radius:10px;overflow:hidden;';
+
+                const floorHeader = document.createElement('div');
+                floorHeader.style.cssText = 'padding:10px 14px;background:#dbeafe;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;';
+
+                const floorLabelWrap = document.createElement('div');
+                floorLabelWrap.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+                const floorLabel = document.createElement('span');
+                floorLabel.style.cssText = 'font-weight:700;color:#1e40af;font-size:0.95rem;';
+                floorLabel.textContent = `📍 ${floor} Floor`;
+
+                const floorChevron = document.createElement('span');
+                floorChevron.style.cssText = 'font-weight:900;color:#1d4ed8;font-size:1.45rem;line-height:1;min-width:20px;text-align:center;';
+                floorChevron.textContent = floorExpanded ? '-' : '+';
+
+                floorLabelWrap.appendChild(floorLabel);
+                floorHeader.appendChild(floorLabelWrap);
+                floorHeader.appendChild(floorChevron);
+                floorEl.appendChild(floorHeader);
+
+                const floorContent = document.createElement('div');
+                floorContent.style.cssText = `max-height:${floorExpanded ? '2000px' : '0'};padding:${floorExpanded ? '10px' : '0'};background:#f8fbff;overflow:hidden;transition:max-height 0.35s ease, padding 0.35s ease;`;
+
+                floorHeader.addEventListener('click', () => {
+                    const willExpand = !disassemblyExpandedFloors.has(floor);
+                    if (willExpand) {
+                        disassemblyExpandedFloors.add(floor);
+                    } else {
+                        disassemblyExpandedFloors.delete(floor);
+                    }
+                    floorChevron.textContent = willExpand ? '-' : '+';
+                    floorContent.style.maxHeight = willExpand ? '2000px' : '0';
+                    floorContent.style.padding = willExpand ? '10px' : '0';
+                });
+
+                Object.keys(roomsInFloor).sort((a, b) => {
+                    return (PACKING_ROOM_CATS[a]?.name || a).localeCompare(PACKING_ROOM_CATS[b]?.name || b);
+                }).forEach(roomKey => {
+                    const itemsInRoom = roomsInFloor[roomKey] || {};
+                    if (Object.keys(itemsInRoom).length === 0) return;
+
+                    const roomStateKey = `disassembly::${floor}::${roomKey}`;
+                    const roomExpanded = disassemblyExpandedRooms.has(roomStateKey);
+
+                    const roomEl = document.createElement('div');
+                    roomEl.style.cssText = 'margin-bottom:8px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;';
+
+                    const roomHeader = document.createElement('div');
+                    roomHeader.style.cssText = 'padding:8px 12px;background:#f3f4f6;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;';
+
+                    const roomLabelWrap = document.createElement('div');
+                    roomLabelWrap.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+                    const roomLabel = document.createElement('span');
+                    roomLabel.style.cssText = 'font-weight:600;color:#374151;font-size:0.9rem;display:flex;align-items:center;gap:6px;';
+                    roomLabel.textContent = `${PACKING_ROOM_CATS[roomKey]?.icon || '📦'} ${PACKING_ROOM_CATS[roomKey]?.name || roomKey}`;
+
+                    const roomCount = document.createElement('span');
+                    roomCount.style.cssText = 'font-size:0.78rem;color:#6b7280;background:#e5e7eb;padding:2px 7px;border-radius:999px;font-weight:600;margin-left:6px;';
+                    roomCount.textContent = Object.keys(itemsInRoom).length;
+
+                    const roomChevron = document.createElement('span');
+                    roomChevron.style.cssText = 'font-weight:900;color:#374151;font-size:1.35rem;line-height:1;min-width:20px;text-align:center;margin-left:auto;';
+                    roomChevron.textContent = roomExpanded ? '-' : '+';
+
+                    roomLabelWrap.appendChild(roomLabel);
+                    roomLabelWrap.appendChild(roomCount);
+                    roomHeader.appendChild(roomLabelWrap);
+                    roomHeader.appendChild(roomChevron);
+                    roomEl.appendChild(roomHeader);
+
+                    const roomContent = document.createElement('div');
+                    roomContent.style.cssText = `display:${roomExpanded ? 'flex' : 'none'};flex-direction:column;gap:4px;padding:8px;background:#fff;`;
+
+                    roomHeader.addEventListener('click', () => {
+                        if (disassemblyExpandedRooms.has(roomStateKey)) {
+                            disassemblyExpandedRooms.delete(roomStateKey);
+                        } else {
+                            disassemblyExpandedRooms.add(roomStateKey);
+                        }
+                        renderDisassemblyConfig();
+                    });
+
+                    Object.entries(itemsInRoom).forEach(([itemName, maxQty]) => {
+                        const itemKey = getDisassemblyItemKey(floor, itemName);
+                        const selectedQty = Math.max(0, Math.min(maxQty, parseInt(disassemblyState[itemKey], 10) || 0));
+
+                        const row = document.createElement('div');
+                        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;';
+
+                        const left = document.createElement('div');
+                        left.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
+
+                        const labelText = document.createElement('span');
+                        labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
+                        labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:break-word;font-size:0.95rem;">${itemName}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
+
+                        left.appendChild(labelText);
+
+                        const controls = document.createElement('div');
+                        controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+                        const minusBtn = document.createElement('button');
+                        minusBtn.type = 'button';
+                        minusBtn.textContent = '-';
+                        minusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
+
+                        const qtyInput = document.createElement('input');
+                        qtyInput.type = 'number';
+                        qtyInput.min = '0';
+                        qtyInput.max = String(maxQty);
+                        qtyInput.value = String(selectedQty);
+                        qtyInput.style.cssText = 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
+
+                        const plusBtn = document.createElement('button');
+                        plusBtn.type = 'button';
+                        plusBtn.textContent = '+';
+                        plusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
+
+                        minusBtn.addEventListener('click', () => {
+                            const nextQty = (parseInt(qtyInput.value, 10) || 0) - 1;
+                            setDisassemblyItemQty(itemKey, nextQty, maxQty);
+                            renderDisassemblyConfig();
+                            if (window.updateNextButtonState) window.updateNextButtonState();
+                        });
+
+                        plusBtn.addEventListener('click', () => {
+                            const nextQty = (parseInt(qtyInput.value, 10) || 0) + 1;
+                            setDisassemblyItemQty(itemKey, nextQty, maxQty);
+                            renderDisassemblyConfig();
+                            if (window.updateNextButtonState) window.updateNextButtonState();
+                        });
+
+                        qtyInput.addEventListener('change', () => {
+                            setDisassemblyItemQty(itemKey, qtyInput.value, maxQty);
+                            renderDisassemblyConfig();
+                            if (window.updateNextButtonState) window.updateNextButtonState();
+                        });
+
+                        controls.appendChild(minusBtn);
+                        controls.appendChild(qtyInput);
+                        controls.appendChild(plusBtn);
+                        row.appendChild(left);
+                        row.appendChild(controls);
+                        roomContent.appendChild(row);
+                    });
+
+                    roomEl.appendChild(roomContent);
+                    floorContent.appendChild(roomEl);
+                });
+
+                floorEl.appendChild(floorContent);
+                disassemblyList.appendChild(floorEl);
+            });
+        }
+
+        // Build set of eligible keys for assembly (items with qty > 0)
+        const disassemblyEligibleSet = new Set(
+            Object.entries(disassemblyState)
+                .filter(([, qty]) => (parseInt(qty, 10) || 0) > 0)
+                .map(([key]) => key)
+        );
+
+        const shouldShowAssembleItems = assembleChoiceInput.value === 'yes';
+        assembleItemsConfig.style.display = shouldShowAssembleItems ? 'block' : 'none';
+
+        if (!shouldShowAssembleItems) {
+            assembleList.innerHTML = '';
+            assembleEmpty.style.display = 'none';
+            if (assembleItemsInput.value) {
+                assembleItemsInput.value = '';
+            }
+            return;
+        }
+
+        const assembleState = parseDisassemblyItemsSelection(assembleItemsInput.value);
+        let assembleStateChanged = false;
+
+        Object.keys(assembleState).forEach((key) => {
+            const disassemblyQty = Math.max(0, parseInt(disassemblyState[key], 10) || 0);
+            const assembleQty = Math.max(0, parseInt(assembleState[key], 10) || 0);
+            if (!disassemblyEligibleSet.has(key) || disassemblyQty === 0) {
+                delete assembleState[key];
+                assembleStateChanged = true;
+                return;
+            }
+            if (assembleQty > disassemblyQty) {
+                assembleState[key] = disassemblyQty;
+                assembleStateChanged = true;
+            }
+        });
+
+        if (assembleStateChanged) {
+            assembleItemsInput.value = Object.keys(assembleState).length > 0 ? JSON.stringify(assembleState) : '';
+        }
+
+        assembleList.innerHTML = '';
+        if (disassemblyEligibleSet.size === 0) {
+            assembleEmpty.style.display = 'block';
+            assembleItemsInput.value = '';
+            return;
+        }
+
+        assembleEmpty.style.display = 'none';
+
+        const allAssemblyFullySelected = Array.from(disassemblyEligibleSet).every((key) => {
+            const disassemblyQty = Math.max(0, parseInt(disassemblyState[key], 10) || 0);
+            const assembleQty = Math.max(0, parseInt(assembleState[key], 10) || 0);
+            return disassemblyQty > 0 && assembleQty >= disassemblyQty;
+        });
+
+        const assembleSelectAllBtn = document.createElement('button');
+        assembleSelectAllBtn.type = 'button';
+        assembleSelectAllBtn.setAttribute('data-assemble-select-all', '1');
+        assembleSelectAllBtn.style.cssText = 'align-self:flex-start;border:1px solid #16a34a;background:#dcfce7;color:#166534;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;margin-bottom:6px;';
+        assembleSelectAllBtn.textContent = allAssemblyFullySelected ? 'Clear all items' : 'Select all items';
+        assembleList.appendChild(assembleSelectAllBtn);
+
+        sortedFloors.forEach((floor) => {
+            const roomsInFloor = byFloor[floor] || {};
+            const floorEligibleCount = Object.values(roomsInFloor).reduce((sum, items) => {
+                return sum + Object.keys(items).filter((itemName) => {
+                    const itemKey = getDisassemblyItemKey(floor, itemName);
+                    return disassemblyEligibleSet.has(itemKey);
+                }).length;
+            }, 0);
+
+            if (floorEligibleCount === 0) return;
+
+            const floorExpanded = assemblyExpandedFloors.has(floor);
+
+            const floorEl = document.createElement('div');
+            floorEl.style.cssText = 'margin-bottom:10px;border:1px solid #bfdbfe;border-radius:10px;overflow:hidden;';
+
+            const floorHeader = document.createElement('div');
+            floorHeader.style.cssText = 'padding:10px 14px;background:#dbeafe;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;';
+
+            const floorLabelWrap = document.createElement('div');
+            floorLabelWrap.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+            const floorLabel = document.createElement('span');
+            floorLabel.style.cssText = 'font-weight:700;color:#1e40af;font-size:0.95rem;';
+            floorLabel.textContent = `📍 ${floor} Floor`;
+
+            const floorCount = document.createElement('span');
+            floorCount.style.cssText = 'font-size:0.78rem;color:#1e40af;background:#bfdbfe;padding:2px 7px;border-radius:999px;font-weight:700;';
+            floorCount.textContent = floorEligibleCount;
+
+            const floorChevron = document.createElement('span');
+            floorChevron.style.cssText = 'font-weight:900;color:#1d4ed8;font-size:1.45rem;line-height:1;min-width:20px;text-align:center;';
+            floorChevron.textContent = floorExpanded ? '-' : '+';
+
+            floorLabelWrap.appendChild(floorLabel);
+            floorLabelWrap.appendChild(floorCount);
+            floorHeader.appendChild(floorLabelWrap);
+            floorHeader.appendChild(floorChevron);
+            floorEl.appendChild(floorHeader);
+
+            const floorContent = document.createElement('div');
+            floorContent.style.cssText = `max-height:${floorExpanded ? '2000px' : '0'};padding:${floorExpanded ? '10px' : '0'};background:#f8fbff;overflow:hidden;transition:max-height 0.35s ease, padding 0.35s ease;`;
+
+            floorHeader.addEventListener('click', () => {
+                const willExpand = !assemblyExpandedFloors.has(floor);
+                if (willExpand) {
+                    assemblyExpandedFloors.add(floor);
+                } else {
+                    assemblyExpandedFloors.delete(floor);
+                }
+                floorChevron.textContent = willExpand ? '-' : '+';
+                floorContent.style.maxHeight = willExpand ? '2000px' : '0';
+                floorContent.style.padding = willExpand ? '10px' : '0';
+            });
+
+            Object.keys(roomsInFloor).sort((a, b) => {
+                return (PACKING_ROOM_CATS[a]?.name || a).localeCompare(PACKING_ROOM_CATS[b]?.name || b);
+            }).forEach((roomKey) => {
+                const itemsInRoom = roomsInFloor[roomKey] || {};
+                const roomEntries = Object.entries(itemsInRoom).filter(([itemName]) => {
+                    const itemKey = getDisassemblyItemKey(floor, itemName);
+                    return disassemblyEligibleSet.has(itemKey);
+                });
+
+                if (roomEntries.length === 0) return;
+
+                const roomStateKey = `assembly::${floor}::${roomKey}`;
+                const roomExpanded = assemblyExpandedRooms.has(roomStateKey);
+
+                const roomEl = document.createElement('div');
+                roomEl.style.cssText = 'margin-bottom:8px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;';
+
+                const roomHeader = document.createElement('div');
+                roomHeader.style.cssText = 'padding:8px 12px;background:#f3f4f6;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;';
+
+                const roomLabelWrap = document.createElement('div');
+                roomLabelWrap.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+                const roomLabel = document.createElement('span');
+                roomLabel.style.cssText = 'font-weight:600;color:#374151;font-size:0.9rem;display:flex;align-items:center;gap:6px;';
+                roomLabel.textContent = `${PACKING_ROOM_CATS[roomKey]?.icon || '📦'} ${PACKING_ROOM_CATS[roomKey]?.name || roomKey}`;
+
+                const roomCount = document.createElement('span');
+                roomCount.style.cssText = 'font-size:0.78rem;color:#6b7280;background:#e5e7eb;padding:2px 7px;border-radius:999px;font-weight:600;margin-left:6px;';
+                roomCount.textContent = roomEntries.length;
+
+                const roomChevron = document.createElement('span');
+                roomChevron.style.cssText = 'font-weight:900;color:#374151;font-size:1.35rem;line-height:1;min-width:20px;text-align:center;margin-left:auto;';
+                roomChevron.textContent = roomExpanded ? '-' : '+';
+
+                roomLabelWrap.appendChild(roomLabel);
+                roomLabelWrap.appendChild(roomCount);
+                roomHeader.appendChild(roomLabelWrap);
+                roomHeader.appendChild(roomChevron);
+                roomEl.appendChild(roomHeader);
+
+                const roomContent = document.createElement('div');
+                roomContent.style.cssText = `display:${roomExpanded ? 'flex' : 'none'};flex-direction:column;gap:4px;padding:8px;background:#fff;`;
+
+                roomHeader.addEventListener('click', () => {
+                    if (assemblyExpandedRooms.has(roomStateKey)) {
+                        assemblyExpandedRooms.delete(roomStateKey);
+                    } else {
+                        assemblyExpandedRooms.add(roomStateKey);
+                    }
+                    renderDisassemblyConfig();
+                });
+
+                roomEntries.forEach(([itemName]) => {
+                    const itemKey = getDisassemblyItemKey(floor, itemName);
+                    const maxQty = Math.max(0, parseInt(disassemblyState[itemKey], 10) || 0);
+                    const selectedQty = Math.max(0, Math.min(maxQty, parseInt(assembleState[itemKey], 10) || 0));
+
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;';
+
+                    const left = document.createElement('div');
+                    left.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
+
+                    const labelText = document.createElement('span');
+                    labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
+                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:break-word;font-size:0.95rem;">${itemName}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
+
+                    left.appendChild(labelText);
+
+                    const controls = document.createElement('div');
+                    controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+                    const minusBtn = document.createElement('button');
+                    minusBtn.type = 'button';
+                    minusBtn.textContent = '-';
+                    minusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
+
+                    const qtyInput = document.createElement('input');
+                    qtyInput.type = 'number';
+                    qtyInput.min = '0';
+                    qtyInput.max = String(maxQty);
+                    qtyInput.value = String(selectedQty);
+                    qtyInput.style.cssText = 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
+
+                    const plusBtn = document.createElement('button');
+                    plusBtn.type = 'button';
+                    plusBtn.textContent = '+';
+                    plusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
+
+                    minusBtn.addEventListener('click', () => {
+                        const nextQty = (parseInt(qtyInput.value, 10) || 0) - 1;
+                        setAssembleItemQty(itemKey, nextQty, maxQty);
+                        renderDisassemblyConfig();
+                        renderStorageConfig();
+                        if (window.updateNextButtonState) window.updateNextButtonState();
+                    });
+
+                    plusBtn.addEventListener('click', () => {
+                        const nextQty = (parseInt(qtyInput.value, 10) || 0) + 1;
+                        setAssembleItemQty(itemKey, nextQty, maxQty);
+                        renderDisassemblyConfig();
+                        renderStorageConfig();
+                        if (window.updateNextButtonState) window.updateNextButtonState();
+                    });
+
+                    qtyInput.addEventListener('change', () => {
+                        setAssembleItemQty(itemKey, qtyInput.value, maxQty);
+                        renderDisassemblyConfig();
+                        renderStorageConfig();
+                        if (window.updateNextButtonState) window.updateNextButtonState();
+                    });
+
+                    controls.appendChild(minusBtn);
+                    controls.appendChild(qtyInput);
+                    controls.appendChild(plusBtn);
+                    row.appendChild(left);
+                    row.appendChild(controls);
+                    roomContent.appendChild(row);
+                });
+
+                roomEl.appendChild(roomContent);
+                floorContent.appendChild(roomEl);
+            });
+
+            floorEl.appendChild(floorContent);
+            assembleList.appendChild(floorEl);
+        });
+    }
+
+    window.hasValidStorageSelection = function() {
+        const storageInput = document.getElementById('service-storage');
+        if (!storageInput || storageInput.value !== 'yes') return true;
+
+        const storageItemsInput = document.getElementById('service-storage-items');
+        const storageStartInput = document.getElementById('service-storage-start-datetime');
+        const storageEndInput = document.getElementById('service-storage-end-datetime');
+        if (!storageItemsInput || !storageStartInput || !storageEndInput) return false;
+
+        const state = parseStorageItemsSelection(storageItemsInput.value);
+        const hasItems = Object.values(state).some(qty => (parseInt(qty, 10) || 0) > 0);
+        if (!hasItems) return false;
+
+        const startDate = new Date(storageStartInput.value);
+        const endDate = new Date(storageEndInput.value);
+        if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) {
+            return false;
+        }
+
+        return endDate > startDate;
+    };
+
+    window.hasValidDisassemblySelection = function() {
+        const disassemblyInput = document.getElementById('service-disassembly');
+        if (!disassemblyInput || disassemblyInput.value !== 'yes') return true;
+
+        const disassemblyItemsInput = document.getElementById('service-disassembly-items');
+        const assembleChoiceInput = document.getElementById('service-assemble-at-arrival');
+        const assembleItemsInput = document.getElementById('service-assemble-items');
+        if (!disassemblyItemsInput || !assembleChoiceInput || !assembleItemsInput) return false;
+
+        const disassemblyState = parseDisassemblyItemsSelection(disassemblyItemsInput.value);
+        const hasItems = Object.values(disassemblyState).some(qty => (parseInt(qty, 10) || 0) > 0);
+        if (!hasItems) return false;
+
+        if (assembleChoiceInput.value !== 'yes' && assembleChoiceInput.value !== 'no') {
+            return false;
+        }
+
+        if (assembleChoiceInput.value === 'yes') {
+            const assembleState = parseDisassemblyItemsSelection(assembleItemsInput.value);
+            return Object.values(assembleState).some((qty) => (parseInt(qty, 10) || 0) > 0);
+        }
+
+        return true;
+    };
+
     window.renderPackingItemsConfig = renderPackingItemsConfig;
+    window.renderStorageConfig = renderStorageConfig;
+    window.renderDisassemblyConfig = renderDisassemblyConfig;
 
     document.addEventListener('change', function(e) {
         if (!e.target) return;
-        if (e.target.id === 'service-packing' || e.target.id === 'service-packing-items' || e.target.id === 'service-packing-mode') {
+        if (e.target.id === 'service-packing' || e.target.id === 'service-packing-items' || e.target.id === 'service-packing-mode' || e.target.id === 'service-packing-box-provider') {
             renderPackingItemsConfig();
             if (window.updateNextButtonState) {
                 window.updateNextButtonState();
             }
         }
+
+        if (e.target.id === 'service-storage' || e.target.id === 'service-storage-items' || e.target.id === 'service-storage-start-datetime' || e.target.id === 'service-storage-end-datetime') {
+            renderStorageConfig();
+            if (window.updateNextButtonState) {
+                window.updateNextButtonState();
+            }
+        }
+
+        if (e.target.id === 'service-disassembly' || e.target.id === 'service-disassembly-items' || e.target.id === 'service-assemble-at-arrival' || e.target.id === 'service-assemble-items') {
+            renderDisassemblyConfig();
+            // When assembly selection changes, refresh storage so assembled items are excluded.
+            if (e.target.id === 'service-assemble-items') {
+                renderStorageConfig();
+            }
+            if (window.updateNextButtonState) {
+                window.updateNextButtonState();
+            }
+        }
+
     });
 
     document.addEventListener('click', function(e) {
@@ -1737,6 +3017,82 @@ document.addEventListener('DOMContentLoaded', function () {
         if (window.updateNextButtonState) {
             window.updateNextButtonState();
         }
+    });
+
+    document.addEventListener('click', function(e) {
+        const providerBtn = e.target.closest('.packing-box-provider-btn');
+        if (!providerBtn) return;
+
+        e.preventDefault();
+        const providerInput = document.getElementById('service-packing-box-provider');
+        const itemsInput = document.getElementById('service-packing-items');
+        if (!providerInput) return;
+
+        providerInput.value = providerBtn.getAttribute('data-value') || '';
+        providerInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+        // Selecting a provider can change what should be packed in selected mode.
+        if (itemsInput && !itemsInput.value) {
+            itemsInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        renderPackingItemsConfig();
+        if (window.updateNextButtonState) {
+            window.updateNextButtonState();
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        const assembleBtn = e.target.closest('.assemble-option-btn');
+        if (!assembleBtn) return;
+
+        e.preventDefault();
+        const assembleChoiceInput = document.getElementById('service-assemble-at-arrival');
+        const assembleItemsInput = document.getElementById('service-assemble-items');
+        if (!assembleChoiceInput) return;
+
+        const value = assembleBtn.getAttribute('data-value') || '';
+        assembleChoiceInput.value = value;
+        assembleChoiceInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+        if (value !== 'yes' && assembleItemsInput) {
+            assembleItemsInput.value = '';
+            assembleItemsInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        renderDisassemblyConfig();
+        if (window.updateNextButtonState) window.updateNextButtonState();
+    });
+
+    document.addEventListener('click', function(e) {
+        const assembleSelectAllBtn = e.target.closest('button[data-assemble-select-all]');
+        if (!assembleSelectAllBtn) return;
+
+        e.preventDefault();
+        const assembleItemsInput = document.getElementById('service-assemble-items');
+        const disassemblyItemsInput = document.getElementById('service-disassembly-items');
+        if (!assembleItemsInput || !disassemblyItemsInput) return;
+
+        const disassemblyState = parseDisassemblyItemsSelection(disassemblyItemsInput.value);
+        const assembleState = parseDisassemblyItemsSelection(assembleItemsInput.value);
+        const eligibleEntries = Object.entries(disassemblyState).filter(([, qty]) => (parseInt(qty, 10) || 0) > 0);
+        const allSelected = eligibleEntries.length > 0 && eligibleEntries.every(([key, qty]) => {
+            return (parseInt(assembleState[key], 10) || 0) >= (parseInt(qty, 10) || 0);
+        });
+
+        if (allSelected) {
+            assembleItemsInput.value = '';
+        } else {
+            const nextState = {};
+            eligibleEntries.forEach(([key, qty]) => {
+                nextState[key] = parseInt(qty, 10) || 0;
+            });
+            assembleItemsInput.value = Object.keys(nextState).length > 0 ? JSON.stringify(nextState) : '';
+        }
+
+        renderDisassemblyConfig();
+        renderStorageConfig();
+        if (window.updateNextButtonState) window.updateNextButtonState();
     });
     
     // Use event delegation for service option buttons
@@ -1763,14 +3119,38 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (service === 'packing') {
             const modeInput = document.getElementById('service-packing-mode');
+            const boxProviderInput = document.getElementById('service-packing-box-provider');
             const itemsInput = document.getElementById('service-packing-items');
             if (value === 'no') {
                 if (modeInput) modeInput.value = '';
+                if (boxProviderInput) boxProviderInput.value = '';
                 if (itemsInput) itemsInput.value = '';
             } else {
                 if (modeInput && !modeInput.value) {
                     modeInput.value = 'all';
                 }
+            }
+        }
+
+        if (service === 'storage') {
+            const storageItemsInput = document.getElementById('service-storage-items');
+            const storageStartInput = document.getElementById('service-storage-start-datetime');
+            const storageEndInput = document.getElementById('service-storage-end-datetime');
+            if (value === 'no') {
+                if (storageItemsInput) storageItemsInput.value = '';
+                if (storageStartInput) storageStartInput.value = '';
+                if (storageEndInput) storageEndInput.value = '';
+            }
+        }
+
+        if (service === 'disassembly') {
+            const disassemblyItemsInput = document.getElementById('service-disassembly-items');
+            const assembleChoiceInput = document.getElementById('service-assemble-at-arrival');
+            const assembleItemsInput = document.getElementById('service-assemble-items');
+            if (value === 'no') {
+                if (disassemblyItemsInput) disassemblyItemsInput.value = '';
+                if (assembleChoiceInput) assembleChoiceInput.value = '';
+                if (assembleItemsInput) assembleItemsInput.value = '';
             }
         }
         
@@ -1780,6 +3160,12 @@ document.addEventListener('DOMContentLoaded', function () {
         if (service === 'packing' && typeof window.renderPackingItemsConfig === 'function') {
             window.renderPackingItemsConfig();
         }
+        if (service === 'storage' && typeof window.renderStorageConfig === 'function') {
+            window.renderStorageConfig();
+        }
+        if (service === 'disassembly' && typeof window.renderDisassemblyConfig === 'function') {
+            window.renderDisassemblyConfig();
+        }
         
         // Update sticky button state
         if (window.updateNextButtonState) {
@@ -1788,20 +3174,27 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     
     
-    document.addEventListener('DOMContentLoaded', function() {
+    (function initializeStep6Bindings() {
         // Service Number Inputs handlers
         const serviceNumberInputs = document.querySelectorAll('.service-number-input');
         serviceNumberInputs.forEach(input => {
             // Set default value to 0 if empty
-            if (!input.value) {
+            const modeInput = document.getElementById(`${input.id}-mode`);
+            if ((!modeInput || modeInput.value !== 'unsure') && !input.value) {
                 input.value = '0';
             }
             
             input.addEventListener('input', function() {
+                const linkedModeInput = document.getElementById(`${this.id}-mode`);
+                if (linkedModeInput && linkedModeInput.value === 'unsure') {
+                    linkedModeInput.value = 'count';
+                    syncMoversUnsureUi();
+                }
                 // Ensure non-negative value
                 if (this.value < 0) {
                     this.value = '0';
                 }
+                this.setAttribute('data-last-count-value', this.value || '0');
                 // Update sticky button state
                 if (window.updateNextButtonState) {
                     window.updateNextButtonState();
@@ -1810,8 +3203,12 @@ document.addEventListener('DOMContentLoaded', function () {
             
             input.addEventListener('change', function() {
                 // Blur handler
-                if (!this.value || this.value === '') {
+                const linkedModeInput = document.getElementById(`${this.id}-mode`);
+                if ((!linkedModeInput || linkedModeInput.value !== 'unsure') && (!this.value || this.value === '')) {
                     this.value = '0';
+                }
+                if (!linkedModeInput || linkedModeInput.value !== 'unsure') {
+                    this.setAttribute('data-last-count-value', this.value || '0');
                 }
                 // Update sticky button state
                 if (window.updateNextButtonState) {
@@ -1821,10 +3218,39 @@ document.addEventListener('DOMContentLoaded', function () {
             
             input.addEventListener('blur', function() {
                 // Set to 0 if empty on blur
-                if (!this.value || this.value === '') {
+                const linkedModeInput = document.getElementById(`${this.id}-mode`);
+                if ((!linkedModeInput || linkedModeInput.value !== 'unsure') && (!this.value || this.value === '')) {
                     this.value = '0';
                 }
+                if (!linkedModeInput || linkedModeInput.value !== 'unsure') {
+                    this.setAttribute('data-last-count-value', this.value || '0');
+                }
                 // Update sticky button state
+                if (window.updateNextButtonState) {
+                    window.updateNextButtonState();
+                }
+            });
+        });
+
+        document.querySelectorAll('.movers-unsure-btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                const inputId = this.getAttribute('data-target-input');
+                const modeId = this.getAttribute('data-target-mode');
+                const input = document.getElementById(inputId);
+                const modeInput = document.getElementById(modeId);
+                if (!input || !modeInput) return;
+
+                const nextIsUnsure = modeInput.value !== 'unsure';
+                if (nextIsUnsure) {
+                    input.setAttribute('data-last-count-value', input.value || input.getAttribute('data-last-count-value') || '0');
+                    modeInput.value = 'unsure';
+                } else {
+                    modeInput.value = 'count';
+                }
+
+                syncMoversUnsureUi();
+                modeInput.dispatchEvent(new Event('change', { bubbles: true }));
                 if (window.updateNextButtonState) {
                     window.updateNextButtonState();
                 }
@@ -1851,18 +3277,34 @@ document.addEventListener('DOMContentLoaded', function () {
             // Ensure mover inputs have values
             const pickupMovers = document.getElementById('service-pickup-movers');
             const deliveryMovers = document.getElementById('service-delivery-movers');
+            const pickupMoversMode = document.getElementById('service-pickup-movers-mode');
+            const deliveryMoversMode = document.getElementById('service-delivery-movers-mode');
             
-            if (pickupMovers && !pickupMovers.value) {
+            if (pickupMoversMode && !pickupMoversMode.value) {
+                pickupMoversMode.value = 'count';
+            }
+            if (deliveryMoversMode && !deliveryMoversMode.value) {
+                deliveryMoversMode.value = 'count';
+            }
+
+            if (pickupMovers && (!pickupMoversMode || pickupMoversMode.value !== 'unsure') && !pickupMovers.value) {
                 pickupMovers.value = '0';
             }
-            if (deliveryMovers && !deliveryMovers.value) {
+            if (deliveryMovers && (!deliveryMoversMode || deliveryMoversMode.value !== 'unsure') && !deliveryMovers.value) {
                 deliveryMovers.value = '0';
             }
+            syncMoversUnsureUi();
             
             // Trigger button state update after a small delay to ensure DOM is ready
             setTimeout(() => {
                 if (typeof window.renderPackingItemsConfig === 'function') {
                     window.renderPackingItemsConfig();
+                }
+                if (typeof window.renderStorageConfig === 'function') {
+                    window.renderStorageConfig();
+                }
+                if (typeof window.renderDisassemblyConfig === 'function') {
+                    window.renderDisassemblyConfig();
                 }
                 if (window.updateNextButtonState) {
                     window.updateNextButtonState();
@@ -1871,7 +3313,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         
         window.initializeStep6 = initializeStep6;
-    });
+    })();
 
 // --- Global State for Floor Selection ---
 window.selectedPickupFloors = new Set();
@@ -2623,74 +4065,73 @@ window.toggleDeliveryFloor = function(floor) {
     }
 
     // Render floor icon grid
-// --- Floor Icon Rendering (moved to top-level for global access) ---
-function renderFloorIcons(propertyType) {
-    const floorIconGrid = document.getElementById('floor-icon-grid');
-    const floorHiddenInput = document.getElementById('pickup-floor-select');
-    if (!floorIconGrid) return;
-    floorIconGrid.innerHTML = '';
-    const floors = propertyFloors[propertyType] || [];
-    // Get already added floors
-    const usedFloors = new Set();
-    const floorsContainer = document.querySelector('.floors-inventory-container');
-    if (floorsContainer) {
-        Array.from(floorsContainer.children).forEach(block => {
-            const floorFromData = block.getAttribute('data-floor');
-            if (floorFromData) {
-                usedFloors.add(floorFromData.trim());
-                return;
-            }
-            const title = block.querySelector('h3');
-            if (title) {
-                let match = title.textContent.match(/Add Inventory for (.+) Floor/);
-                if (!match) match = title.textContent.match(/Inventory for (.+) Floor/);
-                if (!match) match = title.textContent.match(/^(.+) Floor$/);
-                if (match && match[1]) {
-                    usedFloors.add(match[1].trim());
+    function renderFloorIcons(propertyType) {
+        const floorIconGrid = document.getElementById('floor-icon-grid');
+        const floorHiddenInput = document.getElementById('pickup-floor-select');
+        if (!floorIconGrid) return;
+        floorIconGrid.innerHTML = '';
+        const floors = propertyFloors[propertyType] || [];
+        // Get already added floors
+        const usedFloors = new Set();
+        const floorsContainer = document.querySelector('.floors-inventory-container');
+        if (floorsContainer) {
+            Array.from(floorsContainer.children).forEach(block => {
+                const floorFromData = block.getAttribute('data-floor');
+                if (floorFromData) {
+                    usedFloors.add(floorFromData.trim());
+                    return;
                 }
-            }
-        });
-    }
-    floors.forEach(floor => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'floor-icon-btn';
-        btn.setAttribute('data-value', floor);
-        btn.innerHTML = `${getFloorIconSvg(floor)}<span>${floor}</span>`;
-        btn.setAttribute('aria-pressed', 'false');
-        if (usedFloors.has(floor)) {
-            btn.disabled = true;
-            btn.classList.add('disabled');
-        } else {
-            btn.addEventListener('click', function () {
-                // Deselect all
-                floorIconGrid.querySelectorAll('.floor-icon-btn').forEach(b => {
-                    b.classList.remove('selected');
-                    b.setAttribute('aria-pressed', 'false');
-                });
-                btn.classList.add('selected');
-                btn.setAttribute('aria-pressed', 'true');
-                if (floorHiddenInput) {
-                    floorHiddenInput.value = floor;
-                    // Fire change event for listeners
-                    const event = new Event('change', { bubbles: true });
-                    floorHiddenInput.dispatchEvent(event);
-                }
-                // Only update lift/inventory visibility, do not scroll or show inventory here
-                setTimeout(updateInventoryAndliftVisibility, 0);
-                // Update next button state
-                if (typeof window.updateNextButtonState === 'function') {
-                    window.updateNextButtonState();
+                const title = block.querySelector('h3');
+                if (title) {
+                    let match = title.textContent.match(/Add Inventory for (.+) Floor/);
+                    if (!match) match = title.textContent.match(/Inventory for (.+) Floor/);
+                    if (!match) match = title.textContent.match(/^(.+) Floor$/);
+                    if (match && match[1]) {
+                        usedFloors.add(match[1].trim());
+                    }
                 }
             });
         }
-        floorIconGrid.appendChild(btn);
-    });
-    // Reset hidden input if property type changes
-    if (floorHiddenInput) floorHiddenInput.value = '';
-    // Render lift icon grid if needed
-    if (typeof renderliftIcons === 'function') renderliftIcons();
-}
+        floors.forEach(floor => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'floor-icon-btn';
+            btn.setAttribute('data-value', floor);
+            btn.innerHTML = `${getFloorIconSvg(floor)}<span>${floor}</span>`;
+            btn.setAttribute('aria-pressed', 'false');
+            if (usedFloors.has(floor)) {
+                btn.disabled = true;
+                btn.classList.add('disabled');
+            } else {
+                btn.addEventListener('click', function () {
+                    // Deselect all
+                    floorIconGrid.querySelectorAll('.floor-icon-btn').forEach(b => {
+                        b.classList.remove('selected');
+                        b.setAttribute('aria-pressed', 'false');
+                    });
+                    btn.classList.add('selected');
+                    btn.setAttribute('aria-pressed', 'true');
+                    if (floorHiddenInput) {
+                        floorHiddenInput.value = floor;
+                        // Fire change event for listeners
+                        const event = new Event('change', { bubbles: true });
+                        floorHiddenInput.dispatchEvent(event);
+                    }
+                    // Only update lift/inventory visibility, do not scroll or show inventory here
+                    setTimeout(updateInventoryAndliftVisibility, 0);
+                    // Update next button state
+                    if (typeof window.updateNextButtonState === 'function') {
+                        window.updateNextButtonState();
+                    }
+                });
+            }
+            floorIconGrid.appendChild(btn);
+        });
+        // Reset hidden input if property type changes
+        if (floorHiddenInput) floorHiddenInput.value = '';
+        // Render lift icon grid if needed
+        if (typeof renderliftIcons === 'function') renderliftIcons();
+    }
 
     // Render lift icon grid (Yes/No icons)
     function renderliftIcons() {
@@ -3206,7 +4647,7 @@ document.addEventListener('DOMContentLoaded', function () {
         bedrooms: { name: 'Bedrooms', icon: '🛏️' },
         bathrooms: { name: 'Bathrooms', icon: '🚿' },
         garden: { name: 'Garden', icon: '🌳' },
-        boxes: { name: 'Boxes & Other', icon: '📦' }
+        boxes: { name: 'Custom Items', icon: '📦' }
     };
     
     // Expose ROOM_CATEGORIES globally
@@ -3327,7 +4768,9 @@ document.addEventListener('DOMContentLoaded', function () {
     
     // Helper function to extract item name from key
     function getItemNameFromKey(itemKey) {
-        return itemKey.split('||')[0];
+        const rawName = itemKey.split('||')[0];
+        const boxPrefixMatch = rawName.match(/^([^\-]+)\s-\s(Small Boxes|Medium Boxes|Large Boxes|XL Boxes|Extra Large Boxes)$/i);
+        return boxPrefixMatch && boxPrefixMatch[2] ? boxPrefixMatch[2] : rawName;
     }
     
     // Helper function to extract source floor from key
@@ -3684,6 +5127,58 @@ document.addEventListener('DOMContentLoaded', function () {
                 floorRoomsContainer.style.maxHeight = willExpand ? '2000px' : '0';
                 floorRoomsContainer.style.marginBottom = willExpand ? '12px' : '0';
             });
+
+            // Floor-level select all (selects every item in every room under this source floor)
+            const floorItems = Object.values(roomsInFloor).flat();
+            const allInFloorSelected = floorItems.length > 0 && floorItems.every((item) => selectedItems.has(item.key));
+            const floorSelectAllBtn = document.createElement('button');
+            floorSelectAllBtn.type = 'button';
+            floorSelectAllBtn.innerHTML = `<input type="checkbox" class="floor-select-all" data-floor="${sourceFloor}" ${allInFloorSelected ? 'checked' : ''} style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"> Select all from ${sourceFloor} Floor`;
+            floorSelectAllBtn.style.cssText = `
+                width: calc(100% - 24px);
+                margin: 8px 0 10px 12px;
+                padding: 8px 12px;
+                background: #ecfdf5;
+                border: 2px solid #10b981;
+                border-radius: 6px;
+                color: #065f46;
+                font-weight: 600;
+                font-size: 0.85rem;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                text-align: left;
+            `;
+
+            floorSelectAllBtn.addEventListener('mouseover', () => {
+                floorSelectAllBtn.style.background = '#d1fae5';
+            });
+
+            floorSelectAllBtn.addEventListener('mouseout', () => {
+                floorSelectAllBtn.style.background = '#ecfdf5';
+            });
+
+            floorSelectAllBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const checkbox = floorSelectAllBtn.querySelector('.floor-select-all');
+                const clickedCheckbox = e.target && e.target.classList && e.target.classList.contains('floor-select-all');
+                const nextChecked = clickedCheckbox ? checkbox.checked : !checkbox.checked;
+                checkbox.checked = nextChecked;
+
+                floorItems.forEach((item) => {
+                    if (nextChecked) {
+                        selectedItems.add(item.key);
+                    } else {
+                        selectedItems.delete(item.key);
+                    }
+                });
+
+                renderInventoryByRoom();
+                renderDeliveryFloors();
+            });
+
+            floorRoomsContainer.appendChild(floorSelectAllBtn);
             
             // Render rooms within this floor
             Object.keys(roomsInFloor).sort((a, b) => {
@@ -4226,7 +5721,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const removeAllBtn = document.createElement('button');
             removeAllBtn.type = 'button';
-            removeAllBtn.textContent = 'Undo / Remove All';
+            removeAllBtn.textContent = 'Undo / Return all';
             removeAllBtn.disabled = itemsForFloor.length === 0;
             removeAllBtn.style.cssText = `
                 border: none;
@@ -4241,7 +5736,7 @@ document.addEventListener('DOMContentLoaded', function () {
             removeAllBtn.addEventListener('click', () => {
                 if (itemsForFloor.length === 0) return;
 
-                const confirmed = confirm(`Remove all assigned items from ${floor} Floor?`);
+                const confirmed = confirm(`Return all assigned items from ${floor} Floor?`);
                 if (!confirmed) return;
 
                 Object.keys(itemFloorAssignments).forEach((itemKey) => {
@@ -4314,13 +5809,22 @@ document.addEventListener('DOMContentLoaded', function () {
                         overflow: hidden;
                     `;
 
+                    const roomHeaderRow = document.createElement('div');
+                    roomHeaderRow.style.cssText = `
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        background: #f8fafc;
+                        padding: 8px 10px;
+                    `;
+
                     const roomHeaderBtn = document.createElement('button');
                     roomHeaderBtn.type = 'button';
                     roomHeaderBtn.style.cssText = `
-                        width: 100%;
+                        flex: 1;
                         border: none;
-                        background: #f8fafc;
-                        padding: 10px 12px;
+                        background: transparent;
+                        padding: 2px;
                         cursor: pointer;
                         display: flex;
                         align-items: center;
@@ -4378,7 +5882,47 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     roomHeaderBtn.appendChild(roomHeaderLeft);
                     roomHeaderBtn.appendChild(roomChevron);
-                    roomSection.appendChild(roomHeaderBtn);
+
+                    const roomReturnAllBtn = document.createElement('button');
+                    roomReturnAllBtn.type = 'button';
+                    roomReturnAllBtn.textContent = 'Return All';
+                    roomReturnAllBtn.disabled = roomItemsForFloor.length === 0;
+                    roomReturnAllBtn.style.cssText = `
+                        border: none;
+                        border-radius: 6px;
+                        padding: 6px 10px;
+                        font-size: 0.78rem;
+                        font-weight: 700;
+                        background: ${roomItemsForFloor.length > 0 ? '#dc2626' : '#fca5a5'};
+                        color: #fff;
+                        cursor: ${roomItemsForFloor.length > 0 ? 'pointer' : 'not-allowed'};
+                        white-space: nowrap;
+                    `;
+                    roomReturnAllBtn.addEventListener('click', (event) => {
+                        event.stopPropagation();
+                        if (roomItemsForFloor.length === 0) return;
+
+                        const roomLabel = ROOM_CATEGORIES[roomKey]?.name || roomKey;
+                        const confirmed = confirm(`Return all ${roomLabel} items from ${floor} Floor?`);
+                        if (!confirmed) return;
+
+                        roomItemsForFloor.forEach((item) => {
+                            if (itemFloorAssignments[item.key] && itemFloorAssignments[item.key][floor] > 0) {
+                                delete itemFloorAssignments[item.key][floor];
+                                if (Object.keys(itemFloorAssignments[item.key]).length === 0) {
+                                    delete itemFloorAssignments[item.key];
+                                }
+                            }
+                        });
+
+                        expandedDeliveryRooms.delete(roomAccordionKey);
+                        renderInventoryByRoom();
+                        renderDeliveryFloors();
+                    });
+
+                    roomHeaderRow.appendChild(roomHeaderBtn);
+                    roomHeaderRow.appendChild(roomReturnAllBtn);
+                    roomSection.appendChild(roomHeaderRow);
 
                     const roomItemsWrap = document.createElement('div');
                     roomItemsWrap.style.cssText = `
@@ -4729,8 +6273,7 @@ document.addEventListener('DOMContentLoaded', function () {
         { name: 'Office', svg: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="10" rx="2" stroke="currentColor" stroke-width="2"/><rect x="7" y="3" width="10" height="4" rx="1" stroke="currentColor" stroke-width="2"/></svg>' },
         { name: 'Bedrooms', svg: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="10" width="18" height="7" rx="2" stroke="currentColor" stroke-width="2"/><rect x="7" y="7" width="10" height="3" rx="1.5" stroke="currentColor" stroke-width="2"/></svg>' },
         { name: 'Bathrooms', svg: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2"/><rect x="9" y="8" width="6" height="8" rx="2" stroke="currentColor" stroke-width="2"/></svg>' },
-        { name: 'Garden', svg: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="2"/></svg>' },
-        { name: 'Boxes & Other', svg: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="10" rx="2" stroke="currentColor" stroke-width="2"/><rect x="7" y="3" width="10" height="4" rx="1" stroke="currentColor" stroke-width="2"/></svg>' }
+        { name: 'Garden', svg: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="2"/></svg>' }
     ];
     // Inventory items (should match the main inventory)
     const inventoryItems = [
@@ -5178,7 +6721,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const getRoomKey = (tabName) => {
             const key = (tabName || '').toLowerCase();
             if (key === 'utility room') return 'utility';
-            if (key === 'boxes & other') return 'boxes';
+            if (key === 'boxes & other' || key === 'custom items') return 'boxes';
             return key;
         };
 
@@ -5206,8 +6749,9 @@ document.addEventListener('DOMContentLoaded', function () {
             return itemName;
         };
         const getMultiFloorDisplayName = (itemName, tabName) => {
-            if (!isBoxItemName(itemName)) return itemName;
-            return getMultiFloorTrackingKey(itemName, tabName);
+            const trackingKey = getMultiFloorTrackingKey(itemName, tabName);
+            const boxPrefixMatch = trackingKey.match(/^([^\-]+)\s-\s(Small Boxes|Medium Boxes|Large Boxes|XL Boxes|Extra Large Boxes)$/i);
+            return boxPrefixMatch && boxPrefixMatch[2] ? boxPrefixMatch[2] : trackingKey;
         };
 
         // Show room-specific items plus any custom items
@@ -5626,7 +7170,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const propertyTypeSelect = document.getElementById('pickup-property-type');
     if (propertyTypeSelect) {
         propertyTypeSelect.addEventListener('change', function () {
-            // Remove all floor blocks and reset addedFloors when property type changes
+            // Return all floor blocks and reset addedFloors when property type changes
             while (floorsContainer.firstChild) {
                 floorsContainer.removeChild(floorsContainer.firstChild);
             }
@@ -10822,8 +12366,7 @@ function getMultiStopHouseInventoryMarkup(stopId) {
         { key: 'bathrooms', label: 'Bathrooms', icon: '<path d="M4 4h16v2H4zM6 6h12v12H6zM9 10h6v2H9z"/>' },
         { key: 'garden', label: 'Garden', icon: '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6z"/>' },
         { key: 'utility', label: 'Utility', icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="13" r="4" fill="white"/><circle cx="9" cy="7" r="1.2" fill="white"/>' },
-        { key: 'shed', label: 'Shed', icon: '<path d="M4 10l8-6 8 6v10H4z"/><rect x="10" y="13" width="4" height="7" fill="white"/>' },
-        { key: 'boxes', label: 'Boxes & Other', icon: '<path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>' }
+        { key: 'shed', label: 'Shed', icon: '<path d="M4 10l8-6 8 6v10H4z"/><rect x="10" y="13" width="4" height="7" fill="white"/>' }
     ];
 
     const tabMarkup = roomTabs

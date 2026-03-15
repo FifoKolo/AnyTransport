@@ -297,7 +297,6 @@
         <button class="inventory-tab " type="button" data-room="bedrooms"><span><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="10" width="18" height="7" rx="2" stroke="currentColor" stroke-width="2"/><rect x="7" y="7" width="10" height="3" rx="1.5" stroke="currentColor" stroke-width="2"/></svg></span>Bedrooms</button>
         <button class="inventory-tab " type="button" data-room="bathrooms"><span><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2"/><rect x="9" y="8" width="6" height="8" rx="2" stroke="currentColor" stroke-width="2"/></svg></span>Bathrooms</button>
         <button class="inventory-tab " type="button" data-room="garden"><span><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="2"/></svg></span>Garden</button>
-        <button class="inventory-tab " type="button" data-room="boxes"><span><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="10" rx="2" stroke="currentColor" stroke-width="2"/><rect x="7" y="3" width="10" height="4" rx="1" stroke="currentColor" stroke-width="2"/></svg></span>Boxes & Other</button>
     </div>
     <div id="room-items-container" class="room-items-list">
         <div class="room-empty-state">Select a room icon to view items.</div>
@@ -1717,8 +1716,8 @@
                                         <label class="service-requirement-label">
                                             <span>Packing Service</span>
                                             <div class="info-tooltip-wrapper">
-                                                <span class="info-icon">i</span>
-                                                <div class="info-tooltip">We'll pack your items safely with professional materials</div>
+                                               
+                                                   
                                             </div>
                                         </label>
                                     </div>
@@ -1728,6 +1727,7 @@
                                     </div>
                                     <input type="hidden" id="service-packing" name="service-packing" value="">
                                     <input type="hidden" id="service-packing-mode" name="service-packing-mode" value="">
+                                    <input type="hidden" id="service-packing-box-provider" name="service-packing-box-provider" value="">
                                     <input type="hidden" id="service-packing-items" name="service-packing-items" value="">
                                     <div id="packing-mode-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
                                         <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">How would you like packing done?</div>
@@ -1736,11 +1736,61 @@
                                             <button type="button" class="packing-mode-btn" data-value="selected" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Select items</button>
                                         </div>
                                     </div>
+                                    <div id="packing-box-provider-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
+                                        <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">Who will provide the boxes?</div>
+                                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                            <button type="button" class="packing-box-provider-btn" data-value="homeowner" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Homeowner provides boxes</button>
+                                            <button type="button" class="packing-box-provider-btn" data-value="transport-provider" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Transport Provider provides boxes</button>
+                                        </div>
+                                    </div>
                                     <div id="packing-items-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
                                         <div style="font-weight:700; color:#1f2937; margin-bottom:4px; font-size:1rem;">Choose items to pack</div>
                                         <div style="font-size:0.86rem; color:#4b5563; margin-bottom:8px;">Items are grouped by pickup floor and room. Expand a floor, then a room, to select items and set how many units you want packed.</div>
                                         <div id="packing-items-list" style="display:flex; flex-direction:column; gap:6px;"></div>
                                         <div id="packing-items-empty" style="display:none; color:#6b7280; font-size:0.9rem; padding:8px 0;">No inventory items available to pack yet.</div>
+                                    </div>
+                                </div>
+
+                                <!-- Furniture Disassembly/Assembly -->
+                                <div class="service-requirement-card">
+                                    <div class="service-requirement-header">
+                                        <label class="service-requirement-label">
+                                            <span>Furniture Disassembly &amp; Assembly</span>
+                                            <div class="info-tooltip-wrapper">
+                                                <span class="info-icon">i</span>
+                                                <div class="info-tooltip">We'll disassemble furniture for transport and reassemble at your new location</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div class="service-requirement-options">
+                                        <button type="button" class="service-option-btn" data-service="disassembly" data-value="no">No</button>
+                                        <button type="button" class="service-option-btn" data-service="disassembly" data-value="yes">Yes</button>
+                                    </div>
+                                    <input type="hidden" id="service-disassembly" name="service-disassembly" value="">
+                                    <input type="hidden" id="service-disassembly-items" name="service-disassembly-items" value="">
+                                    <input type="hidden" id="service-assemble-at-arrival" name="service-assemble-at-arrival" value="">
+                                    <input type="hidden" id="service-assemble-items" name="service-assemble-items" value="">
+
+                                    <div id="disassembly-items-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
+                                        <div style="font-weight:700; color:#1f2937; margin-bottom:4px; font-size:1rem;">Choose items to disassemble</div>
+                                        <div style="font-size:0.86rem; color:#4b5563; margin-bottom:8px;">Select which inventory items should be disassembled before transport.</div>
+                                        <div id="disassembly-items-list" style="display:flex; flex-direction:column; gap:6px;"></div>
+                                        <div id="disassembly-items-empty" style="display:none; color:#6b7280; font-size:0.9rem; padding:8px 0;">No inventory items available for disassembly yet.</div>
+                                    </div>
+
+                                    <div id="assemble-choice-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
+                                        <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">Assemble items at arrival location?</div>
+                                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                            <button type="button" class="assemble-option-btn" data-value="no" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">No</button>
+                                            <button type="button" class="assemble-option-btn" data-value="yes" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Yes</button>
+                                        </div>
+                                    </div>
+
+                                    <div id="assemble-items-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
+                                        <div style="font-weight:700; color:#1f2937; margin-bottom:4px; font-size:1rem;">Choose items to assemble</div>
+                                        <div style="font-size:0.86rem; color:#4b5563; margin-bottom:8px;">Select which of the disassembled items should be assembled at the delivery location.</div>
+                                        <div id="assemble-items-list" style="display:flex; flex-direction:column; gap:6px;"></div>
+                                        <div id="assemble-items-empty" style="display:none; color:#6b7280; font-size:0.9rem; padding:8px 0;">No disassembled items selected yet.</div>
                                     </div>
                                 </div>
 
@@ -1756,7 +1806,12 @@
                                         </label>
                                     </div>
                                     <div class="service-requirement-input">
-                                        <input type="number" id="service-pickup-movers" class="service-number-input" name="service-pickup-movers" min="0" max="10" placeholder="0" value="">
+                                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                                            <input type="number" id="service-pickup-movers" class="service-number-input" name="service-pickup-movers" min="0" max="10" placeholder="0" value="" style="flex:1 1 140px; min-width:140px;">
+                                            <button type="button" class="movers-unsure-btn" data-target-input="service-pickup-movers" data-target-mode="service-pickup-movers-mode" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">Unsure</button>
+                                        </div>
+                                        <input type="hidden" id="service-pickup-movers-mode" name="service-pickup-movers-mode" value="count">
+                                        <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Choose Unsure if you'd like the movers to decide how many will be needed.</div>
                                     </div>
                                 </div>
 
@@ -1772,7 +1827,12 @@
                                         </label>
                                     </div>
                                     <div class="service-requirement-input">
-                                        <input type="number" id="service-delivery-movers" class="service-number-input" name="service-delivery-movers" min="0" max="10" placeholder="0" value="">
+                                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                                            <input type="number" id="service-delivery-movers" class="service-number-input" name="service-delivery-movers" min="0" max="10" placeholder="0" value="" style="flex:1 1 140px; min-width:140px;">
+                                            <button type="button" class="movers-unsure-btn" data-target-input="service-delivery-movers" data-target-mode="service-delivery-movers-mode" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">Unsure</button>
+                                        </div>
+                                        <input type="hidden" id="service-delivery-movers-mode" name="service-delivery-movers-mode" value="count">
+                                        <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Choose Unsure if you'd like the movers to decide how many will be needed.</div>
                                     </div>
                                 </div>
 
@@ -1810,24 +1870,30 @@
                                         <button type="button" class="service-option-btn" data-service="storage" data-value="yes">Yes</button>
                                     </div>
                                     <input type="hidden" id="service-storage" name="service-storage" value="">
-                                </div>
+                                    <input type="hidden" id="service-storage-items" name="service-storage-items" value="">
 
-                                <!-- Furniture Disassembly/Assembly -->
-                                <div class="service-requirement-card">
-                                    <div class="service-requirement-header">
-                                        <label class="service-requirement-label">
-                                            <span>Furniture Disassembly & Assembly</span>
-                                            <div class="info-tooltip-wrapper">
-                                                <span class="info-icon">i</span>
-                                                <div class="info-tooltip">We'll disassemble furniture for transport and reassemble at your new location</div>
-                                            </div>
-                                        </label>
+                                    <div id="storage-items-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
+                                        <div style="font-weight:700; color:#1f2937; margin-bottom:4px; font-size:1rem;">Choose items for storage</div>
+                                        <div style="font-size:0.86rem; color:#4b5563; margin-bottom:8px;">Select which inventory items should go into storage.</div>
+                                        <div id="storage-items-list" style="display:flex; flex-direction:column; gap:6px;"></div>
+                                        <div id="storage-items-empty" style="display:none; color:#6b7280; font-size:0.9rem; padding:8px 0;">No inventory items available for storage yet.</div>
                                     </div>
-                                    <div class="service-requirement-options">
-                                        <button type="button" class="service-option-btn" data-service="disassembly" data-value="no">No</button>
-                                        <button type="button" class="service-option-btn" data-service="disassembly" data-value="yes">Yes</button>
+
+                                    <div id="storage-duration-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
+                                        <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">Storage duration</div>
+                                        <div style="font-size:0.86rem; color:#4b5563; margin-bottom:8px;">Choose the start and end date/time for storage.</div>
+                                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">
+                                            <label style="display:flex; flex-direction:column; gap:4px; font-weight:600; color:#1f2937; font-size:0.9rem;">
+                                                <span>Storage start</span>
+                                                <input type="datetime-local" id="service-storage-start-datetime" name="service-storage-start-datetime" style="padding:8px; border:1px solid #bfdbfe; border-radius:8px; font-size:0.95rem; color:#1e3a8a;">
+                                            </label>
+                                            <label style="display:flex; flex-direction:column; gap:4px; font-weight:600; color:#1f2937; font-size:0.9rem;">
+                                                <span>Storage end</span>
+                                                <input type="datetime-local" id="service-storage-end-datetime" name="service-storage-end-datetime" style="padding:8px; border:1px solid #bfdbfe; border-radius:8px; font-size:0.95rem; color:#1e3a8a;">
+                                            </label>
+                                        </div>
+                                        <div id="storage-duration-preview" style="margin-top:8px; font-size:0.86rem; color:#1e40af; font-weight:600;"></div>
                                     </div>
-                                    <input type="hidden" id="service-disassembly" name="service-disassembly" value="">
                                 </div>
 
                                 <!-- Special Item Handling -->
