@@ -80,6 +80,12 @@
                                     <span class="stepper-label">Additional Services</span>
                                 </button>
                             </li>
+                            <li class="stepper-item" data-step="7">
+                                <button type="button" class="stepper-link" data-step="7">
+                                    <span class="stepper-index">7</span>
+                                    <span class="stepper-label">Moving Date</span>
+                                </button>
+                            </li>
                         </ol>
                     </div>
                 </aside>
@@ -1714,7 +1720,7 @@
                                 <div class="service-requirement-card">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
-                                            <span>Packing Service</span>
+                                            <span>1. Packing Service ?</span>
                                             <div class="info-tooltip-wrapper">
                                                
                                                    
@@ -1732,15 +1738,15 @@
                                     <div id="packing-mode-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
                                         <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">How would you like packing done?</div>
                                         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                            <button type="button" class="packing-mode-btn" data-value="all" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Pack everything</button>
-                                            <button type="button" class="packing-mode-btn" data-value="selected" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Select items</button>
+                                            <button type="button" class="packing-mode-btn" data-value="all" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Full Packing Service</button>
+                                            <button type="button" class="packing-mode-btn" data-value="selected" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Partial Packing Service</button>
                                         </div>
                                     </div>
                                     <div id="packing-box-provider-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
                                         <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">Who will provide the boxes?</div>
                                         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                            <button type="button" class="packing-box-provider-btn" data-value="homeowner" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Homeowner provides boxes</button>
-                                            <button type="button" class="packing-box-provider-btn" data-value="transport-provider" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Transport Provider provides boxes</button>
+                                            <button type="button" class="packing-box-provider-btn" data-value="homeowner" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">I will provide Packing Materials</button>
+                                            <button type="button" class="packing-box-provider-btn" data-value="transport-provider" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Transport Provider provides Packing Materials</button>
                                         </div>
                                     </div>
                                     <div id="packing-items-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
@@ -1755,7 +1761,7 @@
                                 <div class="service-requirement-card">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
-                                            <span>Furniture Disassembly &amp; Assembly</span>
+                                            <span>2. Furniture Disassembly &amp; Assembly ?</span>
                                             <div class="info-tooltip-wrapper">
                                                 <span class="info-icon">i</span>
                                                 <div class="info-tooltip">We'll disassemble furniture for transport and reassemble at your new location</div>
@@ -1779,7 +1785,7 @@
                                     </div>
 
                                     <div id="assemble-choice-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
-                                        <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">Assemble items at arrival location?</div>
+                                        <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">Assemble items at Delivery location?</div>
                                         <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                             <button type="button" class="assemble-option-btn" data-value="no" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">No</button>
                                             <button type="button" class="assemble-option-btn" data-value="yes" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Yes</button>
@@ -1798,7 +1804,7 @@
                                 <div class="service-requirement-card">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
-                                            <span>Movers at Pickup Location</span>
+                                            <span>3. Amount of Movers at Pickup Location</span>
                                             <div class="info-tooltip-wrapper">
                                                 <span class="info-icon">i</span>
                                                 <div class="info-tooltip">Enter number of additional movers needed at pickup location (0 if none)</div>
@@ -1808,10 +1814,12 @@
                                     <div class="service-requirement-input">
                                         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                                             <input type="number" id="service-pickup-movers" class="service-number-input" name="service-pickup-movers" min="0" max="10" placeholder="0" value="" style="flex:1 1 140px; min-width:140px;">
-                                            <button type="button" class="movers-unsure-btn" data-target-input="service-pickup-movers" data-target-mode="service-pickup-movers-mode" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">Unsure</button>
+                                            <button type="button" class="movers-confirm-btn" data-target-input="service-pickup-movers" data-target-mode="service-pickup-movers-mode" data-target-confirmed="service-pickup-movers-confirmed" style="border:1px solid #16a34a; background:#f0fdf4; color:#166534; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">Confirm Movers</button>
+                                            <button type="button" class="movers-unsure-btn" data-target-input="service-pickup-movers" data-target-mode="service-pickup-movers-mode" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">I Don't Know</button>
                                         </div>
                                         <input type="hidden" id="service-pickup-movers-mode" name="service-pickup-movers-mode" value="count">
-                                        <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Choose Unsure if you'd like the movers to decide how many will be needed.</div>
+                                        <input type="hidden" id="service-pickup-movers-confirmed" name="service-pickup-movers-confirmed" value="no">
+                                        <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Choose I Don't Know if you'd like the Transport Provider to decide how many will be needed.</div>
                                     </div>
                                 </div>
 
@@ -1819,7 +1827,7 @@
                                 <div class="service-requirement-card">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
-                                            <span>Movers at Delivery Location</span>
+                                            <span>4. Amount of Movers at Delivery Location</span>
                                             <div class="info-tooltip-wrapper">
                                                 <span class="info-icon">i</span>
                                                 <div class="info-tooltip">Enter number of additional movers needed at delivery location (0 if none)</div>
@@ -1829,36 +1837,20 @@
                                     <div class="service-requirement-input">
                                         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                                             <input type="number" id="service-delivery-movers" class="service-number-input" name="service-delivery-movers" min="0" max="10" placeholder="0" value="" style="flex:1 1 140px; min-width:140px;">
-                                            <button type="button" class="movers-unsure-btn" data-target-input="service-delivery-movers" data-target-mode="service-delivery-movers-mode" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">Unsure</button>
+                                            <button type="button" class="movers-confirm-btn" data-target-input="service-delivery-movers" data-target-mode="service-delivery-movers-mode" data-target-confirmed="service-delivery-movers-confirmed" style="border:1px solid #16a34a; background:#f0fdf4; color:#166534; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">Confirm Movers</button>
+                                            <button type="button" class="movers-unsure-btn" data-target-input="service-delivery-movers" data-target-mode="service-delivery-movers-mode" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">I Don't Know</button>
                                         </div>
                                         <input type="hidden" id="service-delivery-movers-mode" name="service-delivery-movers-mode" value="count">
-                                        <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Choose Unsure if you'd like the movers to decide how many will be needed.</div>
+                                        <input type="hidden" id="service-delivery-movers-confirmed" name="service-delivery-movers-confirmed" value="no">
+                                        <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Choose I Don't Know if you'd like the Transport Provider to decide how many will be needed.</div>
                                     </div>
-                                </div>
-
-                                <!-- Insurance/Coverage -->
-                                <div class="service-requirement-card">
-                                    <div class="service-requirement-header">
-                                        <label class="service-requirement-label">
-                                            <span>Premium Insurance Coverage</span>
-                                            <div class="info-tooltip-wrapper">
-                                                <span class="info-icon">i</span>
-                                                <div class="info-tooltip">Full value coverage for your items against damage or loss</div>
-                                            </div>
-                                        </label>
-                                    </div>
-                                    <div class="service-requirement-options">
-                                        <button type="button" class="service-option-btn" data-service="insurance" data-value="no">No</button>
-                                        <button type="button" class="service-option-btn" data-service="insurance" data-value="yes">Yes</button>
-                                    </div>
-                                    <input type="hidden" id="service-insurance" name="service-insurance" value="">
                                 </div>
 
                                 <!-- Storage Service -->
                                 <div class="service-requirement-card">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
-                                            <span>Storage Service</span>
+                                            <span>5. Storage Service</span>
                                             <div class="info-tooltip-wrapper">
                                                 <span class="info-icon">i</span>
                                                 <div class="info-tooltip">Secure, climate-controlled storage for your items before delivery</div>
@@ -1881,43 +1873,51 @@
 
                                     <div id="storage-duration-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
                                         <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">Storage duration</div>
-                                        <div style="font-size:0.86rem; color:#4b5563; margin-bottom:8px;">Choose the start and end date/time for storage.</div>
+                                        <div style="font-size:0.86rem; color:#4b5563; margin-bottom:8px;">Choose the start and end date for storage.</div>
                                         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">
                                             <label style="display:flex; flex-direction:column; gap:4px; font-weight:600; color:#1f2937; font-size:0.9rem;">
                                                 <span>Storage start</span>
-                                                <input type="datetime-local" id="service-storage-start-datetime" name="service-storage-start-datetime" style="padding:8px; border:1px solid #bfdbfe; border-radius:8px; font-size:0.95rem; color:#1e3a8a;">
+                                                <input type="date" id="service-storage-start-datetime" name="service-storage-start-datetime" style="padding:8px; border:1px solid #bfdbfe; border-radius:8px; font-size:0.95rem; color:#1e3a8a;">
                                             </label>
                                             <label style="display:flex; flex-direction:column; gap:4px; font-weight:600; color:#1f2937; font-size:0.9rem;">
                                                 <span>Storage end</span>
-                                                <input type="datetime-local" id="service-storage-end-datetime" name="service-storage-end-datetime" style="padding:8px; border:1px solid #bfdbfe; border-radius:8px; font-size:0.95rem; color:#1e3a8a;">
+                                                <input type="date" id="service-storage-end-datetime" name="service-storage-end-datetime" style="padding:8px; border:1px solid #bfdbfe; border-radius:8px; font-size:0.95rem; color:#1e3a8a;">
                                             </label>
                                         </div>
                                         <div id="storage-duration-preview" style="margin-top:8px; font-size:0.86rem; color:#1e40af; font-weight:600;"></div>
                                     </div>
                                 </div>
 
-                                <!-- Special Item Handling -->
+                                <!-- Special Instructions -->
                                 <div class="service-requirement-card">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
-                                            <span>Special Item Handling</span>
+                                            <span>6. Special Instructions</span>
                                             <div class="info-tooltip-wrapper">
                                                 <span class="info-icon">i</span>
-                                                <div class="info-tooltip">Expert handling for pianos, artwork, antiques, or other fragile/valuable items</div>
+                                                <div class="info-tooltip">Optional notes for anything important the transport provider should know</div>
                                             </div>
                                         </label>
                                     </div>
-                                    <div class="service-requirement-options">
-                                        <button type="button" class="service-option-btn" data-service="special-handling" data-value="no">No</button>
-                                        <button type="button" class="service-option-btn" data-service="special-handling" data-value="yes">Yes</button>
+                                    <div class="service-requirement-input">
+                                        <textarea id="service-special-instructions" name="service-special-instructions" class="form-input" rows="4" data-optional="true" placeholder="Add any important information for the Transport Provider that should be known." style="width:100%; resize:vertical;"></textarea>
+                                        <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Optional. Leave this blank if there is nothing extra to add.</div>
                                     </div>
-                                    <input type="hidden" id="service-special-handling" name="service-special-handling" value="">
                                 </div>
 
                             </div>
                         </div>
 
-                        <div class="form-actions" data-form-step="6" data-skip-progressive="true">
+                        <div class="card-section step-hidden" data-form-step="7">
+                            <h2 class="section-title" style="text-align: center; margin-bottom: 1.25rem;">Step 7: Moving Date</h2>
+                            <div style="max-width: 520px; margin: 0 auto; padding: 14px; border: 1px solid #dbeafe; border-radius: 12px; background: #f8fbff;">
+                                <label class="form-label" for="service-transport-date" style="display:block; margin-bottom:8px; font-weight:700; color:#1f2937;">Date of Transport</label>
+                                <input type="date" id="service-transport-date" name="service-transport-date" class="form-input" style="width:100%; padding:10px; border:1px solid #bfdbfe; border-radius:8px; font-size:0.95rem; color:#1e3a8a;">
+                                <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Choose your preferred moving date.</div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions" data-form-step="7" data-skip-progressive="true">
                             <button type="submit" class="btn btn-primary btn-large v2" id="get-prices-btn" style="display: none;">Get Prices</button>
                         </div>
                     </div> <!-- end .form-v2-main-grid -->
