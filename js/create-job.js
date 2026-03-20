@@ -15,12 +15,335 @@ function getItemDisplayName(trackingKey) {
     return trackingKey;
 }
 
-function ensureElevatorPromptModal() {
-    let modal = document.getElementById('elevator-prompt-modal');
+function initTransportDatePicker() {
+    const hiddenInput = document.getElementById('service-transport-date');
+    const trigger = document.getElementById('transport-date-trigger');
+    const panel = document.getElementById('transport-date-panel');
+    const display = document.getElementById('service-transport-date-display');
+
+    if (!hiddenInput || !trigger || !panel || !display) return;
+    if (hiddenInput.dataset.customDatePickerInit === '1') return;
+    hiddenInput.dataset.customDatePickerInit = '1';
+
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const state = {
+        view: 'main',
+        month: new Date(todayStart.getFullYear(), todayStart.getMonth(), 1),
+        rangeStart: null
+    };
+
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    const optionItems = [
+        { id: 'within-week', label: 'Within 1 week', type: 'direct' },
+        { id: 'fixed-date', label: 'On a Fixed Date', type: 'submenu', target: 'fixed' },
+        { id: 'urgent', label: 'Urgently', type: 'submenu', target: 'urgent' },
+        { id: 'between-dates', label: 'Between Dates', type: 'submenu', target: 'between' },
+        { id: 'no-date', label: "Don't Have a Date Yet", type: 'direct' }
+    ];
+
+    const urgentItems = [
+        'Today ASAP',
+        'Today Anytime',
+        'Today or Tomorrow',
+        'Tomorrow AM',
+        'Tomorrow PM',
+        'Tomorrow Anytime'
+    ];
+
+    function normalizeDate(date) {
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    }
+
+    function sameDate(a, b) {
+        return !!a && !!b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    }
+
+    function toIsoDate(date) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    function formatDateDisplay(date) {
+        return new Intl.DateTimeFormat('en-GB', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
+        }).format(date);
+    }
+
+    function setDisplayValue(text, isPlaceholder) {
+        display.textContent = text;
+        display.classList.toggle('is-placeholder', !!isPlaceholder);
+    }
+
+    function syncFromHiddenInput() {
+        const value = (hiddenInput.value || '').trim();
+        if (!value) {
+            setDisplayValue('Select a Date Option', true);
+            return;
+        }
+        setDisplayValue(value, false);
+    }
+
+    function updateTransportDate(value) {
+        hiddenInput.value = value;
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+        if (typeof window.updateNextButtonState === 'function') {
+            window.updateNextButtonState();
+        }
+        syncFromHiddenInput();
+    }
+
+    function openPanel() {
+        panel.classList.add('active');
+        trigger.setAttribute('aria-expanded', 'true');
+    }
+
+    function closePanel() {
+        panel.classList.remove('active');
+        trigger.setAttribute('aria-expanded', 'false');
+        state.view = 'main';
+        state.rangeStart = null;
+    }
+
+    function renderMainOptions() {
+        state.view = 'main';
+        panel.innerHTML = `
+            <div class="transport-date-options">
+                ${optionItems.map((item) => `
+                    <button type="button" class="transport-date-option" data-option-id="${item.id}">
+                        <span>${item.label}</span>
+                        ${item.type === 'submenu' ? '<span class="transport-date-option-chevron">›</span>' : ''}
+                    </button>
+                `).join('')}
+            </div>
+        `;
+
+        panel.querySelectorAll('[data-option-id]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const item = optionItems.find((entry) => entry.id === button.getAttribute('data-option-id'));
+                if (!item) return;
+
+                if (item.type === 'direct') {
+                    updateTransportDate(item.label);
+                    closePanel();
+                    return;
+                }
+
+                if (item.target === 'urgent') {
+                    renderUrgentOptions();
+                    return;
+                }
+
+                if (item.target === 'fixed') {
+                    state.month = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+                    renderCalendar('fixed');
+                    return;
+                }
+
+                if (item.target === 'between') {
+                    state.rangeStart = null;
+                    state.month = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+                    renderCalendar('range-start');
+                }
+            });
+        });
+    }
+
+    function renderUrgentOptions() {
+        state.view = 'urgent';
+        panel.innerHTML = `
+            <div class="transport-date-header">
+                <div class="transport-date-header-top">
+                    <button type="button" class="transport-date-back" data-td-back="1"><span class="transport-date-back-label">‹</span><span class="transport-date-back-text">Back</span></button>
+                </div>
+            </div>
+            <div class="transport-date-options">
+                ${urgentItems.map((item) => `<button type="button" class="transport-date-option" data-urgent-value="${item}"><span>${item}</span></button>`).join('')}
+            </div>
+        `;
+
+        const backButton = panel.querySelector('[data-td-back="1"]');
+        if (backButton) {
+            backButton.addEventListener('click', renderMainOptions);
+        }
+
+        panel.querySelectorAll('[data-urgent-value]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const value = button.getAttribute('data-urgent-value');
+                updateTransportDate(`Urgently: ${value}`);
+                closePanel();
+            });
+        });
+    }
+
+    function buildCalendarGrid(viewType) {
+        const monthStart = new Date(state.month.getFullYear(), state.month.getMonth(), 1);
+        const startDayOffset = (monthStart.getDay() + 6) % 7;
+        const gridStart = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1 - startDayOffset);
+
+        const buttons = [];
+        for (let i = 0; i < 42; i += 1) {
+            const date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i);
+            const isOtherMonth = date.getMonth() !== state.month.getMonth();
+            const isPastDate = normalizeDate(date) < todayStart;
+            const isBeforeRangeStart = viewType === 'range-end' && state.rangeStart && normalizeDate(date) < state.rangeStart;
+            const isDisabled = isPastDate || isBeforeRangeStart;
+
+            const classes = ['transport-date-day'];
+            if (isOtherMonth) classes.push('other-month');
+            if (isDisabled) classes.push('disabled');
+            if (sameDate(state.rangeStart, date)) classes.push('selected');
+
+            buttons.push(`
+                <button type="button" class="${classes.join(' ')}" data-calendar-date="${toIsoDate(date)}" ${isDisabled ? 'disabled' : ''}>${date.getDate()}</button>
+            `);
+        }
+
+        return buttons.join('');
+    }
+
+    function renderCalendar(viewType) {
+        state.view = viewType;
+        const isRangeStart = viewType === 'range-start';
+        const isRangeEnd = viewType === 'range-end';
+        const title = isRangeStart ? 'Select first date' : isRangeEnd ? 'Select second date' : 'Select date';
+
+        panel.innerHTML = `
+            <div class="transport-date-header">
+                <div class="transport-date-header-top">
+                    <button type="button" class="transport-date-back" data-td-back="1"><span class="transport-date-back-label">‹</span><span class="transport-date-back-text">Back</span></button>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <button type="button" class="transport-date-close" data-td-close-text="1">Close</button>
+                        <button type="button" class="transport-date-close-icon" data-td-close-icon="1">×</button>
+                    </div>
+                </div>
+            </div>
+            <div class="transport-date-calendar-wrap">
+                <div class="transport-date-calendar-title">${title}</div>
+                <div class="transport-date-calendar-month-row">
+                    <button type="button" class="transport-date-month-nav" data-td-prev="1">‹</button>
+                    <div class="transport-date-month-label">${new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(state.month)}</div>
+                    <button type="button" class="transport-date-month-nav" data-td-next="1">›</button>
+                </div>
+                <div class="transport-date-weekdays">
+                    ${weekdays.map((day) => `<div class="transport-date-weekday">${day}</div>`).join('')}
+                </div>
+                <div class="transport-date-days-grid">
+                    ${buildCalendarGrid(viewType)}
+                </div>
+            </div>
+        `;
+
+        const backButton = panel.querySelector('[data-td-back="1"]');
+        if (backButton) {
+            backButton.addEventListener('click', () => {
+                if (isRangeEnd) {
+                    renderCalendar('range-start');
+                } else {
+                    renderMainOptions();
+                }
+            });
+        }
+
+        const closeTextButton = panel.querySelector('[data-td-close-text="1"]');
+        const closeIconButton = panel.querySelector('[data-td-close-icon="1"]');
+        [closeTextButton, closeIconButton].forEach((button) => {
+            if (button) {
+                button.addEventListener('click', closePanel);
+            }
+        });
+
+        const prevButton = panel.querySelector('[data-td-prev="1"]');
+        if (prevButton) {
+            prevButton.addEventListener('click', () => {
+                state.month = new Date(state.month.getFullYear(), state.month.getMonth() - 1, 1);
+                renderCalendar(viewType);
+            });
+        }
+
+        const nextButton = panel.querySelector('[data-td-next="1"]');
+        if (nextButton) {
+            nextButton.addEventListener('click', () => {
+                state.month = new Date(state.month.getFullYear(), state.month.getMonth() + 1, 1);
+                renderCalendar(viewType);
+            });
+        }
+
+        panel.querySelectorAll('[data-calendar-date]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const iso = button.getAttribute('data-calendar-date');
+                if (!iso) return;
+                const [year, month, day] = iso.split('-').map(Number);
+                const selectedDate = new Date(year, month - 1, day);
+
+                if (viewType === 'fixed') {
+                    updateTransportDate(`On a Fixed Date: ${formatDateDisplay(selectedDate)}`);
+                    closePanel();
+                    return;
+                }
+
+                if (viewType === 'range-start') {
+                    state.rangeStart = normalizeDate(selectedDate);
+                    state.month = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                    renderCalendar('range-end');
+                    return;
+                }
+
+                if (viewType === 'range-end' && state.rangeStart) {
+                    const fromText = formatDateDisplay(state.rangeStart);
+                    const toText = formatDateDisplay(selectedDate);
+                    updateTransportDate(`Between Dates: ${fromText} - ${toText}`);
+                    closePanel();
+                }
+            });
+        });
+    }
+
+    trigger.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (panel.classList.contains('active')) {
+            closePanel();
+            return;
+        }
+        renderMainOptions();
+        openPanel();
+    });
+
+    panel.addEventListener('click', (event) => {
+        event.stopPropagation();
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!panel.classList.contains('active')) return;
+        const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+        const clickedInsidePanel = path.includes(panel) || panel.contains(event.target);
+        const clickedTrigger = path.includes(trigger) || trigger.contains(event.target);
+        if (!clickedInsidePanel && !clickedTrigger) {
+            closePanel();
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && panel.classList.contains('active')) {
+            closePanel();
+        }
+    });
+
+    syncFromHiddenInput();
+}
+
+function ensureLiftPromptModal() {
+    let modal = document.getElementById('lift-prompt-modal');
     if (modal) return modal;
 
     modal = document.createElement('div');
-    modal.id = 'elevator-prompt-modal';
+    modal.id = 'lift-prompt-modal';
     modal.style.cssText = `
         position: fixed;
         inset: 0;
@@ -36,17 +359,17 @@ function ensureElevatorPromptModal() {
         <div style="width:min(460px, 100%);background:#fff;border-radius:14px;padding:22px;border:1px solid #dbeafe;box-shadow:0 18px 44px rgba(15, 23, 42, 0.28);">
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;">
                 <div>
-                    <h3 id="elevator-prompt-title" style="margin:0;font-size:1.2rem;color:#0f172a;font-weight:800;">Elevator availability</h3>
-                    <p id="elevator-prompt-copy" style="margin:8px 0 0 0;font-size:0.95rem;line-height:1.45;color:#475569;"></p>
+                    <h3 id="lift-prompt-title" style="margin:0;font-size:1.2rem;color:#0f172a;font-weight:800;">Lift availability</h3>
+                    <p id="lift-prompt-copy" style="margin:8px 0 0 0;font-size:0.95rem;line-height:1.45;color:#475569;"></p>
                 </div>
-                <button type="button" data-elevator-modal-close="1" style="border:none;background:transparent;color:#64748b;font-size:1.4rem;line-height:1;cursor:pointer;padding:0;">&times;</button>
+                <button type="button" data-lift-modal-close="1" style="border:none;background:transparent;color:#64748b;font-size:1.4rem;line-height:1;cursor:pointer;padding:0;">&times;</button>
             </div>
             <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px;">
-                <button type="button" data-elevator-value="yes" style="border:1px solid #86efac;background:#f0fdf4;color:#166534;border-radius:10px;padding:12px 14px;font-size:0.98rem;font-weight:700;cursor:pointer;text-align:left;">Yes, there is an elevator</button>
-                <button type="button" data-elevator-value="no" style="border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;border-radius:10px;padding:12px 14px;font-size:0.98rem;font-weight:700;cursor:pointer;text-align:left;">No, there is no elevator</button>
+                <button type="button" data-lift-value="yes" style="border:1px solid #86efac;background:#f0fdf4;color:#166534;border-radius:10px;padding:12px 14px;font-size:0.98rem;font-weight:700;cursor:pointer;text-align:left;">Yes, there is a lift</button>
+                <button type="button" data-lift-value="no" style="border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;border-radius:10px;padding:12px 14px;font-size:0.98rem;font-weight:700;cursor:pointer;text-align:left;">No, there is no lift</button>
             </div>
             <div style="display:flex;justify-content:flex-end;margin-top:14px;">
-                <button type="button" data-elevator-modal-cancel="1" style="border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:8px;padding:8px 12px;font-weight:600;cursor:pointer;">Cancel</button>
+                <button type="button" data-lift-modal-cancel="1" style="border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:8px;padding:8px 12px;font-weight:600;cursor:pointer;">Cancel</button>
             </div>
         </div>
     `;
@@ -55,18 +378,18 @@ function ensureElevatorPromptModal() {
     return modal;
 }
 
-function openElevatorPrompt(options = {}) {
-    const modal = ensureElevatorPromptModal();
-    const title = modal.querySelector('#elevator-prompt-title');
-    const copy = modal.querySelector('#elevator-prompt-copy');
+function openLiftPrompt(options = {}) {
+    const modal = ensureLiftPromptModal();
+    const title = modal.querySelector('#lift-prompt-title');
+    const copy = modal.querySelector('#lift-prompt-copy');
     const contextLabel = options.contextLabel === 'delivery' ? 'delivery' : 'pickup';
     const propertyLabel = options.propertyLabel || 'this property';
 
     if (title) {
-        title.textContent = contextLabel === 'delivery' ? 'Delivery elevator' : 'Pickup elevator';
+        title.textContent = contextLabel === 'delivery' ? 'Delivery lift' : 'Pickup lift';
     }
     if (copy) {
-        copy.textContent = `For the selected ${contextLabel} property type (${propertyLabel}), is there an elevator available?`;
+        copy.textContent = `For the selected ${contextLabel} property type (${propertyLabel}), is there a lift available?`;
     }
 
     modal.style.display = 'flex';
@@ -74,17 +397,17 @@ function openElevatorPrompt(options = {}) {
     return new Promise((resolve) => {
         const cleanup = (value) => {
             modal.style.display = 'none';
-            modal.querySelectorAll('[data-elevator-value], [data-elevator-modal-close], [data-elevator-modal-cancel]').forEach((button) => {
+            modal.querySelectorAll('[data-lift-value], [data-lift-modal-close], [data-lift-modal-cancel]').forEach((button) => {
                 button.replaceWith(button.cloneNode(true));
             });
             resolve(value);
         };
 
-        const refreshedModal = document.getElementById('elevator-prompt-modal');
-        refreshedModal.querySelector('[data-elevator-value="yes"]').addEventListener('click', () => cleanup('yes'));
-        refreshedModal.querySelector('[data-elevator-value="no"]').addEventListener('click', () => cleanup('no'));
-        refreshedModal.querySelector('[data-elevator-modal-close]').addEventListener('click', () => cleanup(null));
-        refreshedModal.querySelector('[data-elevator-modal-cancel]').addEventListener('click', () => cleanup(null));
+        const refreshedModal = document.getElementById('lift-prompt-modal');
+        refreshedModal.querySelector('[data-lift-value="yes"]').addEventListener('click', () => cleanup('yes'));
+        refreshedModal.querySelector('[data-lift-value="no"]').addEventListener('click', () => cleanup('no'));
+        refreshedModal.querySelector('[data-lift-modal-close]').addEventListener('click', () => cleanup(null));
+        refreshedModal.querySelector('[data-lift-modal-cancel]').addEventListener('click', () => cleanup(null));
         refreshedModal.onclick = (event) => {
             if (event.target === refreshedModal) {
                 cleanup(null);
@@ -93,29 +416,91 @@ function openElevatorPrompt(options = {}) {
     });
 }
 
-function applyPickupElevatorSelection(value) {
+function renderPickupliftIcons() {
+    const liftOptionContainer = document.getElementById('pickup-lift-option-container');
+    if (!liftOptionContainer) return;
+
+    let grid = liftOptionContainer.querySelector('#pickup-lift-icon-grid');
+    let hidden = document.getElementById('pickup-lift-available');
+
+    if (!grid) {
+        grid = document.createElement('div');
+        grid.className = 'lift-icon-grid';
+        grid.id = 'pickup-lift-icon-grid';
+        liftOptionContainer.appendChild(grid);
+    }
+
+    if (!hidden) {
+        hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.id = 'pickup-lift-available';
+        hidden.name = 'pickup-lift-available';
+        liftOptionContainer.appendChild(hidden);
+    }
+
+    const previousSelection = hidden.value || '';
+    grid.innerHTML = '';
+    
+    const options = [
+        { value: 'yes', label: 'Yes', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#4A90E2"/><path d="M8 12l3 3 5-5" stroke="#fff" stroke-width="2" fill="none"/></svg>' },
+        { value: 'no', label: 'No', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e53e3e"/><path d="M8 8l8 8M16 8l-8 8" stroke="#fff" stroke-width="2" fill="none"/></svg>' }
+    ];
+    
+    options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'lift-icon-btn';
+        btn.setAttribute('data-value', opt.value);
+        btn.innerHTML = `${opt.icon}<span>${opt.label}</span>`;
+        const isSelected = previousSelection === opt.value;
+        if (isSelected) {
+            btn.classList.add('selected');
+        }
+        btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+        
+        btn.addEventListener('click', function () {
+            grid.querySelectorAll('.lift-icon-btn').forEach(b => {
+                b.classList.remove('selected');
+                b.setAttribute('aria-pressed', 'false');
+            });
+            btn.classList.add('selected');
+            btn.setAttribute('aria-pressed', 'true');
+            
+            hidden.value = opt.value;
+            const event = new Event('change', { bubbles: true });
+            hidden.dispatchEvent(event);
+        });
+        
+        grid.appendChild(btn);
+    });
+}
+
+function applyPickupLiftSelection(value) {
     const liftInput = document.getElementById('pickup-lift-available');
     if (liftInput) {
         liftInput.value = value || '';
         liftInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    const liftQuestion = document.getElementById('pickup-lift-question');
-    if (liftQuestion) {
-        liftQuestion.style.display = 'none';
+    const liftSection = document.getElementById('pickup-lift-section');
+    if (liftSection) {
+        liftSection.style.display = 'flex';
+        liftSection.style.flexDirection = 'column';
     }
 
-    const liftButtons = document.querySelectorAll('.pickup-lift-btn');
+    // Render the lift icon buttons
+    renderPickupliftIcons();
+
+    const liftButtons = document.querySelectorAll('#pickup-lift-option-container .lift-icon-btn');
     liftButtons.forEach((button) => {
         const buttonValue = button.getAttribute('data-value');
         const isSelected = buttonValue === value;
-        button.style.borderColor = isSelected ? (value === 'yes' ? '#10b981' : '#ef4444') : '#e5e7eb';
-        button.style.background = isSelected ? (value === 'yes' ? '#d1fae5' : '#fee2e2') : 'white';
-        button.style.color = isSelected ? (value === 'yes' ? '#065f46' : '#991b1b') : '#4b5563';
+        button.classList.toggle('selected', isSelected);
+        button.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
     });
 }
 
-function applyDeliveryElevatorSelection(value) {
+function applyDeliveryLiftSelection(value) {
     const liftInput = document.getElementById('delivery-lift-available');
     if (liftInput) {
         liftInput.value = value || '';
@@ -124,7 +509,8 @@ function applyDeliveryElevatorSelection(value) {
 
     const liftSection = document.getElementById('delivery-lift-section');
     if (liftSection) {
-        liftSection.style.display = 'none';
+        liftSection.style.display = 'flex';
+        liftSection.style.flexDirection = 'column';
     }
 
     const deliveryButtons = document.querySelectorAll('#delivery-lift-option-container .lift-icon-btn');
@@ -168,6 +554,8 @@ function autoAdvanceToInventoryIfReady() {
 // --- New Plus/Minus Inventory System ---
 // This system works for all inventory blocks (multi-floor and single-floor)
 document.addEventListener('DOMContentLoaded', function () {
+    initTransportDatePicker();
+
     function handleInventoryPlusMinus(container) {
         if (!container) return;
         // Attach listeners to all plus and minus buttons inside the container
@@ -291,6 +679,8 @@ document.addEventListener('DOMContentLoaded', function () {
     // customItemsPerRoom is defined globally below
     var customItems = {};
     window.customItems = customItems; // Expose for persistence restore
+    let customItemPhotos = {};
+    window.customItemPhotos = customItemPhotos; // Expose for persistence restore
     
     // Helper function to get tracking key for items (prefixes boxes with room name)
     function getItemTrackingKey(itemName, roomName) {
@@ -399,6 +789,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 delete itemQuantities[oldTrackingKey];
                 itemQuantities[newTrackingKey] = qty;
             }
+            // Preserve custom item photo when renaming
+            if (oldTrackingKey in customItemPhotos) {
+                customItemPhotos[newTrackingKey] = customItemPhotos[oldTrackingKey];
+                delete customItemPhotos[oldTrackingKey];
+            }
             renderRoomItems(room);
             modal.style.display = 'none';
         };
@@ -419,11 +814,14 @@ document.addEventListener('DOMContentLoaded', function () {
         let html = '<ul class="inventory-items-list">';
         items.forEach(item => {
             const trackingKey = getItemTrackingKey(item, room);
-            const selected = selectedItems[trackingKey] || false;
             const qty = itemQuantities[trackingKey] || 0;
+            const selected = qty > 0;
             // Check if item is custom (exists in customItems for this room)
             const isCustomItem = room && customItems[room] && customItems[room].includes(item);
+            const hasCustomPhoto = !!customItemPhotos[trackingKey];
             const actionButtons = isCustomItem ? `
+                <button type="button" class="item-photo-btn" data-item="${item}" data-room="${room}" title="${hasCustomPhoto ? 'Change photo' : 'Add photo'}" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:${hasCustomPhoto ? '#16a34a' : '#0ea5e9'};font-weight:700;margin-left:8px;">${hasCustomPhoto ? '📷✓' : '📷'}</button>
+                ${hasCustomPhoto ? `<button type="button" class="item-photo-remove-btn" data-item="${item}" data-room="${room}" title="Remove photo" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#f97316;font-weight:700;margin-left:4px;">🗑</button>` : ''}
                 <button type="button" class="item-edit-btn" data-item="${item}" title="Edit item" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#3b82f6;font-weight:600;margin-left:8px;">✎</button>
                 <button type="button" class="item-delete-btn" data-item="${item}" title="Delete item" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#ef4444;font-weight:600;margin-left:4px;">✕</button>
             ` : '';
@@ -525,10 +923,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 const item = row.getAttribute('data-item');
                 const itemRoom = row.getAttribute('data-room');
                 const trackingKey = getItemTrackingKey(item, itemRoom);
-                selectedItems[trackingKey] = !selectedItems[trackingKey];
-                if (!selectedItems[trackingKey]) {
-                    itemQuantities[trackingKey] = 0;
-                }
+
+                // Only allow row-click deselection when quantity is already at least 1.
+                const currentQty = itemQuantities[trackingKey] || 0;
+                if (currentQty <= 0) return;
+
+                itemQuantities[trackingKey] = 0;
+                selectedItems[trackingKey] = false;
                 renderRoomItems(room);
             });
         });
@@ -539,6 +940,61 @@ document.addEventListener('DOMContentLoaded', function () {
                 e.stopPropagation();
                 const item = btn.getAttribute('data-item');
                 openEditCustomItemModal(item, room);
+            });
+        });
+
+        // Add/change custom item photo handlers
+        container.querySelectorAll('.item-photo-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const item = btn.getAttribute('data-item');
+                const itemRoom = btn.getAttribute('data-room') || room;
+
+                let photoInput = document.getElementById('custom-item-photo-input');
+                if (!photoInput) {
+                    photoInput = document.createElement('input');
+                    photoInput.type = 'file';
+                    photoInput.accept = 'image/*';
+                    photoInput.id = 'custom-item-photo-input';
+                    photoInput.style.display = 'none';
+                    document.body.appendChild(photoInput);
+
+                    photoInput.addEventListener('change', function() {
+                        const file = photoInput.files && photoInput.files[0];
+                        const selectedItem = photoInput.getAttribute('data-item');
+                        const selectedRoom = photoInput.getAttribute('data-room') || room;
+                        if (!file || !selectedItem) return;
+                        if (!file.type || !file.type.startsWith('image/')) {
+                            alert('Please select a valid image file.');
+                            return;
+                        }
+
+                        const trackingKey = getItemTrackingKey(selectedItem, selectedRoom);
+                        const reader = new FileReader();
+                        reader.onload = function(evt) {
+                            customItemPhotos[trackingKey] = evt.target.result;
+                            renderRoomItems(selectedRoom);
+                        };
+                        reader.readAsDataURL(file);
+                    });
+                }
+
+                photoInput.setAttribute('data-item', item);
+                photoInput.setAttribute('data-room', itemRoom);
+                photoInput.value = '';
+                photoInput.click();
+            });
+        });
+
+        // Remove custom item photo handlers
+        container.querySelectorAll('.item-photo-remove-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const item = btn.getAttribute('data-item');
+                const itemRoom = btn.getAttribute('data-room') || room;
+                const trackingKey = getItemTrackingKey(item, itemRoom);
+                delete customItemPhotos[trackingKey];
+                renderRoomItems(itemRoom);
             });
         });
         
@@ -556,6 +1012,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     const trackingKey = getItemTrackingKey(item, room);
                     delete itemQuantities[trackingKey];
                     delete selectedItems[trackingKey];
+                    delete customItemPhotos[trackingKey];
                     renderRoomItems(room);
                 }
             });
@@ -683,6 +1140,7 @@ document.addEventListener('DOMContentLoaded', function () {
             selectedRooms: Array.from(selectedRooms),
             itemQuantities: { ...(itemQuantities || {}) },
             customItems: { ...(customItems || {}) },
+            customItemPhotos: { ...(customItemPhotos || {}) },
             selectedPickupFloors: Array.from(window.selectedPickupFloors || []),
             multiFloorInventory: window.multiFloorInventory && typeof window.multiFloorInventory === 'object'
                 ? { ...window.multiFloorInventory }
@@ -1054,6 +1512,10 @@ function updateStep3InventoryWarning() {
 }
 
 function isInventoryInputRequiredForStep3() {
+    const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
+    if (serviceValue === 'Customized Items') {
+        return false;
+    }
     const inventoryCardContainer = document.getElementById('inventory-card-container');
     if (!inventoryCardContainer) return false;
     return inventoryCardContainer.style.display !== 'none' && inventoryCardContainer.offsetParent !== null;
@@ -1082,6 +1544,40 @@ window.hasAnyInventorySelection = hasAnyInventorySelection;
 window.isInventoryInputRequiredForStep3 = isInventoryInputRequiredForStep3;
 window.updateStep3InventoryWarning = updateStep3InventoryWarning;
 window.ensureMultiFloorInventoryVisible = ensureMultiFloorInventoryVisible;
+
+document.addEventListener('click', function(event) {
+    const editBtn = event.target.closest('.overview-edit-btn');
+    if (editBtn) {
+        event.preventDefault();
+        const currentStep = parseInt(document.body.dataset.formStep || '1', 10);
+        if (currentStep === 8) {
+            const card = editBtn.closest('.overview-item');
+            const valueEl = card ? card.querySelector('.overview-item-value') : null;
+            const valueId = valueEl ? valueEl.id : '';
+            if (valueId) {
+                openOverviewEditModal(valueId);
+            }
+            return;
+        }
+    }
+
+    const manageBtn = event.target.closest('.overview-inventory-manage-btn');
+    if (manageBtn) {
+        event.preventDefault();
+        const currentStep = parseInt(document.body.dataset.formStep || '1', 10);
+        if (currentStep === 8) {
+            const kind = manageBtn.getAttribute('data-overview-inventory-kind') === 'delivery' ? 'delivery' : 'pickup';
+            openOverviewInventoryModal(kind);
+        }
+        return;
+    }
+
+    const targetStep = parseInt((editBtn && editBtn.getAttribute('data-edit-step')) || '', 10);
+    if (!Number.isFinite(targetStep)) return;
+    if (typeof window.setFormStep === 'function') {
+        window.setFormStep(targetStep);
+    }
+});
 
 document.addEventListener('DOMContentLoaded', function () {
         // Sticky Next button logic
@@ -1255,6 +1751,14 @@ document.addEventListener('DOMContentLoaded', function () {
         window.updateNextButtonState = function() {
             if (!stickyNextBtn) return;
             const step = parseInt(document.body.dataset.formStep || '1', 10);
+            const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 8;
+            if (step >= totalSteps) {
+                stickyNextBtn.disabled = true;
+                stickyNextBtn.style.opacity = '0.45';
+                stickyNextBtn.style.display = 'none';
+                return;
+            }
+            stickyNextBtn.style.display = '';
             stickyNextBtn.disabled = !requirementsMetForStep(step);
             stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
             ensureMultiFloorInventoryVisible();
@@ -1379,6 +1883,10 @@ document.addEventListener('DOMContentLoaded', function () {
         if (stickyNextBtn) {
             stickyNextBtn.onclick = async function() {
                 const step = parseInt(document.body.dataset.formStep || '1', 10);
+                const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 8;
+                if (step >= totalSteps) {
+                    return;
+                }
                 if (!requirementsMetForStep(step)) {
                     stickyNextBtn.disabled = true;
                     stickyNextBtn.classList.add('disabled');
@@ -1759,11 +2267,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 input.value = input.getAttribute('data-last-count-value') || '0';
             }
 
-            button.style.background = isUnsure ? '#1d4ed8' : '#eff6ff';
+            button.style.background = isUnsure ? '#16a34a' : '#eff6ff';
             button.style.color = isUnsure ? '#fff' : '#1d4ed8';
-            button.style.borderColor = isUnsure ? '#1d4ed8' : '#93c5fd';
+            button.style.borderColor = isUnsure ? '#16a34a' : '#93c5fd';
             button.setAttribute('aria-pressed', isUnsure ? 'true' : 'false');
-            button.textContent = isUnsure ? "I Don't Know (Selected)" : "I Don't Know";
+            button.textContent = isUnsure ? 'Number Of Movers Required' : "I Don't Know";
         });
     }
 
@@ -1875,7 +2383,6 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        const currentState = parsePackingItemsSelection(hiddenInput.value);
         const useMultiFloorInventory = hasActiveMultiFloorInventory();
 
         // Build byFloor: { floorName: { roomKey: { itemName: maxQty } } }
@@ -1901,6 +2408,35 @@ document.addEventListener('DOMContentLoaded', function () {
                     Object.entries(items).forEach(([name, qty]) => addItem(floor, name, qty));
                 }
             });
+        }
+
+        // Auto-fill partial packing quantities once with each item's full available amount.
+        // After initialization, user edits are preserved.
+        let currentState = parsePackingItemsSelection(hiddenInput.value);
+        if (Object.keys(currentState).length > 0) {
+            hiddenInput.dataset.partialAutoInitialized = 'yes';
+        }
+
+        const shouldAutoInitializePartial = hiddenInput.dataset.partialAutoInitialized !== 'yes'
+            && Object.keys(currentState).length === 0;
+
+        if (shouldAutoInitializePartial) {
+            const initializedState = {};
+            Object.values(byFloor).forEach((roomsMap) => {
+                Object.values(roomsMap).forEach((itemsMap) => {
+                    Object.entries(itemsMap).forEach(([itemName, maxQty]) => {
+                        const parsedMax = parseInt(maxQty, 10) || 0;
+                        if (parsedMax > 0) {
+                            initializedState[itemName] = parsedMax;
+                        }
+                    });
+                });
+            });
+
+            currentState = initializedState;
+            hiddenInput.value = Object.keys(initializedState).length > 0 ? JSON.stringify(initializedState) : '';
+            hiddenInput.dataset.partialAutoInitialized = 'yes';
+            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
         list.innerHTML = '';
@@ -2004,7 +2540,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Render each item
                 Object.entries(itemsInRoom).forEach(([itemName, maxQty]) => {
                     const selectedQty = Math.max(0, Math.min(maxQty, parseInt(currentState[itemName], 10) || 0));
-                    const isChecked = selectedQty > 0;
 
                     const row = document.createElement('div');
                     row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;';
@@ -2192,7 +2727,7 @@ document.addEventListener('DOMContentLoaded', function () {
         selectAllBtn.type = 'button';
         selectAllBtn.setAttribute(selectAllAttr, '1');
         selectAllBtn.style.cssText = 'align-self:flex-start;border:1px solid #16a34a;background:#dcfce7;color:#166534;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;margin-bottom:6px;';
-        selectAllBtn.textContent = allSelected ? 'Clear all items' : 'Select all items';
+        selectAllBtn.textContent = allSelected ? 'Undo all items' : 'Select all items';
         listEl.appendChild(selectAllBtn);
 
         sortedFloors.forEach((floor) => {
@@ -2500,7 +3035,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const selectAllBtn = document.createElement('button');
             selectAllBtn.type = 'button';
             selectAllBtn.style.cssText = 'border:1px solid #16a34a;background:#dcfce7;color:#166534;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;';
-            selectAllBtn.textContent = allStorageItemsSelected ? 'Clear all items' : 'Select all items';
+            selectAllBtn.textContent = allStorageItemsSelected ? 'Undo all items' : 'Select all items';
 
             selectAllBtn.addEventListener('click', () => {
                 const nextState = {};
@@ -3052,7 +3587,7 @@ document.addEventListener('DOMContentLoaded', function () {
         assembleSelectAllBtn.type = 'button';
         assembleSelectAllBtn.setAttribute('data-assemble-select-all', '1');
         assembleSelectAllBtn.style.cssText = 'align-self:flex-start;border:1px solid #16a34a;background:#dcfce7;color:#166534;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;margin-bottom:6px;';
-        assembleSelectAllBtn.textContent = allAssemblyFullySelected ? 'Clear all items' : 'Select all items';
+        assembleSelectAllBtn.textContent = allAssemblyFullySelected ? 'Undo all items' : 'Select all items';
         assembleList.appendChild(assembleSelectAllBtn);
 
         sortedFloors.forEach((floor) => {
@@ -4399,6 +4934,15 @@ window.toggleDeliveryFloor = function(floor) {
     };
 
     function updateInventoryAndliftVisibility() {
+        const serviceValue = (
+            document.getElementById('item-description-hidden')?.value
+            || decodeURIComponent(new URLSearchParams(window.location.search).get('service') || '')
+            || ''
+        ).trim();
+        const isCustomizedItems = serviceValue === 'Customized Items';
+        const customInventorySection = document.getElementById('customized-items-inventory-section');
+        const houseInventorySection = document.getElementById('house-removal-inventory-section');
+
                 // Update inventory title to match selected floor
                 if (inventoryFloorTitle && floorHiddenInput) {
                     const floor = floorHiddenInput.value;
@@ -4436,7 +4980,11 @@ window.toggleDeliveryFloor = function(floor) {
 
             const liftHidden = liftOptionContainer ? liftOptionContainer.querySelector('#lift-available') : null;
             const liftSelected = !!(liftHidden && liftHidden.value);
-            const canShowInventory = !propertyPrompt && !floorPrompt && isStep3 && (!liftRequired || liftSelected);
+            let canShowInventory = !propertyPrompt && !floorPrompt && isStep3 && (!liftRequired || liftSelected);
+
+            if (isCustomizedItems && isStep3) {
+                canShowInventory = true;
+            }
 
             inventoryCardContainer.style.display = canShowInventory ? '' : 'none';
         // --- Scroll to inventory on lift or floor selection ---
@@ -4466,13 +5014,46 @@ window.toggleDeliveryFloor = function(floor) {
             }, true);
         }
         }
+
+        if (inventoryCardContainer) {
+            if (isCustomizedItems && isStep3) {
+                if (customInventorySection) {
+                    customInventorySection.style.display = 'block';
+                    customInventorySection.classList.remove('step-hidden');
+                }
+                if (houseInventorySection) {
+                    houseInventorySection.style.display = 'none';
+                    houseInventorySection.classList.add('step-hidden');
+                }
+            } else {
+                if (customInventorySection) {
+                    customInventorySection.style.display = 'none';
+                    customInventorySection.classList.add('step-hidden');
+                }
+                if (houseInventorySection && serviceValue === 'House Removals') {
+                    houseInventorySection.classList.remove('step-hidden');
+                }
+            }
+        }
+
         // lift visibility is handled by isPickupliftRequired logic above.
-        // Add .house-removals-active to body if House Removals or Apartment is selected in step 3
+        // Only allow .house-removals-active for House Removals service.
         if (propertyTypeHidden && body) {
             const val = (propertyTypeHidden.value || '').toLowerCase().trim();
-            if (val === 'house' || val === 'apartment') {
+            const isHouseLikeProperty = (val === 'house' || val === 'apartment');
+            const isHouseRemovalsService = serviceValue === 'House Removals';
+            if (isHouseRemovalsService && isHouseLikeProperty) {
                 body.classList.add('house-removals-active');
             } else {
+                body.classList.remove('house-removals-active');
+            }
+        }
+        
+        // Add .customized-items-active to body if Customized Items is selected
+        if (body) {
+            const isCustomizedItems = (document.getElementById('item-description-hidden')?.value || '').trim() === 'Customized Items';
+            body.classList.toggle('customized-items-active', isCustomizedItems);
+            if (isCustomizedItems) {
                 body.classList.remove('house-removals-active');
             }
         }
@@ -4618,7 +5199,7 @@ window.toggleDeliveryFloor = function(floor) {
             btn.addEventListener('click', async function () {
                 const selectedPropertyValue = btn.getAttribute('data-value');
                 const selectedPropertyLabel = btn.textContent.trim();
-                const elevatorValue = await openElevatorPrompt({
+                const elevatorValue = await openLiftPrompt({
                     contextLabel: 'pickup',
                     propertyLabel: selectedPropertyLabel
                 });
@@ -4637,7 +5218,7 @@ window.toggleDeliveryFloor = function(floor) {
                 propertyTypeBtns.forEach(b => b.setAttribute('aria-pressed', 'false'));
                 btn.setAttribute('aria-pressed', 'true');
                 propertyTypeHidden.value = selectedPropertyValue;
-                applyPickupElevatorSelection(elevatorValue);
+                applyPickupLiftSelection(elevatorValue);
                 // Fire change event for hidden input so listeners update
                 const event = new Event('change', { bubbles: true });
                 propertyTypeHidden.dispatchEvent(event);
@@ -4647,10 +5228,10 @@ window.toggleDeliveryFloor = function(floor) {
                 renderPickupFloorSelector();
                 updateInventoryAndliftVisibility();
 
-                // Always advance to step 3 after selection if not already there or past
-                const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 7;
+                // Advance to next step (step 3) after selection if not already there or past
+                const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 8;
                 const currentStep = parseInt(document.body.dataset.formStep, 10) || 1;
-                if (typeof window.setFormStep === 'function' && 3 <= totalSteps && currentStep < 3) {
+                if (typeof window.setFormStep === 'function' && 3 <= totalSteps && currentStep <= 2) {
                     window.setFormStep(3);
                 }
             });
@@ -4661,6 +5242,13 @@ window.toggleDeliveryFloor = function(floor) {
     if (propertyTypeHidden && propertyTypeHidden.value) {
         renderFloorIcons(propertyTypeHidden.value);
         renderPickupFloorSelector();
+        // Show and render Step 2 lift section when property is already selected
+        const pickupLiftSection = document.getElementById('pickup-lift-section');
+        if (pickupLiftSection) {
+            pickupLiftSection.style.display = 'flex';
+            pickupLiftSection.style.flexDirection = 'column';
+        }
+        renderPickupliftIcons();
     }
 
     // When property type changes (e.g. by code), re-render floor icons
@@ -4668,6 +5256,17 @@ window.toggleDeliveryFloor = function(floor) {
         propertyTypeHidden.addEventListener('change', function () {
             renderFloorIcons(propertyTypeHidden.value);
             renderPickupFloorSelector();
+            // Show/hide Step 2 lift section when property type changes
+            const pickupLiftSection = document.getElementById('pickup-lift-section');
+            if (pickupLiftSection) {
+                if (propertyTypeHidden.value) {
+                    pickupLiftSection.style.display = 'flex';
+                    pickupLiftSection.style.flexDirection = 'column';
+                    renderPickupliftIcons();
+                } else {
+                    pickupLiftSection.style.display = 'none';
+                }
+            }
         });
     }
 
@@ -4695,18 +5294,49 @@ window.toggleDeliveryFloor = function(floor) {
     
     if (confirmBtn) {
         confirmBtn.addEventListener('click', async function() {
+            const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
+            const isCustomizedItems = serviceValue === 'Customized Items';
+
+            if (isCustomizedItems) {
+                const inventoryCardContainer = document.getElementById('inventory-card-container');
+                const customSection = document.getElementById('customized-items-inventory-section');
+                const houseSection = document.getElementById('house-removal-inventory-section');
+
+                if (inventoryCardContainer) inventoryCardContainer.style.display = '';
+                if (customSection) {
+                    customSection.classList.add('customized-revealed');
+                    customSection.classList.remove('step-hidden');
+                }
+                if (houseSection) {
+                    houseSection.style.display = 'none';
+                    houseSection.classList.add('step-hidden');
+                }
+
+                // Scroll to inventory section
+                setTimeout(() => {
+                    if (inventoryCardContainer) {
+                        inventoryCardContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                }, 100);
+
+                if (typeof window.updateNextButtonState === 'function') {
+                    setTimeout(() => window.updateNextButtonState(), 0);
+                }
+                return;
+            }
+
             // Check if lift question was answered
             if (window.selectedPickupFloors.size > 0 && !liftInput.value) {
                 const propertyButton = document.querySelector('#property-type-selection-section .property-type-icon-btn.active, #property-type-selection-section .property-type-icon-btn.selected, #property-type-selection-section .property-type-icon-btn.is-active');
                 const propertyLabel = propertyButton ? propertyButton.textContent.trim() : (document.getElementById('pickup-property-type')?.value || 'pickup property');
-                const elevatorValue = await openElevatorPrompt({
+                const elevatorValue = await openLiftPrompt({
                     contextLabel: 'pickup',
                     propertyLabel
                 });
                 if (!elevatorValue) {
                     return;
                 }
-                applyPickupElevatorSelection(elevatorValue);
+                applyPickupLiftSelection(elevatorValue);
             }
             // If floors selected, verify lift is answered and proceed
             if (window.selectedPickupFloors.size > 0 && liftInput.value) {
@@ -4778,8 +5408,16 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         const liftSection = document.getElementById('delivery-lift-section');
-        if (liftSection) {
-            liftSection.style.display = 'none';
+        if (liftSection && savedProperty) {
+            liftSection.style.display = 'flex';
+            liftSection.style.flexDirection = 'column';
+            // Render the lift icons
+            renderDeliveryliftIcons();
+            // Apply the previously selected delivery lift value
+            const deliveryLiftInput = document.getElementById('delivery-lift-available');
+            if (deliveryLiftInput && deliveryLiftInput.value) {
+                applyDeliveryLiftSelection(deliveryLiftInput.value);
+            }
         }
     }
 
@@ -4790,7 +5428,7 @@ document.addEventListener('DOMContentLoaded', function () {
             btn.addEventListener('click', async function () {
                 const propertyTypeValue = btn.getAttribute('data-value');
                 const propertyTypeLabel = btn.textContent.trim();
-                const elevatorValue = await openElevatorPrompt({
+                const elevatorValue = await openLiftPrompt({
                     contextLabel: 'delivery',
                     propertyLabel: propertyTypeLabel
                 });
@@ -4809,7 +5447,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 deliveryPropertyTypeBtns.forEach(b => b.setAttribute('aria-pressed', 'false'));
                 btn.setAttribute('aria-pressed', 'true');
                 deliveryPropertyTypeHidden.value = propertyTypeValue;
-                applyDeliveryElevatorSelection(elevatorValue);
+                applyDeliveryLiftSelection(elevatorValue);
                 // Fire change event for hidden input so listeners update
                 const event = new Event('change', { bubbles: true });
                 deliveryPropertyTypeHidden.dispatchEvent(event);
@@ -4817,6 +5455,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Render delivery floor icons with lift option based on property type
                 console.log('Property type selected in step 4:', propertyTypeValue);
                 setTimeout(() => {
+                    // Render lift icons in step 4
+                    if (typeof window.renderDeliveryliftIcons === 'function') {
+                        window.renderDeliveryliftIcons();
+                    }
+                    
                     if (window.renderDeliveryFloorIconsWithlift) {
                         window.renderDeliveryFloorIconsWithlift(propertyTypeValue);
                     }
@@ -4824,16 +5467,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (typeof window.renderDeliveryFloorSelector === 'function') {
                         window.renderDeliveryFloorSelector();
                     }
-                    // Keep Step 4 focused on property selection only
-                    const liftSection = document.getElementById('delivery-lift-section');
-                    if (liftSection) {
-                        liftSection.style.display = 'none';
-                    }
-                    applyDeliveryElevatorSelection(elevatorValue);
+                    applyDeliveryLiftSelection(elevatorValue);
                 }, 100);
                 
                 // Advance to next step (step 5) after selection if not already there or past
-                const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 7;
+                const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 8;
                 const currentStep = parseInt(document.body.dataset.formStep, 10) || 1;
                 if (typeof window.setFormStep === 'function' && 5 <= totalSteps && currentStep <= 4) {
                     window.setFormStep(5);
@@ -5020,6 +5658,52 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (typeof window.renderDeliveryFloors === 'function') {
                         window.renderDeliveryFloors();
                     }
+                    
+                    // Show the delivery lift section in step 5 for editing
+                    const deliveryLiftSection = document.getElementById('delivery-lift-section');
+                    if (deliveryLiftSection) {
+                        deliveryLiftSection.style.display = 'flex';
+                        deliveryLiftSection.style.flexDirection = 'column';
+                    }
+                    
+                    // For Customized Items, populate the inventory list with customized items
+                    const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
+                    if (serviceValue === 'Customized Items') {
+                        const inventoryList = document.getElementById('delivery-inventory-list');
+                        if (inventoryList) {
+                            const serializedItems = document.getElementById('customized-items-hidden')?.value || '';
+                            if (serializedItems) {
+                                try {
+                                    const parsedItems = JSON.parse(serializedItems);
+                                    if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+                                        let itemsHtml = '<div style="display: flex; flex-direction: column; gap: 8px;">';
+                                        parsedItems.forEach((item, idx) => {
+                                            const name = (item.name || '').trim();
+                                            const width = item.width || '';
+                                            const depth = item.depth || '';
+                                            const height = item.height || '';
+                                            const sizeUnit = item.sizeUnit || 'cm';
+                                            const weight = item.weight || '';
+                                            const weightUnit = item.weightUnit || 'kg';
+                                            if (!name) return;
+                                            itemsHtml += `
+                                                <div style="padding: 10px; border: 1px solid #ddd; border-radius: 6px; background: #f9f9f9;">
+                                                    <div style="font-weight: 600; color: #0f172a; margin-bottom: 4px;">${name}</div>
+                                                    <div style="font-size: 0.85rem; color: #6b7280;">
+                                                        ${width}x${depth}x${height}${sizeUnit} | ${weight}${weightUnit}
+                                                    </div>
+                                                </div>
+                                            `;
+                                        });
+                                        itemsHtml += '</div>';
+                                        inventoryList.innerHTML = itemsHtml;
+                                    }
+                                } catch (error) {
+                                    console.error('Error parsing customized items:', error);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -5038,6 +5722,13 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (typeof window.renderDeliveryFloorSelector === 'function') {
             window.renderDeliveryFloorSelector();
+        }
+        
+        // Show the delivery lift section in step 5 for editing
+        const deliveryLiftSection = document.getElementById('delivery-lift-section');
+        if (deliveryLiftSection) {
+            deliveryLiftSection.style.display = 'flex';
+            deliveryLiftSection.style.flexDirection = 'column';
         }
     }
     
@@ -5216,6 +5907,29 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             });
         }
+
+        // Get items from Customized Items inventory (Step 3)
+        const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
+        if (serviceValue === 'Customized Items') {
+            const serializedItems = document.getElementById('customized-items-hidden')?.value || '';
+            if (serializedItems) {
+                try {
+                    const parsedItems = JSON.parse(serializedItems);
+                    if (Array.isArray(parsedItems)) {
+                        parsedItems.forEach((item, index) => {
+                            const name = (item?.name || '').trim();
+                            if (!name) return;
+
+                            // Keep the display label clean (name), while keeping key unique with a 3rd segment.
+                            const itemKey = `${name}||Customized||${index}`;
+                            roomItems.boxes[itemKey] = 1;
+                        });
+                    }
+                } catch (error) {
+                    // Ignore malformed customized items payload.
+                }
+            }
+        }
         
         return roomItems;
     }
@@ -5294,7 +6008,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (totalQty <= 0) continue;
 
                 const sourceFloor = getSourceFloorFromKey(itemKey);
-                if (selectedPickupFloors.size > 0 && !selectedPickupFloors.has(sourceFloor)) {
+                if (selectedPickupFloors.size > 0 && sourceFloor !== 'Customized' && !selectedPickupFloors.has(sourceFloor)) {
                     continue;
                 }
 
@@ -5418,7 +6132,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     const sourceFloor = getSourceFloorFromKey(itemKey);
                     
                     // Filter by selected pickup floors - if any floors selected, only show items from those floors
-                    if (selectedPickupFloors.size > 0 && !selectedPickupFloors.has(sourceFloor)) {
+                    if (selectedPickupFloors.size > 0 && sourceFloor !== 'Customized' && !selectedPickupFloors.has(sourceFloor)) {
                         return; // Skip items not on selected pickup floors
                     }
                     
@@ -5975,10 +6689,11 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         
         floorsGrid.innerHTML = '';
-        const roomItems = getItemsByRoom();
         
-        // Collect all items with their quantities
+        // Collect all items from the shared organization source
         const allItems = [];
+        const roomItems = getItemsByRoom();
+
         Object.keys(roomItems).forEach(roomKey => {
             const items = roomItems[roomKey];
             Object.keys(items).forEach(itemKey => {
@@ -5991,7 +6706,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         name: itemName,
                         sourceFloor: sourceFloor,
                         qty: qty,
-                        room: roomKey
+                        room: roomKey,
+                        type: 'organization-item'
                     });
                 }
             });
@@ -6147,7 +6863,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const addAllBtn = document.createElement('button');
             addAllBtn.type = 'button';
-            addAllBtn.textContent = '+ Add All Items To Delivery Floor';
+            addAllBtn.textContent = '+ Assign All Unassigned Items To This Floor';
             addAllBtn.style.cssText = `
                 border: none;
                 border-radius: 6px;
@@ -6234,13 +6950,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 emptyFloorMsg.textContent = 'No items assigned to this floor yet';
                 floorContent.appendChild(emptyFloorMsg);
             } else {
+                // House removal rendering (with room grouping)
                 const itemsByRoom = {};
-                itemsForFloor.forEach((item) => {
-                    if (!itemsByRoom[item.room]) {
-                        itemsByRoom[item.room] = [];
-                    }
-                    itemsByRoom[item.room].push(item);
-                });
 
                 const roomList = document.createElement('div');
                 roomList.style.cssText = `
@@ -7228,9 +7939,11 @@ document.addEventListener('DOMContentLoaded', function () {
             getItemsForTab(tabName).forEach(itemName => {
                 const li = document.createElement('li');
                 const trackingKey = getMultiFloorTrackingKey(itemName, tabName);
-                const selected = floorSelectedItems[trackingKey] || false;
                 const qty = floorQuantities[trackingKey] || 0;
+                const selected = qty > 0;
                 const isCustomItem = customFloorItems.includes(itemName);
+                const photoStore = window.customItemPhotos || (window.customItemPhotos = {});
+                const hasCustomPhoto = !!photoStore[trackingKey];
                 li.className = 'inventory-item' + (selected ? ' selected' : '');
                 li.setAttribute('data-item', itemName);
                 
@@ -7273,6 +7986,74 @@ document.addEventListener('DOMContentLoaded', function () {
                 
                 // Add edit/delete buttons for custom items
                 if (isCustomItem) {
+                    const photoBtn = document.createElement('button');
+                    photoBtn.type = 'button';
+                    photoBtn.className = 'item-photo-btn';
+                    photoBtn.title = hasCustomPhoto ? 'Change photo' : 'Add photo';
+                    photoBtn.textContent = hasCustomPhoto ? '📷✓' : '📷';
+                    photoBtn.style.background = 'none';
+                    photoBtn.style.border = 'none';
+                    photoBtn.style.cursor = 'pointer';
+                    photoBtn.style.padding = '4px 6px';
+                    photoBtn.style.color = hasCustomPhoto ? '#16a34a' : '#0ea5e9';
+                    photoBtn.style.fontWeight = '700';
+                    photoBtn.style.marginLeft = '8px';
+                    photoBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+
+                        let photoInput = document.getElementById('custom-item-photo-input-multifloor');
+                        if (!photoInput) {
+                            photoInput = document.createElement('input');
+                            photoInput.type = 'file';
+                            photoInput.accept = 'image/*';
+                            photoInput.id = 'custom-item-photo-input-multifloor';
+                            photoInput.style.display = 'none';
+                            document.body.appendChild(photoInput);
+
+                            photoInput.addEventListener('change', function() {
+                                const file = photoInput.files && photoInput.files[0];
+                                const selectedTrackingKey = photoInput.getAttribute('data-tracking-key');
+                                if (!file || !selectedTrackingKey) return;
+                                if (!file.type || !file.type.startsWith('image/')) {
+                                    alert('Please select a valid image file.');
+                                    return;
+                                }
+                                const reader = new FileReader();
+                                reader.onload = function(evt) {
+                                    photoStore[selectedTrackingKey] = evt.target.result;
+                                    renderItems(tabName);
+                                };
+                                reader.readAsDataURL(file);
+                            });
+                        }
+
+                        photoInput.setAttribute('data-tracking-key', trackingKey);
+                        photoInput.value = '';
+                        photoInput.click();
+                    });
+                    qtyDiv.appendChild(photoBtn);
+
+                    if (hasCustomPhoto) {
+                        const removePhotoBtn = document.createElement('button');
+                        removePhotoBtn.type = 'button';
+                        removePhotoBtn.className = 'item-photo-remove-btn';
+                        removePhotoBtn.title = 'Remove photo';
+                        removePhotoBtn.textContent = '🗑';
+                        removePhotoBtn.style.background = 'none';
+                        removePhotoBtn.style.border = 'none';
+                        removePhotoBtn.style.cursor = 'pointer';
+                        removePhotoBtn.style.padding = '4px 6px';
+                        removePhotoBtn.style.color = '#f97316';
+                        removePhotoBtn.style.fontWeight = '700';
+                        removePhotoBtn.style.marginLeft = '4px';
+                        removePhotoBtn.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            delete photoStore[trackingKey];
+                            renderItems(tabName);
+                        });
+                        qtyDiv.appendChild(removePhotoBtn);
+                    }
+
                     const editBtn = document.createElement('button');
                     editBtn.type = 'button';
                     editBtn.className = 'item-edit-btn';
@@ -7296,6 +8077,12 @@ document.addEventListener('DOMContentLoaded', function () {
                                 const index = customFloorItems.indexOf(itemName);
                                 if (index > -1) {
                                     customFloorItems[index] = trimmedName;
+                                }
+                                // Preserve photo mapping when custom item is renamed
+                                const newTrackingKey = getMultiFloorTrackingKey(trimmedName, tabName);
+                                if (photoStore[trackingKey]) {
+                                    photoStore[newTrackingKey] = photoStore[trackingKey];
+                                    delete photoStore[trackingKey];
                                 }
                                 // Move quantities
                                 if (itemName in floorQuantities) {
@@ -7333,6 +8120,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             if (index > -1) {
                                 customFloorItems.splice(index, 1);
                             }
+                            delete photoStore[trackingKey];
                             delete floorQuantities[itemName];
                             delete floorSelectedItems[itemName];
                             renderItems(tabName);
@@ -7347,11 +8135,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 
                 li.style.cursor = 'pointer';
                 li.addEventListener('click', function(e) {
-                    if (e.target.closest('.room-item-controls') || e.target.closest('.item-edit-btn') || e.target.closest('.item-delete-btn')) return;
-                    floorSelectedItems[trackingKey] = !floorSelectedItems[trackingKey];
-                    if (!floorSelectedItems[trackingKey]) {
-                        floorQuantities[trackingKey] = 0;
-                    }
+                    if (e.target.closest('.room-item-controls') || e.target.closest('.item-edit-btn') || e.target.closest('.item-delete-btn') || e.target.closest('.item-photo-btn') || e.target.closest('.item-photo-remove-btn')) return;
+
+                    // Only allow row-click deselection when quantity is already at least 1.
+                    const currentQty = floorQuantities[trackingKey] || 0;
+                    if (currentQty <= 0) return;
+
+                    floorQuantities[trackingKey] = 0;
+                    floorSelectedItems[trackingKey] = false;
                     renderItems(tabName);
                     syncFloorToGlobal();
                     updateOrganizationIfNeeded();
@@ -8525,11 +9316,85 @@ document.addEventListener('DOMContentLoaded', function() {
     // Dimension Item Management
     const addDimensionBtn = document.getElementById('add-dimension-btn');
     const dimensionsList = document.getElementById('dimensions-list');
+    const customizedItemsHiddenInput = document.getElementById('customized-items-hidden');
+
+    const bindPhotoUploadHandlers = (root = document) => {
+        const photoAreas = root.querySelectorAll('.photo-upload-area');
+        photoAreas.forEach((area) => {
+            if (area.dataset.photoBound === 'true') return;
+            const input = area.querySelector('.photo-input');
+            if (!input) return;
+
+            area.addEventListener('click', () => input.click());
+
+            area.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                area.style.borderColor = '#4A90E2';
+                area.style.background = '#f0f6ff';
+            });
+
+            area.addEventListener('dragleave', () => {
+                area.style.borderColor = '#ddd';
+                area.style.background = '#f9f9f9';
+            });
+
+            area.addEventListener('drop', (e) => {
+                e.preventDefault();
+                area.style.borderColor = '#ddd';
+                area.style.background = '#f9f9f9';
+                input.files = e.dataTransfer.files;
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+
+            area.dataset.photoBound = 'true';
+        });
+    };
+
+    const updateCustomizedItemsHiddenValue = () => {
+        if (!customizedItemsHiddenInput || !dimensionsList) return;
+
+        const rows = Array.from(dimensionsList.querySelectorAll('.dimension-item'));
+        const parsedItems = rows.map((row) => {
+            const name = (row.querySelector('.dimension-description')?.value || '').trim();
+            const width = (row.querySelector('.dimension-width')?.value || '').trim();
+            const depth = (row.querySelector('.dimension-depth')?.value || '').trim();
+            const height = (row.querySelector('.dimension-height')?.value || '').trim();
+            const sizeUnit = (row.querySelector('.dimension-size-unit')?.value || 'cm').trim();
+            const weight = (row.querySelector('.dimension-weight')?.value || '').trim();
+            const weightUnit = (row.querySelector('.dimension-weight-unit')?.value || 'kg').trim();
+            const photos = Array.from(row.querySelectorAll('.photo-input')).filter((input) => input.files && input.files.length > 0).length;
+
+            return {
+                name,
+                width,
+                depth,
+                height,
+                sizeUnit,
+                weight,
+                weightUnit,
+                photos,
+                valid: !!name && !!width && !!depth && !!height && !!weight
+            };
+        });
+
+        const validItems = parsedItems
+            .filter((item) => item.valid)
+            .map(({ valid, ...item }) => item);
+
+        customizedItemsHiddenInput.value = validItems.length ? JSON.stringify(validItems) : '';
+        customizedItemsHiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+        
+        // Re-render delivery floors if already on step 5 or later
+        if (typeof window.renderDeliveryFloors === 'function') {
+            setTimeout(() => window.renderDeliveryFloors(), 0);
+        }
+    };
 
     if (addDimensionBtn) {
         addDimensionBtn.addEventListener('click', (e) => {
             e.preventDefault();
             addDimensionItem();
+            updateCustomizedItemsHiddenValue();
         });
     }
 
@@ -8540,40 +9405,42 @@ document.addEventListener('DOMContentLoaded', function() {
             if (deleteBtn) {
                 const item = deleteBtn.closest('.dimension-item');
                 if (item) item.remove();
+                updateCustomizedItemsHiddenValue();
+            }
+        });
+
+        dimensionsList.addEventListener('input', (e) => {
+            if (e.target.closest('.dimension-item')) {
+                updateCustomizedItemsHiddenValue();
+            }
+        });
+
+        dimensionsList.addEventListener('change', (e) => {
+            if (e.target.closest('.dimension-item')) {
+                updateCustomizedItemsHiddenValue();
             }
         });
     }
 
     // Photo upload handlers
-    const photoAreas = document.querySelectorAll('.photo-upload-area');
-    photoAreas.forEach(area => {
-        const input = area.querySelector('.photo-input');
-        
-        area.addEventListener('click', () => input.click());
-        
-        area.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            area.style.borderColor = '#4A90E2';
-            area.style.background = '#f0f6ff';
-        });
-        
-        area.addEventListener('dragleave', () => {
-            area.style.borderColor = '#ddd';
-            area.style.background = '#f9f9f9';
-        });
-        
-        area.addEventListener('drop', (e) => {
-            e.preventDefault();
-            area.style.borderColor = '#ddd';
-            area.style.background = '#f9f9f9';
-            if (input) {
-                input.files = e.dataTransfer.files;
-            }
-        });
-    });
+    bindPhotoUploadHandlers(document);
 
     // Service selection
-    const cjHidden = document.getElementById('item-description-hidden');
+    let cjHidden = document.getElementById('item-description-hidden');
+    if (!cjHidden) {
+        const quoteFormEl = document.getElementById('create-job-form');
+        const fallbackField = document.createElement('input');
+        fallbackField.type = 'hidden';
+        fallbackField.id = 'item-description-hidden';
+        fallbackField.name = 'item-description';
+        fallbackField.value = '';
+        if (quoteFormEl) {
+            quoteFormEl.appendChild(fallbackField);
+        } else {
+            document.body.appendChild(fallbackField);
+        }
+        cjHidden = fallbackField;
+    }
     const serviceIconButtons = document.querySelectorAll('.service-icon-btn');
     const urlParams = new URLSearchParams(window.location.search);
     isMultiStopMode = urlParams.get('mode') === 'multi' || urlParams.get('multistop') === '1';
@@ -8581,24 +9448,41 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Auto-select service if provided in URL
     const serviceFromUrl = urlParams.get('service');
-    if (serviceFromUrl && serviceIconButtons.length) {
-        serviceIconButtons.forEach(btn => {
-            if (btn.dataset.value && btn.dataset.value.toLowerCase().replace(/\s|&/g, '') === serviceFromUrl.toLowerCase().replace(/\s|&/g, '')) {
-                // Set as selected
-                btn.setAttribute('aria-pressed', 'true');
-                btn.classList.add('active');
-                if (cjHidden) {
-                    cjHidden.value = btn.dataset.value;
+    const normalizeServiceValue = (value) => (value || '').toLowerCase().replace(/\s|&/g, '');
+
+    if (serviceFromUrl) {
+        const normalizedUrlService = normalizeServiceValue(serviceFromUrl);
+        let matchedServiceValue = '';
+
+        if (serviceIconButtons.length) {
+            serviceIconButtons.forEach((btn) => {
+                const btnValue = btn.dataset.value || '';
+                const isMatch = normalizeServiceValue(btnValue) === normalizedUrlService;
+                if (isMatch) {
+                    matchedServiceValue = btnValue;
+                    btn.setAttribute('aria-pressed', 'true');
+                    btn.classList.add('active');
+                } else {
+                    btn.setAttribute('aria-pressed', 'false');
+                    btn.classList.remove('active');
                 }
-            } else {
-                btn.setAttribute('aria-pressed', 'false');
-                btn.classList.remove('active');
+            });
+        }
+
+        // Fallback for pages without service icon buttons: trust URL service value directly.
+        if (!matchedServiceValue) {
+            matchedServiceValue = decodeURIComponent(serviceFromUrl);
+        }
+
+        if (matchedServiceValue) {
+            // Store for later use when applyServiceSelection is ready
+            window.pendingServiceFromUrl = matchedServiceValue;
+            if (cjHidden) {
+                cjHidden.value = matchedServiceValue;
             }
-        });
-        // Update summary if present
-        const summaryService = document.getElementById('summary-service');
-        if (summaryService && cjHidden && cjHidden.value) {
-            summaryService.textContent = cjHidden.value;
+            if (matchedServiceValue === 'Customized Items') {
+                document.body.classList.add('customized-items-active');
+            }
         }
     }
 
@@ -8754,7 +9638,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const stepBackBtn = document.getElementById('step-back-btn') || document.getElementById('step-back-btn-top');
         const stepNextBtn = document.getElementById('step-next-btn');
         const getPricesBtn = document.getElementById('get-prices-btn');
-        const totalSteps = 7;
+        const totalSteps = 8;
         window.totalSteps = totalSteps;
         let currentStep = 1;
 
@@ -8973,10 +9857,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const serviceValue = cjHidden ? cjHidden.value.trim() : '';
             const serviceLabel = serviceValue ? getServiceLabel(serviceValue) : '';
-            let pickupType = getSelectText('pickup-location-type') || getSelectText('office-pickup-location-type');
-            const deliveryType = getSelectText('delivery-location-type') || getSelectText('office-delivery-location-type');
-            let pickupFloor = getSelectText('pickup-floor') || getSelectText('office-pickup-floor');
-            const deliveryFloor = getSelectText('delivery-floor') || getSelectText('office-delivery-floor');
+            const pickupPropertyTypeValue = getInputValue('pickup-property-type');
+            const deliveryPropertyTypeValue = getInputValue('delivery-property-type');
+            let pickupType = formatPropertyTypeValue(pickupPropertyTypeValue) || getSelectText('pickup-location-type') || getSelectText('office-pickup-location-type');
+            let deliveryType = formatPropertyTypeValue(deliveryPropertyTypeValue) || getSelectText('delivery-location-type') || getSelectText('office-delivery-location-type');
+            let pickupFloor = getOrderedFloorList(Array.from(window.selectedPickupFloors || [])).join(', ') || getSelectText('pickup-floor') || getSelectText('office-pickup-floor');
+            let deliveryFloor = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || [])).join(', ') || getSelectText('delivery-floor') || getSelectText('office-delivery-floor');
             const pickupAddress = formatAddress('pickup-address', 'pickup-city', 'pickup-postcode');
             const deliveryAddress = formatAddress('delivery-address', 'delivery-city', 'delivery-postcode');
             const moveDate = getInputValue('service-transport-date') || getInputValue('office-move-date');
@@ -9034,6 +9920,31 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (serviceValue === 'Piano Transport') {
                 const pianoType = getOptionNavLabel('piano-type-hidden');
                 itemsSummary = pianoType ? `Type: ${pianoType}` : '';
+            } else if (serviceValue === 'Customized Items') {
+                const serializedItems = getInputValue('customized-items-hidden');
+                if (serializedItems) {
+                    try {
+                        const parsedItems = JSON.parse(serializedItems);
+                        if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+                            itemsSummary = parsedItems
+                                .map((item) => {
+                                    const name = (item.name || '').trim();
+                                    const width = item.width || '';
+                                    const depth = item.depth || '';
+                                    const height = item.height || '';
+                                    const sizeUnit = item.sizeUnit || 'cm';
+                                    const weight = item.weight || '';
+                                    const weightUnit = item.weightUnit || 'kg';
+                                    if (!name) return '';
+                                    return `${name} (${width}x${depth}x${height}${sizeUnit}, ${weight}${weightUnit})`;
+                                })
+                                .filter(Boolean)
+                                .join(' | ');
+                        }
+                    } catch (error) {
+                        itemsSummary = '';
+                    }
+                }
             } else {
                 itemsSummary = getInputValue('other-job-description') || getInputValue('manpower-job-description') || getInputValue('office-removal-description');
             }
@@ -9064,12 +9975,17 @@ document.addEventListener('DOMContentLoaded', function() {
             setSummaryValue('summary-service', serviceLabel || '—');
             setSummaryValue('summary-pickup-type', pickupType || '—');
             setSummaryValue('summary-delivery-type', deliveryType || '—');
+            setSummaryValue('summary-pickup-elevator', getOverviewElevatorStatus('pickup'));
+            setSummaryValue('summary-delivery-elevator', getOverviewElevatorStatus('delivery'));
             setSummaryValue('summary-floors', floorSummary || '—');
+            setSummaryValue('summary-pickup-floors', pickupFloor || '—');
+            setSummaryValue('summary-delivery-floors', deliveryFloor || '—');
             setSummaryValue('summary-pickup-address', pickupAddress || '—');
             setSummaryValue('summary-delivery-address', deliveryAddress || '—');
             setSummaryValue('summary-items', itemsSummary || '—');
             setSummaryValue('summary-date', moveDate || '—');
             setSummaryValue('summary-notes', notesParts.length ? notesParts.join(' - ') : '—');
+            updateOverviewFloorAndInventorySummary();
             
             // Hide/show floors row based on service category
             const floorsRow = document.getElementById('summary-floors-row');
@@ -9193,6 +10109,15 @@ document.addEventListener('DOMContentLoaded', function() {
             if (step === 2 && typeof map !== 'undefined' && map && typeof map.resize === 'function') {
                 setTimeout(() => map.resize(), 200);
             }
+            if (step === 8) {
+                initOverviewRouteMap();
+                updateOverviewRouteLabels();
+                setTimeout(() => {
+                    if (typeof overviewMap !== 'undefined' && overviewMap && typeof overviewMap.resize === 'function') {
+                        overviewMap.resize();
+                    }
+                }, 180);
+            }
             // Update sticky next button state for new step
             if (typeof window.updateNextButtonState === 'function') {
                 window.updateNextButtonState();
@@ -9258,7 +10183,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const stepBackBtn = document.getElementById('step-back-btn');
         const stepNextBtn = document.getElementById('step-next-btn');
         const getPricesBtn = document.getElementById('get-prices-btn');
-        const totalSteps = 7;
+        const totalSteps = 8;
         window.totalSteps = totalSteps;
         let currentStep = 1;
 
@@ -9462,10 +10387,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const serviceValue = cjHidden ? cjHidden.value.trim() : '';
             const serviceLabel = serviceValue ? getServiceLabel(serviceValue) : '';
-            const pickupType = getSelectText('pickup-location-type') || getSelectText('office-pickup-location-type');
-            const deliveryType = getSelectText('delivery-location-type') || getSelectText('office-delivery-location-type');
-            const pickupFloor = getSelectText('pickup-floor') || getSelectText('office-pickup-floor');
-            const deliveryFloor = getSelectText('delivery-floor') || getSelectText('office-delivery-floor');
+            const pickupPropertyTypeValue = getInputValue('pickup-property-type');
+            const deliveryPropertyTypeValue = getInputValue('delivery-property-type');
+            let pickupType = formatPropertyTypeValue(pickupPropertyTypeValue) || getSelectText('pickup-location-type') || getSelectText('office-pickup-location-type');
+            let deliveryType = formatPropertyTypeValue(deliveryPropertyTypeValue) || getSelectText('delivery-location-type') || getSelectText('office-delivery-location-type');
+            let pickupFloor = getOrderedFloorList(Array.from(window.selectedPickupFloors || [])).join(', ') || getSelectText('pickup-floor') || getSelectText('office-pickup-floor');
+            let deliveryFloor = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || [])).join(', ') || getSelectText('delivery-floor') || getSelectText('office-delivery-floor');
             const pickupAddress = formatAddress('pickup-address', 'pickup-city', 'pickup-postcode');
             const deliveryAddress = formatAddress('delivery-address', 'delivery-city', 'delivery-postcode');
             const moveDate = getInputValue('service-transport-date') || getInputValue('office-move-date');
@@ -9522,6 +10449,31 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (serviceValue === 'Piano Transport') {
                 const pianoType = getOptionNavLabel('piano-type-hidden');
                 itemsSummary = pianoType ? `Type: ${pianoType}` : '';
+            } else if (serviceValue === 'Customized Items') {
+                const serializedItems = getInputValue('customized-items-hidden');
+                if (serializedItems) {
+                    try {
+                        const parsedItems = JSON.parse(serializedItems);
+                        if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+                            itemsSummary = parsedItems
+                                .map((item) => {
+                                    const name = (item.name || '').trim();
+                                    const width = item.width || '';
+                                    const depth = item.depth || '';
+                                    const height = item.height || '';
+                                    const sizeUnit = item.sizeUnit || 'cm';
+                                    const weight = item.weight || '';
+                                    const weightUnit = item.weightUnit || 'kg';
+                                    if (!name) return '';
+                                    return `${name} (${width}x${depth}x${height}${sizeUnit}, ${weight}${weightUnit})`;
+                                })
+                                .filter(Boolean)
+                                .join(' | ');
+                        }
+                    } catch (error) {
+                        itemsSummary = '';
+                    }
+                }
             } else {
                 itemsSummary = getInputValue('other-job-description') || getInputValue('manpower-job-description') || getInputValue('office-removal-description');
             }
@@ -9540,12 +10492,17 @@ document.addEventListener('DOMContentLoaded', function() {
             setSummaryValue('summary-service', serviceLabel || '—');
             setSummaryValue('summary-pickup-type', pickupType || '—');
             setSummaryValue('summary-delivery-type', deliveryType || '—');
+            setSummaryValue('summary-pickup-elevator', getOverviewElevatorStatus('pickup'));
+            setSummaryValue('summary-delivery-elevator', getOverviewElevatorStatus('delivery'));
             setSummaryValue('summary-floors', floorSummary || '—');
+            setSummaryValue('summary-pickup-floors', pickupFloor || '—');
+            setSummaryValue('summary-delivery-floors', deliveryFloor || '—');
             setSummaryValue('summary-pickup-address', pickupAddress || '—');
             setSummaryValue('summary-delivery-address', deliveryAddress || '—');
             setSummaryValue('summary-items', itemsSummary || '—');
             setSummaryValue('summary-date', moveDate || '—');
             setSummaryValue('summary-notes', notesParts.length ? notesParts.join(' - ') : '—');
+            updateOverviewFloorAndInventorySummary();
             
             // Hide/show floors row based on service category
             const floorsRow = document.getElementById('summary-floors-row');
@@ -9667,6 +10624,15 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             if (step === 4 && typeof map !== 'undefined' && map && typeof map.resize === 'function') {
                 setTimeout(() => map.resize(), 200);
+            }
+            if (step === 8) {
+                initOverviewRouteMap();
+                updateOverviewRouteLabels();
+                setTimeout(() => {
+                    if (typeof overviewMap !== 'undefined' && overviewMap && typeof overviewMap.resize === 'function') {
+                        overviewMap.resize();
+                    }
+                }, 180);
             }
             // Update sticky next button state for new step
             if (typeof window.updateNextButtonState === 'function') {
@@ -9847,7 +10813,6 @@ document.addEventListener('DOMContentLoaded', function() {
             hidePianoDeliverySection();
             hideIndustrialSection();
             showOtherSection();
-            showDeliveryFloor();
         } else if (value === 'Man Power Only') {
             if (inventorySection) {
                 inventorySection.style.display = 'none';
@@ -9865,7 +10830,6 @@ document.addEventListener('DOMContentLoaded', function() {
             hideTrailerCampervanSection();
             hidePianoDeliverySection();
             hideIndustrialSection();
-            showDeliveryFloor();
         } else if (value === 'Industrial') {
             if (inventorySection) {
                 inventorySection.style.display = 'none';
@@ -9968,7 +10932,11 @@ document.addEventListener('DOMContentLoaded', function() {
             hideTrailerCampervanSection();
             hidePianoDeliverySection();
             hideIndustrialSection();
-            showSpecialistAntiquesSection();
+            hideSpecialistAntiquesSection();
+            hideOtherSection();
+            hidePackagingSection();
+            hideFreightSection();
+            hideClearanceSection();
         } else if (value === 'Specialist & Antiques') {
             if (inventorySection) {
                 inventorySection.style.display = 'none';
@@ -10045,7 +11013,37 @@ document.addEventListener('DOMContentLoaded', function() {
         if (typeof window.updateFormSummary === 'function') {
             window.updateFormSummary();
         }
+        
+        // Immediately update inventory visibility for Customized Items (without waiting for floor selection)
+        if (value === 'Customized Items') {
+            document.body.classList.add('customized-items-active');
+            const isStep3 = document.body.getAttribute('data-form-step') === '3' || document.body.getAttribute('data-current-step') === '3';
+            
+            // Direct visibility control - set before async function calls
+            const inventoryContainer = document.getElementById('inventory-card-container');
+            const customSection = document.getElementById('customized-items-inventory-section');
+            const houseSection = document.getElementById('house-removal-inventory-section');
+            
+            if (inventoryContainer) inventoryContainer.style.display = isStep3 ? '' : 'none';
+            if (customSection) {
+                customSection.style.display = isStep3 ? 'block' : 'none';
+                customSection.classList.toggle('step-hidden', !isStep3);
+            }
+            if (houseSection) {
+                houseSection.style.display = 'none';
+                houseSection.classList.add('step-hidden');
+            }
+            
+            // Also call the update function without delay
+            if (typeof updateInventoryAndliftVisibility === 'function') {
+                updateInventoryAndliftVisibility();
+            }
+        } else {
+            document.body.classList.remove('customized-items-active');
+        }
     };
+
+    window.applyServiceSelection = applyServiceSelection;
 
     const serviceGrid = document.getElementById('service-icon-grid');
     if (serviceGrid && serviceGrid.dataset.listenerBound !== 'true') {
@@ -10080,22 +11078,112 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    const syncCustomizedItemsStep3Visibility = () => {
+        const serviceValue = (
+            cjHidden?.value
+            || decodeURIComponent(new URLSearchParams(window.location.search).get('service') || '')
+            || ''
+        ).trim();
+        const body = document.body;
+        const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
+        const isCustomizedService = serviceValue === 'Customized Items';
+
+        const inventoryCardContainer = document.getElementById('inventory-card-container');
+        const houseInventorySection = document.getElementById('house-removal-inventory-section');
+        const customSection = document.getElementById('customized-items-inventory-section');
+        const pickupFloorsImage = document.getElementById('pickup-floors-image');
+        const pickupRoomList = document.getElementById('pickup-room-list');
+        const step3Title = document.getElementById('step3-title-wrapper');
+
+        if (!customSection || !inventoryCardContainer) return;
+
+        document.body.classList.toggle('customized-items-active', isCustomizedService);
+
+        if (isCustomizedService && isStep3) {
+            if (pickupFloorsImage) pickupFloorsImage.style.display = 'none';
+            if (pickupRoomList) pickupRoomList.style.display = 'none';
+            if (step3Title) step3Title.style.display = 'none';
+
+            inventoryCardContainer.style.display = '';
+            customSection.style.display = 'block';
+            customSection.classList.remove('step-hidden');
+            if (houseInventorySection) {
+                houseInventorySection.style.display = 'none';
+                houseInventorySection.classList.add('step-hidden');
+            }
+
+            if (dimensionsList && dimensionsList.children.length === 0) {
+                addDimensionItem();
+            }
+        } else {
+            if (pickupFloorsImage) pickupFloorsImage.style.display = '';
+            if (pickupRoomList) pickupRoomList.style.display = '';
+
+            customSection.style.display = 'none';
+            customSection.classList.add('step-hidden');
+
+            if (serviceValue !== 'House Removals' && serviceValue !== 'Customized Items') {
+                inventoryCardContainer.style.display = 'none';
+            }
+
+            if (houseInventorySection && serviceValue === 'House Removals') {
+                houseInventorySection.style.display = '';
+                houseInventorySection.classList.remove('step-hidden');
+            }
+        }
+
+        updateCustomizedItemsHiddenValue();
+    };
+
     function addDimensionItem() {
+        if (!dimensionsList) return;
+        const itemIndex = dimensionsList.querySelectorAll('.dimension-item').length + 1;
         const item = document.createElement('div');
         item.className = 'dimension-item';
         item.innerHTML = `
+            <label class="form-label" style="margin:0;">Add photos</label>
+            <div class="photo-upload-grid">
+                <div class="photo-upload-area">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <path d="M21 15l-5-5L5 21"></path>
+                    </svg>
+                    <span>Drag photo here <strong>upload</strong></span>
+                    <input type="file" class="photo-input" accept="image/*" id="custom-item-photo-${itemIndex}-1">
+                </div>
+                <div class="photo-upload-area">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <path d="M21 15l-5-5L5 21"></path>
+                    </svg>
+                    <span>Drag photo here <strong>upload</strong></span>
+                    <input type="file" class="photo-input" accept="image/*" id="custom-item-photo-${itemIndex}-2">
+                </div>
+                <div class="photo-upload-area">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <path d="M21 15l-5-5L5 21"></path>
+                    </svg>
+                    <span>Drag photo here <strong>upload</strong></span>
+                    <input type="file" class="photo-input" accept="image/*" id="custom-item-photo-${itemIndex}-3">
+                </div>
+            </div>
+            <label class="form-label" style="margin:0;">Add Dimensions</label>
             <input type="text" class="form-input dimension-description" placeholder="Enter Item Description here">
             <div class="dimension-inputs">
-                <input type="number" class="form-input dimension-field" placeholder="Width" min="0" step="0.1">
-                <input type="number" class="form-input dimension-field" placeholder="Depth" min="0" step="0.1">
-                <input type="number" class="form-input dimension-field" placeholder="Height" min="0" step="0.1">
-                <select class="form-input dimension-unit">
+                <input type="number" class="form-input dimension-field dimension-width" placeholder="Width" min="0" step="0.1">
+                <input type="number" class="form-input dimension-field dimension-depth" placeholder="Depth" min="0" step="0.1">
+                <input type="number" class="form-input dimension-field dimension-height" placeholder="Height" min="0" step="0.1">
+                <select class="form-input dimension-unit dimension-size-unit">
                     <option value="cm">cm</option>
                     <option value="m">m</option>
                     <option value="ft">ft</option>
                 </select>
-                <input type="number" class="form-input dimension-field" placeholder="Weight" min="0" step="0.1">
-                <select class="form-input dimension-unit">
+                <input type="number" class="form-input dimension-field dimension-weight" placeholder="Weight" min="0" step="0.1">
+                <select class="form-input dimension-unit dimension-weight-unit">
                     <option value="kg">kg</option>
                     <option value="lbs">lbs</option>
                 </select>
@@ -10110,7 +11198,29 @@ document.addEventListener('DOMContentLoaded', function() {
             </button>
         `;
         dimensionsList.appendChild(item);
+        bindPhotoUploadHandlers(item);
+        updateCustomizedItemsHiddenValue();
     }
+
+    if (cjHidden) {
+        cjHidden.addEventListener('change', syncCustomizedItemsStep3Visibility);
+    }
+
+    document.addEventListener('click', (event) => {
+        if (event.target.closest('.service-icon-btn')) {
+            setTimeout(syncCustomizedItemsStep3Visibility, 0);
+        }
+    });
+
+    const stepObserver = new MutationObserver(() => {
+        syncCustomizedItemsStep3Visibility();
+    });
+    stepObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['data-form-step', 'data-current-step']
+    });
+
+    syncCustomizedItemsStep3Visibility();
 
     const quoteForm = document.getElementById('create-job-form');
 
@@ -11223,7 +12333,11 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     const updateLocationDetailForConfig = (config) => {
-        const serviceValue = document.getElementById('item-description-hidden')?.value || '';
+        const serviceValue = (
+            document.getElementById('item-description-hidden')?.value
+            || decodeURIComponent(new URLSearchParams(window.location.search).get('service') || '')
+            || ''
+        );
         const allowLocations = true;
         const isVehicleNoFloor = vehicleNoFloorCategories.has(serviceValue);
         const typeSelect = document.getElementById(config.typeSelectId);
@@ -11306,8 +12420,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function updateHouseInventoryVisibility() {
         const inventorySection = document.getElementById('house-removal-inventory-section');
+        const customInventorySection = document.getElementById('customized-items-inventory-section');
+        const inventoryCardContainer = document.getElementById('inventory-card-container');
         const serviceValue = document.getElementById('item-description-hidden')?.value || '';
         const isHouse = serviceValue === 'House Removals';
+        const isCustomizedItems = serviceValue === 'Customized Items';
         const currentStep = document.body.dataset.formStep;
 
         document.body.classList.toggle('floor-block-mode', isHouse);
@@ -11318,6 +12435,22 @@ document.addEventListener('DOMContentLoaded', function() {
             document.body.classList.add('house-removals-active');
         } else {
             document.body.classList.remove('house-removals-active');
+        }
+
+        if (isCustomizedItems) {
+            if (inventoryCardContainer && currentStep === '3') {
+                inventoryCardContainer.style.display = '';
+            }
+            if (customInventorySection) {
+                const showCustomSection = currentStep === '3';
+                customInventorySection.style.display = showCustomSection ? 'block' : 'none';
+                customInventorySection.classList.toggle('step-hidden', !showCustomSection);
+            }
+            if (inventorySection) {
+                inventorySection.style.display = 'none';
+                inventorySection.classList.add('step-hidden');
+            }
+            return;
         }
 
         // Floor block section logic remains unchanged
@@ -11578,6 +12711,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
         }
+        
+        if (block.id === 'customized-items-inventory-section') {
+            const customizedItemsField = document.getElementById('customized-items-hidden');
+            if (customizedItemsField && customizedItemsField.value.trim()) {
+                try {
+                    const items = JSON.parse(customizedItemsField.value);
+                    return Array.isArray(items) && items.length > 0;
+                } catch (e) {
+                    return false;
+                }
+            }
+            return false;
+        }
 
         const requiredFields = Array.from(block.querySelectorAll('[data-required="true"]'))
             .filter((field) => isFieldVisible(field));
@@ -11615,9 +12761,13 @@ document.addEventListener('DOMContentLoaded', function() {
         ]);
         const skipLocationGate = vehicleNoFloorCategories.has(serviceValue);
         const inventorySection = document.getElementById('house-removal-inventory-section');
+        const customizedItemsSection = document.getElementById('customized-items-inventory-section');
         const officeInventorySection = document.getElementById('office-removal-inventory-section');
         if (inventorySection) {
             inventorySection.style.display = serviceValue === 'House Removals' ? 'block' : 'none';
+        }
+        if (customizedItemsSection) {
+            customizedItemsSection.style.display = serviceValue === 'Customized Items' ? 'block' : 'none';
         }
         if (officeInventorySection) {
             officeInventorySection.style.display = serviceValue === 'Office Removals' ? 'block' : 'none';
@@ -11640,6 +12790,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             if (block.id === 'house-removal-inventory-section' && serviceValue === 'House Removals') {
+                block.classList.remove('progressive-hidden');
+                if (!isBlockComplete(block)) {
+                    allowShow = false;
+                }
+                return;
+            }
+            if (block.id === 'customized-items-inventory-section' && serviceValue === 'Customized Items') {
                 block.classList.remove('progressive-hidden');
                 if (!isBlockComplete(block)) {
                     allowShow = false;
@@ -14487,6 +15644,13 @@ let directionsService;
 let directionsRenderer;
 let pickupAutocomplete;
 let deliveryAutocomplete;
+let overviewMap;
+let overviewMapReady = false;
+let overviewPickupMarker = null;
+let overviewDeliveryMarker = null;
+let overviewRouteGeometry = null;
+let overviewStartCoords = null;
+let overviewEndCoords = null;
 
 
 function loadGoogleMaps() {
@@ -15359,6 +16523,10 @@ function drawMultiStopRoute(route, coordsList) {
     const bounds = new mapboxgl.LngLatBounds();
     coordsList.forEach((coords) => bounds.extend(coords));
     map.fitBounds(bounds, { padding: 60 });
+
+    if (coordsList.length > 1) {
+        setOverviewRouteSnapshot(route.geometry, coordsList[0], coordsList[coordsList.length - 1]);
+    }
 }
 
 function clearMultiStopMarkers() {
@@ -15553,13 +16721,128 @@ function drawMapRoute(route, pickupCoords, deliveryCoords) {
     bounds.extend(pickupCoords);
     bounds.extend(deliveryCoords);
     map.fitBounds(bounds, { padding: 50 });
+
+    setOverviewRouteSnapshot(route.geometry, pickupCoords, deliveryCoords);
+}
+
+function setOverviewRouteSnapshot(routeGeometry, startCoords, endCoords) {
+    overviewRouteGeometry = routeGeometry || null;
+    overviewStartCoords = Array.isArray(startCoords) ? startCoords : null;
+    overviewEndCoords = Array.isArray(endCoords) ? endCoords : null;
+    renderOverviewRouteMap();
+}
+
+function initOverviewRouteMap() {
+    const mapEl = document.getElementById('overview-route-map');
+    if (!mapEl) return;
+
+    if (!window.mapboxgl) {
+        mapEl.innerHTML = '<div style="padding:16px; color:#64748b; font-size:0.9rem;">Map preview unavailable. Address summary is shown above.</div>';
+        return;
+    }
+
+    if (overviewMap) {
+        renderOverviewRouteMap();
+        return;
+    }
+
+    try {
+        overviewMap = new mapboxgl.Map({
+            container: 'overview-route-map',
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [-6.2603, 53.3498],
+            zoom: 6
+        });
+        overviewMap.addControl(new mapboxgl.NavigationControl());
+        overviewMap.on('load', () => {
+            overviewMapReady = true;
+            renderOverviewRouteMap();
+        });
+    } catch (err) {
+        console.error('Overview map init error:', err);
+    }
+}
+
+function renderOverviewRouteMap() {
+    if (!overviewMap || !overviewMapReady) return;
+
+    const sourceId = 'overview-route-source';
+    const layerId = 'overview-route-layer';
+
+    if (overviewMap.getLayer(layerId)) {
+        overviewMap.removeLayer(layerId);
+    }
+    if (overviewMap.getSource(sourceId)) {
+        overviewMap.removeSource(sourceId);
+    }
+
+    if (overviewRouteGeometry) {
+        overviewMap.addSource(sourceId, {
+            type: 'geojson',
+            data: {
+                type: 'Feature',
+                geometry: overviewRouteGeometry
+            }
+        });
+
+        overviewMap.addLayer({
+            id: layerId,
+            type: 'line',
+            source: sourceId,
+            layout: {
+                'line-join': 'round',
+                'line-cap': 'round'
+            },
+            paint: {
+                'line-color': '#2563eb',
+                'line-width': 4,
+                'line-opacity': 0.85
+            }
+        });
+    }
+
+    if (overviewPickupMarker) {
+        overviewPickupMarker.remove();
+        overviewPickupMarker = null;
+    }
+    if (overviewDeliveryMarker) {
+        overviewDeliveryMarker.remove();
+        overviewDeliveryMarker = null;
+    }
+
+    if (overviewStartCoords) {
+        overviewPickupMarker = new mapboxgl.Marker({ color: '#10B981' })
+            .setLngLat(overviewStartCoords)
+            .setPopup(new mapboxgl.Popup().setText('A: Pickup'))
+            .addTo(overviewMap);
+    }
+
+    if (overviewEndCoords) {
+        overviewDeliveryMarker = new mapboxgl.Marker({ color: '#EF4444' })
+            .setLngLat(overviewEndCoords)
+            .setPopup(new mapboxgl.Popup().setText('B: Delivery'))
+            .addTo(overviewMap);
+    }
+
+    if (overviewStartCoords && overviewEndCoords) {
+        const bounds = new mapboxgl.LngLatBounds();
+        bounds.extend(overviewStartCoords);
+        bounds.extend(overviewEndCoords);
+        overviewMap.fitBounds(bounds, { padding: 50 });
+    }
 }
 
 function updateRouteUI(distanceKm, durationText, price) {
     const distanceEl = document.getElementById('route-distance');
     const durationEl = document.getElementById('route-duration');
-    if (distanceEl) distanceEl.textContent = distanceKm ? `${distanceKm.toFixed(1)} km` : '—';
-    if (durationEl) durationEl.textContent = durationText || '—';
+    const overviewDistanceEl = document.getElementById('summary-route-distance');
+    const overviewDurationEl = document.getElementById('summary-route-duration');
+    const distanceText = distanceKm ? `${distanceKm.toFixed(1)} km` : '—';
+    const durationValue = durationText || '—';
+    if (distanceEl) distanceEl.textContent = distanceText;
+    if (durationEl) durationEl.textContent = durationValue;
+    if (overviewDistanceEl) overviewDistanceEl.textContent = distanceText;
+    if (overviewDurationEl) overviewDurationEl.textContent = durationValue;
     updateRouteLabels();
     // route-price element removed from UI, only using distance and duration
 }
@@ -15589,6 +16872,7 @@ function updateRouteLabels() {
         const stopCount = document.querySelectorAll('.multi-stop-card').length;
         if (pickupLabel) pickupLabel.textContent = stopCount > 0 ? 'Stop 1' : 'Pickup';
         if (deliveryLabel) deliveryLabel.textContent = stopCount > 1 ? `Stop ${stopCount}` : 'Delivery';
+        updateOverviewRouteLabels();
         return;
     }
 
@@ -15597,6 +16881,724 @@ function updateRouteLabels() {
 
     if (pickupLabel) pickupLabel.textContent = pickupText;
     if (deliveryLabel) deliveryLabel.textContent = deliveryText;
+    updateOverviewRouteLabels();
+    updateOverviewFloorAndInventorySummary();
+}
+
+function updateOverviewRouteLabels() {
+    if (isMultiStopMode) {
+        const stops = Array.from(document.querySelectorAll('.multi-stop-card'));
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        const getStopAddress = (card) => {
+            if (!card) return '';
+            const address = card.querySelector('.multi-stop-address')?.value?.trim() || '';
+            const city = card.querySelector('.multi-stop-city')?.value?.trim() || '';
+            const postcode = card.querySelector('.multi-stop-postcode')?.value?.trim() || '';
+            return [address, city, postcode].filter(Boolean).join(', ');
+        };
+        const firstAddress = getStopAddress(first);
+        const lastAddress = getStopAddress(last);
+
+        const pointA = document.getElementById('overview-point-a');
+        const pointB = document.getElementById('overview-point-b');
+        const cityRoute = document.getElementById('overview-route-cities');
+        if (pointA) pointA.textContent = firstAddress || '—';
+        if (pointB) pointB.textContent = lastAddress || '—';
+        if (cityRoute) cityRoute.textContent = stops.length > 1 ? 'Stop 1 → Final Stop' : 'A → B';
+        return;
+    }
+
+    const pickupAddress = [
+        document.getElementById('pickup-address')?.value?.trim() || '',
+        document.getElementById('pickup-city')?.value?.trim() || '',
+        document.getElementById('pickup-postcode')?.value?.trim() || ''
+    ].filter(Boolean).join(', ');
+
+    const deliveryAddress = [
+        document.getElementById('delivery-address')?.value?.trim() || '',
+        document.getElementById('delivery-city')?.value?.trim() || '',
+        document.getElementById('delivery-postcode')?.value?.trim() || ''
+    ].filter(Boolean).join(', ');
+
+    const pickupCity = document.getElementById('pickup-city')?.value?.trim() || 'Pickup';
+    const deliveryCity = document.getElementById('delivery-city')?.value?.trim() || 'Delivery';
+
+    const pointA = document.getElementById('overview-point-a');
+    const pointB = document.getElementById('overview-point-b');
+    const cityRoute = document.getElementById('overview-route-cities');
+
+    if (pointA) pointA.textContent = pickupAddress || '—';
+    if (pointB) pointB.textContent = deliveryAddress || '—';
+    if (cityRoute) cityRoute.textContent = `${pickupCity} → ${deliveryCity}`;
+}
+
+function escapeOverviewHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function normalizeOverviewItemName(name) {
+    const raw = String(name || '').trim();
+    const boxPrefixMatch = raw.match(/^([^-]+)\s-\s(Small Boxes|Medium Boxes|Large Boxes|XL Boxes|Extra Large Boxes)$/i);
+    return boxPrefixMatch && boxPrefixMatch[2] ? boxPrefixMatch[2] : raw;
+}
+
+function formatPropertyTypeValue(value) {
+    const key = String(value || '').trim().toLowerCase();
+    const map = {
+        house: 'House',
+        apartment: 'Apartment',
+        duplex: 'Duplex',
+        warehouse: 'Warehouse/Shop',
+        'warehouse/shop': 'Warehouse/Shop',
+        bungalow: 'Bungalow',
+        'storage-unit': 'Storage Unit',
+        storageunit: 'Storage Unit'
+    };
+    return map[key] || (value || '').trim();
+}
+
+function normalizeElevatorValue(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return '';
+    if (raw === 'yes' || raw === 'available') return 'Yes';
+    if (raw === 'no' || raw === 'not-available' || raw === 'none') return 'No';
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function getOverviewElevatorStatus(kind) {
+    const isPickup = kind === 'pickup';
+    const mainId = isPickup ? 'pickup-lift-available' : 'delivery-lift-available';
+    const officeId = isPickup ? 'office-pickup-lift' : 'office-delivery-lift';
+
+    const mainValue = normalizeElevatorValue(document.getElementById(mainId)?.value || '');
+    const officeValue = normalizeElevatorValue(document.getElementById(officeId)?.value || '');
+
+    return mainValue || officeValue || '—';
+}
+
+function getOrderedFloorList(values) {
+    const floorOrder = ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
+    const seen = new Set();
+    return (values || [])
+        .map((v) => String(v || '').trim())
+        .filter(Boolean)
+        .filter((v) => {
+            if (seen.has(v)) return false;
+            seen.add(v);
+            return true;
+        })
+        .sort((a, b) => {
+            const ai = floorOrder.indexOf(a);
+            const bi = floorOrder.indexOf(b);
+            const sa = ai === -1 ? 999 : ai;
+            const sb = bi === -1 ? 999 : bi;
+            return sa - sb;
+        });
+}
+
+function buildOverviewFloorInventoryMarkup(kind) {
+    const grouped = {};
+    const selectedPickup = getOrderedFloorList(Array.from(window.selectedPickupFloors || []));
+    const selectedDelivery = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || []));
+    const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
+
+    if (kind === 'pickup') {
+        const singleFloor = document.getElementById('pickup-floor-select')?.value || 'Ground';
+        const singleItems = window.itemQuantities || {};
+        Object.keys(singleItems).forEach((itemName) => {
+            const qty = parseInt(singleItems[itemName], 10) || 0;
+            if (qty <= 0) return;
+            if (selectedPickup.length > 0 && !selectedPickup.includes(singleFloor)) return;
+            if (!grouped[singleFloor]) grouped[singleFloor] = {};
+            const normalized = normalizeOverviewItemName(itemName);
+            grouped[singleFloor][normalized] = (grouped[singleFloor][normalized] || 0) + qty;
+        });
+
+        const multi = window.multiFloorInventory || {};
+        Object.keys(multi).forEach((floorName) => {
+            if (selectedPickup.length > 0 && !selectedPickup.includes(floorName)) return;
+            const items = multi[floorName] || {};
+            Object.keys(items).forEach((itemName) => {
+                const qty = parseInt(items[itemName], 10) || 0;
+                if (qty <= 0) return;
+                if (!grouped[floorName]) grouped[floorName] = {};
+                const normalized = normalizeOverviewItemName(itemName);
+                grouped[floorName][normalized] = (grouped[floorName][normalized] || 0) + qty;
+            });
+        });
+
+        // For Customized Items service, surface dimensions/weight in Pickup Floor Inventory.
+        if (serviceValue === 'Customized Items') {
+            const serializedItems = document.getElementById('customized-items-hidden')?.value || '';
+            if (serializedItems) {
+                try {
+                    const parsedItems = JSON.parse(serializedItems);
+                    if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+                        const targetFloor = selectedPickup[0]
+                            || document.getElementById('pickup-floor-select')?.value
+                            || 'Ground';
+
+                        if (!grouped[targetFloor]) grouped[targetFloor] = {};
+
+                        parsedItems.forEach((item) => {
+                            const name = (item?.name || '').trim();
+                            if (!name) return;
+                            const width = item?.width || '';
+                            const depth = item?.depth || '';
+                            const height = item?.height || '';
+                            const sizeUnit = item?.sizeUnit || 'cm';
+                            const weight = item?.weight || '';
+                            const weightUnit = item?.weightUnit || 'kg';
+                            const label = `${name} (${width}x${depth}x${height}${sizeUnit}, ${weight}${weightUnit})`;
+                            grouped[targetFloor][label] = (grouped[targetFloor][label] || 0) + 1;
+                        });
+                    }
+                } catch (error) {
+                    // Ignore malformed customized payload.
+                }
+            }
+        }
+    } else {
+        const assignments = window.itemFloorAssignments || {};
+        Object.keys(assignments).forEach((itemKey) => {
+            const perFloor = assignments[itemKey] || {};
+            const baseName = normalizeOverviewItemName(itemKey.includes('||') ? itemKey.split('||')[0] : itemKey);
+            Object.keys(perFloor).forEach((floorName) => {
+                const qty = parseInt(perFloor[floorName], 10) || 0;
+                if (qty <= 0) return;
+                if (selectedDelivery.length > 0 && !selectedDelivery.includes(floorName)) return;
+                if (!grouped[floorName]) grouped[floorName] = {};
+                grouped[floorName][baseName] = (grouped[floorName][baseName] || 0) + qty;
+            });
+        });
+    }
+
+    const floors = getOrderedFloorList(Object.keys(grouped));
+    if (floors.length === 0) {
+        return kind === 'pickup'
+            ? 'No pickup inventory selected yet.'
+            : 'No delivery floor assignments yet.';
+    }
+
+    return floors.map((floor) => {
+        const items = Object.entries(grouped[floor] || {});
+        const itemRows = items.length === 0
+            ? '<li>No items</li>'
+            : items
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([name, qty]) => `<li>${escapeOverviewHtml(name)} x${qty}</li>`)
+                .join('');
+        return `
+            <div class="overview-floor-block">
+                <div class="overview-floor-title">${escapeOverviewHtml(floor)} Floor</div>
+                <ul class="overview-floor-items">${itemRows}</ul>
+            </div>
+        `;
+    }).join('');
+}
+
+function updateOverviewFloorAndInventorySummary() {
+    const pickupFloors = getOrderedFloorList(Array.from(window.selectedPickupFloors || []));
+    const deliveryFloors = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || []));
+    const pickupText = pickupFloors.length ? pickupFloors.join(', ') : '—';
+    const deliveryText = deliveryFloors.length ? deliveryFloors.join(', ') : '—';
+
+    const pickupFloorsEl = document.getElementById('summary-pickup-floors');
+    const deliveryFloorsEl = document.getElementById('summary-delivery-floors');
+    const mergedFloorsEl = document.getElementById('summary-floors');
+    if (pickupFloorsEl) pickupFloorsEl.textContent = pickupText;
+    if (deliveryFloorsEl) deliveryFloorsEl.textContent = deliveryText;
+    if (mergedFloorsEl) mergedFloorsEl.textContent = `Pickup: ${pickupText} | Delivery: ${deliveryText}`;
+
+    const pickupInventoryEl = document.getElementById('summary-pickup-inventory');
+    const deliveryInventoryEl = document.getElementById('summary-delivery-inventory');
+    if (pickupInventoryEl) pickupInventoryEl.innerHTML = buildOverviewFloorInventoryMarkup('pickup');
+    if (deliveryInventoryEl) deliveryInventoryEl.innerHTML = buildOverviewFloorInventoryMarkup('delivery');
+}
+
+function getOverviewAllFloors() {
+    return ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
+}
+
+function getOverviewPropertyTypeOptions() {
+    return [
+        { value: 'house', label: 'House' },
+        { value: 'apartment', label: 'Apartment' },
+        { value: 'duplex', label: 'Duplex' },
+        { value: 'warehouse', label: 'Warehouse/Shop' },
+        { value: 'bungalow', label: 'Bungalow' },
+        { value: 'storage-unit', label: 'Storage Unit' }
+    ];
+}
+
+function getOverviewRoomOptions() {
+    const categories = window.ROOM_CATEGORIES || {
+        hallway: { name: 'Hallway' },
+        shed: { name: 'Shed' },
+        utility: { name: 'Utility' },
+        living: { name: 'Living' },
+        dining: { name: 'Dining' },
+        kitchen: { name: 'Kitchen' },
+        office: { name: 'Office' },
+        bedrooms: { name: 'Bedrooms' },
+        bathrooms: { name: 'Bathrooms' },
+        garden: { name: 'Garden' },
+        boxes: { name: 'Boxes' }
+    };
+    return Object.keys(categories).map((key) => ({ key, label: categories[key]?.name || key }));
+}
+
+function setOverviewFieldValue(fieldId, value) {
+    const field = document.getElementById(fieldId);
+    if (!field) return;
+    field.value = value;
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    field.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function refreshOverviewAfterEdit() {
+    if (typeof window.updateFormSummary === 'function') {
+        window.updateFormSummary();
+    }
+    if (typeof updateOverviewRouteLabels === 'function') {
+        updateOverviewRouteLabels();
+    }
+    if (typeof updateOverviewFloorAndInventorySummary === 'function') {
+        updateOverviewFloorAndInventorySummary();
+    }
+    if (typeof updateRouteIfReady === 'function') {
+        updateRouteIfReady();
+    }
+    if (typeof window.renderInventoryByRoom === 'function') {
+        window.renderInventoryByRoom();
+    }
+    if (typeof window.renderDeliveryFloors === 'function') {
+        window.renderDeliveryFloors();
+    }
+    if (typeof window.updateNextButtonState === 'function') {
+        window.updateNextButtonState();
+    }
+}
+
+function ensureOverviewEditorModal() {
+    let modal = document.getElementById('overview-editor-modal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'overview-editor-modal';
+    modal.className = 'overview-editor-modal';
+    modal.innerHTML = `
+        <div class="overview-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="overview-editor-title">
+            <h3 class="overview-editor-title" id="overview-editor-title">Edit Overview</h3>
+            <p class="overview-editor-subtitle" id="overview-editor-subtitle">Change values directly in Step 8.</p>
+            <div id="overview-editor-body"></div>
+            <div class="overview-editor-actions">
+                <button type="button" class="overview-editor-btn cancel" id="overview-editor-cancel">Cancel</button>
+                <button type="button" class="overview-editor-btn save" id="overview-editor-save">Save</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) {
+            modal.classList.remove('active');
+        }
+    });
+    modal.querySelector('#overview-editor-cancel').addEventListener('click', () => {
+        modal.classList.remove('active');
+    });
+
+    return modal;
+}
+
+function openOverviewEditModal(valueId) {
+    const modal = ensureOverviewEditorModal();
+    const title = modal.querySelector('#overview-editor-title');
+    const subtitle = modal.querySelector('#overview-editor-subtitle');
+    const body = modal.querySelector('#overview-editor-body');
+    const saveBtn = modal.querySelector('#overview-editor-save');
+
+    const propertyTypeOptions = getOverviewPropertyTypeOptions();
+    const floorOptions = getOverviewAllFloors();
+
+    let onSave = null;
+
+    if (valueId === 'summary-service') {
+        const services = Array.from(document.querySelectorAll('.service-icon-btn'))
+            .map((btn) => btn.getAttribute('data-value'))
+            .filter(Boolean);
+        const current = document.getElementById('item-description-hidden')?.value || '';
+        title.textContent = 'Edit Service';
+        subtitle.textContent = 'Choose the service for this quote.';
+        body.innerHTML = `
+            <div class="overview-editor-field">
+                <label for="overview-edit-service">Service</label>
+                <select id="overview-edit-service">${services.map((s) => `<option value="${escapeOverviewHtml(s)}" ${s === current ? 'selected' : ''}>${escapeOverviewHtml(s)}</option>`).join('')}</select>
+            </div>
+        `;
+        onSave = () => {
+            const value = body.querySelector('#overview-edit-service')?.value || '';
+            if (!value) return;
+            setOverviewFieldValue('item-description-hidden', value);
+            if (typeof window.setActiveServiceIcon === 'function') {
+                window.setActiveServiceIcon(value);
+            }
+            refreshOverviewAfterEdit();
+            modal.classList.remove('active');
+        };
+    } else if (valueId === 'summary-pickup-type' || valueId === 'summary-delivery-type') {
+        const targetField = valueId === 'summary-pickup-type' ? 'pickup-property-type' : 'delivery-property-type';
+        const current = document.getElementById(targetField)?.value || '';
+        title.textContent = valueId === 'summary-pickup-type' ? 'Edit Pickup Type' : 'Edit Delivery Type';
+        subtitle.textContent = 'Select the property type.';
+        body.innerHTML = `
+            <div class="overview-editor-field">
+                <label for="overview-edit-type">Property Type</label>
+                <select id="overview-edit-type">${propertyTypeOptions.map((opt) => `<option value="${opt.value}" ${opt.value === current ? 'selected' : ''}>${escapeOverviewHtml(opt.label)}</option>`).join('')}</select>
+            </div>
+        `;
+        onSave = () => {
+            const value = body.querySelector('#overview-edit-type')?.value || '';
+            if (!value) return;
+            setOverviewFieldValue(targetField, value);
+            refreshOverviewAfterEdit();
+            modal.classList.remove('active');
+        };
+    } else if (valueId === 'summary-pickup-elevator' || valueId === 'summary-delivery-elevator') {
+        const isPickup = valueId === 'summary-pickup-elevator';
+        const mainFieldId = isPickup ? 'pickup-lift-available' : 'delivery-lift-available';
+        const officeFieldId = isPickup ? 'office-pickup-lift' : 'office-delivery-lift';
+        const currentRaw = document.getElementById(mainFieldId)?.value || document.getElementById(officeFieldId)?.value || '';
+        const current = String(currentRaw || '').trim().toLowerCase();
+
+        title.textContent = isPickup ? 'Edit Pickup Elevator Status' : 'Edit Delivery Elevator Status';
+        subtitle.textContent = 'Select whether a lift/elevator is available.';
+        body.innerHTML = `
+            <div class="overview-editor-field">
+                <label for="overview-edit-elevator">Elevator Status</label>
+                <select id="overview-edit-elevator">
+                    <option value="yes" ${current === 'yes' ? 'selected' : ''}>Yes</option>
+                    <option value="no" ${current === 'no' ? 'selected' : ''}>No</option>
+                </select>
+            </div>
+        `;
+
+        onSave = () => {
+            const value = body.querySelector('#overview-edit-elevator')?.value || '';
+            if (!value) return;
+
+            if (document.getElementById(mainFieldId)) {
+                setOverviewFieldValue(mainFieldId, value);
+            }
+            if (document.getElementById(officeFieldId)) {
+                setOverviewFieldValue(officeFieldId, value);
+            }
+
+            if (isPickup && typeof applyPickupLiftSelection === 'function') {
+                applyPickupLiftSelection(value);
+            }
+            if (!isPickup && typeof applyDeliveryLiftSelection === 'function') {
+                applyDeliveryLiftSelection(value);
+            }
+
+            refreshOverviewAfterEdit();
+            modal.classList.remove('active');
+        };
+    } else if (valueId === 'summary-pickup-floors' || valueId === 'summary-delivery-floors') {
+        const isPickup = valueId === 'summary-pickup-floors';
+        const selectedSet = isPickup ? new Set(Array.from(window.selectedPickupFloors || [])) : new Set(Array.from(window.selectedDeliveryFloors || []));
+        title.textContent = isPickup ? 'Edit Pickup Floors' : 'Edit Delivery Floors';
+        subtitle.textContent = 'Select one or more floors.';
+        body.innerHTML = `
+            <div class="overview-editor-checkbox-list">
+                ${floorOptions.map((floor) => `
+                    <label class="overview-editor-checkbox-item">
+                        <input type="checkbox" value="${floor}" ${selectedSet.has(floor) ? 'checked' : ''}>
+                        <span>${floor}</span>
+                    </label>
+                `).join('')}
+            </div>
+        `;
+        onSave = () => {
+            const selected = Array.from(body.querySelectorAll('input[type="checkbox"]:checked')).map((cb) => cb.value);
+            if (isPickup) {
+                window.selectedPickupFloors = new Set(selected);
+                if (typeof window.renderPickupFloorSelector === 'function') window.renderPickupFloorSelector();
+            } else {
+                window.selectedDeliveryFloors = new Set(selected);
+                if (typeof window.renderDeliveryFloorSelector === 'function') window.renderDeliveryFloorSelector();
+                if (typeof window.renderDeliveryFloors === 'function') window.renderDeliveryFloors();
+            }
+            refreshOverviewAfterEdit();
+            modal.classList.remove('active');
+        };
+    } else if (valueId === 'summary-pickup-address' || valueId === 'summary-delivery-address') {
+        const isPickup = valueId === 'summary-pickup-address';
+        const prefix = isPickup ? 'pickup' : 'delivery';
+        title.textContent = isPickup ? 'Edit Pickup Address' : 'Edit Delivery Address';
+        subtitle.textContent = 'Update address details.';
+        body.innerHTML = `
+            <div class="overview-editor-grid">
+                <div class="overview-editor-field" style="grid-column: 1 / -1;">
+                    <label for="overview-edit-address">Street Address</label>
+                    <input id="overview-edit-address" value="${escapeOverviewHtml(document.getElementById(`${prefix}-address`)?.value || '')}">
+                </div>
+                <div class="overview-editor-field">
+                    <label for="overview-edit-city">City</label>
+                    <input id="overview-edit-city" value="${escapeOverviewHtml(document.getElementById(`${prefix}-city`)?.value || '')}">
+                </div>
+                <div class="overview-editor-field">
+                    <label for="overview-edit-postcode">Postcode</label>
+                    <input id="overview-edit-postcode" value="${escapeOverviewHtml(document.getElementById(`${prefix}-postcode`)?.value || '')}">
+                </div>
+            </div>
+        `;
+        onSave = () => {
+            setOverviewFieldValue(`${prefix}-address`, body.querySelector('#overview-edit-address')?.value || '');
+            setOverviewFieldValue(`${prefix}-city`, body.querySelector('#overview-edit-city')?.value || '');
+            setOverviewFieldValue(`${prefix}-postcode`, body.querySelector('#overview-edit-postcode')?.value || '');
+            refreshOverviewAfterEdit();
+            modal.classList.remove('active');
+        };
+    } else if (valueId === 'summary-date') {
+        const current = document.getElementById('service-transport-date')?.value || '';
+        const options = ['Within 1 week', 'Urgently: Today ASAP', 'Urgently: Today Anytime', 'Urgently: Today or Tomorrow', "Don't Have a Date Yet"];
+        title.textContent = 'Edit Moving Date';
+        subtitle.textContent = 'Pick one date option.';
+        body.innerHTML = `
+            <div class="overview-editor-field">
+                <label for="overview-edit-date">Date Option</label>
+                <select id="overview-edit-date">${options.map((opt) => `<option value="${escapeOverviewHtml(opt)}" ${opt === current ? 'selected' : ''}>${escapeOverviewHtml(opt)}</option>`).join('')}</select>
+            </div>
+        `;
+        onSave = () => {
+            const value = body.querySelector('#overview-edit-date')?.value || '';
+            if (!value) return;
+            setOverviewFieldValue('service-transport-date', value);
+            const dateDisplay = document.getElementById('service-transport-date-display');
+            if (dateDisplay) {
+                dateDisplay.textContent = value;
+                dateDisplay.classList.remove('is-placeholder');
+            }
+            refreshOverviewAfterEdit();
+            modal.classList.remove('active');
+        };
+    } else if (valueId === 'summary-notes') {
+        title.textContent = 'Edit Notes & Services';
+        subtitle.textContent = 'Update notes shown in overview.';
+        const notesValue = document.getElementById('service-special-instructions')?.value || document.getElementById('generic-special-instructions')?.value || '';
+        body.innerHTML = `
+            <div class="overview-editor-field">
+                <label for="overview-edit-notes">Notes</label>
+                <textarea id="overview-edit-notes" rows="4">${escapeOverviewHtml(notesValue)}</textarea>
+            </div>
+        `;
+        onSave = () => {
+            const value = body.querySelector('#overview-edit-notes')?.value || '';
+            if (document.getElementById('service-special-instructions')) {
+                setOverviewFieldValue('service-special-instructions', value);
+            }
+            if (document.getElementById('generic-special-instructions')) {
+                setOverviewFieldValue('generic-special-instructions', value);
+            }
+            refreshOverviewAfterEdit();
+            modal.classList.remove('active');
+        };
+    } else {
+        title.textContent = 'Edit';
+        subtitle.textContent = 'No editor is available for this field yet.';
+        body.innerHTML = '';
+        onSave = () => modal.classList.remove('active');
+    }
+
+    saveBtn.onclick = onSave;
+    modal.classList.add('active');
+}
+
+function getOverviewRoomPrefix(roomKey) {
+    const map = {
+        hallway: 'Hallway',
+        shed: 'Shed',
+        utility: 'Utility',
+        living: 'Living',
+        dining: 'Dining',
+        kitchen: 'Kitchen',
+        office: 'Office',
+        bedrooms: 'Bedrooms',
+        bathrooms: 'Bathrooms',
+        garden: 'Garden',
+        boxes: 'Boxes'
+    };
+    return map[roomKey] || roomKey;
+}
+
+function openOverviewInventoryModal(kind) {
+    const modal = ensureOverviewEditorModal();
+    const title = modal.querySelector('#overview-editor-title');
+    const subtitle = modal.querySelector('#overview-editor-subtitle');
+    const body = modal.querySelector('#overview-editor-body');
+    const saveBtn = modal.querySelector('#overview-editor-save');
+
+    const allFloors = getOverviewAllFloors();
+    const roomOptions = getOverviewRoomOptions();
+    const selectedPickupFloors = getOrderedFloorList(Array.from(window.selectedPickupFloors || []));
+    const selectedDeliveryFloors = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || []));
+    const pickupChoices = selectedPickupFloors.length ? selectedPickupFloors : allFloors;
+    const deliveryChoices = selectedDeliveryFloors.length ? selectedDeliveryFloors : allFloors;
+
+    title.textContent = kind === 'delivery' ? 'Quick Manage Delivery Inventory' : 'Quick Manage Pickup Inventory';
+    subtitle.textContent = 'Choose an action to add, change, or remove an item from a room.';
+
+    if (kind === 'delivery') {
+        body.innerHTML = `
+            <div class="overview-editor-grid">
+                <div class="overview-editor-field">
+                    <label for="overview-inv-action">Action</label>
+                    <select id="overview-inv-action">
+                        <option value="add">Add quantity</option>
+                        <option value="update">Change quantity</option>
+                        <option value="remove">Remove item</option>
+                    </select>
+                </div>
+                <div class="overview-editor-field">
+                    <label for="overview-inv-source-floor">Pickup Floor (source)</label>
+                    <select id="overview-inv-source-floor">${pickupChoices.map((floor) => `<option value="${floor}">${floor}</option>`).join('')}</select>
+                </div>
+                <div class="overview-editor-field">
+                    <label for="overview-inv-target-floor">Delivery Floor</label>
+                    <select id="overview-inv-target-floor">${deliveryChoices.map((floor) => `<option value="${floor}">${floor}</option>`).join('')}</select>
+                </div>
+                <div class="overview-editor-field">
+                    <label for="overview-inv-room">Room</label>
+                    <select id="overview-inv-room">${roomOptions.map((room) => `<option value="${room.key}">${escapeOverviewHtml(room.label)}</option>`).join('')}</select>
+                </div>
+                <div class="overview-editor-field" style="grid-column: 1 / -1;">
+                    <label for="overview-inv-item">Item</label>
+                    <input id="overview-inv-item" placeholder="Example: Mirror">
+                </div>
+                <div class="overview-editor-field">
+                    <label for="overview-inv-qty">Quantity</label>
+                    <input id="overview-inv-qty" type="number" min="1" step="1" value="1">
+                </div>
+            </div>
+        `;
+
+        saveBtn.onclick = () => {
+            const action = body.querySelector('#overview-inv-action')?.value || 'add';
+            const sourceFloor = body.querySelector('#overview-inv-source-floor')?.value || '';
+            const targetFloor = body.querySelector('#overview-inv-target-floor')?.value || '';
+            const roomKey = body.querySelector('#overview-inv-room')?.value || 'boxes';
+            const item = (body.querySelector('#overview-inv-item')?.value || '').trim();
+            const qty = parseInt(body.querySelector('#overview-inv-qty')?.value || '0', 10) || 0;
+            if (!sourceFloor || !targetFloor || !item) return;
+
+            const prefix = getOverviewRoomPrefix(roomKey);
+            const itemKey = `${prefix} - ${item}||${sourceFloor}`;
+            if (!window.itemFloorAssignments || typeof window.itemFloorAssignments !== 'object') {
+                window.itemFloorAssignments = {};
+            }
+            if (!window.itemFloorAssignments[itemKey]) {
+                window.itemFloorAssignments[itemKey] = {};
+            }
+
+            if (action === 'remove') {
+                delete window.itemFloorAssignments[itemKey][targetFloor];
+                if (Object.keys(window.itemFloorAssignments[itemKey]).length === 0) {
+                    delete window.itemFloorAssignments[itemKey];
+                }
+            } else if (action === 'update') {
+                if (qty > 0) {
+                    window.itemFloorAssignments[itemKey][targetFloor] = qty;
+                }
+            } else if (qty > 0) {
+                window.itemFloorAssignments[itemKey][targetFloor] = (parseInt(window.itemFloorAssignments[itemKey][targetFloor], 10) || 0) + qty;
+            }
+
+            if (!window.selectedPickupFloors) window.selectedPickupFloors = new Set();
+            if (!window.selectedDeliveryFloors) window.selectedDeliveryFloors = new Set();
+            window.selectedPickupFloors.add(sourceFloor);
+            window.selectedDeliveryFloors.add(targetFloor);
+            if (typeof window.renderDeliveryFloorSelector === 'function') window.renderDeliveryFloorSelector();
+            if (typeof window.renderDeliveryFloors === 'function') window.renderDeliveryFloors();
+            refreshOverviewAfterEdit();
+            modal.classList.remove('active');
+        };
+    } else {
+        body.innerHTML = `
+            <div class="overview-editor-grid">
+                <div class="overview-editor-field">
+                    <label for="overview-inv-action">Action</label>
+                    <select id="overview-inv-action">
+                        <option value="add">Add quantity</option>
+                        <option value="update">Change quantity</option>
+                        <option value="remove">Remove item</option>
+                    </select>
+                </div>
+                <div class="overview-editor-field">
+                    <label for="overview-inv-floor">Pickup Floor</label>
+                    <select id="overview-inv-floor">${pickupChoices.map((floor) => `<option value="${floor}">${floor}</option>`).join('')}</select>
+                </div>
+                <div class="overview-editor-field">
+                    <label for="overview-inv-room">Room</label>
+                    <select id="overview-inv-room">${roomOptions.map((room) => `<option value="${room.key}">${escapeOverviewHtml(room.label)}</option>`).join('')}</select>
+                </div>
+                <div class="overview-editor-field" style="grid-column: 1 / -1;">
+                    <label for="overview-inv-item">Item</label>
+                    <input id="overview-inv-item" placeholder="Example: Mirror">
+                </div>
+                <div class="overview-editor-field">
+                    <label for="overview-inv-qty">Quantity</label>
+                    <input id="overview-inv-qty" type="number" min="1" step="1" value="1">
+                </div>
+            </div>
+        `;
+
+        saveBtn.onclick = () => {
+            const action = body.querySelector('#overview-inv-action')?.value || 'add';
+            const floor = body.querySelector('#overview-inv-floor')?.value || '';
+            const roomKey = body.querySelector('#overview-inv-room')?.value || 'boxes';
+            const item = (body.querySelector('#overview-inv-item')?.value || '').trim();
+            const qty = parseInt(body.querySelector('#overview-inv-qty')?.value || '0', 10) || 0;
+            if (!floor || !item) return;
+
+            const prefix = getOverviewRoomPrefix(roomKey);
+            const itemKey = `${prefix} - ${item}`;
+            if (!window.multiFloorInventory || typeof window.multiFloorInventory !== 'object') {
+                window.multiFloorInventory = {};
+            }
+            if (!window.multiFloorInventory[floor]) {
+                window.multiFloorInventory[floor] = {};
+            }
+
+            if (action === 'remove') {
+                delete window.multiFloorInventory[floor][itemKey];
+                if (Object.keys(window.multiFloorInventory[floor]).length === 0) {
+                    delete window.multiFloorInventory[floor];
+                }
+            } else if (action === 'update') {
+                if (qty > 0) {
+                    window.multiFloorInventory[floor][itemKey] = qty;
+                }
+            } else if (qty > 0) {
+                window.multiFloorInventory[floor][itemKey] = (parseInt(window.multiFloorInventory[floor][itemKey], 10) || 0) + qty;
+            }
+
+            if (!window.selectedPickupFloors) window.selectedPickupFloors = new Set();
+            window.selectedPickupFloors.add(floor);
+            if (typeof window.renderPickupFloorSelector === 'function') window.renderPickupFloorSelector();
+            refreshOverviewAfterEdit();
+            modal.classList.remove('active');
+        };
+    }
+
+    modal.classList.add('active');
 }
 
 // Initialize Car Transport Dropdowns
@@ -15890,5 +17892,35 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (service === 'Car Transport') {
         document.querySelector('.service-icon-btn[data-value="Car Transport"]')?.click();
+    }
+    
+    // Handle Customized Items service from URL
+    const decodedService = decodeURIComponent(service || '').trim();
+    if (decodedService.toLowerCase() === 'customized items') {
+        if (window.pendingServiceFromUrl && typeof window.applyServiceSelection === 'function') {
+            window.applyServiceSelection(window.pendingServiceFromUrl, window.pendingServiceFromUrl);
+        } else {
+            // Fallback in case pending value was not set in time
+            const serviceHidden = document.getElementById('item-description-hidden');
+            const inventoryCardContainer = document.getElementById('inventory-card-container');
+            const customSection = document.getElementById('customized-items-inventory-section');
+            const houseSection = document.getElementById('house-removal-inventory-section');
+
+            if (serviceHidden) {
+                serviceHidden.value = decodedService;
+                serviceHidden.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            document.body.classList.add('customized-items-active');
+            const isStep3 = document.body.getAttribute('data-form-step') === '3' || document.body.getAttribute('data-current-step') === '3';
+            if (inventoryCardContainer) inventoryCardContainer.style.display = isStep3 ? '' : 'none';
+            if (customSection) {
+                customSection.style.display = isStep3 ? 'block' : 'none';
+                customSection.classList.toggle('step-hidden', !isStep3);
+            }
+            if (houseSection) {
+                houseSection.style.display = 'none';
+                houseSection.classList.add('step-hidden');
+            }
+        }
     }
 });

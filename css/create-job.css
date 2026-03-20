@@ -1,3 +1,29 @@
+/* === CRITICAL: Customized Items Visibility Locks (Step 3 only) === */
+body.customized-items-active[data-form-step="3"] #inventory-card-container,
+body.customized-items-active[data-current-step="3"] #inventory-card-container {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    position: static !important;
+}
+body.customized-items-active[data-form-step="3"] #house-removal-inventory-section,
+body.customized-items-active[data-current-step="3"] #house-removal-inventory-section {
+    display: none !important;
+}
+body.customized-items-active[data-form-step="3"] #customized-items-inventory-section,
+body.customized-items-active[data-current-step="3"] #customized-items-inventory-section {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+body.customized-items-active #step3-title-wrapper {
+    display: none !important;
+}
+
 /* Style for new custom item button */
 #custom-item-btn {
     display: block;
@@ -448,6 +474,7 @@ body[data-form-step="3"] .form-stepper, body[data-current-step="3"] .form-steppe
 /* --- Inventory UI Redesign --- */
 .inventory-tabs {
     display: flex;
+    align-items: stretch;
     border-bottom: 2px solid #e5e7eb;
     margin-bottom: 18px;
     background: #fff;
@@ -474,13 +501,17 @@ body.multi-floor-inventory-mode #house-removal-inventory-section > #room-tabs {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 12px 32px 8px 32px;
+    gap: 6px;
+    padding: 10px 12px 8px;
     border: none;
     background: none;
     cursor: pointer;
     font-size: 1.05rem;
+    line-height: 1.15;
+    text-align: center;
     color: #444;
     border-right: 1px solid #e5e7eb;
+    flex: 1 1 0;
     min-width: 110px;
     transition: background 0.15s, color 0.15s;
 }
@@ -837,7 +868,11 @@ body[data-form-step="3"].house-removals-active #house-removal-inventory-section 
 #house-removal-inventory-section {
     display: none !important;
 }
-body[data-form-step="3"] #house-removal-inventory-section.inventory-section {
+body[data-form-step="3"].house-removals-active #house-removal-inventory-section.inventory-section {
+    display: flex !important;
+    flex-direction: column;
+}
+body[data-current-step="3"].house-removals-active #house-removal-inventory-section.inventory-section {
     display: flex !important;
     flex-direction: column;
 }
@@ -1275,6 +1310,11 @@ form.form-v2-main {
     border-radius: 0 0 12px 12px;
     box-shadow: 0 4px 24px rgba(0,0,0,0.07);
     background: #fff;
+}
+
+body[data-form-step="3"] #house-removal-inventory-section .floor-inventory-block .inventory-block-header,
+body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-block .inventory-block-header {
+    padding-right: 24px;
 }
 
 body:not([data-form-step="3"]) #floor-inventory-section,
@@ -2097,6 +2137,492 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
 .dropdown-item:hover {
     background: #f0f7ff;
     color: #4A90E2;
+}
+
+.transport-date-picker {
+    position: relative;
+}
+
+.transport-date-trigger {
+    width: 100%;
+    min-height: 58px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+}
+
+.transport-date-trigger:focus-visible {
+    outline: 3px solid rgba(59, 130, 246, 0.35);
+    outline-offset: 2px;
+}
+
+.transport-date-display {
+    flex: 1;
+    padding: 15px 18px;
+    font-size: 1rem;
+    color: #334155;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.transport-date-display.is-placeholder {
+    color: #94a3b8;
+}
+
+.transport-date-icon {
+    width: 66px;
+    border-left: 1px solid #cbd5e1;
+    display: grid;
+    place-items: center;
+    color: #94a3b8;
+    align-self: stretch;
+}
+
+.transport-date-icon svg {
+    width: 22px;
+    height: 22px;
+}
+
+.transport-date-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+    z-index: 1200;
+    display: none;
+    padding: 10px 0;
+}
+
+.transport-date-panel.active {
+    display: block;
+}
+
+.transport-date-header {
+    padding: 0 18px 10px;
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 6px;
+}
+
+.transport-date-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.transport-date-back,
+.transport-date-close,
+.transport-date-close-icon,
+.transport-date-month-nav {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #1e293b;
+}
+
+.transport-date-back {
+    font-size: 1.9rem;
+    line-height: 1;
+    padding: 0;
+}
+
+.transport-date-back-label {
+    font-size: 1.8rem;
+    line-height: 1;
+    margin-right: 8px;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.transport-date-back-text {
+    font-size: 2.1rem;
+    font-weight: 700;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.transport-date-close {
+    font-size: 2.1rem;
+    font-weight: 700;
+    padding: 0;
+}
+
+.transport-date-close-icon {
+    font-size: 1.9rem;
+    line-height: 1;
+    padding: 0;
+}
+
+.transport-date-options {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 0;
+}
+
+.transport-date-option {
+    border: none;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+    padding: 12px 18px;
+    font-size: 1.1rem;
+    color: #1e293b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.transport-date-option:hover {
+    background: #f8fafc;
+}
+
+.transport-date-option-chevron {
+    font-size: 1.8rem;
+    color: #334155;
+    font-weight: 700;
+}
+
+.transport-date-calendar-wrap {
+    padding: 0 18px 12px;
+}
+
+.transport-date-calendar-title {
+    text-align: center;
+    font-size: 1.1rem;
+    color: #6b7280;
+    margin: 12px 0 8px;
+    font-weight: 700;
+}
+
+.transport-date-calendar-month-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.transport-date-month-label {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #6b7280;
+}
+
+.transport-date-month-nav {
+    font-size: 1.8rem;
+    color: #38bdf8;
+    padding: 2px 8px;
+}
+
+.transport-date-weekdays,
+.transport-date-days-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+}
+
+.transport-date-weekday {
+    text-align: center;
+    font-size: 1rem;
+    color: #1e293b;
+    font-weight: 700;
+    padding: 8px 0 2px;
+}
+
+.transport-date-day {
+    border: none;
+    background: transparent;
+    border-radius: 10px;
+    height: 38px;
+    font-size: 1rem;
+    color: #334155;
+    cursor: pointer;
+}
+
+.transport-date-day:hover {
+    background: #eff6ff;
+}
+
+.transport-date-day.other-month {
+    color: #cbd5e1;
+}
+
+.transport-date-day.disabled {
+    color: #cbd5e1;
+    cursor: not-allowed;
+    background: transparent;
+}
+
+.transport-date-day.selected {
+    background: #f1f5f9;
+    color: #0f172a;
+    box-shadow: inset 0 0 0 1px #e2e8f0;
+}
+
+.overview-card {
+    border: 1px solid #dbeafe;
+    background: #f8fbff;
+    border-radius: 12px;
+    padding: 14px;
+}
+
+.overview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+}
+
+.overview-item {
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    padding: 10px;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.overview-item-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.overview-item-value {
+    font-size: 0.96rem;
+    color: #0f172a;
+    line-height: 1.35;
+    min-height: 1.3em;
+    word-break: break-word;
+}
+
+.overview-edit-btn {
+    align-self: flex-start;
+    border: 1px solid #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-radius: 7px;
+    padding: 5px 9px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.overview-edit-btn:hover {
+    background: #dbeafe;
+}
+
+.overview-route-card {
+    margin-top: 14px;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: #fff;
+    padding: 12px;
+}
+
+.overview-route-line {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin-bottom: 4px;
+    color: #334155;
+    font-size: 0.92rem;
+}
+
+.overview-inventory-grid {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+}
+
+.overview-inventory-card {
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: #fff;
+    padding: 10px;
+}
+
+.overview-inventory-list {
+    color: #334155;
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.overview-floor-block {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 7px 8px;
+    background: #f8fafc;
+    margin-bottom: 7px;
+}
+
+.overview-floor-title {
+    font-weight: 700;
+    color: #1e3a8a;
+    margin-bottom: 4px;
+    font-size: 0.85rem;
+}
+
+.overview-floor-items {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.overview-floor-items li {
+    margin-bottom: 2px;
+}
+
+.overview-inventory-manage-btn {
+    border: 1px solid #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-radius: 7px;
+    padding: 5px 9px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.overview-editor-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 15000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.overview-editor-modal.active {
+    display: flex;
+}
+
+.overview-editor-dialog {
+    width: min(560px, 100%);
+    max-height: 90vh;
+    overflow: auto;
+    background: #fff;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+    padding: 14px;
+}
+
+.overview-editor-title {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #0f172a;
+}
+
+.overview-editor-subtitle {
+    margin: 4px 0 10px;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.overview-editor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+}
+
+.overview-editor-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.overview-editor-field label {
+    font-size: 0.82rem;
+    color: #475569;
+    font-weight: 700;
+}
+
+.overview-editor-field input,
+.overview-editor-field select,
+.overview-editor-field textarea {
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.92rem;
+    color: #0f172a;
+}
+
+.overview-editor-actions {
+    margin-top: 12px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.overview-editor-btn {
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.overview-editor-btn.cancel {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #334155;
+}
+
+.overview-editor-btn.save {
+    border: none;
+    background: #2563eb;
+    color: #fff;
+}
+
+.overview-editor-checkbox-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 6px;
+}
+
+.overview-editor-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.88rem;
+    color: #334155;
+}
+
+@media (max-width: 700px) {
+    .transport-date-panel {
+        width: min(100vw - 32px, 520px);
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    .transport-date-option {
+        font-size: 1rem;
+    }
+
+    .transport-date-calendar-title,
+    .transport-date-month-label {
+        font-size: 1.1rem;
+    }
+
+    .transport-date-day {
+        font-size: 1rem;
+    }
 }
 
 /* Remove number input arrows/spinners */
@@ -3856,6 +4382,11 @@ input[type="file"]:focus {
         line-height: 1.15 !important;
     }
 
+    body[data-form-step="3"] #house-removal-inventory-section .floor-inventory-block .inventory-block-header,
+    body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-block .inventory-block-header {
+        padding-right: 12px;
+    }
+
     body[data-form-step="3"] #house-removal-inventory-section > #room-tabs.is-hidden-by-multi-floor,
     body[data-current-step="3"] #house-removal-inventory-section > #room-tabs.is-hidden-by-multi-floor,
     body[data-form-step="3"] #house-removal-inventory-section > #room-items-container.is-hidden-by-multi-floor,
@@ -3936,4 +4467,31 @@ input[type="file"]:focus {
     #property-type-icon-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
+}
+
+/* Final visibility locks for Step 3 service split */
+body[data-form-step="3"]:not(.house-removals-active) #house-removal-inventory-section,
+body[data-current-step="3"]:not(.house-removals-active) #house-removal-inventory-section {
+    display: none !important;
+}
+
+body.customized-items-active #house-removal-inventory-section {
+    display: none !important;
+}
+
+/* Hide customized items section by default at Step 3 - shown only after "Confirm Selected Floors" button */
+body.customized-items-active[data-form-step="3"] #customized-items-inventory-section,
+body.customized-items-active[data-current-step="3"] #customized-items-inventory-section {
+    display: none !important;
+}
+
+/* Show customized items when revealed class is added */
+body.customized-items-active[data-form-step="3"] #customized-items-inventory-section.customized-revealed,
+body.customized-items-active[data-current-step="3"] #customized-items-inventory-section.customized-revealed {
+    display: block !important;
+}
+
+body.customized-items-active[data-form-step="3"] #inventory-card-container,
+body.customized-items-active[data-current-step="3"] #inventory-card-container {
+    display: block !important;
 }

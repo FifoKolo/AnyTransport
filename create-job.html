@@ -86,6 +86,12 @@
                                     <span class="stepper-label">Moving Date</span>
                                 </button>
                             </li>
+                            <li class="stepper-item" data-step="8">
+                                <button type="button" class="stepper-link" data-step="8">
+                                    <span class="stepper-index">8</span>
+                                    <span class="stepper-label">Overview</span>
+                                </button>
+                            </li>
                         </ol>
                     </div>
                 </aside>
@@ -191,6 +197,15 @@
                                 </button>
                             </div>
                             <input type="hidden" id="pickup-property-type" name="pickup-property-type" value="">
+
+                            <!-- Pickup lift Section (Step 2) -->
+                            <div class="card-section" id="pickup-lift-section" data-form-step="2" style="display: none; margin-top: 20px;">
+                                <label class="form-label">Is a lift available for pickup? <span class="required-text">(required)</span></label>
+                                <div id="pickup-lift-option-container" style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px;">
+                                    <!-- pickup lift buttons will be dynamically rendered here -->
+                                </div>
+                                <input type="hidden" id="pickup-lift-available" name="pickup-lift-available" value="">
+                            </div>
                         </div>
 
                         <!-- Step 3: Pickup Room Form (was step 2) -->
@@ -222,7 +237,6 @@
                                             ✗ No lift
                                         </button>
                                     </div>
-                                    <input type="hidden" id="pickup-lift-available" name="pickup-lift-available" value="">
                                 </div>
 
                                 <!-- Confirm button -->
@@ -313,6 +327,20 @@
     <!-- Floor selection modal -->
 <!-- Floor selection modal moved to end of body for proper overlay -->
                 </div>
+
+                                                            <div class="card-section" id="customized-items-inventory-section" data-form-step="3" style="display:none; margin-top:2rem;">
+                                                                <h3 style="margin-bottom: 10px; color: var(--text-primary);">Customized Items <span class="required-text" data-required-for="customized-items-hidden">(required)</span></h3>
+                                                                <p style="margin: 0 0 14px; color: #64748b; font-size: 0.9rem;">Add each custom item with photos, dimensions, and weight.</p>
+                                                                <input type="hidden" id="customized-items-hidden" name="customized-items" data-required="true" value="">
+                                                                <div id="dimensions-list" class="dimensions-list"></div>
+                                                                <button type="button" id="add-dimension-btn" class="btn-add-dimension">
+                                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                                                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                                                    </svg>
+                                                                    Add Another Item
+                                                                </button>
+                                                            </div>
                                                             </div>
 
     <div id="floor-modal" class="floor-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:2000; align-items:center; justify-content:center;">
@@ -767,7 +795,7 @@
                                 </button>
                             </div>
                             <p style="color: #6b7280; margin-bottom: 20px; font-size: 0.95rem;">
-                                <strong>How to assign items:</strong> Items are grouped by room on the left so you can see where each item comes from. Select individual items or use "Select all from [Room]", then use <strong>+ Add Selected</strong> on a floor. Use <strong>+ Add All</strong> to place all remaining inventory on one floor.
+                                <strong>How to assign items:</strong> Items are grouped by room on the left so you can see where each item comes from. Select individual items or use "Select all from [Room]", then use <strong>+ Add Selected</strong> on a floor. Use <strong>+ Assign All Remaining Items</strong> to place all remaining inventory on one floor.
                             </p>
                             
                             <style>
@@ -1714,13 +1742,14 @@
                         <!-- Step 6: Service Requirements Section -->
                         <div id="service-requirements-section" data-form-step="6" class="step-hidden">
                             <h2 class="section-title" style="text-align: center; margin-bottom: 2rem;">Step 6: Service Requirements</h2>
+                            <p style="text-align:center; margin:-1rem 0 1.5rem; color:#64748b; font-size:0.9rem;">All Services are required to be answerered, except for Special Instructions.</p>
                             <div class="card-section">
                                 
                                 <!-- Packing Service -->
                                 <div class="service-requirement-card">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
-                                            <span>1. Packing Service ?</span>
+                                            <span>1. Packing Service ? <span class="required-text">(required)</span></span>
                                             <div class="info-tooltip-wrapper">
                                                
                                                    
@@ -1761,7 +1790,7 @@
                                 <div class="service-requirement-card">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
-                                            <span>2. Furniture Disassembly &amp; Assembly ?</span>
+                                            <span>2. Furniture Disassembly &amp; Assembly ? <span class="required-text">(required)</span></span>
                                             <div class="info-tooltip-wrapper">
                                                 <span class="info-icon">i</span>
                                                 <div class="info-tooltip">We'll disassemble furniture for transport and reassemble at your new location</div>
@@ -1804,7 +1833,7 @@
                                 <div class="service-requirement-card">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
-                                            <span>3. Amount of Movers at Pickup Location</span>
+                                            <span>3. Number of Movers at Pickup Location <span class="required-text">(required)</span></span>
                                             <div class="info-tooltip-wrapper">
                                                 <span class="info-icon">i</span>
                                                 <div class="info-tooltip">Enter number of additional movers needed at pickup location (0 if none)</div>
@@ -1827,7 +1856,7 @@
                                 <div class="service-requirement-card">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
-                                            <span>4. Amount of Movers at Delivery Location</span>
+                                            <span>4. Number of Movers at Delivery Location <span class="required-text">(required)</span></span>
                                             <div class="info-tooltip-wrapper">
                                                 <span class="info-icon">i</span>
                                                 <div class="info-tooltip">Enter number of additional movers needed at delivery location (0 if none)</div>
@@ -1850,7 +1879,7 @@
                                 <div class="service-requirement-card">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
-                                            <span>5. Storage Service</span>
+                                            <span>5. Storage Service <span class="required-text">(required)</span></span>
                                             <div class="info-tooltip-wrapper">
                                                 <span class="info-icon">i</span>
                                                 <div class="info-tooltip">Secure, climate-controlled storage for your items before delivery</div>
@@ -1892,7 +1921,7 @@
                                 <div class="service-requirement-card">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
-                                            <span>6. Special Instructions</span>
+                                            <span>6. Special Instructions <span style="color:#64748b; font-size:0.9em; font-weight:600;">(optional)</span></span>
                                             <div class="info-tooltip-wrapper">
                                                 <span class="info-icon">i</span>
                                                 <div class="info-tooltip">Optional notes for anything important the transport provider should know</div>
@@ -1901,7 +1930,7 @@
                                     </div>
                                     <div class="service-requirement-input">
                                         <textarea id="service-special-instructions" name="service-special-instructions" class="form-input" rows="4" data-optional="true" placeholder="Add any important information for the Transport Provider that should be known." style="width:100%; resize:vertical;"></textarea>
-                                        <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Optional. Leave this blank if there is nothing extra to add.</div>
+                                        
                                     </div>
                                 </div>
 
@@ -1912,12 +1941,122 @@
                             <h2 class="section-title" style="text-align: center; margin-bottom: 1.25rem;">Step 7: Moving Date</h2>
                             <div style="max-width: 520px; margin: 0 auto; padding: 14px; border: 1px solid #dbeafe; border-radius: 12px; background: #f8fbff;">
                                 <label class="form-label" for="service-transport-date" style="display:block; margin-bottom:8px; font-weight:700; color:#1f2937;">Date of Transport</label>
-                                <input type="date" id="service-transport-date" name="service-transport-date" class="form-input" style="width:100%; padding:10px; border:1px solid #bfdbfe; border-radius:8px; font-size:0.95rem; color:#1e3a8a;">
+                                <input type="hidden" id="service-transport-date" name="service-transport-date">
+                                <div class="transport-date-picker" id="transport-date-picker">
+                                    <button type="button" class="transport-date-trigger" id="transport-date-trigger" aria-haspopup="dialog" aria-expanded="false">
+                                        <span class="transport-date-display" id="service-transport-date-display">Select a Date Option</span>
+                                        <span class="transport-date-icon" aria-hidden="true">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                                <line x1="16" y1="2" x2="16" y2="6"></line>
+                                                <line x1="8" y1="2" x2="8" y2="6"></line>
+                                                <line x1="3" y1="10" x2="21" y2="10"></line>
+                                            </svg>
+                                        </span>
+                                    </button>
+                                    <div class="transport-date-panel" id="transport-date-panel" role="dialog" aria-modal="false" aria-label="Transport date options"></div>
+                                </div>
                                 <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Choose your preferred moving date.</div>
                             </div>
                         </div>
 
-                        <div class="form-actions" data-form-step="7" data-skip-progressive="true">
+                        <div class="card-section step-hidden" data-form-step="8">
+                            <h2 class="section-title" style="text-align: center; margin-bottom: 1.25rem;">Step 8: Overview</h2>
+                            <div class="overview-card">
+                                <div class="overview-grid">
+                                    <div class="overview-item">
+                                        <div class="overview-item-label">Service</div>
+                                        <div class="overview-item-value" id="summary-service">—</div>
+                                        <button type="button" class="overview-edit-btn" data-edit-step="2">Edit</button>
+                                    </div>
+                                    <div class="overview-item">
+                                        <div class="overview-item-label">Pickup Type</div>
+                                        <div class="overview-item-value" id="summary-pickup-type">—</div>
+                                        <button type="button" class="overview-edit-btn" data-edit-step="2">Edit</button>
+                                    </div>
+                                    <div class="overview-item">
+                                        <div class="overview-item-label">Delivery Type</div>
+                                        <div class="overview-item-value" id="summary-delivery-type">—</div>
+                                        <button type="button" class="overview-edit-btn" data-edit-step="4">Edit</button>
+                                    </div>
+                                    <div class="overview-item">
+                                        <div class="overview-item-label">Pickup Elevator Status</div>
+                                        <div class="overview-item-value" id="summary-pickup-elevator">—</div>
+                                        <button type="button" class="overview-edit-btn" data-edit-step="2">Edit</button>
+                                    </div>
+                                    <div class="overview-item">
+                                        <div class="overview-item-label">Delivery Elevator Status</div>
+                                        <div class="overview-item-value" id="summary-delivery-elevator">—</div>
+                                        <button type="button" class="overview-edit-btn" data-edit-step="4">Edit</button>
+                                    </div>
+                                    <div class="overview-item" id="summary-floors-row">
+                                        <div class="overview-item-label">Pickup Floors</div>
+                                        <div class="overview-item-value" id="summary-pickup-floors">—</div>
+                                        <button type="button" class="overview-edit-btn" data-edit-step="3">Edit</button>
+                                    </div>
+                                    <div class="overview-item" id="summary-delivery-floors-row">
+                                        <div class="overview-item-label">Delivery Floors</div>
+                                        <div class="overview-item-value" id="summary-delivery-floors">—</div>
+                                        <button type="button" class="overview-edit-btn" data-edit-step="5">Edit</button>
+                                    </div>
+                                    <div class="overview-item">
+                                        <div class="overview-item-label">Pickup Address</div>
+                                        <div class="overview-item-value" id="summary-pickup-address">—</div>
+                                        <button type="button" class="overview-edit-btn" data-edit-step="1">Edit</button>
+                                    </div>
+                                    <div class="overview-item">
+                                        <div class="overview-item-label">Delivery Address</div>
+                                        <div class="overview-item-value" id="summary-delivery-address">—</div>
+                                        <button type="button" class="overview-edit-btn" data-edit-step="1">Edit</button>
+                                    </div>
+                                    <div class="overview-item">
+                                        <div class="overview-item-label">Moving Date</div>
+                                        <div class="overview-item-value" id="summary-date">—</div>
+                                        <button type="button" class="overview-edit-btn" data-edit-step="7">Edit</button>
+                                    </div>
+                                    <div class="overview-item">
+                                        <div class="overview-item-label">Notes & Services</div>
+                                        <div class="overview-item-value" id="summary-notes">—</div>
+                                        <button type="button" class="overview-edit-btn" data-edit-step="6">Edit</button>
+                                    </div>
+                                    <div class="overview-item">
+                                        <div class="overview-item-label">Distance</div>
+                                        <div class="overview-item-value" id="summary-route-distance">—</div>
+                                    </div>
+                                    <div class="overview-item">
+                                        <div class="overview-item-label">Duration</div>
+                                        <div class="overview-item-value" id="summary-route-duration">—</div>
+                                    </div>
+                                </div>
+
+                                <div class="overview-inventory-grid">
+                                    <div class="overview-inventory-card">
+                                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
+                                            <h3 style="margin:0; color:#0f172a; font-size:1rem;">Pickup Floor Inventory</h3>
+                                            <button type="button" class="overview-inventory-manage-btn" data-overview-inventory-kind="pickup">Quick Manage</button>
+                                        </div>
+                                        <div id="summary-pickup-inventory" class="overview-inventory-list">No pickup inventory selected yet.</div>
+                                    </div>
+                                    <div class="overview-inventory-card">
+                                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
+                                            <h3 style="margin:0; color:#0f172a; font-size:1rem;">Delivery Floor Inventory</h3>
+                                            <button type="button" class="overview-inventory-manage-btn" data-overview-inventory-kind="delivery">Quick Manage</button>
+                                        </div>
+                                        <div id="summary-delivery-inventory" class="overview-inventory-list">No delivery floor assignments yet.</div>
+                                    </div>
+                                </div>
+
+                                <div class="overview-route-card">
+                                    <h3 style="margin:0 0 10px 0; color:#0f172a; font-size:1.05rem;">Route Overview</h3>
+                                    <div class="overview-route-line"><strong>A</strong> <span id="overview-point-a">—</span></div>
+                                    <div class="overview-route-line"><strong>B</strong> <span id="overview-point-b">—</span></div>
+                                    <div class="overview-route-line" style="font-weight:700; color:#1e3a8a;"><span id="overview-route-cities">A → B</span></div>
+                                    <div id="overview-route-map" style="width:100%; height:260px; border:1px solid #dbeafe; border-radius:10px; margin-top:10px;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions" data-form-step="8" data-skip-progressive="true">
                             <button type="submit" class="btn btn-primary btn-large v2" id="get-prices-btn" style="display: none;">Get Prices</button>
                         </div>
                     </div> <!-- end .form-v2-main-grid -->
