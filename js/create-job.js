@@ -873,7 +873,7 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         });
         
-        // Quantity input field handlers (typed values require confirmation)
+        // Quantity input field handlers (typed values apply immediately)
         container.querySelectorAll('.room-item-quantity-display').forEach(input => {
             input.addEventListener('focus', function() {
                 const item = input.getAttribute('data-item');
@@ -881,6 +881,29 @@ document.addEventListener('DOMContentLoaded', function () {
                 const trackingKey = getItemTrackingKey(item, itemRoom);
                 const currentQty = itemQuantities[trackingKey] || 0;
                 input.setAttribute('data-last-confirmed-qty', String(currentQty));
+            });
+
+            input.addEventListener('input', function(e) {
+                e.stopPropagation();
+                const item = input.getAttribute('data-item');
+                const itemRoom = input.getAttribute('data-room');
+                const trackingKey = getItemTrackingKey(item, itemRoom);
+                let qty = parseInt(input.value, 10);
+                qty = Number.isNaN(qty) ? 0 : Math.max(0, qty);
+
+                itemQuantities[trackingKey] = qty;
+                selectedItems[trackingKey] = qty > 0;
+
+                // Keep validation/save state in sync without re-rendering while typing.
+                if (typeof updateNextButtonState === 'function') {
+                    updateNextButtonState();
+                }
+                if (typeof window.saveStep3InventorySnapshot === 'function') {
+                    window.saveStep3InventorySnapshot({ silent: true });
+                }
+                if (typeof window.saveCreateJobProgress === 'function') {
+                    window.saveCreateJobProgress();
+                }
             });
 
             input.addEventListener('keydown', function(e) {
@@ -904,33 +927,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     return;
                 }
 
-                const confirmed = confirm(`Set "${item}" quantity to ${qty}?`);
-                if (!confirmed) {
-                    input.value = previousQty;
-                    return;
-                }
-
                 itemQuantities[trackingKey] = qty;
                 selectedItems[trackingKey] = qty > 0;
                 renderRoomItems(room);
             });
         });
         
-        // Make row clickable to select/deselect
+        // Keep row click passive; quantity is controlled only via plus/minus/input.
         container.querySelectorAll('.inventory-item').forEach(row => {
             row.addEventListener('click', function(e) {
                 if (e.target.closest('.room-item-controls') || e.target.closest('.item-edit-btn') || e.target.closest('.item-delete-btn')) return;
-                const item = row.getAttribute('data-item');
-                const itemRoom = row.getAttribute('data-room');
-                const trackingKey = getItemTrackingKey(item, itemRoom);
-
-                // Only allow row-click deselection when quantity is already at least 1.
-                const currentQty = itemQuantities[trackingKey] || 0;
-                if (currentQty <= 0) return;
-
-                itemQuantities[trackingKey] = 0;
-                selectedItems[trackingKey] = false;
-                renderRoomItems(room);
+                // Intentionally no toggle on row tap to avoid accidental resets to 0.
             });
         });
         
@@ -1096,6 +1103,14 @@ document.addEventListener('DOMContentLoaded', function () {
         // Update next button state after inventory changes
         if (typeof updateNextButtonState === 'function') {
             updateNextButtonState();
+        }
+
+        // Persist inventory changes immediately so users never need manual save clicks.
+        if (typeof window.saveStep3InventorySnapshot === 'function') {
+            window.saveStep3InventorySnapshot({ silent: true });
+        }
+        if (typeof window.saveCreateJobProgress === 'function') {
+            window.saveCreateJobProgress();
         }
     }
 
@@ -1428,14 +1443,29 @@ function renderFloorIcons(propertyType) {
 
 // --- Show inventory only when both fields are filled ---
 function hasAnyInventorySelection() {
-    // Multi-floor pickup flow: every selected floor must have at least one item
+    // Fast path: trust visible quantity inputs in Step 3 inventory UI.
+    const inventoryRoot = document.getElementById('inventory-card-container');
+    if (inventoryRoot && inventoryRoot.style.display !== 'none') {
+        const qtyInputs = Array.from(inventoryRoot.querySelectorAll('.room-item-quantity-display'));
+        const hasPositiveVisibleQty = qtyInputs.some((input) => {
+            const qty = parseInt(input.value, 10) || 0;
+            return qty > 0;
+        });
+        if (hasPositiveVisibleQty) {
+            return true;
+        }
+    }
+
+    // Multi-floor pickup flow: at least one selected floor must have at least one item.
+    // Requiring every selected floor here can block progression while users are still
+    // incrementally entering inventory across floors.
     if (window.selectedPickupFloors && window.selectedPickupFloors.size > 0) {
         if (!window.multiFloorInventory || typeof window.multiFloorInventory !== 'object') {
             return false;
         }
 
         const selectedFloors = Array.from(window.selectedPickupFloors);
-        const everySelectedFloorHasItems = selectedFloors.every((floorName) => {
+        const anySelectedFloorHasItems = selectedFloors.some((floorName) => {
             const floorItems = window.multiFloorInventory[floorName];
             if (!floorItems || typeof floorItems !== 'object') {
                 return false;
@@ -1443,7 +1473,7 @@ function hasAnyInventorySelection() {
             return Object.values(floorItems).some((qty) => (parseInt(qty, 10) || 0) > 0);
         });
 
-        return everySelectedFloorHasItems;
+        return anySelectedFloorHasItems;
     }
 
     if (window.itemQuantities) {
@@ -1617,13 +1647,29 @@ document.addEventListener('DOMContentLoaded', function () {
             // lift also required if visible (when floor is not ground)
             if (step === 3) {
                 const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
-                if (selectedFloors.length === 0) {
-                    return false;
-                }
+                const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+                    .map((btn) => (btn.getAttribute('data-floor') || '').trim())
+                    .filter(Boolean);
+                const legacyFloorValue = (document.getElementById('pickup-floor-select')?.value || '').trim();
 
-                // Multi-floor pickup lift answer is required after floor selection
-                const pickuplift = document.getElementById('pickup-lift-available');
-                if (!pickuplift || !pickuplift.value.trim()) {
+                // Fallback to persisted multi-floor keys when selectedPickupFloors is stale.
+                const inventoryFloors = (window.multiFloorInventory && typeof window.multiFloorInventory === 'object')
+                    ? Object.entries(window.multiFloorInventory)
+                        .filter(([, items]) => {
+                            if (!items || typeof items !== 'object') return false;
+                            return Object.values(items).some((qty) => (parseInt(qty, 10) || 0) > 0);
+                        })
+                        .map(([floor]) => floor)
+                    : [];
+
+                const effectiveFloors = selectedFloors.length > 0
+                    ? selectedFloors
+                    : (domSelectedFloors.length > 0
+                        ? domSelectedFloors
+                        : (inventoryFloors.length > 0
+                            ? inventoryFloors
+                            : (legacyFloorValue ? [legacyFloorValue] : [])));
+                if (effectiveFloors.length === 0) {
                     return false;
                 }
 
@@ -1740,9 +1786,38 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             return true;
         }
+
+        function getEffectiveCurrentStep() {
+            const rawStep = document.body.dataset.formStep || document.body.dataset.currentStep || '1';
+            let step = parseInt(rawStep, 10);
+            if (!Number.isFinite(step)) {
+                step = 1;
+            }
+
+            const pickupStepVisible = !!(document.getElementById('pickup-room-list-wrapper') && document.getElementById('pickup-room-list-wrapper').offsetParent !== null);
+
+            // Only correct obvious stale state from Step 1/2 to Step 3.
+            // Do not infer Step 4 from visibility, because overlapping containers can
+            // temporarily be visible and would incorrectly block the Step 3 Next button.
+            if (step < 3 && pickupStepVisible) {
+                return 3;
+            }
+
+            return step;
+        }
+
+        function syncBodyStep(step) {
+            const value = String(step);
+            if (document.body.dataset.formStep !== value) {
+                document.body.dataset.formStep = value;
+            }
+            if (document.body.dataset.currentStep !== value) {
+                document.body.dataset.currentStep = value;
+            }
+        }
         // Scroll/visibility logic
         function updateStickyNextBtnVisibility() {
-            const step = parseInt(document.body.dataset.formStep || '1', 10);
+            const step = getEffectiveCurrentStep();
             // Always show sticky button
             showStickyNextBtn();
         }
@@ -1750,7 +1825,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Global function to update next button state (can be called from renderRoomItems)
         window.updateNextButtonState = function() {
             if (!stickyNextBtn) return;
-            const step = parseInt(document.body.dataset.formStep || '1', 10);
+            const step = getEffectiveCurrentStep();
             const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 8;
             if (step >= totalSteps) {
                 stickyNextBtn.disabled = true;
@@ -1882,7 +1957,8 @@ document.addEventListener('DOMContentLoaded', function () {
         // Sync sticky button with normal Next button
         if (stickyNextBtn) {
             stickyNextBtn.onclick = async function() {
-                const step = parseInt(document.body.dataset.formStep || '1', 10);
+                const step = getEffectiveCurrentStep();
+                syncBodyStep(step);
                 const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 8;
                 if (step >= totalSteps) {
                     return;
@@ -1920,14 +1996,14 @@ document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('input, select').forEach(el => {
             el.addEventListener('input', function() {
                 updateStickyNextBtnVisibility();
-                const step = parseInt(document.body.dataset.formStep || '1', 10);
+                const step = getEffectiveCurrentStep();
                 stickyNextBtn.disabled = !requirementsMetForStep(step);
                 stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
                 updateStep3InventoryWarning();
             });
             el.addEventListener('change', function() {
                 updateStickyNextBtnVisibility();
-                const step = parseInt(document.body.dataset.formStep || '1', 10);
+                const step = getEffectiveCurrentStep();
                 stickyNextBtn.disabled = !requirementsMetForStep(step);
                 stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
                 updateStep3InventoryWarning();
@@ -1937,10 +2013,20 @@ document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('.inventory-item-add, .inventory-item-remove').forEach(el => {
             el.addEventListener('click', updateStickyNextBtnVisibility);
         });
+
+        // Fallback: keep sticky Next state in sync for plus/minus controls rendered dynamically.
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('.room-item-qty-plus, .room-item-qty-minus')) return;
+            setTimeout(() => {
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+            }, 0);
+        }, true);
         // Initial visibility
         updateStickyNextBtnVisibility();
         // Set initial disabled state for Next button
-        const stepInit = parseInt(document.body.dataset.formStep || '1', 10);
+        const stepInit = getEffectiveCurrentStep();
         stickyNextBtn.disabled = !requirementsMetForStep(stepInit);
         stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
         updateStep3InventoryWarning();
@@ -2332,6 +2418,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function renderPackingItemsConfig() {
+        const isNarrowPackingViewport = window.innerWidth <= 768;
         const packingInput = document.getElementById('service-packing');
         const packingModeInput = document.getElementById('service-packing-mode');
         const packingBoxProviderInput = document.getElementById('service-packing-box-provider');
@@ -2542,19 +2629,25 @@ document.addEventListener('DOMContentLoaded', function () {
                     const selectedQty = Math.max(0, Math.min(maxQty, parseInt(currentState[itemName], 10) || 0));
 
                     const row = document.createElement('div');
-                    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;';
+                    row.style.cssText = isNarrowPackingViewport
+                        ? 'display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:10px;padding:8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;'
+                        : 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;';
 
                     const left = document.createElement('div');
-                    left.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
+                    left.style.cssText = isNarrowPackingViewport
+                        ? 'display:flex;align-items:flex-start;gap:8px;flex:1;min-width:0;width:100%;'
+                        : 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
 
                     const labelText = document.createElement('span');
                     labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
-                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:break-word;font-size:0.95rem;">${getItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
+                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:break-word;line-height:1.3;font-size:${isNarrowPackingViewport ? '1rem' : '0.95rem'};">${getItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
 
                     left.appendChild(labelText);
 
                     const controls = document.createElement('div');
-                    controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+                    controls.style.cssText = isNarrowPackingViewport
+                        ? 'display:flex;align-items:center;justify-content:flex-start;gap:6px;flex-wrap:nowrap;width:100%;'
+                        : 'display:flex;align-items:center;gap:4px;';
 
                     const minusBtn = document.createElement('button');
                     minusBtn.type = 'button';
@@ -2566,7 +2659,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     qtyInput.min = '0';
                     qtyInput.max = String(maxQty);
                     qtyInput.value = String(selectedQty);
-                    qtyInput.style.cssText = 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
+                    qtyInput.style.cssText = isNarrowPackingViewport
+                        ? 'width:62px;padding:6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:1rem;'
+                        : 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
 
                     const plusBtn = document.createElement('button');
                     plusBtn.type = 'button';
@@ -2689,6 +2784,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function renderServiceItemsList(listEl, selectedSet, byFloor, sortedFloors, options) {
+        const isNarrowServiceViewport = window.innerWidth <= 540;
         const {
             checkboxAttr,
             selectAllAttr,
@@ -2840,16 +2936,20 @@ document.addEventListener('DOMContentLoaded', function () {
                     const key = getDisassemblyItemKey(floor, itemName);
 
                     const row = document.createElement('label');
-                    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;cursor:pointer;';
+                    row.style.cssText = isNarrowServiceViewport
+                        ? 'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;cursor:pointer;'
+                        : 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;cursor:pointer;';
 
                     const left = document.createElement('div');
-                    left.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
+                    left.style.cssText = isNarrowServiceViewport
+                        ? 'display:flex;align-items:flex-start;gap:8px;flex:1;min-width:0;'
+                        : 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
 
                     const textWrap = document.createElement('span');
                     textWrap.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
 
                     const title = document.createElement('span');
-                    title.style.cssText = 'font-weight:600;color:#1f2937;word-break:break-word;font-size:0.95rem;';
+                    title.style.cssText = `font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};`;
                     title.textContent = getItemDisplayName(itemName);
 
                     const sub = document.createElement('span');
@@ -2861,7 +2961,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     textWrap.appendChild(sub);
 
                     const controls = document.createElement('div');
-                    controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+                    controls.style.cssText = isNarrowServiceViewport
+                        ? 'display:flex;align-items:center;gap:4px;flex-shrink:0;padding-top:2px;'
+                        : 'display:flex;align-items:center;gap:4px;';
 
                     const checkbox = document.createElement('input');
                     checkbox.type = 'checkbox';
@@ -2910,6 +3012,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function renderStorageConfig() {
+        const isNarrowServiceViewport = window.innerWidth <= 540;
         const storageInput = document.getElementById('service-storage');
         const storageItemsInput = document.getElementById('service-storage-items');
         const storageItemsConfig = document.getElementById('storage-items-config');
@@ -3234,19 +3337,25 @@ document.addEventListener('DOMContentLoaded', function () {
                     const selectedQty = Math.max(0, Math.min(availableForStorage, parseInt(currentState[itemKey], 10) || 0));
 
                     const row = document.createElement('div');
-                    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;';
+                    row.style.cssText = isNarrowServiceViewport
+                        ? 'display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:10px;padding:8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;'
+                        : 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;';
 
                     const left = document.createElement('div');
-                    left.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
+                    left.style.cssText = isNarrowServiceViewport
+                        ? 'display:flex;align-items:flex-start;gap:8px;flex:1;min-width:0;width:100%;'
+                        : 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
 
                     const labelText = document.createElement('span');
                     labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
-                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:break-word;font-size:0.95rem;">${getItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${availableForStorage}</span>`;
+                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};">${getItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${availableForStorage}</span>`;
 
                     left.appendChild(labelText);
 
                     const controls = document.createElement('div');
-                    controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+                    controls.style.cssText = isNarrowServiceViewport
+                        ? 'display:flex;align-items:center;justify-content:flex-start;gap:6px;flex-wrap:nowrap;width:100%;'
+                        : 'display:flex;align-items:center;gap:4px;';
 
                     const minusBtn = document.createElement('button');
                     minusBtn.type = 'button';
@@ -3258,7 +3367,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     qtyInput.min = '0';
                     qtyInput.max = String(availableForStorage);
                     qtyInput.value = String(selectedQty);
-                    qtyInput.style.cssText = 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
+                    qtyInput.style.cssText = isNarrowServiceViewport
+                        ? 'width:62px;padding:6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:1rem;'
+                        : 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
 
                     const plusBtn = document.createElement('button');
                     plusBtn.type = 'button';
@@ -3303,6 +3414,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function renderDisassemblyConfig() {
+        const isNarrowServiceViewport = window.innerWidth <= 540;
         const disassemblyInput = document.getElementById('service-disassembly');
         const disassemblyItemsInput = document.getElementById('service-disassembly-items');
         const assembleChoiceInput = document.getElementById('service-assemble-at-arrival');
@@ -3460,19 +3572,25 @@ document.addEventListener('DOMContentLoaded', function () {
                         const selectedQty = Math.max(0, Math.min(maxQty, parseInt(disassemblyState[itemKey], 10) || 0));
 
                         const row = document.createElement('div');
-                        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;';
+                        row.style.cssText = isNarrowServiceViewport
+                            ? 'display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:10px;padding:8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;'
+                            : 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;';
 
                         const left = document.createElement('div');
-                        left.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
+                        left.style.cssText = isNarrowServiceViewport
+                            ? 'display:flex;align-items:flex-start;gap:8px;flex:1;min-width:0;width:100%;'
+                            : 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
 
                         const labelText = document.createElement('span');
                         labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
-                        labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:break-word;font-size:0.95rem;">${getItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
+                        labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};">${getItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
 
                         left.appendChild(labelText);
 
                         const controls = document.createElement('div');
-                        controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+                        controls.style.cssText = isNarrowServiceViewport
+                            ? 'display:flex;align-items:center;justify-content:flex-start;gap:6px;flex-wrap:nowrap;width:100%;'
+                            : 'display:flex;align-items:center;gap:4px;';
 
                         const minusBtn = document.createElement('button');
                         minusBtn.type = 'button';
@@ -3484,7 +3602,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         qtyInput.min = '0';
                         qtyInput.max = String(maxQty);
                         qtyInput.value = String(selectedQty);
-                        qtyInput.style.cssText = 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
+                        qtyInput.style.cssText = isNarrowServiceViewport
+                            ? 'width:62px;padding:6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:1rem;'
+                            : 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
 
                         const plusBtn = document.createElement('button');
                         plusBtn.type = 'button';
@@ -3704,19 +3824,25 @@ document.addEventListener('DOMContentLoaded', function () {
                     const selectedQty = Math.max(0, Math.min(maxQty, parseInt(assembleState[itemKey], 10) || 0));
 
                     const row = document.createElement('div');
-                    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;';
+                    row.style.cssText = isNarrowServiceViewport
+                        ? 'display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:10px;padding:8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;'
+                        : 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid #dbeafe;border-radius:8px;background:#fff;';
 
                     const left = document.createElement('div');
-                    left.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
+                    left.style.cssText = isNarrowServiceViewport
+                        ? 'display:flex;align-items:flex-start;gap:8px;flex:1;min-width:0;width:100%;'
+                        : 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
 
                     const labelText = document.createElement('span');
                     labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
-                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:break-word;font-size:0.95rem;">${getItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
+                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};">${getItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
 
                     left.appendChild(labelText);
 
                     const controls = document.createElement('div');
-                    controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+                    controls.style.cssText = isNarrowServiceViewport
+                        ? 'display:flex;align-items:center;justify-content:flex-start;gap:6px;flex-wrap:nowrap;width:100%;'
+                        : 'display:flex;align-items:center;gap:4px;';
 
                     const minusBtn = document.createElement('button');
                     minusBtn.type = 'button';
@@ -3728,7 +3854,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     qtyInput.min = '0';
                     qtyInput.max = String(maxQty);
                     qtyInput.value = String(selectedQty);
-                    qtyInput.style.cssText = 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
+                    qtyInput.style.cssText = isNarrowServiceViewport
+                        ? 'width:62px;padding:6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:1rem;'
+                        : 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
 
                     const plusBtn = document.createElement('button');
                     plusBtn.type = 'button';
@@ -4231,11 +4359,115 @@ window.selectedPickupFloors = new Set();
 window.selectedDeliveryFloors = new Set();
 window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
-// --- Form Progress Persistence ---
-(function setupCreateJobProgressPersistence() {
-    const FORM_PROGRESS_KEY = 'anytransport_create_job_progress_v1';
+// --- Simple Draft Persistence ---
+(function setupSimpleCreateJobDraft() {
+    const DRAFT_KEY = 'anytransport_simple_create_job_draft_v1';
+    const DRAFT_FULL_KEY = 'anytransport_simple_create_job_draft_full_v1';
+    const WINDOW_NAME_PREFIX = 'ANYTRANSPORT_CREATE_JOB_DRAFT::';
     let saveTimer = null;
-    let restoreAttempted = false;
+    let isRestoring = false;
+    let bootRestoreDone = false;
+    let hasUserInteracted = false;
+    let bootLockedStep = null;
+
+    const CRITICAL_FIELD_IDS = [
+        'pickup-address',
+        'pickup-city',
+        'pickup-postcode',
+        'delivery-address',
+        'delivery-city',
+        'delivery-postcode',
+        'pickup-property-type',
+        'delivery-property-type',
+        'pickup-lift-available',
+        'delivery-lift-available'
+    ];
+
+    const readWindowNameStore = () => {
+        try {
+            const raw = typeof window.name === 'string' ? window.name : '';
+            if (!raw || !raw.startsWith(WINDOW_NAME_PREFIX)) return {};
+            const parsed = JSON.parse(raw.slice(WINDOW_NAME_PREFIX.length));
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (error) {
+            return {};
+        }
+    };
+
+    const writeWindowNameStore = (store) => {
+        try {
+            window.name = `${WINDOW_NAME_PREFIX}${JSON.stringify(store || {})}`;
+            return true;
+        } catch (error) {
+            return false;
+        }
+    };
+
+    const persistValue = (key, value) => {
+        let ok = false;
+
+        try {
+            localStorage.setItem(key, value);
+            ok = true;
+        } catch (error) {
+            // Ignore and continue fallback attempts.
+        }
+
+        try {
+            sessionStorage.setItem(key, value);
+            ok = true;
+        } catch (error) {
+            // Ignore and continue fallback attempts.
+        }
+
+        const store = readWindowNameStore();
+        store[key] = value;
+        if (writeWindowNameStore(store)) {
+            ok = true;
+        }
+
+        return ok;
+    };
+
+    const readPersistedValue = (key) => {
+        try {
+            const value = localStorage.getItem(key);
+            if (value !== null) return value;
+        } catch (error) {
+            // Ignore and continue fallback attempts.
+        }
+
+        try {
+            const value = sessionStorage.getItem(key);
+            if (value !== null) return value;
+        } catch (error) {
+            // Ignore and continue fallback attempts.
+        }
+
+        const store = readWindowNameStore();
+        return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null;
+    };
+
+    const parseDraftValue = (raw) => {
+        if (!raw) return null;
+
+        try {
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === 'object' ? parsed : null;
+        } catch (error) {
+            return null;
+        }
+    };
+
+    const getSavedDraft = () => parseDraftValue(readPersistedValue(DRAFT_KEY));
+    const getSavedFullDraft = () => parseDraftValue(readPersistedValue(DRAFT_FULL_KEY));
+
+    // Seed step for downstream step engines that read this during startup.
+    const bootDraft = getSavedDraft();
+    if (bootDraft && Number.isFinite(parseInt(bootDraft.step, 10))) {
+        bootLockedStep = parseInt(bootDraft.step, 10);
+        window.__createJobRestoreTargetStep = bootLockedStep;
+    }
 
     const getStep = () => {
         const raw = document.body?.dataset?.formStep || document.body?.dataset?.currentStep || '1';
@@ -4243,91 +4475,219 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         return Number.isFinite(parsed) ? parsed : 1;
     };
 
-    const getFieldKey = (el, index) => {
+    const getControls = () => {
+        return Array.from(document.querySelectorAll('main.job-form input, main.job-form select, main.job-form textarea'));
+    };
+
+    const getControlKey = (el, index) => {
+        const type = (el.type || '').toLowerCase();
         if (el.id) return `id:${el.id}`;
-        if (el.name) return `name:${el.name}:${index}`;
+        if (el.name) {
+            if (type === 'checkbox' || type === 'radio') {
+                return `name:${el.name}:value:${el.value}`;
+            }
+            return `name:${el.name}:idx:${index}`;
+        }
         return `idx:${index}`;
     };
 
-    const scheduleSave = () => {
-        if (window.__isRestoringCreateJobProgress) return;
-        clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => {
-            if (typeof window.saveCreateJobProgress === 'function') {
-                window.saveCreateJobProgress();
-            }
-        }, 120);
+    const shouldTrack = (el) => {
+        if (!el) return false;
+        const type = (el.type || '').toLowerCase();
+        if (type === 'file' || type === 'button' || type === 'submit' || type === 'reset') return false;
+        if (el.closest('#login-modal') || el.closest('#confirmation-modal')) return false;
+        return true;
+    };
+
+    const safeClone = (value, fallback) => {
+        try {
+            return JSON.parse(JSON.stringify(value));
+        } catch (error) {
+            return fallback;
+        }
+    };
+
+    const applyUiState = () => {
+        const pickupPropertyValue = document.getElementById('pickup-property-type')?.value || '';
+        const deliveryPropertyValue = document.getElementById('delivery-property-type')?.value || '';
+        const pickupLiftValue = document.getElementById('pickup-lift-available')?.value || '';
+        const deliveryLiftValue = document.getElementById('delivery-lift-available')?.value || '';
+
+        const syncButtons = (selector, value) => {
+            document.querySelectorAll(selector).forEach((btn) => {
+                const isSelected = (btn.getAttribute('data-value') || '') === value;
+                btn.classList.toggle('active', isSelected);
+                btn.classList.toggle('selected', isSelected);
+                btn.classList.toggle('is-active', isSelected);
+                btn.classList.toggle('is-selected', isSelected);
+                btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+            });
+        };
+
+        syncButtons('#property-type-selection-section .property-type-icon-btn', pickupPropertyValue);
+        syncButtons('#delivery-property-type-selection-section .property-type-icon-btn', deliveryPropertyValue);
+
+        if (typeof window.applyPickupLiftSelection === 'function') {
+            window.applyPickupLiftSelection(pickupLiftValue);
+        } else {
+            syncButtons('#pickup-lift-option-container .lift-icon-btn', pickupLiftValue);
+        }
+
+        if (typeof window.applyDeliveryLiftSelection === 'function') {
+            window.applyDeliveryLiftSelection(deliveryLiftValue);
+        } else {
+            syncButtons('#delivery-lift-option-container .lift-icon-btn', deliveryLiftValue);
+        }
+
+        if (typeof window.renderPickupFloorSelector === 'function') {
+            window.renderPickupFloorSelector();
+        }
+        if (typeof window.renderDeliveryFloorSelector === 'function') {
+            window.renderDeliveryFloorSelector();
+        }
+        if (typeof window.renderDeliveryFloors === 'function') {
+            window.renderDeliveryFloors();
+        }
+
+        if (pickupLiftValue && typeof window.renderSelectedPickupFloorsInventory === 'function') {
+            window.renderSelectedPickupFloorsInventory(pickupLiftValue);
+        }
+
+        if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
+            window.ensureMultiFloorInventoryVisible();
+        }
+        if (typeof window.syncDeliveryStep4FromState === 'function') {
+            window.syncDeliveryStep4FromState();
+        }
+        if (typeof window.renderRoomItems === 'function') {
+            window.renderRoomItems(window.currentRoom || null);
+        }
+        if (typeof window.updateNextButtonState === 'function') {
+            window.updateNextButtonState();
+        }
     };
 
     window.saveCreateJobProgress = function saveCreateJobProgress() {
-        if (window.__isRestoringCreateJobProgress) return;
-
-        const form = document.getElementById('create-job-form');
-        if (!form) return;
-
-        const elements = Array.from(form.querySelectorAll('input, select, textarea'));
-        const fields = {};
-
-        elements.forEach((el, index) => {
-            const key = getFieldKey(el, index);
-            const type = (el.type || '').toLowerCase();
-            fields[key] = {
-                type,
-                value: el.value,
-                checked: !!el.checked
-            };
-        });
-
-        const payload = {
-            savedAt: Date.now(),
-            step: getStep(),
-            fields,
-            selectedPickupFloors: Array.from(window.selectedPickupFloors || []),
-            selectedDeliveryFloors: Array.from(window.selectedDeliveryFloors || []),
-            multiFloorInventory: window.multiFloorInventory && typeof window.multiFloorInventory === 'object'
-                ? window.multiFloorInventory
-                : {}
-        };
-
-        try {
-            localStorage.setItem(FORM_PROGRESS_KEY, JSON.stringify(payload));
-        } catch (error) {
-            console.warn('Unable to save form progress:', error);
+        if (isRestoring) return;
+        if (!bootRestoreDone && !hasUserInteracted) {
+            return;
         }
 
-        // Keep Step 3 inventory snapshot in sync without requiring manual "Save Inventory" click.
-        if (typeof window.saveStep3InventorySnapshot === 'function') {
-            window.saveStep3InventorySnapshot({ silent: true });
+        const controls = getControls().filter(shouldTrack);
+        const fields = {};
+        const coreFields = {};
+        const idState = {};
+
+        controls.forEach((el, index) => {
+            const key = getControlKey(el, index);
+            const type = (el.type || '').toLowerCase();
+            const rawValue = typeof el.value === 'string' ? el.value : '';
+
+            fields[key] = {
+                type,
+                value: rawValue,
+                checked: !!el.checked
+            };
+
+            // Keep a compact core copy that avoids huge blobs so persistence always succeeds.
+            if (rawValue.length <= 500) {
+                coreFields[key] = {
+                    type,
+                    value: rawValue,
+                    checked: !!el.checked
+                };
+            }
+
+            if (el.id) {
+                idState[el.id] = {
+                    type,
+                    value: rawValue,
+                    checked: !!el.checked
+                };
+            }
+        });
+
+        if (Object.keys(fields).length === 0) return;
+
+        const commonState = {
+            savedAt: Date.now(),
+            step: getStep(),
+            selectedPickupFloors: Array.from(window.selectedPickupFloors || []),
+            selectedDeliveryFloors: Array.from(window.selectedDeliveryFloors || []),
+            multiFloorInventory: safeClone(window.multiFloorInventory || {}, {}),
+            itemQuantities: safeClone(window.itemQuantities || {}, {}),
+            customItems: safeClone(window.customItems || {}, {})
+        };
+
+        const payload = {
+            ...commonState,
+            fields,
+            idState
+        };
+
+        const corePayload = {
+            ...commonState,
+            fields: coreFields,
+            idState
+        };
+
+        window.__createJobRestoreTargetStep = payload.step;
+
+        const coreRaw = JSON.stringify(corePayload);
+        if (!persistValue(DRAFT_KEY, coreRaw)) {
+            console.warn('Unable to persist core create-job draft.');
+        }
+
+        try {
+            const fullRaw = JSON.stringify(payload);
+            persistValue(DRAFT_FULL_KEY, fullRaw);
+        } catch (error) {
+            // Full payload is best-effort only.
+        }
+
+        // Keep legacy inventory snapshot in sync for existing step-3 code paths.
+        try {
+            localStorage.setItem('house_removal_inventory', JSON.stringify({
+                itemQuantities: payload.itemQuantities,
+                customItems: payload.customItems,
+                selectedPickupFloors: payload.selectedPickupFloors,
+                multiFloorInventory: payload.multiFloorInventory
+            }));
+        } catch (error) {
+            // Ignore inventory snapshot write failures.
         }
     };
 
     window.restoreCreateJobProgress = function restoreCreateJobProgress() {
-        if (restoreAttempted) return;
-        restoreAttempted = true;
+        const corePayload = getSavedDraft();
+        const fullPayload = getSavedFullDraft();
+        const payload = fullPayload || corePayload;
 
-        const form = document.getElementById('create-job-form');
-        if (!form) return;
-
-        let raw = null;
-        try {
-            raw = localStorage.getItem(FORM_PROGRESS_KEY);
-        } catch (error) {
-            console.warn('Unable to access saved form progress:', error);
+        if (!payload || typeof payload !== 'object' || !payload.fields) {
             return;
         }
 
-        if (!raw) return;
-
-        let payload;
+        isRestoring = true;
         try {
-            payload = JSON.parse(raw);
-        } catch (error) {
-            console.warn('Saved form progress is invalid JSON:', error);
-            return;
-        }
+            const overwriteObjectPreserveReference = (targetRef, sourceObj) => {
+                if (!sourceObj || typeof sourceObj !== 'object') return;
 
-        window.__isRestoringCreateJobProgress = true;
-        try {
+                let target = targetRef;
+                if (!target || typeof target !== 'object') {
+                    target = {};
+                }
+
+                Object.keys(target).forEach((key) => {
+                    delete target[key];
+                });
+
+                Object.entries(sourceObj).forEach(([key, value]) => {
+                    target[key] = value;
+                });
+
+                return target;
+            };
+
             if (Array.isArray(payload.selectedPickupFloors)) {
                 window.selectedPickupFloors = new Set(payload.selectedPickupFloors);
             }
@@ -4335,87 +4695,59 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 window.selectedDeliveryFloors = new Set(payload.selectedDeliveryFloors);
             }
             if (payload.multiFloorInventory && typeof payload.multiFloorInventory === 'object') {
-                window.multiFloorInventory = payload.multiFloorInventory;
+                window.multiFloorInventory = overwriteObjectPreserveReference(window.multiFloorInventory, payload.multiFloorInventory) || payload.multiFloorInventory;
+            }
+            if (payload.itemQuantities && typeof payload.itemQuantities === 'object') {
+                window.itemQuantities = overwriteObjectPreserveReference(window.itemQuantities, payload.itemQuantities) || payload.itemQuantities;
+            }
+            if (payload.customItems && typeof payload.customItems === 'object') {
+                window.customItems = overwriteObjectPreserveReference(window.customItems, payload.customItems) || payload.customItems;
             }
 
-            // Restore Step 3 inventory snapshot (saved in a separate key).
-            try {
-                const snapshotRaw = localStorage.getItem('house_removal_inventory');
-                if (snapshotRaw) {
-                    const snapshot = JSON.parse(snapshotRaw);
-                    if (snapshot && typeof snapshot === 'object') {
-                        if (snapshot.itemQuantities && typeof snapshot.itemQuantities === 'object') {
-                            if (!window.itemQuantities || typeof window.itemQuantities !== 'object') {
-                                window.itemQuantities = {};
-                            }
-                            Object.keys(window.itemQuantities).forEach((key) => delete window.itemQuantities[key]);
-                            Object.entries(snapshot.itemQuantities).forEach(([key, value]) => {
-                                window.itemQuantities[key] = parseInt(value, 10) || 0;
-                            });
-                        }
-
-                        if (snapshot.customItems && typeof snapshot.customItems === 'object') {
-                            if (!window.customItems || typeof window.customItems !== 'object') {
-                                window.customItems = {};
-                            }
-                            Object.keys(window.customItems).forEach((key) => delete window.customItems[key]);
-                            Object.entries(snapshot.customItems).forEach(([room, items]) => {
-                                window.customItems[room] = Array.isArray(items) ? items.slice() : [];
-                            });
-                        }
-
-                        if (Array.isArray(snapshot.selectedPickupFloors)) {
-                            window.selectedPickupFloors = new Set(snapshot.selectedPickupFloors);
-                        }
-                        if (snapshot.multiFloorInventory && typeof snapshot.multiFloorInventory === 'object') {
-                            window.multiFloorInventory = snapshot.multiFloorInventory;
-                        }
-                    }
-                }
-            } catch (error) {
-                console.warn('Unable to restore Step 3 inventory snapshot:', error);
-            }
-
-            const elements = Array.from(form.querySelectorAll('input, select, textarea'));
-            elements.forEach((el, index) => {
-                const key = getFieldKey(el, index);
-                const saved = payload.fields ? payload.fields[key] : null;
+            const controls = getControls().filter(shouldTrack);
+            controls.forEach((el, index) => {
+                const key = getControlKey(el, index);
+                const saved = payload.fields[key];
                 if (!saved) return;
 
                 const type = (el.type || '').toLowerCase();
                 if (type === 'checkbox' || type === 'radio') {
                     el.checked = !!saved.checked;
-                } else if (typeof saved.value !== 'undefined') {
-                    el.value = saved.value;
+                } else {
+                    el.value = typeof saved.value === 'string' ? saved.value : '';
                 }
             });
 
-            if (typeof window.renderPickupFloorSelector === 'function') {
-                window.renderPickupFloorSelector();
-            }
-            if (typeof window.renderDeliveryFloorSelector === 'function') {
-                window.renderDeliveryFloorSelector();
-            }
-
-            const pickuplift = document.getElementById('pickup-lift-available');
-            if (
-                window.selectedPickupFloors &&
-                window.selectedPickupFloors.size > 0 &&
-                pickuplift &&
-                pickuplift.value &&
-                typeof window.renderSelectedPickupFloorsInventory === 'function'
-            ) {
-                window.renderSelectedPickupFloorsInventory(pickuplift.value);
+            // Stronger restore pass by stable element id.
+            if (payload.idState && typeof payload.idState === 'object') {
+                Object.entries(payload.idState).forEach(([id, saved]) => {
+                    const el = document.getElementById(id);
+                    if (!el || !saved) return;
+                    const type = (el.type || '').toLowerCase();
+                    if (type === 'checkbox' || type === 'radio') {
+                        el.checked = !!saved.checked;
+                    } else {
+                        el.value = typeof saved.value === 'string' ? saved.value : '';
+                    }
+                });
             }
 
-            if (typeof window.renderDeliveryFloors === 'function') {
-                window.renderDeliveryFloors();
-            }
-            if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
-                window.ensureMultiFloorInventoryVisible();
-            }
+            // Force critical business fields from id snapshot even if other code mutates them.
+            CRITICAL_FIELD_IDS.forEach((id) => {
+                const saved = payload.idState ? payload.idState[id] : null;
+                const el = document.getElementById(id);
+                if (!saved || !el) return;
+                const type = (el.type || '').toLowerCase();
+                if (type === 'checkbox' || type === 'radio') {
+                    el.checked = !!saved.checked;
+                } else {
+                    el.value = typeof saved.value === 'string' ? saved.value : '';
+                }
+            });
 
             const targetStep = Number.isFinite(parseInt(payload.step, 10)) ? parseInt(payload.step, 10) : 1;
+            bootLockedStep = targetStep;
+            window.__createJobRestoreTargetStep = targetStep;
             if (typeof window.setFormStep === 'function') {
                 window.setFormStep(targetStep);
             } else {
@@ -4423,133 +4755,109 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 document.body.dataset.currentStep = String(targetStep);
             }
 
-            if (typeof window.updateNextButtonState === 'function') {
-                window.updateNextButtonState();
-            }
+            applyUiState();
 
-            if (typeof window.renderRoomItems === 'function') {
-                const restoredRoom = window.currentRoom || null;
-                window.renderRoomItems(restoredRoom);
-            }
-
-            elements.forEach((el) => {
+            controls.forEach((el) => {
                 el.dispatchEvent(new Event('change', { bubbles: true }));
             });
+
+            applyUiState();
+
         } finally {
-            window.__isRestoringCreateJobProgress = false;
+            isRestoring = false;
         }
     };
 
-    const restoreStepUiIfReady = () => {
-        const activeStep = parseInt(document.body?.dataset?.formStep || document.body?.dataset?.currentStep || '1', 10);
-        if (activeStep === 3) {
-            const selectedFloors = Array.from(window.selectedPickupFloors || []);
-            const liftInput = document.getElementById('pickup-lift-available');
-            if (selectedFloors.length > 0 && liftInput && liftInput.value) {
-                const inventoryCardContainer = document.getElementById('inventory-card-container');
-                if (inventoryCardContainer) {
-                    inventoryCardContainer.style.display = '';
-                }
-
-                if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
-                    window.renderSelectedPickupFloorsInventory(liftInput.value);
-                }
-
-                if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
-                    window.ensureMultiFloorInventoryVisible();
-                }
-                if (typeof window.updateNextButtonState === 'function') {
-                    window.updateNextButtonState();
-                }
+    const scheduleSave = (eventOrNull = null, markInteraction = true) => {
+        if (isRestoring) return;
+        if (markInteraction) {
+            if (eventOrNull && eventOrNull.isTrusted === true) {
+                hasUserInteracted = true;
             }
         }
-
-        if (activeStep === 4) {
-            const deliveryPropertyInput = document.getElementById('delivery-property-type');
-            const selectedProperty = deliveryPropertyInput ? deliveryPropertyInput.value : '';
-            const propertySection = document.getElementById('delivery-property-type-selection-section');
-            const propertyButtons = propertySection ? propertySection.querySelectorAll('.property-type-icon-btn') : [];
-
-            if (propertyButtons && propertyButtons.length > 0) {
-                propertyButtons.forEach((button) => {
-                    const isSelected = !!selectedProperty && button.getAttribute('data-value') === selectedProperty;
-                    button.classList.toggle('active', isSelected);
-                    button.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
-                });
-            }
-
-            const liftSection = document.getElementById('delivery-lift-section');
-            if (liftSection) {
-                liftSection.style.display = 'none';
-            }
-
-            if (typeof window.syncDeliveryStep4FromState === 'function') {
-                window.syncDeliveryStep4FromState();
-            }
-        }
-    };
-
-    const wrapSetFormStep = () => {
-        if (typeof window.setFormStep !== 'function') return false;
-        if (window.setFormStep.__progressWrapped) return true;
-
-        const originalSetFormStep = window.setFormStep;
-
-        const wrappedSetFormStep = function wrappedSetFormStep(step) {
+        if (!bootRestoreDone && !hasUserInteracted) return;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
             if (typeof window.saveCreateJobProgress === 'function') {
                 window.saveCreateJobProgress();
             }
-            const result = originalSetFormStep(step);
-            setTimeout(restoreStepUiIfReady, 0);
-            if (typeof window.saveCreateJobProgress === 'function') {
-                setTimeout(() => window.saveCreateJobProgress(), 0);
-            }
-            return result;
-        };
-
-        wrappedSetFormStep.__progressWrapped = true;
-        window.setFormStep = wrappedSetFormStep;
-        return true;
+        }, 150);
     };
 
-    document.addEventListener('DOMContentLoaded', () => {
-        wrapSetFormStep();
-        window.restoreCreateJobProgress();
-        restoreStepUiIfReady();
-        setTimeout(restoreStepUiIfReady, 150);
-        setTimeout(restoreStepUiIfReady, 700);
-
-        const setFormStepWrapRetry = setInterval(() => {
-            if (wrapSetFormStep()) {
-                clearInterval(setFormStepWrapRetry);
+    const initPersistenceLifecycle = () => {
+        // Mark true user interaction as early as possible.
+        const markInteracted = (event) => {
+            if (event && event.isTrusted === true) {
+                hasUserInteracted = true;
             }
-        }, 150);
-        setTimeout(() => clearInterval(setFormStepWrapRetry), 10000);
+        };
 
-        const stepStateObserver = new MutationObserver((mutations) => {
+        window.addEventListener('pointerdown', markInteracted, true);
+        window.addEventListener('keydown', markInteracted, true);
+        window.addEventListener('touchstart', markInteracted, true);
+
+        window.restoreCreateJobProgress();
+        setTimeout(() => window.restoreCreateJobProgress(), 250);
+        setTimeout(() => window.restoreCreateJobProgress(), 1200);
+        setTimeout(() => window.restoreCreateJobProgress(), 3200);
+        setTimeout(() => window.restoreCreateJobProgress(), 5500);
+
+        setTimeout(() => {
+            // Before unlocking startup saves, force the originally restored step once more
+            // so late initializers cannot persist an unintended step change.
+            if (!hasUserInteracted && Number.isFinite(parseInt(bootLockedStep, 10))) {
+                const targetStep = parseInt(bootLockedStep, 10);
+                if (typeof window.setFormStep === 'function') {
+                    window.setFormStep(targetStep);
+                } else {
+                    document.body.dataset.formStep = String(targetStep);
+                    document.body.dataset.currentStep = String(targetStep);
+                }
+            }
+
+            bootRestoreDone = true;
+            if (typeof window.saveCreateJobProgress === 'function') {
+                window.saveCreateJobProgress();
+            }
+        }, 6200);
+
+        document.addEventListener('input', (event) => scheduleSave(event, true), true);
+        document.addEventListener('change', (event) => scheduleSave(event, true), true);
+        document.addEventListener('blur', (event) => scheduleSave(event, true), true);
+        document.addEventListener('click', (event) => scheduleSave(event, true), true);
+
+        const stepObserver = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
                 if (mutation.attributeName === 'data-form-step' || mutation.attributeName === 'data-current-step') {
-                    setTimeout(restoreStepUiIfReady, 0);
-                    setTimeout(restoreStepUiIfReady, 120);
+                    scheduleSave(null, false);
                 }
             });
         });
+
         if (document.body) {
-            stepStateObserver.observe(document.body, {
+            stepObserver.observe(document.body, {
                 attributes: true,
                 attributeFilter: ['data-form-step', 'data-current-step']
             });
         }
 
-        document.addEventListener('input', scheduleSave, true);
-        document.addEventListener('change', scheduleSave, true);
-        document.addEventListener('click', scheduleSave, true);
         window.addEventListener('beforeunload', () => {
-            if (typeof window.saveCreateJobProgress === 'function') {
-                window.saveCreateJobProgress();
-            }
+            bootRestoreDone = true;
+            window.saveCreateJobProgress();
         });
-    });
+
+        window.addEventListener('pagehide', () => {
+            bootRestoreDone = true;
+            window.saveCreateJobProgress();
+        });
+
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initPersistenceLifecycle, { once: true });
+    } else {
+        initPersistenceLifecycle();
+    }
 })();
 
 // --- Global Floor Selection Functions (accessible before event listeners) ---
@@ -4974,19 +5282,30 @@ window.toggleDeliveryFloor = function(floor) {
             }
         }
 
-        if (propertyTypeHidden && floorHiddenInput && inventoryCardContainer) {
+        if (propertyTypeHidden && inventoryCardContainer) {
             const propertyPrompt = propertyTypeHidden.value === '';
-            const floorPrompt = floorHiddenInput.value === '';
+            const hasSelectedPickupFloors = (window.selectedPickupFloors && window.selectedPickupFloors.size > 0);
 
-            const liftHidden = liftOptionContainer ? liftOptionContainer.querySelector('#lift-available') : null;
-            const liftSelected = !!(liftHidden && liftHidden.value);
-            let canShowInventory = !propertyPrompt && !floorPrompt && isStep3 && (!liftRequired || liftSelected);
+            const legacyLiftHidden = liftOptionContainer ? liftOptionContainer.querySelector('#lift-available') : null;
+            const pickupLiftInput = document.getElementById('pickup-lift-available');
+            const liftSelected = !!(
+                (pickupLiftInput && pickupLiftInput.value)
+                || (legacyLiftHidden && legacyLiftHidden.value)
+            );
+
+            // In multi-floor flow, selected floors are the source of truth.
+            const floorReady = hasSelectedPickupFloors || !!(floorHiddenInput && floorHiddenInput.value);
+            let canShowInventory = !propertyPrompt && floorReady && isStep3 && (!liftRequired || liftSelected);
 
             if (isCustomizedItems && isStep3) {
                 canShowInventory = true;
             }
 
             inventoryCardContainer.style.display = canShowInventory ? '' : 'none';
+
+            if (canShowInventory && typeof window.ensureMultiFloorInventoryVisible === 'function') {
+                window.ensureMultiFloorInventoryVisible();
+            }
         // --- Scroll to inventory on lift or floor selection ---
         if (floorHiddenInput) {
             floorHiddenInput.addEventListener('change', function() {
@@ -5769,13 +6088,20 @@ document.addEventListener('DOMContentLoaded', function () {
     let expandedDeliveryFloors = new Set();
     let expandedDeliveryRooms = new Set();
     
-    // Track which pickup floors (source) have been selected by user
-    const selectedPickupFloors = window.selectedPickupFloors || new Set();
-    window.selectedPickupFloors = selectedPickupFloors;
-    
-    // Track which delivery floors (destination) have been selected by user
-    const selectedDeliveryFloors = window.selectedDeliveryFloors || new Set();
-    window.selectedDeliveryFloors = selectedDeliveryFloors;
+    // Always read floor selections from the live global Sets.
+    const getSelectedPickupFloors = () => {
+        if (!(window.selectedPickupFloors instanceof Set)) {
+            window.selectedPickupFloors = new Set(Array.from(window.selectedPickupFloors || []));
+        }
+        return window.selectedPickupFloors;
+    };
+
+    const getSelectedDeliveryFloors = () => {
+        if (!(window.selectedDeliveryFloors instanceof Set)) {
+            window.selectedDeliveryFloors = new Set(Array.from(window.selectedDeliveryFloors || []));
+        }
+        return window.selectedDeliveryFloors;
+    };
     
     // Floor definitions - will be set based on delivery property type
     let deliveryFloors = ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
@@ -5908,6 +6234,54 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
+        // Fallback: recover inventory from persisted Step 3 snapshot when globals are empty.
+        const hasRuntimeInventory = Object.keys(roomItems).some((roomKey) => {
+            const roomMap = roomItems[roomKey] || {};
+            return Object.keys(roomMap).length > 0;
+        });
+
+        if (!hasRuntimeInventory) {
+            try {
+                const rawSnapshot = localStorage.getItem('house_removal_inventory');
+                if (rawSnapshot) {
+                    const parsedSnapshot = JSON.parse(rawSnapshot);
+
+                    const snapshotMultiFloor = parsedSnapshot && parsedSnapshot.multiFloorInventory && typeof parsedSnapshot.multiFloorInventory === 'object'
+                        ? parsedSnapshot.multiFloorInventory
+                        : {};
+
+                    Object.keys(snapshotMultiFloor).forEach((floorName) => {
+                        const floorItems = snapshotMultiFloor[floorName];
+                        if (!floorItems || typeof floorItems !== 'object') return;
+                        Object.keys(floorItems).forEach((itemName) => {
+                            const qty = parseInt(floorItems[itemName], 10) || 0;
+                            if (qty <= 0) return;
+                            const room = getRoomForItem(itemName);
+                            const itemKey = `${itemName}||${floorName}`;
+                            roomItems[room][itemKey] = qty;
+                        });
+                    });
+
+                    const snapshotSingle = parsedSnapshot && parsedSnapshot.itemQuantities && typeof parsedSnapshot.itemQuantities === 'object'
+                        ? parsedSnapshot.itemQuantities
+                        : {};
+
+                    Object.keys(snapshotSingle).forEach((itemName) => {
+                        const qty = parseInt(snapshotSingle[itemName], 10) || 0;
+                        if (qty <= 0) return;
+                        const room = getRoomForItem(itemName);
+                        const sourceFloor = document.getElementById('pickup-floor-select')?.value || 'Ground';
+                        const itemKey = `${itemName}||${sourceFloor}`;
+                        if (!roomItems[room][itemKey]) {
+                            roomItems[room][itemKey] = qty;
+                        }
+                    });
+                }
+            } catch (error) {
+                // Ignore snapshot parsing failures and keep current roomItems.
+            }
+        }
+
         // Get items from Customized Items inventory (Step 3)
         const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
         if (serviceValue === 'Customized Items') {
@@ -5944,6 +6318,55 @@ document.addEventListener('DOMContentLoaded', function () {
     // Helper function to extract source floor from key
     function getSourceFloorFromKey(itemKey) {
         return itemKey.split('||')[1] || 'Unknown';
+    }
+
+    function normalizeFloorLabel(value) {
+        const raw = String(value || '').trim().toLowerCase();
+        if (!raw) return '';
+        if (raw === 'ground floor' || raw === 'ground') return 'ground';
+        if (raw === 'basement') return 'basement';
+        if (raw === 'attic') return 'attic';
+
+        const numeric = raw.match(/^(\d+)(st|nd|rd|th)?$/);
+        if (numeric) return String(parseInt(numeric[1], 10));
+
+        return raw.replace(/\s+/g, ' ');
+    }
+
+    function isSourceFloorSelected(selectedPickupFloors, sourceFloor) {
+        if (!selectedPickupFloors || selectedPickupFloors.size === 0) return false;
+        const normalizedSource = normalizeFloorLabel(sourceFloor);
+        if (!normalizedSource) return false;
+
+        return Array.from(selectedPickupFloors).some((floorName) => {
+            return normalizeFloorLabel(floorName) === normalizedSource;
+        });
+    }
+
+    function shouldApplyPickupFloorFilter(roomItems, selectedPickupFloors) {
+        if (!selectedPickupFloors || selectedPickupFloors.size === 0) return false;
+
+        const selectedNormalized = new Set(
+            Array.from(selectedPickupFloors)
+                .map((floorName) => normalizeFloorLabel(floorName))
+                .filter(Boolean)
+        );
+        if (selectedNormalized.size === 0) return false;
+
+        let hasOverlap = false;
+        Object.keys(roomItems).forEach((roomKey) => {
+            const items = roomItems[roomKey] || {};
+            Object.keys(items).forEach((itemKey) => {
+                if (hasOverlap) return;
+                const sourceFloor = getSourceFloorFromKey(itemKey);
+                const normalizedSource = normalizeFloorLabel(sourceFloor);
+                if (normalizedSource && selectedNormalized.has(normalizedSource)) {
+                    hasOverlap = true;
+                }
+            });
+        });
+
+        return hasOverlap;
     }
     
     // Helper function to get source floor(s) for an item
@@ -5994,11 +6417,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function isStep5DeliveryOrganizationComplete() {
+        const selectedDeliveryFloors = getSelectedDeliveryFloors();
+        const selectedPickupFloors = getSelectedPickupFloors();
         if (!selectedDeliveryFloors || selectedDeliveryFloors.size === 0) {
             return false;
         }
 
         const roomItems = getItemsByRoom();
+        const applyPickupFloorFilter = shouldApplyPickupFloorFilter(roomItems, selectedPickupFloors);
         let hasAnyInventory = false;
 
         for (const roomKey of Object.keys(roomItems)) {
@@ -6008,7 +6434,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (totalQty <= 0) continue;
 
                 const sourceFloor = getSourceFloorFromKey(itemKey);
-                if (selectedPickupFloors.size > 0 && sourceFloor !== 'Customized' && !selectedPickupFloors.has(sourceFloor)) {
+                if (applyPickupFloorFilter && sourceFloor !== 'Customized' && !isSourceFloorSelected(selectedPickupFloors, sourceFloor)) {
                     continue;
                 }
 
@@ -6114,11 +6540,13 @@ document.addEventListener('DOMContentLoaded', function () {
     // Function to render inventory with unassigned items highlighted
     function renderInventoryByRoom() {
         if (!inventoryList) return;
+        const selectedPickupFloors = getSelectedPickupFloors();
         
         // Save the current expanded state before re-rendering
         saveExpandedState();
         
         const roomItems = getItemsByRoom();
+        const applyPickupFloorFilter = shouldApplyPickupFloorFilter(roomItems, selectedPickupFloors);
         
         // First, show items with remaining quantity to assign
         const unassignedItems = [];
@@ -6132,7 +6560,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     const sourceFloor = getSourceFloorFromKey(itemKey);
                     
                     // Filter by selected pickup floors - if any floors selected, only show items from those floors
-                    if (selectedPickupFloors.size > 0 && sourceFloor !== 'Customized' && !selectedPickupFloors.has(sourceFloor)) {
+                    if (applyPickupFloorFilter && sourceFloor !== 'Customized' && !isSourceFloorSelected(selectedPickupFloors, sourceFloor)) {
                         return; // Skip items not on selected pickup floors
                     }
                     
@@ -6676,6 +7104,29 @@ document.addEventListener('DOMContentLoaded', function () {
     // Function to render room sections with floor-based delivery organization
     function renderDeliveryFloors() {
         if (!floorsGrid) return;
+        const selectedDeliveryFloors = getSelectedDeliveryFloors();
+
+        // Recovery path: if selected floors were lost but assignments still exist,
+        // rebuild selection from assigned floors so Step 5 can render correctly.
+        if (selectedDeliveryFloors.size === 0 && itemFloorAssignments && typeof itemFloorAssignments === 'object') {
+            Object.values(itemFloorAssignments).forEach((perFloor) => {
+                if (!perFloor || typeof perFloor !== 'object') return;
+                Object.keys(perFloor).forEach((floorName) => {
+                    const qty = parseInt(perFloor[floorName], 10) || 0;
+                    if (qty > 0) {
+                        selectedDeliveryFloors.add(floorName);
+                    }
+                });
+            });
+
+            // Reflect recovered selection in floor selector buttons.
+            document.querySelectorAll('#delivery-floors-selector .delivery-floor-selector-btn').forEach((btn) => {
+                const floor = (btn.getAttribute('data-floor') || '').trim();
+                const selected = !!floor && selectedDeliveryFloors.has(floor);
+                btn.classList.toggle('selected', selected);
+                btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+            });
+        }
         
         // Show/hide empty state and grid based on selected floors
         const emptyState = document.getElementById('delivery-floors-empty-state');
@@ -7251,6 +7702,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // Initialize and render the organization section when visible
     function initializeOrganizationSection() {
         if (!organizationSection) return;
+
+        if (typeof window.renderDeliveryFloorSelector === 'function') {
+            window.renderDeliveryFloorSelector();
+        }
         
         // Render the inventory and room sections immediately
         renderInventoryByRoom();
@@ -7385,6 +7840,7 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     let inventoryStickyRaf = null;
+    const MOBILE_STICKY_FOLLOW_LIMIT = 260;
 
     const getInventoryStickyTopOffset = () => {
         const nav = document.querySelector('.navbar');
@@ -7408,12 +7864,16 @@ document.addEventListener('DOMContentLoaded', function () {
             const blockTopAbs = window.scrollY + blockRect.top;
             const blockHeight = block.offsetHeight;
             const trackHeight = stickyTrack.offsetHeight;
+            const isMobileViewport = window.innerWidth <= 768;
 
             let shift = window.scrollY + stickyTop - blockTopAbs;
             const maxShift = Math.max(0, blockHeight - trackHeight - 8);
+            const cappedMaxShift = isMobileViewport
+                ? Math.min(maxShift, MOBILE_STICKY_FOLLOW_LIMIT)
+                : maxShift;
 
             if (shift < 0) shift = 0;
-            if (shift > maxShift) shift = maxShift;
+            if (shift > cappedMaxShift) shift = cappedMaxShift;
 
             stickyTrack.style.transform = `translateY(${shift}px)`;
             stickySpacer.style.height = `${trackHeight + 8}px`;
@@ -8133,19 +8593,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 
                 li.appendChild(qtyDiv);
                 
-                li.style.cursor = 'pointer';
+                li.style.cursor = 'default';
                 li.addEventListener('click', function(e) {
                     if (e.target.closest('.room-item-controls') || e.target.closest('.item-edit-btn') || e.target.closest('.item-delete-btn') || e.target.closest('.item-photo-btn') || e.target.closest('.item-photo-remove-btn')) return;
-
-                    // Only allow row-click deselection when quantity is already at least 1.
-                    const currentQty = floorQuantities[trackingKey] || 0;
-                    if (currentQty <= 0) return;
-
-                    floorQuantities[trackingKey] = 0;
-                    floorSelectedItems[trackingKey] = false;
-                    renderItems(tabName);
-                    syncFloorToGlobal();
-                    updateOrganizationIfNeeded();
+                    // Intentionally no toggle on row tap to avoid accidental resets to 0.
                 });
                 
                 ul.appendChild(li);
@@ -8181,12 +8632,24 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             });
 
-            // Quantity input field handlers (typed values require confirmation)
+            // Quantity input field handlers (typed values apply immediately)
             ul.querySelectorAll('.room-item-quantity-display').forEach(input => {
                 input.addEventListener('focus', function() {
                     const trackingKey = input.getAttribute('data-tracking-key') || input.getAttribute('data-item');
                     const currentQty = floorQuantities[trackingKey] || 0;
                     input.setAttribute('data-last-confirmed-qty', String(currentQty));
+                });
+
+                input.addEventListener('input', function(e) {
+                    e.stopPropagation();
+                    const trackingKey = input.getAttribute('data-tracking-key') || input.getAttribute('data-item');
+                    let qty = parseInt(input.value, 10);
+                    qty = Number.isNaN(qty) ? 0 : Math.max(0, qty);
+
+                    floorQuantities[trackingKey] = qty;
+                    floorSelectedItems[trackingKey] = qty > 0;
+                    syncFloorToGlobal();
+                    updateOrganizationIfNeeded();
                 });
 
                 input.addEventListener('keydown', function(e) {
@@ -8209,12 +8672,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         return;
                     }
 
-                    const confirmed = confirm(`Set "${item}" quantity to ${qty}?`);
-                    if (!confirmed) {
-                        input.value = previousQty;
-                        return;
-                    }
-
                     floorQuantities[trackingKey] = qty;
                     floorSelectedItems[trackingKey] = qty > 0;
                     renderItems(tabName);
@@ -8231,6 +8688,14 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (typeof window.updateNextButtonState === 'function') {
                 window.updateNextButtonState();
+            }
+
+            // Persist floor inventory edits automatically.
+            if (typeof window.saveStep3InventorySnapshot === 'function') {
+                window.saveStep3InventorySnapshot({ silent: true });
+            }
+            if (typeof window.saveCreateJobProgress === 'function') {
+                window.saveCreateJobProgress();
             }
         }
         
@@ -10016,10 +10481,35 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 let hasValue = true;
+
+                // Step 3 legacy hidden fields can be stale in multi-floor flow.
+                // Validate against current state instead of raw hidden input values.
+                if (step === 3 && field.type === 'hidden') {
+                    if (field.id === 'pickup-floor-select') {
+                        const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                        if (selectedFloors.length > 0) {
+                            hasValue = true;
+                        }
+                    }
+
+                    if (field.id === 'lift-available') {
+                        const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                        const hasNonGroundFloor = selectedFloors.some((floor) => {
+                            const normalized = String(floor || '').trim().toLowerCase();
+                            return normalized && normalized !== 'ground' && normalized !== 'ground floor' && !normalized.includes('ground');
+                        });
+                        const pickupLift = document.getElementById('pickup-lift-available');
+                        hasValue = !hasNonGroundFloor || !!(pickupLift && pickupLift.value && pickupLift.value.trim());
+                    }
+                }
+
                 if (field.type === 'checkbox' || field.type === 'radio') {
                     hasValue = field.checked;
                 } else {
-                    hasValue = !!field.value && field.value.trim().length > 0;
+                    // Keep Step 3 legacy override above intact.
+                    if (!(step === 3 && field.type === 'hidden' && (field.id === 'pickup-floor-select' || field.id === 'lift-available'))) {
+                        hasValue = !!field.value && field.value.trim().length > 0;
+                    }
                 }
 
                 if (!hasValue) {
@@ -10090,6 +10580,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (step < 1 || step > totalSteps) return;
             currentStep = step;
             document.body.dataset.formStep = String(step);
+            document.body.dataset.currentStep = String(step);
             setStepVisibility(step);
             updateStepSlices(step);
             updateStepperState(step);
@@ -10121,6 +10612,11 @@ document.addEventListener('DOMContentLoaded', function() {
             // Update sticky next button state for new step
             if (typeof window.updateNextButtonState === 'function') {
                 window.updateNextButtonState();
+            }
+
+            // Persist immediately to avoid refresh timing gaps.
+            if (typeof window.saveCreateJobProgress === 'function') {
+                window.saveCreateJobProgress();
             }
         };
         
@@ -10158,7 +10654,10 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        setFormStep(1);
+        const initialStep = Number.isFinite(parseInt(window.__createJobRestoreTargetStep, 10))
+            ? Math.max(1, Math.min(totalSteps, parseInt(window.__createJobRestoreTargetStep, 10)))
+            : 1;
+        setFormStep(initialStep);
         
         // Add listeners to update submit button visibility when fields change
         if (quoteForm) {
@@ -10533,10 +11032,35 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 let hasValue = true;
+
+                // Step 3 legacy hidden fields can be stale in multi-floor flow.
+                // Validate against current state instead of raw hidden input values.
+                if (step === 3 && field.type === 'hidden') {
+                    if (field.id === 'pickup-floor-select') {
+                        const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                        if (selectedFloors.length > 0) {
+                            hasValue = true;
+                        }
+                    }
+
+                    if (field.id === 'lift-available') {
+                        const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                        const hasNonGroundFloor = selectedFloors.some((floor) => {
+                            const normalized = String(floor || '').trim().toLowerCase();
+                            return normalized && normalized !== 'ground' && normalized !== 'ground floor' && !normalized.includes('ground');
+                        });
+                        const pickupLift = document.getElementById('pickup-lift-available');
+                        hasValue = !hasNonGroundFloor || !!(pickupLift && pickupLift.value && pickupLift.value.trim());
+                    }
+                }
+
                 if (field.type === 'checkbox' || field.type === 'radio') {
                     hasValue = field.checked;
                 } else {
-                    hasValue = !!field.value && field.value.trim().length > 0;
+                    // Keep Step 3 legacy override above intact.
+                    if (!(step === 3 && field.type === 'hidden' && (field.id === 'pickup-floor-select' || field.id === 'lift-available'))) {
+                        hasValue = !!field.value && field.value.trim().length > 0;
+                    }
                 }
 
                 if (!hasValue) {
@@ -10607,6 +11131,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (step < 1 || step > totalSteps) return;
             currentStep = step;
             document.body.dataset.formStep = String(step);
+            document.body.dataset.currentStep = String(step);
             setStepVisibility(step);
             updateStepperState(step);
             updateStepButtons();
@@ -10637,6 +11162,11 @@ document.addEventListener('DOMContentLoaded', function() {
             // Update sticky next button state for new step
             if (typeof window.updateNextButtonState === 'function') {
                 window.updateNextButtonState();
+            }
+
+            // Persist immediately to avoid refresh timing gaps.
+            if (typeof window.saveCreateJobProgress === 'function') {
+                window.saveCreateJobProgress();
             }
         };
         
@@ -10674,7 +11204,10 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        setFormStep(1);
+        const initialStep = Number.isFinite(parseInt(window.__createJobRestoreTargetStep, 10))
+            ? Math.max(1, Math.min(totalSteps, parseInt(window.__createJobRestoreTargetStep, 10)))
+            : 1;
+        setFormStep(initialStep);
         
         // Add listeners to update submit button visibility when fields change
         if (quoteForm) {
@@ -16905,7 +17438,7 @@ function updateOverviewRouteLabels() {
         const cityRoute = document.getElementById('overview-route-cities');
         if (pointA) pointA.textContent = firstAddress || '—';
         if (pointB) pointB.textContent = lastAddress || '—';
-        if (cityRoute) cityRoute.textContent = stops.length > 1 ? 'Stop 1 → Final Stop' : 'A → B';
+        if (cityRoute) cityRoute.textContent = stops.length > 1 ? 'Stop 1 → Final Stop' : 'Pickup → Delivery';
         return;
     }
 

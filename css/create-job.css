@@ -830,7 +830,13 @@ body[data-form-step="3"] #house-removal-inventory-section > #room-items-containe
     object-fit: contain;
     display: block;
 }
-body[data-form-step="3"] .pickup-floors-image {
+/* Keep pickup floors image hidden by default; show only when Step 3 wrapper is actively visible. */
+#pickup-room-list-wrapper .pickup-floors-image {
+    display: none !important;
+}
+
+body[data-form-step="3"] #pickup-room-list-wrapper:not(.step-hidden) .pickup-floors-image,
+body[data-current-step="3"] #pickup-room-list-wrapper:not(.step-hidden) .pickup-floors-image {
     display: flex !important;
 }
 /* Step 3 Pickup Room Form Layout Improvements */
@@ -878,8 +884,9 @@ body[data-current-step="3"].house-removals-active #house-removal-inventory-secti
 }
 
 
-body[data-form-step="5"] .pickup-floors-image {
-    display: flex !important;
+body[data-form-step="5"] .pickup-floors-image,
+body[data-current-step="5"] .pickup-floors-image {
+    display: none !important;
 }
 
 /* Delivery Floors Image Styling (Step 5) */
@@ -930,12 +937,12 @@ body[data-form-step="5"] .pickup-floors-image {
     border-radius: 0 16px 16px 0;
 }
 
-body[data-form-step="5"] .delivery-floors-image {
-    display: flex !important;
-}
-
-body[data-form-step="5"] #delivery-room-list {
-    display: block !important;
+/* Legacy Step 5 delivery image/list wrapper is no longer used (replaced by item organization UI).
+   Force-hide it to prevent image artifacts behind the active card. */
+#delivery-room-list-wrapper,
+#delivery-room-list-wrapper .delivery-floors-image,
+#delivery-room-list-wrapper #delivery-room-list {
+    display: none !important;
 }
 
 @media (max-width: 900px) {
@@ -2441,6 +2448,23 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     margin-bottom: 4px;
     color: #334155;
     font-size: 0.92rem;
+}
+
+.overview-route-marker {
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    margin-top: 3px;
+    flex: 0 0 14px;
+    box-shadow: 0 0 0 2px #ffffff, 0 1px 4px rgba(15, 23, 42, 0.22);
+}
+
+.overview-route-marker-pickup {
+    background: #ef4444;
+}
+
+.overview-route-marker-delivery {
+    background: #22c55e;
 }
 
 .overview-inventory-grid {
@@ -4449,6 +4473,29 @@ input[type="file"]:focus {
         font-size: 1rem !important;
         min-width: 88px !important;
     }
+
+    #service-requirements-section .service-requirement-card {
+        padding: 12px !important;
+    }
+
+    #service-requirements-section .service-requirement-options {
+        gap: 0.6rem !important;
+    }
+
+    #service-requirements-section .packing-mode-btn,
+    #service-requirements-section .packing-box-provider-btn {
+        width: 100% !important;
+        text-align: left !important;
+        padding: 10px 12px !important;
+    }
+
+    #service-requirements-section #packing-items-config {
+        padding: 8px !important;
+    }
+
+    #service-requirements-section #packing-items-list {
+        gap: 8px !important;
+    }
 }
 
 @media (max-width: 480px) {
@@ -4470,6 +4517,16 @@ input[type="file"]:focus {
 }
 
 /* Final visibility locks for Step 3 service split */
+body:not([data-form-step="3"]) #inventory-card-container,
+body:not([data-current-step="3"]) #inventory-card-container {
+    display: none !important;
+}
+
+body:not([data-form-step="3"]) #house-removal-inventory-section,
+body:not([data-current-step="3"]) #house-removal-inventory-section {
+    display: none !important;
+}
+
 body[data-form-step="3"]:not(.house-removals-active) #house-removal-inventory-section,
 body[data-current-step="3"]:not(.house-removals-active) #house-removal-inventory-section {
     display: none !important;

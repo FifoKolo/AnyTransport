@@ -106,7 +106,7 @@
                             </div>
                         <!-- Step 1 removed: Service selection now handled on landing page -->
                         <!-- Step 3 Title placed above the form, only visible for step 3 -->
-                        <div class="step-title-wrapper" id="step3-title-wrapper" style="display:none;">
+                        <div class="step-title-wrapper" id="step3-title-wrapper" data-form-step="3" style="display:none;">
                             <h2 class="section-title" style="text-align:center; margin-bottom:2rem;">Step 3: Please select all the floors you are moving from (multiple selections available)</h2>
                         </div>
                         <!-- Step 1: Destinations (Map) -->
@@ -1980,12 +1980,12 @@
                                         <button type="button" class="overview-edit-btn" data-edit-step="4">Edit</button>
                                     </div>
                                     <div class="overview-item">
-                                        <div class="overview-item-label">Pickup Elevator Status</div>
+                                        <div class="overview-item-label">Pickup Lift Status</div>
                                         <div class="overview-item-value" id="summary-pickup-elevator">—</div>
                                         <button type="button" class="overview-edit-btn" data-edit-step="2">Edit</button>
                                     </div>
                                     <div class="overview-item">
-                                        <div class="overview-item-label">Delivery Elevator Status</div>
+                                        <div class="overview-item-label">Delivery Lift Status</div>
                                         <div class="overview-item-value" id="summary-delivery-elevator">—</div>
                                         <button type="button" class="overview-edit-btn" data-edit-step="4">Edit</button>
                                     </div>
@@ -2048,8 +2048,8 @@
 
                                 <div class="overview-route-card">
                                     <h3 style="margin:0 0 10px 0; color:#0f172a; font-size:1.05rem;">Route Overview</h3>
-                                    <div class="overview-route-line"><strong>A</strong> <span id="overview-point-a">—</span></div>
-                                    <div class="overview-route-line"><strong>B</strong> <span id="overview-point-b">—</span></div>
+                                    <div class="overview-route-line"><span class="overview-route-marker overview-route-marker-pickup" aria-hidden="true"></span> <span id="overview-point-a">—</span></div>
+                                    <div class="overview-route-line"><span class="overview-route-marker overview-route-marker-delivery" aria-hidden="true"></span> <span id="overview-point-b">—</span></div>
                                     <div class="overview-route-line" style="font-weight:700; color:#1e3a8a;"><span id="overview-route-cities">A → B</span></div>
                                     <div id="overview-route-map" style="width:100%; height:260px; border:1px solid #dbeafe; border-radius:10px; margin-top:10px;"></div>
                                 </div>
