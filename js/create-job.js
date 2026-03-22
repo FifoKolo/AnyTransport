@@ -31,7 +31,10 @@ function initTransportDatePicker() {
     const state = {
         view: 'main',
         month: new Date(todayStart.getFullYear(), todayStart.getMonth(), 1),
-        rangeStart: null
+        rangeStart: null,
+        rangeEnd: null,
+        rangeStartMonth: new Date(todayStart.getFullYear(), todayStart.getMonth(), 1),
+        rangeEndMonth: new Date(todayStart.getFullYear(), todayStart.getMonth() + 1, 1)
     };
 
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -106,13 +109,16 @@ function initTransportDatePicker() {
 
     function closePanel() {
         panel.classList.remove('active');
+        panel.classList.remove('between-mode');
         trigger.setAttribute('aria-expanded', 'false');
         state.view = 'main';
         state.rangeStart = null;
+        state.rangeEnd = null;
     }
 
     function renderMainOptions() {
         state.view = 'main';
+        panel.classList.remove('between-mode');
         panel.innerHTML = `
             <div class="transport-date-options">
                 ${optionItems.map((item) => `
@@ -148,8 +154,10 @@ function initTransportDatePicker() {
 
                 if (item.target === 'between') {
                     state.rangeStart = null;
-                    state.month = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
-                    renderCalendar('range-start');
+                    state.rangeEnd = null;
+                    state.rangeStartMonth = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+                    state.rangeEndMonth = new Date(todayStart.getFullYear(), todayStart.getMonth() + 1, 1);
+                    renderBetweenCalendars();
                 }
             });
         });
@@ -157,6 +165,7 @@ function initTransportDatePicker() {
 
     function renderUrgentOptions() {
         state.view = 'urgent';
+        panel.classList.remove('between-mode');
         panel.innerHTML = `
             <div class="transport-date-header">
                 <div class="transport-date-header-top">
@@ -182,34 +191,161 @@ function initTransportDatePicker() {
         });
     }
 
-    function buildCalendarGrid(viewType) {
-        const monthStart = new Date(state.month.getFullYear(), state.month.getMonth(), 1);
+    function buildCalendarGrid(monthDate, config = {}) {
+        const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
         const startDayOffset = (monthStart.getDay() + 6) % 7;
         const gridStart = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1 - startDayOffset);
+        const {
+            allowPastDates = false,
+            disableBeforeDate = null,
+            selectedDate = null,
+            dataAttrs = ''
+        } = config;
 
         const buttons = [];
         for (let i = 0; i < 42; i += 1) {
             const date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i);
-            const isOtherMonth = date.getMonth() !== state.month.getMonth();
-            const isPastDate = normalizeDate(date) < todayStart;
-            const isBeforeRangeStart = viewType === 'range-end' && state.rangeStart && normalizeDate(date) < state.rangeStart;
-            const isDisabled = isPastDate || isBeforeRangeStart;
+            const normalizedDate = normalizeDate(date);
+            const isOtherMonth = date.getMonth() !== monthStart.getMonth();
+            const isPastDate = !allowPastDates && normalizedDate < todayStart;
+            const isBeforeLimit = !!disableBeforeDate && normalizedDate < disableBeforeDate;
+            const isDisabled = isPastDate || isBeforeLimit;
 
             const classes = ['transport-date-day'];
             if (isOtherMonth) classes.push('other-month');
             if (isDisabled) classes.push('disabled');
-            if (sameDate(state.rangeStart, date)) classes.push('selected');
+            if (sameDate(selectedDate, date)) classes.push('selected');
 
             buttons.push(`
-                <button type="button" class="${classes.join(' ')}" data-calendar-date="${toIsoDate(date)}" ${isDisabled ? 'disabled' : ''}>${date.getDate()}</button>
+                <button type="button" class="${classes.join(' ')}" data-calendar-date="${toIsoDate(date)}" ${dataAttrs} ${isDisabled ? 'disabled' : ''}>${date.getDate()}</button>
             `);
         }
 
         return buttons.join('');
     }
 
+    function renderBetweenCalendars() {
+        state.view = 'between';
+        panel.classList.add('between-mode');
+
+        panel.innerHTML = `
+            <div class="transport-date-header">
+                <div class="transport-date-header-top">
+                    <button type="button" class="transport-date-back" data-td-back="1"><span class="transport-date-back-label">‹</span><span class="transport-date-back-text">Back</span></button>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <button type="button" class="transport-date-close" data-td-close-text="1">Close</button>
+                        <button type="button" class="transport-date-close-icon" data-td-close-icon="1">×</button>
+                    </div>
+                </div>
+            </div>
+            <div class="transport-date-between-layout">
+                <div class="transport-date-calendar-wrap transport-date-calendar-wrap-between">
+                    <div class="transport-date-calendar-title">Beginning date</div>
+                    <div class="transport-date-calendar-month-row">
+                        <button type="button" class="transport-date-month-nav" data-range-month="start" data-range-dir="prev">‹</button>
+                        <div class="transport-date-month-label">${new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(state.rangeStartMonth)}</div>
+                        <button type="button" class="transport-date-month-nav" data-range-month="start" data-range-dir="next">›</button>
+                    </div>
+                    <div class="transport-date-weekdays">
+                        ${weekdays.map((day) => `<div class="transport-date-weekday">${day}</div>`).join('')}
+                    </div>
+                    <div class="transport-date-days-grid">
+                        ${buildCalendarGrid(state.rangeStartMonth, {
+                            selectedDate: state.rangeStart,
+                            dataAttrs: 'data-range-target="start"'
+                        })}
+                    </div>
+                </div>
+
+                <div class="transport-date-calendar-wrap transport-date-calendar-wrap-between">
+                    <div class="transport-date-calendar-title">End date</div>
+                    <div class="transport-date-calendar-month-row">
+                        <button type="button" class="transport-date-month-nav" data-range-month="end" data-range-dir="prev">‹</button>
+                        <div class="transport-date-month-label">${new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(state.rangeEndMonth)}</div>
+                        <button type="button" class="transport-date-month-nav" data-range-month="end" data-range-dir="next">›</button>
+                    </div>
+                    <div class="transport-date-weekdays">
+                        ${weekdays.map((day) => `<div class="transport-date-weekday">${day}</div>`).join('')}
+                    </div>
+                    <div class="transport-date-days-grid">
+                        ${buildCalendarGrid(state.rangeEndMonth, {
+                            selectedDate: state.rangeEnd,
+                            disableBeforeDate: state.rangeStart,
+                            dataAttrs: 'data-range-target="end"'
+                        })}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const backButton = panel.querySelector('[data-td-back="1"]');
+        if (backButton) {
+            backButton.addEventListener('click', renderMainOptions);
+        }
+
+        const closeTextButton = panel.querySelector('[data-td-close-text="1"]');
+        const closeIconButton = panel.querySelector('[data-td-close-icon="1"]');
+        [closeTextButton, closeIconButton].forEach((button) => {
+            if (button) {
+                button.addEventListener('click', closePanel);
+            }
+        });
+
+        panel.querySelectorAll('[data-range-month]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const target = button.getAttribute('data-range-month');
+                const dir = button.getAttribute('data-range-dir');
+                if (!target || !dir) return;
+                const delta = dir === 'prev' ? -1 : 1;
+                if (target === 'start') {
+                    state.rangeStartMonth = new Date(state.rangeStartMonth.getFullYear(), state.rangeStartMonth.getMonth() + delta, 1);
+                } else {
+                    state.rangeEndMonth = new Date(state.rangeEndMonth.getFullYear(), state.rangeEndMonth.getMonth() + delta, 1);
+                }
+                renderBetweenCalendars();
+            });
+        });
+
+        panel.querySelectorAll('[data-calendar-date][data-range-target]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const iso = button.getAttribute('data-calendar-date');
+                const target = button.getAttribute('data-range-target');
+                if (!iso || !target) return;
+                const [year, month, day] = iso.split('-').map(Number);
+                const selectedDate = normalizeDate(new Date(year, month - 1, day));
+
+                if (target === 'start') {
+                    state.rangeStart = selectedDate;
+                    if (state.rangeEnd && state.rangeEnd < selectedDate) {
+                        state.rangeEnd = null;
+                    }
+                    state.rangeStartMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                    if (!state.rangeEnd || state.rangeEnd < selectedDate) {
+                        state.rangeEndMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                    }
+                    renderBetweenCalendars();
+                    return;
+                }
+
+                if (target === 'end') {
+                    if (!state.rangeStart || selectedDate < state.rangeStart) {
+                        return;
+                    }
+                    state.rangeEnd = selectedDate;
+                    state.rangeEndMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+
+                    const fromText = formatDateDisplay(state.rangeStart);
+                    const toText = formatDateDisplay(state.rangeEnd);
+                    updateTransportDate(`Between Dates: ${fromText} - ${toText}`);
+                    closePanel();
+                }
+            });
+        });
+    }
+
     function renderCalendar(viewType) {
         state.view = viewType;
+        panel.classList.remove('between-mode');
         const isRangeStart = viewType === 'range-start';
         const isRangeEnd = viewType === 'range-end';
         const title = isRangeStart ? 'Select first date' : isRangeEnd ? 'Select second date' : 'Select date';
@@ -235,7 +371,9 @@ function initTransportDatePicker() {
                     ${weekdays.map((day) => `<div class="transport-date-weekday">${day}</div>`).join('')}
                 </div>
                 <div class="transport-date-days-grid">
-                    ${buildCalendarGrid(viewType)}
+                    ${buildCalendarGrid(state.month, {
+                        selectedDate: null
+                    })}
                 </div>
             </div>
         `;
@@ -243,11 +381,7 @@ function initTransportDatePicker() {
         const backButton = panel.querySelector('[data-td-back="1"]');
         if (backButton) {
             backButton.addEventListener('click', () => {
-                if (isRangeEnd) {
-                    renderCalendar('range-start');
-                } else {
-                    renderMainOptions();
-                }
+                renderMainOptions();
             });
         }
 
@@ -287,20 +421,6 @@ function initTransportDatePicker() {
                     closePanel();
                     return;
                 }
-
-                if (viewType === 'range-start') {
-                    state.rangeStart = normalizeDate(selectedDate);
-                    state.month = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-                    renderCalendar('range-end');
-                    return;
-                }
-
-                if (viewType === 'range-end' && state.rangeStart) {
-                    const fromText = formatDateDisplay(state.rangeStart);
-                    const toText = formatDateDisplay(selectedDate);
-                    updateTransportDate(`Between Dates: ${fromText} - ${toText}`);
-                    closePanel();
-                }
             });
         });
     }
@@ -336,84 +456,6 @@ function initTransportDatePicker() {
     });
 
     syncFromHiddenInput();
-}
-
-function ensureLiftPromptModal() {
-    let modal = document.getElementById('lift-prompt-modal');
-    if (modal) return modal;
-
-    modal = document.createElement('div');
-    modal.id = 'lift-prompt-modal';
-    modal.style.cssText = `
-        position: fixed;
-        inset: 0;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        background: rgba(15, 23, 42, 0.5);
-        z-index: 14000;
-        padding: 16px;
-    `;
-
-    modal.innerHTML = `
-        <div style="width:min(460px, 100%);background:#fff;border-radius:14px;padding:22px;border:1px solid #dbeafe;box-shadow:0 18px 44px rgba(15, 23, 42, 0.28);">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;">
-                <div>
-                    <h3 id="lift-prompt-title" style="margin:0;font-size:1.2rem;color:#0f172a;font-weight:800;">Lift availability</h3>
-                    <p id="lift-prompt-copy" style="margin:8px 0 0 0;font-size:0.95rem;line-height:1.45;color:#475569;"></p>
-                </div>
-                <button type="button" data-lift-modal-close="1" style="border:none;background:transparent;color:#64748b;font-size:1.4rem;line-height:1;cursor:pointer;padding:0;">&times;</button>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px;">
-                <button type="button" data-lift-value="yes" style="border:1px solid #86efac;background:#f0fdf4;color:#166534;border-radius:10px;padding:12px 14px;font-size:0.98rem;font-weight:700;cursor:pointer;text-align:left;">Yes, there is a lift</button>
-                <button type="button" data-lift-value="no" style="border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;border-radius:10px;padding:12px 14px;font-size:0.98rem;font-weight:700;cursor:pointer;text-align:left;">No, there is no lift</button>
-            </div>
-            <div style="display:flex;justify-content:flex-end;margin-top:14px;">
-                <button type="button" data-lift-modal-cancel="1" style="border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:8px;padding:8px 12px;font-weight:600;cursor:pointer;">Cancel</button>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(modal);
-    return modal;
-}
-
-function openLiftPrompt(options = {}) {
-    const modal = ensureLiftPromptModal();
-    const title = modal.querySelector('#lift-prompt-title');
-    const copy = modal.querySelector('#lift-prompt-copy');
-    const contextLabel = options.contextLabel === 'delivery' ? 'delivery' : 'pickup';
-    const propertyLabel = options.propertyLabel || 'this property';
-
-    if (title) {
-        title.textContent = contextLabel === 'delivery' ? 'Delivery lift' : 'Pickup lift';
-    }
-    if (copy) {
-        copy.textContent = `For the selected ${contextLabel} property type (${propertyLabel}), is there a lift available?`;
-    }
-
-    modal.style.display = 'flex';
-
-    return new Promise((resolve) => {
-        const cleanup = (value) => {
-            modal.style.display = 'none';
-            modal.querySelectorAll('[data-lift-value], [data-lift-modal-close], [data-lift-modal-cancel]').forEach((button) => {
-                button.replaceWith(button.cloneNode(true));
-            });
-            resolve(value);
-        };
-
-        const refreshedModal = document.getElementById('lift-prompt-modal');
-        refreshedModal.querySelector('[data-lift-value="yes"]').addEventListener('click', () => cleanup('yes'));
-        refreshedModal.querySelector('[data-lift-value="no"]').addEventListener('click', () => cleanup('no'));
-        refreshedModal.querySelector('[data-lift-modal-close]').addEventListener('click', () => cleanup(null));
-        refreshedModal.querySelector('[data-lift-modal-cancel]').addEventListener('click', () => cleanup(null));
-        refreshedModal.onclick = (event) => {
-            if (event.target === refreshedModal) {
-                cleanup(null);
-            }
-        };
-    });
 }
 
 function renderPickupliftIcons() {
@@ -802,15 +844,23 @@ document.addEventListener('DOMContentLoaded', function () {
     function renderRoomItems(room) {
         const container = document.getElementById('room-items-container');
         if (!container) return;
+        const isMobileAccordion = window.matchMedia('(max-width: 768px)').matches;
         let items = room ? ROOM_ITEMS[room].slice() : null;
         // Add custom items for this room
         if (room && customItems[room]) {
             items = items.concat(customItems[room]);
         }
         if (!items) {
-            container.innerHTML = '<div class="room-empty-state">Select a room icon to view items.</div>';
+            if (isMobileAccordion) {
+                container.innerHTML = '';
+                container.style.display = 'none';
+            } else {
+                container.innerHTML = '<div class="room-empty-state">Select a room icon to view items.</div>';
+                container.style.display = '';
+            }
             return;
         }
+        container.style.display = '';
         let html = '<ul class="inventory-items-list">';
         items.forEach(item => {
             const trackingKey = getItemTrackingKey(item, room);
@@ -1252,20 +1302,79 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Room tab logic
     const roomTabs = document.querySelectorAll('#room-tabs .inventory-tab');
+    const roomTabsContainer = document.getElementById('room-tabs');
+    const isMobileInventoryAccordion = () => window.matchMedia('(max-width: 768px)').matches;
+    let lastBaseAccordionTapAt = 0;
+    const getMobileBaseOpenRoom = () => window.__mobileBaseInventoryOpenRoom || '';
+    const setMobileBaseOpenRoom = (room) => {
+        window.__mobileBaseInventoryOpenRoom = room || '';
+    };
+    const updateMobileBaseInventoryTabsState = () => {
+        if (!roomTabsContainer) return;
+        const shouldCollapseOthers = isMobileInventoryAccordion() && !!currentRoom;
+        roomTabsContainer.classList.toggle('mobile-accordion-open', shouldCollapseOthers);
+        roomTabs.forEach((tabButton) => {
+            const room = tabButton.getAttribute('data-room') || '';
+            const hide = shouldCollapseOthers && room !== currentRoom;
+            tabButton.classList.toggle('is-mobile-hidden', hide);
+        });
+    };
+
     roomTabs.forEach(tab => {
         tab.addEventListener('click', function() {
-            roomTabs.forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
             const room = tab.getAttribute('data-room');
+            const isMobile = isMobileInventoryAccordion();
+
+            if (isMobile) {
+                const now = Date.now();
+                if (now - lastBaseAccordionTapAt < 220) {
+                    return;
+                }
+                lastBaseAccordionTapAt = now;
+
+                if (currentRoom === room) {
+                    roomTabs.forEach((t) => t.classList.remove('active'));
+                    currentRoom = '';
+                    window.currentRoom = null;
+                    setMobileBaseOpenRoom('');
+                    renderRoomItems(null);
+                    updateMobileBaseInventoryTabsState();
+                    return;
+                }
+            }
+
+            roomTabs.forEach(t => t.classList.remove('active'));
+
+            tab.classList.add('active');
             currentRoom = room;
             window.currentRoom = room; // Make currentRoom accessible globally for custom item modal
+            if (isMobileInventoryAccordion()) {
+                setMobileBaseOpenRoom(room);
+            }
             renderRoomItems(room);
+            updateMobileBaseInventoryTabsState();
         });
     });
 
     // Render default state
-    window.currentRoom = null;
-    renderRoomItems(null);
+    const initialMobileRoom = isMobileInventoryAccordion() ? getMobileBaseOpenRoom() : '';
+    if (initialMobileRoom) {
+        const matchingTab = Array.from(roomTabs).find((tabButton) => tabButton.getAttribute('data-room') === initialMobileRoom);
+        if (matchingTab) {
+            roomTabs.forEach((t) => t.classList.remove('active'));
+            matchingTab.classList.add('active');
+            currentRoom = initialMobileRoom;
+            window.currentRoom = initialMobileRoom;
+            renderRoomItems(initialMobileRoom);
+        } else {
+            window.currentRoom = null;
+            renderRoomItems(null);
+        }
+    } else {
+        window.currentRoom = null;
+        renderRoomItems(null);
+    }
+    updateMobileBaseInventoryTabsState();
 
     // (Optional) Attach plus/minus logic to all inventory items (default and custom) after DOM loads
     // ...removed legacy attachInventoryItemToggles();
@@ -1511,6 +1620,12 @@ function updateStep3InventoryWarning() {
     const inventoryCardContainer = document.getElementById('inventory-card-container');
     if (!inventoryCardContainer) return;
 
+    const inventorySection = document.getElementById('house-removal-inventory-section');
+    const warningHost = inventorySection || inventoryCardContainer;
+    const warningAnchor = inventorySection
+        ? (inventorySection.querySelector('.inventory-floor-title') || inventorySection.firstElementChild || null)
+        : (inventoryCardContainer.firstElementChild || null);
+
     let warningEl = document.getElementById('step3-inventory-warning');
     if (!warningEl) {
         warningEl = document.createElement('div');
@@ -1526,7 +1641,14 @@ function updateStep3InventoryWarning() {
             font-size: 0.9rem;
             font-weight: 600;
         `;
-        inventoryCardContainer.insertBefore(warningEl, inventoryCardContainer.firstChild);
+    }
+
+    if (warningAnchor) {
+        if (warningEl.parentElement !== warningHost || warningEl.nextElementSibling !== warningAnchor) {
+            warningHost.insertBefore(warningEl, warningAnchor);
+        }
+    } else if (warningEl.parentElement !== warningHost) {
+        warningHost.appendChild(warningEl);
     }
 
     const isStep3 = (document.body.getAttribute('data-form-step') === '3' || document.body.getAttribute('data-current-step') === '3');
@@ -1650,31 +1772,38 @@ document.addEventListener('DOMContentLoaded', function () {
                 const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
                     .map((btn) => (btn.getAttribute('data-floor') || '').trim())
                     .filter(Boolean);
-                const legacyFloorValue = (document.getElementById('pickup-floor-select')?.value || '').trim();
-
-                // Fallback to persisted multi-floor keys when selectedPickupFloors is stale.
-                const inventoryFloors = (window.multiFloorInventory && typeof window.multiFloorInventory === 'object')
-                    ? Object.entries(window.multiFloorInventory)
-                        .filter(([, items]) => {
-                            if (!items || typeof items !== 'object') return false;
-                            return Object.values(items).some((qty) => (parseInt(qty, 10) || 0) > 0);
-                        })
-                        .map(([floor]) => floor)
-                    : [];
-
                 const effectiveFloors = selectedFloors.length > 0
                     ? selectedFloors
-                    : (domSelectedFloors.length > 0
-                        ? domSelectedFloors
-                        : (inventoryFloors.length > 0
-                            ? inventoryFloors
-                            : (legacyFloorValue ? [legacyFloorValue] : [])));
+                    : domSelectedFloors;
                 if (effectiveFloors.length === 0) {
                     return false;
                 }
 
-                if (isInventoryInputRequiredForStep3() && !hasAnyInventorySelection()) {
+                const hasNonGroundFloor = effectiveFloors.some((floor) => {
+                    const normalized = String(floor || '').trim().toLowerCase();
+                    return normalized && normalized !== 'ground' && normalized !== 'ground floor' && !normalized.includes('ground');
+                });
+                const pickupLift = document.getElementById('pickup-lift-available');
+                if (hasNonGroundFloor && !(pickupLift && pickupLift.value && pickupLift.value.trim())) {
                     return false;
+                }
+
+                if (isInventoryInputRequiredForStep3()) {
+                    const missingFloors = effectiveFloors.filter((floorName) => {
+                        const floorItems = window.multiFloorInventory && window.multiFloorInventory[floorName];
+                        if (!floorItems || typeof floorItems !== 'object') {
+                            return true;
+                        }
+                        return !Object.values(floorItems).some((qty) => (parseInt(qty, 10) || 0) > 0);
+                    });
+
+                    if (missingFloors.length > 0) {
+                        return false;
+                    }
+
+                    if (!hasAnyInventorySelection()) {
+                        return false;
+                    }
                 }
                 
                 return true;
@@ -2062,6 +2191,9 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         };
         const handleHomeClick = function () {
+            if (typeof window.clearCreateJobProgress === 'function') {
+                window.clearCreateJobProgress();
+            }
             window.location.assign('index.html');
         };
         if (homeBtnTop) {
@@ -4361,8 +4493,12 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
 // --- Simple Draft Persistence ---
 (function setupSimpleCreateJobDraft() {
-    const DRAFT_KEY = 'anytransport_simple_create_job_draft_v1';
-    const DRAFT_FULL_KEY = 'anytransport_simple_create_job_draft_full_v1';
+    const DRAFT_KEY_BASE = 'anytransport_simple_create_job_draft_v1';
+    const DRAFT_FULL_KEY_BASE = 'anytransport_simple_create_job_draft_full_v1';
+    const LAST_SCOPE_KEY = 'anytransport_simple_create_job_draft_scope_v1';
+    const EXIT_PURGE_FLAG_KEY = 'anytransport_create_job_exit_purge_pending_v1';
+    const LEGACY_DRAFT_KEY = 'anytransport_simple_create_job_draft_v1';
+    const LEGACY_DRAFT_FULL_KEY = 'anytransport_simple_create_job_draft_full_v1';
     const WINDOW_NAME_PREFIX = 'ANYTRANSPORT_CREATE_JOB_DRAFT::';
     let saveTimer = null;
     let isRestoring = false;
@@ -4448,6 +4584,104 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null;
     };
 
+    const removePersistedValue = (key) => {
+        try {
+            localStorage.removeItem(key);
+        } catch (error) {
+            // Ignore and continue fallback attempts.
+        }
+
+        try {
+            sessionStorage.removeItem(key);
+        } catch (error) {
+            // Ignore and continue fallback attempts.
+        }
+
+        const store = readWindowNameStore();
+        if (Object.prototype.hasOwnProperty.call(store, key)) {
+            delete store[key];
+            writeWindowNameStore(store);
+        }
+    };
+
+    const removePersistedValuesByPrefix = (prefix) => {
+        const removeFromStorage = (storage) => {
+            try {
+                for (let idx = storage.length - 1; idx >= 0; idx -= 1) {
+                    const storageKey = storage.key(idx);
+                    if (storageKey && storageKey.startsWith(prefix)) {
+                        storage.removeItem(storageKey);
+                    }
+                }
+            } catch (error) {
+                // Ignore storage iteration failures.
+            }
+        };
+
+        removeFromStorage(localStorage);
+        removeFromStorage(sessionStorage);
+
+        const store = readWindowNameStore();
+        let changed = false;
+        Object.keys(store).forEach((storageKey) => {
+            if (storageKey.startsWith(prefix)) {
+                delete store[storageKey];
+                changed = true;
+            }
+        });
+        if (changed) {
+            writeWindowNameStore(store);
+        }
+    };
+
+    const setExitPurgePending = () => {
+        try {
+            sessionStorage.setItem(EXIT_PURGE_FLAG_KEY, String(Date.now()));
+        } catch (error) {
+            // Ignore storage write failures.
+        }
+    };
+
+    const clearExitPurgePending = () => {
+        try {
+            sessionStorage.removeItem(EXIT_PURGE_FLAG_KEY);
+        } catch (error) {
+            // Ignore storage removal failures.
+        }
+    };
+
+    const hasExitPurgePending = () => {
+        try {
+            return !!sessionStorage.getItem(EXIT_PURGE_FLAG_KEY);
+        } catch (error) {
+            return false;
+        }
+    };
+
+    const getNavigationType = () => {
+        try {
+            const entries = typeof performance.getEntriesByType === 'function'
+                ? performance.getEntriesByType('navigation')
+                : [];
+            if (entries && entries.length && entries[0] && entries[0].type) {
+                return entries[0].type;
+            }
+        } catch (error) {
+            // Ignore and fallback.
+        }
+
+        try {
+            if (performance && performance.navigation) {
+                if (performance.navigation.type === 1) return 'reload';
+                if (performance.navigation.type === 2) return 'back_forward';
+            }
+        } catch (error) {
+            // Ignore and fallback.
+        }
+
+        return 'navigate';
+    };
+
     const parseDraftValue = (raw) => {
         if (!raw) return null;
 
@@ -4459,11 +4693,180 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         }
     };
 
-    const getSavedDraft = () => parseDraftValue(readPersistedValue(DRAFT_KEY));
-    const getSavedFullDraft = () => parseDraftValue(readPersistedValue(DRAFT_FULL_KEY));
+    const normalizeServiceScope = (rawValue) => {
+        const normalized = String(rawValue || '')
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+        return normalized;
+    };
+
+    const getServiceFromUrl = () => {
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            const fromUrl = params.get('service');
+            return fromUrl ? decodeURIComponent(fromUrl) : '';
+        } catch (error) {
+            return '';
+        }
+    };
+
+    const getServiceFromForm = () => {
+        const hidden = document.getElementById('item-description-hidden') || document.getElementById('create-job-hidden');
+        const value = hidden && typeof hidden.value === 'string' ? hidden.value.trim() : '';
+        return value;
+    };
+
+    const getServiceFromPrefill = () => {
+        try {
+            const raw = localStorage.getItem('anytransport_quote_prefill');
+            if (!raw) return '';
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed.itemType === 'string' ? parsed.itemType.trim() : '';
+        } catch (error) {
+            return '';
+        }
+    };
+
+    const getRequestedServiceScope = () => {
+        const fromUrl = normalizeServiceScope(getServiceFromUrl());
+        if (fromUrl) return fromUrl;
+
+        const fromPrefill = normalizeServiceScope(getServiceFromPrefill());
+        if (fromPrefill) return fromPrefill;
+
+        return '';
+    };
+
+    const getActiveServiceScope = () => {
+        const fromForm = normalizeServiceScope(getServiceFromForm());
+        if (fromForm) return fromForm;
+
+        const requested = getRequestedServiceScope();
+        if (requested) return requested;
+
+        return 'global';
+    };
+
+    const getLastSavedScope = () => {
+        const raw = readPersistedValue(LAST_SCOPE_KEY);
+        return normalizeServiceScope(raw);
+    };
+
+    const getRestoreScope = () => {
+        const requestedScope = getRequestedServiceScope();
+        if (requestedScope) return requestedScope;
+
+        const formScope = normalizeServiceScope(getServiceFromForm());
+        if (formScope) return formScope;
+
+        const lastScope = getLastSavedScope();
+        if (lastScope) return lastScope;
+
+        return 'global';
+    };
+
+    const getDraftKeysForScope = (scope) => {
+        const resolvedScope = scope || 'global';
+        return {
+            core: `${DRAFT_KEY_BASE}::${resolvedScope}`,
+            full: `${DRAFT_FULL_KEY_BASE}::${resolvedScope}`
+        };
+    };
+
+    const getServiceScopeFromPayload = (payload) => {
+        if (!payload || typeof payload !== 'object') return '';
+
+        if (typeof payload.serviceScope === 'string' && payload.serviceScope.trim()) {
+            return normalizeServiceScope(payload.serviceScope);
+        }
+
+        const serviceFromIdState = payload.idState && payload.idState['item-description-hidden']
+            ? payload.idState['item-description-hidden'].value
+            : '';
+        return normalizeServiceScope(serviceFromIdState);
+    };
+
+    const getSavedPayloadsForScope = (scope, allowLegacyFallback = false) => {
+        const scopedKeys = getDraftKeysForScope(scope || 'global');
+        const scopedCore = parseDraftValue(readPersistedValue(scopedKeys.core));
+        const scopedFull = parseDraftValue(readPersistedValue(scopedKeys.full));
+
+        if (scopedCore || scopedFull) {
+            return { core: scopedCore, full: scopedFull };
+        }
+
+        if (!allowLegacyFallback) {
+            return { core: null, full: null };
+        }
+
+        const legacyCore = parseDraftValue(readPersistedValue(LEGACY_DRAFT_KEY));
+        const legacyFull = parseDraftValue(readPersistedValue(LEGACY_DRAFT_FULL_KEY));
+        return { core: legacyCore, full: legacyFull };
+    };
+
+    const getSavedDraft = (scope, allowLegacyFallback = false) => {
+        const payloads = getSavedPayloadsForScope(scope, allowLegacyFallback);
+        return payloads.core;
+    };
+
+    const getSavedFullDraft = (scope, allowLegacyFallback = false) => {
+        const payloads = getSavedPayloadsForScope(scope, allowLegacyFallback);
+        return payloads.full;
+    };
+
+    window.clearCreateJobProgress = function clearCreateJobProgress() {
+        clearTimeout(saveTimer);
+
+        const candidateScopes = new Set([
+            'global',
+            getRequestedServiceScope(),
+            getActiveServiceScope(),
+            getLastSavedScope()
+        ]);
+
+        candidateScopes.forEach((scope) => {
+            const normalizedScope = normalizeServiceScope(scope) || 'global';
+            const keys = getDraftKeysForScope(normalizedScope);
+            removePersistedValue(keys.core);
+            removePersistedValue(keys.full);
+        });
+
+        removePersistedValuesByPrefix(`${DRAFT_KEY_BASE}::`);
+        removePersistedValuesByPrefix(`${DRAFT_FULL_KEY_BASE}::`);
+        removePersistedValue(LEGACY_DRAFT_KEY);
+        removePersistedValue(LEGACY_DRAFT_FULL_KEY);
+        removePersistedValue(LAST_SCOPE_KEY);
+
+        removePersistedValue('house_removal_inventory');
+    };
+
+    const maybePurgeDraftAfterExit = () => {
+        if (!hasExitPurgePending()) return;
+
+        const navigationType = getNavigationType();
+        if (navigationType === 'reload') {
+            clearExitPurgePending();
+            return;
+        }
+
+        if (typeof window.clearCreateJobProgress === 'function') {
+            window.clearCreateJobProgress();
+        }
+        clearExitPurgePending();
+    };
 
     // Seed step for downstream step engines that read this during startup.
-    const bootDraft = getSavedDraft();
+    const bootScope = getRestoreScope();
+    let bootDraft = getSavedDraft(bootScope, false);
+    if (!bootDraft) {
+        const legacyDraft = getSavedDraft(bootScope, true);
+        const legacyScope = getServiceScopeFromPayload(legacyDraft);
+        if (!bootScope || !legacyScope || legacyScope === bootScope) {
+            bootDraft = legacyDraft;
+        }
+    }
     if (bootDraft && Number.isFinite(parseInt(bootDraft.step, 10))) {
         bootLockedStep = parseInt(bootDraft.step, 10);
         window.__createJobRestoreTargetStep = bootLockedStep;
@@ -4612,6 +5015,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         const commonState = {
             savedAt: Date.now(),
             step: getStep(),
+            serviceScope: getActiveServiceScope(),
             selectedPickupFloors: Array.from(window.selectedPickupFloors || []),
             selectedDeliveryFloors: Array.from(window.selectedDeliveryFloors || []),
             multiFloorInventory: safeClone(window.multiFloorInventory || {}, {}),
@@ -4633,37 +5037,57 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
         window.__createJobRestoreTargetStep = payload.step;
 
+        const activeScope = payload.serviceScope || getActiveServiceScope();
+        const draftKeys = getDraftKeysForScope(activeScope);
+        persistValue(LAST_SCOPE_KEY, activeScope);
+
         const coreRaw = JSON.stringify(corePayload);
-        if (!persistValue(DRAFT_KEY, coreRaw)) {
+        if (!persistValue(draftKeys.core, coreRaw)) {
             console.warn('Unable to persist core create-job draft.');
         }
 
         try {
             const fullRaw = JSON.stringify(payload);
-            persistValue(DRAFT_FULL_KEY, fullRaw);
+            persistValue(draftKeys.full, fullRaw);
         } catch (error) {
             // Full payload is best-effort only.
         }
 
         // Keep legacy inventory snapshot in sync for existing step-3 code paths.
         try {
-            localStorage.setItem('house_removal_inventory', JSON.stringify({
-                itemQuantities: payload.itemQuantities,
-                customItems: payload.customItems,
-                selectedPickupFloors: payload.selectedPickupFloors,
-                multiFloorInventory: payload.multiFloorInventory
-            }));
+            if (payload.serviceScope === 'house_removals') {
+                localStorage.setItem('house_removal_inventory', JSON.stringify({
+                    itemQuantities: payload.itemQuantities,
+                    customItems: payload.customItems,
+                    selectedPickupFloors: payload.selectedPickupFloors,
+                    multiFloorInventory: payload.multiFloorInventory
+                }));
+            }
         } catch (error) {
             // Ignore inventory snapshot write failures.
         }
     };
 
     window.restoreCreateJobProgress = function restoreCreateJobProgress() {
-        const corePayload = getSavedDraft();
-        const fullPayload = getSavedFullDraft();
-        const payload = fullPayload || corePayload;
+        const requestedScope = getRestoreScope();
+        const payloads = getSavedPayloadsForScope(requestedScope, false);
+        let payload = payloads.full || payloads.core;
+
+        if (!payload) {
+            const legacyPayloads = getSavedPayloadsForScope(requestedScope, true);
+            const legacyPayload = legacyPayloads.full || legacyPayloads.core;
+            const legacyScope = getServiceScopeFromPayload(legacyPayload);
+            if (!requestedScope || !legacyScope || legacyScope === requestedScope) {
+                payload = legacyPayload;
+            }
+        }
 
         if (!payload || typeof payload !== 'object' || !payload.fields) {
+            return;
+        }
+
+        const payloadScope = getServiceScopeFromPayload(payload);
+        if (requestedScope && payloadScope && requestedScope !== payloadScope) {
             return;
         }
 
@@ -4785,6 +5209,8 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
     };
 
     const initPersistenceLifecycle = () => {
+        maybePurgeDraftAfterExit();
+
         // Mark true user interaction as early as possible.
         const markInteracted = (event) => {
             if (event && event.isTrusted === true) {
@@ -4842,13 +5268,11 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         }
 
         window.addEventListener('beforeunload', () => {
-            bootRestoreDone = true;
-            window.saveCreateJobProgress();
+            setExitPurgePending();
         });
 
         window.addEventListener('pagehide', () => {
-            bootRestoreDone = true;
-            window.saveCreateJobProgress();
+            setExitPurgePending();
         });
 
     };
@@ -5255,7 +5679,7 @@ window.toggleDeliveryFloor = function(floor) {
                 if (inventoryFloorTitle && floorHiddenInput) {
                     const floor = floorHiddenInput.value;
                     if (floor) {
-                        inventoryFloorTitle.textContent = `${floor} Floor`;
+                        inventoryFloorTitle.textContent = `Add Inventory To ${floor} Floor`;
                     } else {
                         inventoryFloorTitle.textContent = '';
                     }
@@ -5306,32 +5730,6 @@ window.toggleDeliveryFloor = function(floor) {
             if (canShowInventory && typeof window.ensureMultiFloorInventoryVisible === 'function') {
                 window.ensureMultiFloorInventoryVisible();
             }
-        // --- Scroll to inventory on lift or floor selection ---
-        if (floorHiddenInput) {
-            floorHiddenInput.addEventListener('change', function() {
-                // Only scroll if lift is not visible for this floor
-                if (!liftOptionContainer || liftOptionContainer.style.display === 'none') {
-                    if (inventoryCardContainer && inventoryCardContainer.style.display !== 'none') {
-                        setTimeout(() => {
-                            inventoryCardContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }, 100);
-                    }
-                }
-            });
-        }
-        if (liftOptionContainer) {
-            liftOptionContainer.addEventListener('change', function() {
-                // Only scroll if lift is visible and selected
-                if (liftOptionContainer.style.display !== 'none') {
-                    const liftHidden = liftOptionContainer.querySelector('#lift-available');
-                    if (liftHidden && liftHidden.value && inventoryCardContainer && inventoryCardContainer.style.display !== 'none') {
-                        setTimeout(() => {
-                            inventoryCardContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }, 100);
-                    }
-                }
-            }, true);
-        }
         }
 
         if (inventoryCardContainer) {
@@ -5514,17 +5912,28 @@ window.toggleDeliveryFloor = function(floor) {
 
     // Icon button selection logic
     if (propertyTypeBtns && propertyTypeHidden) {
-        propertyTypeBtns.forEach(btn => {
-            btn.addEventListener('click', async function () {
-                const selectedPropertyValue = btn.getAttribute('data-value');
-                const selectedPropertyLabel = btn.textContent.trim();
-                const elevatorValue = await openLiftPrompt({
-                    contextLabel: 'pickup',
-                    propertyLabel: selectedPropertyLabel
-                });
-                if (!elevatorValue) {
-                    return;
+        const guideToPickupLiftSelection = () => {
+            const pickupLiftSection = document.getElementById('pickup-lift-section');
+            if (!pickupLiftSection) return;
+
+            pickupLiftSection.style.display = 'flex';
+            pickupLiftSection.style.flexDirection = 'column';
+            pickupLiftSection.classList.remove('step-hidden');
+
+            renderPickupliftIcons();
+
+            setTimeout(() => {
+                pickupLiftSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const firstLiftButton = pickupLiftSection.querySelector('.lift-icon-btn');
+                if (firstLiftButton && typeof firstLiftButton.focus === 'function') {
+                    firstLiftButton.focus({ preventScroll: true });
                 }
+            }, 80);
+        };
+
+        propertyTypeBtns.forEach(btn => {
+            btn.addEventListener('click', function () {
+                const selectedPropertyValue = btn.getAttribute('data-value');
 
                 propertyTypeBtns.forEach(b => {
                     b.classList.remove('active');
@@ -5537,7 +5946,12 @@ window.toggleDeliveryFloor = function(floor) {
                 propertyTypeBtns.forEach(b => b.setAttribute('aria-pressed', 'false'));
                 btn.setAttribute('aria-pressed', 'true');
                 propertyTypeHidden.value = selectedPropertyValue;
-                applyPickupLiftSelection(elevatorValue);
+
+                const pickupLiftInput = document.getElementById('pickup-lift-available');
+                if (pickupLiftInput) {
+                    pickupLiftInput.value = '';
+                }
+
                 // Fire change event for hidden input so listeners update
                 const event = new Event('change', { bubbles: true });
                 propertyTypeHidden.dispatchEvent(event);
@@ -5547,12 +5961,7 @@ window.toggleDeliveryFloor = function(floor) {
                 renderPickupFloorSelector();
                 updateInventoryAndliftVisibility();
 
-                // Advance to next step (step 3) after selection if not already there or past
-                const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 8;
-                const currentStep = parseInt(document.body.dataset.formStep, 10) || 1;
-                if (typeof window.setFormStep === 'function' && 3 <= totalSteps && currentStep <= 2) {
-                    window.setFormStep(3);
-                }
+                guideToPickupLiftSelection();
             });
         });
     }
@@ -5646,16 +6055,20 @@ window.toggleDeliveryFloor = function(floor) {
 
             // Check if lift question was answered
             if (window.selectedPickupFloors.size > 0 && !liftInput.value) {
-                const propertyButton = document.querySelector('#property-type-selection-section .property-type-icon-btn.active, #property-type-selection-section .property-type-icon-btn.selected, #property-type-selection-section .property-type-icon-btn.is-active');
-                const propertyLabel = propertyButton ? propertyButton.textContent.trim() : (document.getElementById('pickup-property-type')?.value || 'pickup property');
-                const elevatorValue = await openLiftPrompt({
-                    contextLabel: 'pickup',
-                    propertyLabel
-                });
-                if (!elevatorValue) {
-                    return;
+                const pickupLiftSection = document.getElementById('pickup-lift-section');
+                if (pickupLiftSection) {
+                    pickupLiftSection.style.display = 'flex';
+                    pickupLiftSection.style.flexDirection = 'column';
+                    pickupLiftSection.classList.remove('step-hidden');
+                    setTimeout(() => {
+                        pickupLiftSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        const firstLiftButton = pickupLiftSection.querySelector('.lift-icon-btn');
+                        if (firstLiftButton && typeof firstLiftButton.focus === 'function') {
+                            firstLiftButton.focus({ preventScroll: true });
+                        }
+                    }, 80);
                 }
-                applyPickupLiftSelection(elevatorValue);
+                return;
             }
             // If floors selected, verify lift is answered and proceed
             if (window.selectedPickupFloors.size > 0 && liftInput.value) {
@@ -5743,17 +6156,30 @@ document.addEventListener('DOMContentLoaded', function () {
     window.syncDeliveryStep4FromState = syncDeliveryStep4FromState;
     
     if (deliveryPropertyTypeBtns && deliveryPropertyTypeHidden) {
-        deliveryPropertyTypeBtns.forEach(btn => {
-            btn.addEventListener('click', async function () {
-                const propertyTypeValue = btn.getAttribute('data-value');
-                const propertyTypeLabel = btn.textContent.trim();
-                const elevatorValue = await openLiftPrompt({
-                    contextLabel: 'delivery',
-                    propertyLabel: propertyTypeLabel
-                });
-                if (!elevatorValue) {
-                    return;
+        const guideToDeliveryLiftSelection = () => {
+            const deliveryLiftSection = document.getElementById('delivery-lift-section');
+            if (!deliveryLiftSection) return;
+
+            deliveryLiftSection.style.display = 'flex';
+            deliveryLiftSection.style.flexDirection = 'column';
+            deliveryLiftSection.classList.remove('step-hidden');
+
+            if (typeof window.renderDeliveryliftIcons === 'function') {
+                window.renderDeliveryliftIcons();
+            }
+
+            setTimeout(() => {
+                deliveryLiftSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const firstLiftButton = deliveryLiftSection.querySelector('.lift-icon-btn');
+                if (firstLiftButton && typeof firstLiftButton.focus === 'function') {
+                    firstLiftButton.focus({ preventScroll: true });
                 }
+            }, 80);
+        };
+
+        deliveryPropertyTypeBtns.forEach(btn => {
+            btn.addEventListener('click', function () {
+                const propertyTypeValue = btn.getAttribute('data-value');
 
                 deliveryPropertyTypeBtns.forEach(b => {
                     b.classList.remove('active');
@@ -5766,7 +6192,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 deliveryPropertyTypeBtns.forEach(b => b.setAttribute('aria-pressed', 'false'));
                 btn.setAttribute('aria-pressed', 'true');
                 deliveryPropertyTypeHidden.value = propertyTypeValue;
-                applyDeliveryLiftSelection(elevatorValue);
+
+                const deliveryLiftInput = document.getElementById('delivery-lift-available');
+                if (deliveryLiftInput) {
+                    deliveryLiftInput.value = '';
+                }
+
                 // Fire change event for hidden input so listeners update
                 const event = new Event('change', { bubbles: true });
                 deliveryPropertyTypeHidden.dispatchEvent(event);
@@ -5786,15 +6217,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (typeof window.renderDeliveryFloorSelector === 'function') {
                         window.renderDeliveryFloorSelector();
                     }
-                    applyDeliveryLiftSelection(elevatorValue);
                 }, 100);
-                
-                // Advance to next step (step 5) after selection if not already there or past
-                const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 8;
-                const currentStep = parseInt(document.body.dataset.formStep, 10) || 1;
-                if (typeof window.setFormStep === 'function' && 5 <= totalSteps && currentStep <= 4) {
-                    window.setFormStep(5);
-                }
+
+                guideToDeliveryLiftSelection();
             });
         });
     }
@@ -6240,7 +6665,8 @@ document.addEventListener('DOMContentLoaded', function () {
             return Object.keys(roomMap).length > 0;
         });
 
-        if (!hasRuntimeInventory) {
+        const currentServiceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
+        if (!hasRuntimeInventory && currentServiceValue === 'House Removals') {
             try {
                 const rawSnapshot = localStorage.getItem('house_removal_inventory');
                 if (rawSnapshot) {
@@ -8033,7 +8459,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Title
         const title = document.createElement('h3');
         title.className = 'inventory-floor-title';
-        title.textContent = `${floorRef.name} Floor`;
+        title.textContent = `Add Inventory To ${floorRef.name} Floor`;
         title.style.margin = '0';
         title.style.flex = '1';
         titleWrapper.appendChild(title);
@@ -8182,7 +8608,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 block.setAttribute('data-floor', newFloor);
                 
                 // Update title
-                title.textContent = `${newFloor} Floor`;
+                title.textContent = `Add Inventory To ${newFloor} Floor`;
 
                 if (saveFloorBtn) {
                     saveFloorBtn.textContent = `Save ${newFloor} Floor`;
@@ -8297,6 +8723,22 @@ document.addEventListener('DOMContentLoaded', function () {
         tabs.style.boxShadow = '0 6px 16px rgba(15, 23, 42, 0.08)';
         tabs.style.marginBottom = '0';
         tabs.style.width = '100%';
+        const isMobileInventoryAccordion = () => window.matchMedia('(max-width: 768px)').matches;
+        let lastFloorAccordionTapAt = 0;
+        const getMobileOpenRoomStore = () => {
+            if (!window.__mobileFloorInventoryOpenRooms || typeof window.__mobileFloorInventoryOpenRooms !== 'object') {
+                window.__mobileFloorInventoryOpenRooms = {};
+            }
+            return window.__mobileFloorInventoryOpenRooms;
+        };
+        const setMobileFloorOpenRoom = (roomName) => {
+            const store = getMobileOpenRoomStore();
+            if (roomName) {
+                store[floorRef.name] = roomName;
+            } else {
+                delete store[floorRef.name];
+            }
+        };
         roomTypes.forEach((room, idx) => {
             const btn = document.createElement('button');
             btn.className = 'inventory-tab';
@@ -8304,16 +8746,36 @@ document.addEventListener('DOMContentLoaded', function () {
             btn.innerHTML = `<span>${room.svg}</span>${room.name}`;
             btn.setAttribute('data-room-name', room.name);
             btn.addEventListener('click', function() {
-                tabs.querySelectorAll('.inventory-tab').forEach(tab => tab.classList.remove('active'));
+                const isMobile = isMobileInventoryAccordion();
+                if (isMobile) {
+                    const now = Date.now();
+                    if (now - lastFloorAccordionTapAt < 220) {
+                        return;
+                    }
+                    lastFloorAccordionTapAt = now;
+
+                    if (currentTab === room.name) {
+                        tabs.querySelectorAll('.inventory-tab').forEach((tabButton) => tabButton.classList.remove('active'));
+                        currentTab = '';
+                        setMobileFloorOpenRoom('');
+                        renderItems(null);
+                        return;
+                    }
+                }
+                tabs.querySelectorAll('.inventory-tab').forEach((tabButton) => tabButton.classList.remove('active'));
+
                 btn.classList.add('active');
                 currentTab = room.name;
+                if (isMobileInventoryAccordion()) {
+                    setMobileFloorOpenRoom(room.name);
+                }
                 renderItems(currentTab);
             });
             tabs.appendChild(btn);
         });
         // Set the first tab as active by default
         const firstTab = tabs.querySelector('.inventory-tab');
-        if (firstTab) firstTab.classList.add('active');
+        if (firstTab && !isMobileInventoryAccordion()) firstTab.classList.add('active');
         stickyTrack.appendChild(tabs);
         block.appendChild(stickyTrack);
 
@@ -8390,12 +8852,57 @@ document.addEventListener('DOMContentLoaded', function () {
             const baseItems = ROOM_ITEMS[roomKey] ? ROOM_ITEMS[roomKey] : inventoryItems;
             return baseItems.concat(customFloorItems);
         }
+
+        function getRoomInventoryTotal(tabName) {
+            return getItemsForTab(tabName).reduce((sum, itemName) => {
+                const trackingKey = getMultiFloorTrackingKey(itemName, tabName);
+                return sum + (parseInt(floorQuantities[trackingKey], 10) || 0);
+            }, 0);
+        }
+
+        function updateRoomTabsCompletionState() {
+            tabs.querySelectorAll('.inventory-tab').forEach((tabBtn) => {
+                const tabName = tabBtn.getAttribute('data-room-name') || '';
+                const hasItems = getRoomInventoryTotal(tabName) > 0;
+                tabBtn.classList.toggle('has-items', hasItems);
+                tabBtn.setAttribute('data-has-items', hasItems ? 'true' : 'false');
+            });
+        }
+
+        function updateMobileFloorTabsState(tabName) {
+            const shouldCollapseOthers = isMobileInventoryAccordion() && !!tabName;
+            tabs.classList.toggle('mobile-accordion-open', shouldCollapseOthers);
+            tabs.querySelectorAll('.inventory-tab').forEach((tabBtn) => {
+                const name = tabBtn.getAttribute('data-room-name') || '';
+                const hide = shouldCollapseOthers && name !== tabName;
+                tabBtn.classList.toggle('is-mobile-hidden', hide);
+            });
+        }
         
-        // Set initial tab to the first tab's data-room-name
-        let currentTab = tabs.querySelector('.inventory-tab')?.getAttribute('data-room-name') || 'Hallway';
+        // Set initial tab to the first tab's data-room-name (collapsed by default on mobile)
+        const store = getMobileOpenRoomStore();
+        let currentTab = isMobileInventoryAccordion()
+            ? (store[floorRef.name] || '')
+            : (tabs.querySelector('.inventory-tab')?.getAttribute('data-room-name') || 'Hallway');
         
         function renderItems(tabName) {
             ul.innerHTML = '';
+
+            if (!tabName) {
+                listWrap.style.display = 'none';
+                if (isMobileInventoryAccordion()) {
+                    setMobileFloorOpenRoom('');
+                }
+                updateRoomTabsCompletionState();
+                updateMobileFloorTabsState('');
+                return;
+            }
+
+            listWrap.style.display = '';
+            if (isMobileInventoryAccordion()) {
+                setMobileFloorOpenRoom(tabName);
+            }
+            updateMobileFloorTabsState(tabName);
             getItemsForTab(tabName).forEach(itemName => {
                 const li = document.createElement('li');
                 const trackingKey = getMultiFloorTrackingKey(itemName, tabName);
@@ -8601,6 +9108,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 
                 ul.appendChild(li);
             });
+
+            updateRoomTabsCompletionState();
             
             // Quantity plus button handlers
             ul.querySelectorAll('.room-item-qty-plus').forEach(btn => {
@@ -8703,15 +9212,6 @@ document.addEventListener('DOMContentLoaded', function () {
         block.appendChild(listWrap);
 
         scheduleInventoryStickyTracks();
-        
-        // Update items on tab click
-        tabs.querySelectorAll('.inventory-tab').forEach(tabBtn => {
-            tabBtn.addEventListener('click', function() {
-                currentTab = tabBtn.getAttribute('data-room-name');
-                renderItems(currentTab);
-                updateOrganizationIfNeeded();
-            });
-        });
 
         // Add custom item button
         const addCustomBtn = document.createElement('button');
@@ -10538,17 +11038,59 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            if (
-                step === 3 &&
-                typeof window.isInventoryInputRequiredForStep3 === 'function' &&
-                window.isInventoryInputRequiredForStep3() &&
-                typeof window.hasAnyInventorySelection === 'function' &&
-                !window.hasAnyInventorySelection()
-            ) {
-                return firstInvalid
-                    || document.getElementById('inventory-card-container')
-                    || document.getElementById('house-removal-inventory-section')
-                    || document.getElementById('pickup-floor-select');
+            if (step === 3) {
+                const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+                    .map((btn) => (btn.getAttribute('data-floor') || '').trim())
+                    .filter(Boolean);
+                const effectiveFloors = selectedFloors.length > 0 ? selectedFloors : domSelectedFloors;
+
+                if (effectiveFloors.length === 0) {
+                    return firstInvalid
+                        || document.getElementById('pickup-floors-selector')
+                        || document.getElementById('pickup-floor-select');
+                }
+
+                const hasNonGroundFloor = effectiveFloors.some((floor) => {
+                    const normalized = String(floor || '').trim().toLowerCase();
+                    return normalized && normalized !== 'ground' && normalized !== 'ground floor' && !normalized.includes('ground');
+                });
+                const pickupLift = document.getElementById('pickup-lift-available');
+                if (hasNonGroundFloor && !(pickupLift && pickupLift.value && pickupLift.value.trim())) {
+                    return firstInvalid
+                        || document.getElementById('pickup-lift-option-container')
+                        || document.getElementById('pickup-lift-available');
+                }
+
+                if (
+                    typeof window.isInventoryInputRequiredForStep3 === 'function' &&
+                    window.isInventoryInputRequiredForStep3()
+                ) {
+                    const missingFloors = effectiveFloors.filter((floorName) => {
+                        const floorItems = window.multiFloorInventory && window.multiFloorInventory[floorName];
+                        if (!floorItems || typeof floorItems !== 'object') {
+                            return true;
+                        }
+                        return !Object.values(floorItems).some((qty) => (parseInt(qty, 10) || 0) > 0);
+                    });
+
+                    if (missingFloors.length > 0) {
+                        return firstInvalid
+                            || document.getElementById('inventory-card-container')
+                            || document.getElementById('house-removal-inventory-section')
+                            || document.getElementById('pickup-floor-select');
+                    }
+
+                    if (
+                        typeof window.hasAnyInventorySelection === 'function' &&
+                        !window.hasAnyInventorySelection()
+                    ) {
+                        return firstInvalid
+                            || document.getElementById('inventory-card-container')
+                            || document.getElementById('house-removal-inventory-section')
+                            || document.getElementById('pickup-floor-select');
+                    }
+                }
             }
 
             return firstInvalid;
@@ -11089,17 +11631,59 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            if (
-                step === 3 &&
-                typeof window.isInventoryInputRequiredForStep3 === 'function' &&
-                window.isInventoryInputRequiredForStep3() &&
-                typeof window.hasAnyInventorySelection === 'function' &&
-                !window.hasAnyInventorySelection()
-            ) {
-                return firstInvalid
-                    || document.getElementById('inventory-card-container')
-                    || document.getElementById('house-removal-inventory-section')
-                    || document.getElementById('pickup-floor-select');
+            if (step === 3) {
+                const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+                    .map((btn) => (btn.getAttribute('data-floor') || '').trim())
+                    .filter(Boolean);
+                const effectiveFloors = selectedFloors.length > 0 ? selectedFloors : domSelectedFloors;
+
+                if (effectiveFloors.length === 0) {
+                    return firstInvalid
+                        || document.getElementById('pickup-floors-selector')
+                        || document.getElementById('pickup-floor-select');
+                }
+
+                const hasNonGroundFloor = effectiveFloors.some((floor) => {
+                    const normalized = String(floor || '').trim().toLowerCase();
+                    return normalized && normalized !== 'ground' && normalized !== 'ground floor' && !normalized.includes('ground');
+                });
+                const pickupLift = document.getElementById('pickup-lift-available');
+                if (hasNonGroundFloor && !(pickupLift && pickupLift.value && pickupLift.value.trim())) {
+                    return firstInvalid
+                        || document.getElementById('pickup-lift-option-container')
+                        || document.getElementById('pickup-lift-available');
+                }
+
+                if (
+                    typeof window.isInventoryInputRequiredForStep3 === 'function' &&
+                    window.isInventoryInputRequiredForStep3()
+                ) {
+                    const missingFloors = effectiveFloors.filter((floorName) => {
+                        const floorItems = window.multiFloorInventory && window.multiFloorInventory[floorName];
+                        if (!floorItems || typeof floorItems !== 'object') {
+                            return true;
+                        }
+                        return !Object.values(floorItems).some((qty) => (parseInt(qty, 10) || 0) > 0);
+                    });
+
+                    if (missingFloors.length > 0) {
+                        return firstInvalid
+                            || document.getElementById('inventory-card-container')
+                            || document.getElementById('house-removal-inventory-section')
+                            || document.getElementById('pickup-floor-select');
+                    }
+
+                    if (
+                        typeof window.hasAnyInventorySelection === 'function' &&
+                        !window.hasAnyInventorySelection()
+                    ) {
+                        return firstInvalid
+                            || document.getElementById('inventory-card-container')
+                            || document.getElementById('house-removal-inventory-section')
+                            || document.getElementById('pickup-floor-select');
+                    }
+                }
             }
 
             return firstInvalid;

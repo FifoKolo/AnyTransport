@@ -1,12 +1,10 @@
 html, body {
     overflow-x: hidden !important;
-    width: 100vw !important;
-    max-width: 100vw !important;
 }
 
 :root {
     --room-selected-green: #15803d;
-    --room-selected-green-dark: #166534;
+    --room-selected-green-dark: #166165;
     --room-selected-green-bg: #dcfce7;
 }
 
@@ -19,11 +17,10 @@ html, body {
     overflow-y: auto !important;
     overflow-x: visible !important;
     width: 100% !important;
-    max-width: 1400px !important;
-    margin: 24px auto !important;
+    max-width: none !important;
+    margin: 24px 0 !important;
+    box-sizing: border-box !important;
     list-style: none;
-    margin: 0;
-    padding: 0;
 }
 
 .room-item {
@@ -115,6 +112,19 @@ html, body {
     overflow: visible !important;
 }
 
+#house-removal-inventory-section .floors-inventory-container .floor-inventory-block:first-child {
+    margin-top: 28px !important;
+}
+
+/* Keep step section in normal flow and slightly higher on step 3 */
+body[data-form-step="3"] .form-stepper,
+body[data-current-step="3"] .form-stepper {
+    position: static !important;
+    z-index: auto !important;
+    margin-top: 0 !important;
+    transform: none;
+}
+
 #house-removal-inventory-section .floor-inventory-block > .inventory-block-header {
     position: sticky !important;
     top: 78px !important;
@@ -136,16 +146,43 @@ html, body {
 #house-removal-inventory-section .inventory-tab.active,
 #house-removal-inventory-section .inventory-tab:focus,
 #house-removal-inventory-section .inventory-tab:focus-visible {
-    color: var(--room-selected-green) !important;
-    background: var(--room-selected-green-bg) !important;
-    box-shadow: inset 0 -3px 0 var(--room-selected-green);
+    color: #2563eb !important;
+    background: #eff6ff !important;
+    box-shadow: inset 0 -3px 0 #2563eb;
 }
 
 #house-removal-inventory-section .inventory-tab.active svg,
 #house-removal-inventory-section .inventory-tab:focus svg,
 #house-removal-inventory-section .inventory-tab:focus-visible svg {
-    color: var(--room-selected-green) !important;
-    fill: var(--room-selected-green) !important;
+    color: #2563eb !important;
+    fill: #2563eb !important;
+}
+
+#house-removal-inventory-section .inventory-tab.has-items {
+    color: #166534 !important;
+    background: #ecfdf5 !important;
+    box-shadow: inset 0 -2px 0 #22c55e;
+    font-weight: 700;
+}
+
+#house-removal-inventory-section .inventory-tab.has-items svg {
+    color: #16a34a !important;
+    fill: #16a34a !important;
+}
+
+#house-removal-inventory-section .inventory-tab.has-items.active,
+#house-removal-inventory-section .inventory-tab.has-items:focus,
+#house-removal-inventory-section .inventory-tab.has-items:focus-visible {
+    color: #2563eb !important;
+    background: #eff6ff !important;
+    box-shadow: inset 0 -3px 0 #2563eb;
+}
+
+#house-removal-inventory-section .inventory-tab.has-items.active svg,
+#house-removal-inventory-section .inventory-tab.has-items:focus svg,
+#house-removal-inventory-section .inventory-tab.has-items:focus-visible svg {
+    color: #2563eb !important;
+    fill: #2563eb !important;
 }
 
 /* Let the page scroll (not inner list scroll) so sticky headers/tabs can follow naturally */
@@ -597,5 +634,45 @@ body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-bl
 
     .modal-content {
         padding: 16px;
+    }
+}
+
+/* Step 3 mobile: use page scroll (not inner inventory scroll) */
+@media (max-width: 768px) {
+    body[data-form-step="3"] #house-removal-inventory-section .floor-inventory-block > .inventory-block-header,
+    body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-block > .inventory-block-header,
+    body[data-form-step="3"] #house-removal-inventory-section .floor-inventory-block > .inventory-tabs,
+    body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-block > .inventory-tabs,
+    body[data-form-step="3"] #house-removal-inventory-section .floor-inventory-block > .inventory-tabs-sticky,
+    body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-block > .inventory-tabs-sticky,
+    body[data-form-step="3"] #house-removal-inventory-section .floor-inventory-block .inventory-sticky-track,
+    body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-block .inventory-sticky-track {
+        position: static !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        z-index: auto !important;
+        transform: none !important;
+        box-shadow: none !important;
+    }
+
+    body[data-form-step="3"] #house-removal-inventory-section .floor-inventory-block .inventory-sticky-spacer,
+    body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-block .inventory-sticky-spacer {
+        display: none !important;
+        height: 0 !important;
+    }
+
+    body[data-form-step="3"] #house-removal-inventory-section .room-items-list,
+    body[data-current-step="3"] #house-removal-inventory-section .room-items-list {
+        max-height: none !important;
+        overflow-y: visible !important;
+        overflow-x: visible !important;
+        -webkit-overflow-scrolling: auto;
+        padding-bottom: 96px !important;
+    }
+
+    body[data-form-step="3"] #house-removal-inventory-section .inventory-items-list,
+    body[data-current-step="3"] #house-removal-inventory-section .inventory-items-list {
+        overflow: visible !important;
     }
 }
