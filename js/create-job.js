@@ -5403,7 +5403,8 @@ function renderPickupFloorSelector() {
         confirmBtn.style.display = window.selectedPickupFloors.size > 0 ? 'block' : 'none';
     }
     if (liftQuestion) {
-        liftQuestion.style.display = 'none';
+        const liftValue = (document.getElementById('pickup-lift-available')?.value || '').trim();
+        liftQuestion.style.display = (window.selectedPickupFloors.size > 0 && !liftValue) ? 'block' : 'none';
     }
 
     // If selections were pruned, keep rendered multi-floor inventory blocks aligned.
@@ -6078,6 +6079,7 @@ window.toggleDeliveryFloor = function(floor) {
         confirmBtn.addEventListener('click', async function() {
             const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
             const isCustomizedItems = serviceValue === 'Customized Items';
+            const liftValue = (liftInput && liftInput.value) ? liftInput.value.trim() : '';
 
             if (isCustomizedItems) {
                 const inventoryCardContainer = document.getElementById('inventory-card-container');
@@ -6108,7 +6110,19 @@ window.toggleDeliveryFloor = function(floor) {
             }
 
             // Check if lift question was answered
-            if (window.selectedPickupFloors.size > 0 && !liftInput.value) {
+            if (window.selectedPickupFloors.size > 0 && !liftValue) {
+                const step3LiftQuestion = document.getElementById('pickup-lift-question');
+                if (step3LiftQuestion) {
+                    step3LiftQuestion.style.display = 'block';
+                    setTimeout(() => {
+                        step3LiftQuestion.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        const firstStep3LiftButton = step3LiftQuestion.querySelector('.pickup-lift-btn');
+                        if (firstStep3LiftButton && typeof firstStep3LiftButton.focus === 'function') {
+                            firstStep3LiftButton.focus({ preventScroll: true });
+                        }
+                    }, 60);
+                }
+
                 const pickupLiftSection = document.getElementById('pickup-lift-section');
                 if (pickupLiftSection) {
                     pickupLiftSection.style.display = 'flex';
@@ -6125,10 +6139,10 @@ window.toggleDeliveryFloor = function(floor) {
                 return;
             }
             // If floors selected, verify lift is answered and proceed
-            if (window.selectedPickupFloors.size > 0 && liftInput.value) {
+            if (window.selectedPickupFloors.size > 0 && liftValue) {
                 // Render one old-style inventory block per selected pickup floor
                 if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
-                    window.renderSelectedPickupFloorsInventory(liftInput.value);
+                    window.renderSelectedPickupFloorsInventory(liftValue);
                 } else {
                     restoreOriginalInventoryUI();
                 }
@@ -6156,6 +6170,11 @@ window.toggleDeliveryFloor = function(floor) {
             const value = this.getAttribute('data-value');
             if (liftInput) {
                 liftInput.value = value;
+                liftInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            const liftQuestion = document.getElementById('pickup-lift-question');
+            if (liftQuestion) {
+                liftQuestion.style.display = 'none';
             }
             // Update button styles
             liftBtns.forEach(b => {
@@ -6166,6 +6185,9 @@ window.toggleDeliveryFloor = function(floor) {
             this.style.borderColor = value === 'yes' ? '#10b981' : '#ef4444';
             this.style.background = value === 'yes' ? '#d1fae5' : '#fee2e2';
             this.style.color = value === 'yes' ? '#065f46' : '#991b1b';
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
         });
     });
 });
