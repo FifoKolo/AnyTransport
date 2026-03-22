@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Request a Quote - AnyTransport</title>
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/navbar.css">
-    <link rel="stylesheet" href="css/create-job.css">
-    <link rel="stylesheet" href="css/house-removal.css">
-    <link rel="stylesheet" href="css/sticky-next-btn.css">
+    <link rel="stylesheet" href="css/style.css?v=20260322-1">
+    <link rel="stylesheet" href="css/navbar.css?v=20260322-1">
+    <link rel="stylesheet" href="css/create-job.css?v=20260322-1">
+    <link rel="stylesheet" href="css/house-removal.css?v=20260322-1">
+    <link rel="stylesheet" href="css/sticky-next-btn.css?v=20260322-1">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js'></script>
 </head>
@@ -1957,6 +1957,33 @@
                                     <div class="transport-date-panel" id="transport-date-panel" role="dialog" aria-modal="false" aria-label="Transport date options"></div>
                                 </div>
                                 <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Choose your preferred moving date.</div>
+
+                                <div id="transport-time-window-row" style="margin-top:12px;">
+                                    <label class="form-label" for="preferred-time-pickup" style="display:block; margin-bottom:8px; font-weight:700; color:#1f2937;">Estimated Time Windows <span style="color:#64748b; font-size:0.9em; font-weight:600;">(optional)</span></label>
+                                    <div style="display:grid; grid-template-columns:1fr; gap:10px;">
+                                        <div>
+                                            <label class="form-label" for="preferred-time-pickup" style="display:block; margin-bottom:6px; font-weight:600; color:#334155; font-size:0.9rem;">Pickup time window</label>
+                                            <select id="preferred-time-pickup" name="preferred-time-pickup" data-optional="true" style="width:100%; padding:10px 12px; border:1px solid #bfdbfe; border-radius:8px; background:#fff; color:#1f2937; font-weight:600;">
+                                                <option value="">No preferred pickup time</option>
+                                                <option value="09:00 - 12:00">09:00 - 12:00</option>
+                                                <option value="12:00 - 15:00">12:00 - 15:00</option>
+                                                <option value="15:00 - 18:00">15:00 - 18:00</option>
+                                                <option value="18:00 - 21:00">18:00 - 21:00</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="form-label" for="preferred-time-delivery" style="display:block; margin-bottom:6px; font-weight:600; color:#334155; font-size:0.9rem;">Delivery time window</label>
+                                            <select id="preferred-time-delivery" name="preferred-time-delivery" data-optional="true" style="width:100%; padding:10px 12px; border:1px solid #bfdbfe; border-radius:8px; background:#fff; color:#1f2937; font-weight:600;">
+                                                <option value="">No preferred delivery time</option>
+                                                <option value="09:00 - 12:00">09:00 - 12:00</option>
+                                                <option value="12:00 - 15:00">12:00 - 15:00</option>
+                                                <option value="15:00 - 18:00">15:00 - 18:00</option>
+                                                <option value="18:00 - 21:00">18:00 - 21:00</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Optional: choose pickup and delivery time windows to help estimate arrival slots.</div>
+                                </div>
                             </div>
                         </div>
 
@@ -2064,6 +2091,7 @@
                         <div style="flex:1 1 auto;"></div>
                         <!-- Old Next button removed; only sticky Next button remains -->
                     </div>
+                    <button type="button" class="sticky-next-btn sticky-reset-btn" id="sticky-reset-btn">Reset</button>
                     <button type="button" class="sticky-next-btn" id="sticky-next-btn">Next</button>
                 </form>
                 <!-- Removed duplicate lift-option-container. Only one instance should exist inside the form. -->
@@ -2091,9 +2119,9 @@
         </div>
     </div>
 
-    <script src="js/auth.js"></script>
-    <script src="js/house-removal.js"></script>
-    <script src="js/create-job.js"></script>
+    <script src="js/auth.js?v=20260322-1"></script>
+    <script src="js/house-removal.js?v=20260322-1"></script>
+    <script src="js/create-job.js?v=20260322-1"></script>
 </body>
 <script>
 function updateStep3TitleVisibility() {

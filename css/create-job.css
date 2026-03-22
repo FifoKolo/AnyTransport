@@ -1168,8 +1168,27 @@ form.form-v2-main {
     box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
 }
 
+.map-step-card {
+    width: 92%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
 .map-step-card .map-card {
-    height: 320px;
+    height: 221px;
+    min-height: 221px;
+    width: 69%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* #route-map has inline width/height, so force desktop size here */
+.map-step-card #route-map.map-card {
+    width: 69% !important;
+    height: 221px !important;
+    min-height: 221px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
 }
 
 .summary-title {
@@ -2654,6 +2673,109 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     gap: 6px;
     font-size: 0.88rem;
     color: #334155;
+}
+
+.reset-confirm-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.5);
+    z-index: 13000;
+    padding: 16px;
+}
+
+.reset-confirm-modal.active {
+    display: flex;
+}
+
+.reset-confirm-dialog {
+    width: min(460px, 100%);
+    background: linear-gradient(180deg, #ffffff 0%, #fff7f7 100%);
+    border: 1px solid #fecaca;
+    border-radius: 16px;
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.25);
+    padding: 20px;
+}
+
+.reset-confirm-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 1.2rem;
+    margin-bottom: 10px;
+}
+
+.reset-confirm-title {
+    margin: 0;
+    color: #7f1d1d;
+    font-size: 1.18rem;
+    font-weight: 800;
+}
+
+.reset-confirm-copy {
+    margin: 8px 0 0 0;
+    color: #475569;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.reset-confirm-actions {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.reset-confirm-btn {
+    border: none;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.92rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.reset-confirm-btn:hover,
+.reset-confirm-btn:focus {
+    transform: translateY(-1px);
+    filter: brightness(0.98);
+}
+
+.reset-confirm-btn.cancel {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.reset-confirm-btn.danger {
+    background: #dc2626;
+    color: #fff;
+}
+
+@media (max-width: 768px) {
+    .reset-confirm-dialog {
+        padding: 16px;
+        border-radius: 14px;
+    }
+
+    .reset-confirm-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .reset-confirm-btn {
+        width: 100%;
+    }
 }
 
 @media (max-width: 700px) {
@@ -4417,8 +4539,11 @@ input[type="file"]:focus {
 
     .map-step-card .map-card,
     .map-card {
-        min-height: 240px !important;
-        height: 240px !important;
+        min-height: 144px !important;
+        height: 144px !important;
+        width: 100% !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
     }
 
     .map-info {
