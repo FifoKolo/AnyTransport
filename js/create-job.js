@@ -591,12 +591,25 @@ function autoAdvanceToInventoryIfReady() {
     }
 }
 
+function syncCreateJobGridMapLayout() {
+    const formGrid = document.querySelector('.form-v2-grid');
+    if (!formGrid) return;
+
+    const sideMapPanel = formGrid.querySelector('.form-v2-map');
+    if (!sideMapPanel) return;
+
+    // Treat the panel as present only when it has actual element children.
+    const hasSidePanelContent = sideMapPanel.children && sideMapPanel.children.length > 0;
+    formGrid.classList.toggle('no-side-map', !hasSidePanelContent);
+}
+
 // Attach plus/minus logic to all inventory items (default and custom) after DOM loads
 
 // --- New Plus/Minus Inventory System ---
 // This system works for all inventory blocks (multi-floor and single-floor)
 document.addEventListener('DOMContentLoaded', function () {
     initTransportDatePicker();
+    syncCreateJobGridMapLayout();
 
     function handleInventoryPlusMinus(container) {
         if (!container) return;
@@ -667,6 +680,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Patch after custom item add (for multi-floor blocks)
     const observer = new MutationObserver(() => {
         patchAllInventoryBlocks();
+        syncCreateJobGridMapLayout();
     });
     observer.observe(document.body, { childList: true, subtree: true });
 });
@@ -2191,6 +2205,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         };
         const handleHomeClick = function () {
+            isUnloadingForm = true;
             if (typeof window.clearCreateJobProgress === 'function') {
                 window.clearCreateJobProgress();
             }
@@ -2200,6 +2215,17 @@ document.addEventListener('DOMContentLoaded', function () {
             homeBtnTop.disabled = false;
             homeBtnTop.addEventListener('click', handleHomeClick);
         }
+
+        const navbarHomeLinks = document.querySelectorAll('.navbar-logo[href="index.html"]');
+        navbarHomeLinks.forEach((link) => {
+            if (link.dataset.resetBound === '1') return;
+            link.dataset.resetBound = '1';
+            link.addEventListener('click', (event) => {
+                event.preventDefault();
+                handleHomeClick();
+            });
+        });
+
         if (backBtnTop) {
             backBtnTop.disabled = false;
             backBtnTop.addEventListener('click', handleBackClick);
@@ -4505,6 +4531,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
     let bootRestoreDone = false;
     let hasUserInteracted = false;
     let bootLockedStep = null;
+    let isUnloadingForm = false;
 
     const CRITICAL_FIELD_IDS = [
         'pickup-address',
@@ -4680,6 +4707,23 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         }
 
         return 'navigate';
+    };
+
+    const isLandingPageReferrer = () => {
+        try {
+            if (!document.referrer) return false;
+            const ref = new URL(document.referrer, window.location.origin);
+            const path = (ref.pathname || '').toLowerCase();
+            return path === '/' || path.endsWith('/index.html');
+        } catch (error) {
+            return false;
+        }
+    };
+
+    const shouldResetDraftOnEntry = () => {
+        const navigationType = getNavigationType();
+        if (navigationType === 'reload') return false;
+        return isLandingPageReferrer();
     };
 
     const parseDraftValue = (raw) => {
@@ -4972,6 +5016,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
     window.saveCreateJobProgress = function saveCreateJobProgress() {
         if (isRestoring) return;
+        if (isUnloadingForm) return;
         if (!bootRestoreDone && !hasUserInteracted) {
             return;
         }
@@ -5209,6 +5254,11 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
     };
 
     const initPersistenceLifecycle = () => {
+        if (shouldResetDraftOnEntry() && typeof window.clearCreateJobProgress === 'function') {
+            window.clearCreateJobProgress();
+            clearExitPurgePending();
+        }
+
         maybePurgeDraftAfterExit();
 
         // Mark true user interaction as early as possible.
@@ -5268,10 +5318,14 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         }
 
         window.addEventListener('beforeunload', () => {
+            isUnloadingForm = true;
+            clearTimeout(saveTimer);
             setExitPurgePending();
         });
 
         window.addEventListener('pagehide', () => {
+            isUnloadingForm = true;
+            clearTimeout(saveTimer);
             setExitPurgePending();
         });
 

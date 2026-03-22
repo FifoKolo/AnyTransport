@@ -1,5 +1,6 @@
 html, body {
-    overflow-x: hidden !important;
+    /* Remove overflow-x hidden to prevent content cutting off */
+    /* overflow-x: hidden !important; */
 }
 
 :root {
@@ -13,8 +14,9 @@ html, body {
     padding: 24px !important;
     border-radius: 16px !important;
     box-shadow: 0 4px 24px rgba(0,0,0,0.07) !important;
-    max-height: 600px !important;
-    overflow-y: auto !important;
+    /* Removed fixed max-height to allow natural flow */
+    /* max-height: 600px !important; */
+    overflow-y: visible !important;
     overflow-x: visible !important;
     width: 100% !important;
     max-width: none !important;
@@ -593,9 +595,10 @@ body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-bl
         grid-template-columns: repeat(2, 1fr);
     }
 
-    .room-items-list {
+    /* Removed max-height to allow natural flow */
+    /* .room-items-list {
         max-height: 300px;
-    }
+    } */
 
     .room-item {
         padding: 10px;

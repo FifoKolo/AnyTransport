@@ -789,8 +789,8 @@ body[data-form-step="3"] #house-removal-inventory-section > #room-items-containe
     margin-top: 0;
 }
 .pickup-room-flex > #pickup-room-list {
-    flex: 1 1 0%;
-    min-width: 600px;
+    flex: 1 1 auto;
+    min-width: auto;
     max-width: 100%;
     position: relative;
     z-index: 2;
@@ -922,8 +922,8 @@ body[data-current-step="5"] .pickup-floors-image {
 }
 
 .pickup-room-flex > #delivery-room-list {
-    flex: 1 1 0%;
-    min-width: 600px;
+    flex: 1 1 auto;
+    min-width: auto;
     max-width: 100%;
     position: relative;
     z-index: 2;
@@ -983,7 +983,7 @@ body[data-form-step="5"] #delivery-room-list label.form-label {
 }
 .form-v2-grid {
     display: grid !important;
-    grid-template-columns: 180px 2fr 1.1fr !important;
+    grid-template-columns: 220px 2fr 1.1fr !important;
     gap: 2.5rem;
     align-items: flex-start;
     width: 100%;
@@ -1057,14 +1057,30 @@ form.form-v2-main {
     grid-row: 1;
 }
 
+/* If map panel has no content, reclaim the third column for the form. */
+.form-v2-grid.no-side-map {
+    grid-template-columns: 220px minmax(0, 1fr) !important;
+    max-width: 1400px;
+    gap: 2rem;
+}
+
+.form-v2-grid.no-side-map .form-v2-map {
+    display: none;
+}
+
+.form-v2-grid.no-side-map .form-v2-main {
+    grid-column: 2;
+    max-width: 100%;
+}
+
 .form-stepper {
     position: static;
     height: fit-content;
     align-self: flex-start;
     margin-top: 0;
     width: 100%;
-    font-size: 1.4em;
-    padding: 2.2rem;
+    font-size: 1rem;
+    padding: 0;
 }
 
 .stepper-card {
@@ -1073,7 +1089,7 @@ form.form-v2-main {
     border-radius: 8px;
     padding: 1.4rem;
     box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
-    font-size: 1.4em;
+    font-size: 1rem;
 }
 
 .stepper-eyebrow {
@@ -1093,7 +1109,7 @@ form.form-v2-main {
     display: flex;
     flex-direction: column;
     gap: 0.77rem;
-    font-size: 1.4em;
+    font-size: 1rem;
 }
 
 .stepper-link {
@@ -1216,7 +1232,7 @@ form.form-v2-main {
     display: none !important;
 }
 .form-v2-grid.office-layout {
-    grid-template-columns: 180px 2fr 1.1fr !important;
+    grid-template-columns: 220px 2fr 1.1fr !important;
     grid-template-areas: "illustration main map";
 }
 .floors-illustration-panel {
@@ -4350,6 +4366,16 @@ input[type="file"]:focus {
 
 /* Final mobile overrides (kept at end to beat earlier conflicting breakpoints) */
 @media (max-width: 768px) {
+    .job-form.v2 {
+        padding: 84px 0.5rem 1rem !important;
+    }
+
+    body.multi-stop-mode .form-v2-grid,
+    .multi-stop-mode .form-v2-grid,
+    .multi-stop-mode .form-v2-grid.no-side-map {
+        grid-template-columns: 1fr !important;
+    }
+
     .form-v2-grid {
         grid-template-columns: 1fr !important;
         gap: 1rem !important;
@@ -4359,6 +4385,11 @@ input[type="file"]:focus {
 
     .form-stepper,
     .form-v2-map {
+        display: none !important;
+    }
+
+    .multi-stop-mode .form-stepper,
+    .multi-stop-mode .form-v2-map {
         display: none !important;
     }
 
@@ -4372,10 +4403,46 @@ input[type="file"]:focus {
         margin: 0 !important;
     }
 
+    .multi-stop-mode .form-v2-main {
+        grid-column: 1 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .map-step-card .section-title {
+        font-size: 1.05rem !important;
+        line-height: 1.35 !important;
+        margin-bottom: 0.8rem !important;
+    }
+
+    .map-step-card .map-card,
+    .map-card {
+        min-height: 240px !important;
+        height: 240px !important;
+    }
+
+    .map-info {
+        padding: 0.85rem !important;
+        gap: 0.65rem !important;
+    }
+
+    .map-metrics {
+        gap: 0.7rem !important;
+    }
+
     .form-v2-main-grid {
         width: 100% !important;
         min-width: 0 !important;
         padding-bottom: 90px;
+    }
+
+    .form-v2-main-grid > .card-section,
+    .map-step-card {
+        width: 100% !important;
+        max-width: none !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        box-sizing: border-box;
     }
 
     .pickup-room-flex:not(.step-hidden) {
@@ -4494,6 +4561,7 @@ input[type="file"]:focus {
 
     .location-editor.open {
         display: block !important;
+        width: 100% !important;
     }
 
     .location-col {
@@ -4554,6 +4622,10 @@ input[type="file"]:focus {
 @media (max-width: 480px) {
     .create-job-main {
         padding: 72px 12px 84px 12px !important;
+    }
+
+    .job-form.v2 {
+        padding: 80px 0.35rem 1rem !important;
     }
 
     .form-v2-main {
@@ -4627,4 +4699,37 @@ body.house-removals-active[data-current-step="3"] #house-removal-inventory-secti
     margin-left: 0 !important;
     margin-right: 0 !important;
     border-radius: 0 !important;
+}
+
+/* Ultimate mobile layout lock: bypass desktop grid columns entirely on phones. */
+@media (max-width: 768px) {
+    .job-form.v2 .form-v2-grid {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .job-form.v2 #form-stepper,
+    .job-form.v2 .form-v2-map {
+        display: none !important;
+    }
+
+    .job-form.v2 #create-job-form,
+    .job-form.v2 .form-v2-main,
+    .job-form.v2 .form-v2-main-grid {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    .job-form.v2 .form-v2-main-grid > .card-section,
+    .job-form.v2 .map-step-card {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
 }
