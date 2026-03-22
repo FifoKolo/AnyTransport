@@ -278,11 +278,16 @@ body[data-form-step="3"] .form-stepper, body[data-current-step="3"] .form-steppe
     color: #4A90E2;
     background: #f0f7ff;
 }
-.lift-icon-btn.selected, .lift-icon-btn.is-active, .lift-icon-btn:focus {
+.lift-icon-btn.selected, .lift-icon-btn.is-active {
     border-color: #4A90E2;
     color: #1f5fbf;
     background: #e3f2fd;
     box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
+}
+
+.lift-icon-btn:focus-visible {
+    outline: 3px solid rgba(74, 144, 226, 0.35);
+    outline-offset: 2px;
 }
 /* Floor icon grid - match property/service icon style */
 .floor-icon-grid {

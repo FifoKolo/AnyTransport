@@ -518,8 +518,8 @@ function renderPickupliftIcons() {
         liftOptionContainer.appendChild(hidden);
     }
 
-    // Do not preselect Step 2 pickup lift from restored values; user must choose explicitly.
-    const previousSelection = '';
+    // Only keep a selection if the user explicitly picked it in this session.
+    const previousSelection = hidden && hidden.dataset.userSelected === 'true' ? (hidden.value || '') : '';
     grid.innerHTML = '';
     
     const options = [
@@ -548,6 +548,7 @@ function renderPickupliftIcons() {
             btn.setAttribute('aria-pressed', 'true');
             
             hidden.value = opt.value;
+            hidden.dataset.userSelected = 'true';
             const event = new Event('change', { bubbles: true });
             hidden.dispatchEvent(event);
         });
@@ -560,6 +561,7 @@ function resetPickupLiftSelection() {
     const liftInput = document.getElementById('pickup-lift-available');
     if (liftInput) {
         liftInput.value = '';
+        liftInput.dataset.userSelected = 'false';
         liftInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
@@ -575,6 +577,7 @@ function applyPickupLiftSelection(value) {
     const hasPickupProperty = !!(pickupPropertyInput && pickupPropertyInput.value && pickupPropertyInput.value.trim());
     if (liftInput) {
         liftInput.value = value || '';
+        liftInput.dataset.userSelected = value ? 'true' : 'false';
         liftInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
@@ -4829,6 +4832,11 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         'delivery-lift-available'
     ];
 
+    // Step 2 pickup lift must be explicitly chosen by user on each fresh load.
+    const NON_RESTORABLE_FIELD_IDS = new Set([
+        'pickup-lift-available'
+    ]);
+
     const readWindowNameStore = () => {
         try {
             const raw = typeof window.name === 'string' ? window.name : '';
@@ -5463,6 +5471,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 const key = getControlKey(el, index);
                 const saved = payload.fields[key];
                 if (!saved) return;
+                if (el.id && NON_RESTORABLE_FIELD_IDS.has(el.id)) {
+                    return;
+                }
 
                 const type = (el.type || '').toLowerCase();
                 if (type === 'checkbox' || type === 'radio') {
@@ -5475,6 +5486,10 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             // Stronger restore pass by stable element id.
             if (payload.idState && typeof payload.idState === 'object') {
                 Object.entries(payload.idState).forEach(([id, saved]) => {
+                    if (NON_RESTORABLE_FIELD_IDS.has(id)) {
+                        return;
+                    }
+
                     const el = document.getElementById(id);
                     if (!el || !saved) return;
                     const type = (el.type || '').toLowerCase();
@@ -5488,6 +5503,10 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
             // Force critical business fields from id snapshot even if other code mutates them.
             CRITICAL_FIELD_IDS.forEach((id) => {
+                if (NON_RESTORABLE_FIELD_IDS.has(id)) {
+                    return;
+                }
+
                 const saved = payload.idState ? payload.idState[id] : null;
                 const el = document.getElementById(id);
                 if (!saved || !el) return;
@@ -6231,6 +6250,7 @@ window.toggleDeliveryFloor = function(floor) {
                 const pickupLiftInput = document.getElementById('pickup-lift-available');
                 if (pickupLiftInput) {
                     pickupLiftInput.value = '';
+                    pickupLiftInput.dataset.userSelected = 'false';
                 }
 
                 // Fire change event for hidden input so listeners update
@@ -6302,16 +6322,16 @@ window.toggleDeliveryFloor = function(floor) {
             pickupLiftSection.style.flexDirection = 'column';
             renderPickupliftIcons();
             const pickupLiftInput = document.getElementById('pickup-lift-available');
-            if (pickupLiftInput && pickupLiftInput.value) {
+            if (pickupLiftInput && pickupLiftInput.value && pickupLiftInput.dataset.userSelected === 'true') {
                 applyPickupLiftSelection(pickupLiftInput.value);
             }
 
             if (currentStep === 2) {
                 setTimeout(() => {
                     pickupLiftSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    const firstLiftButton = pickupLiftSection.querySelector('.lift-icon-btn');
-                    if (firstLiftButton && typeof firstLiftButton.focus === 'function') {
-                        firstLiftButton.focus({ preventScroll: true });
+                    const selectedLiftButton = pickupLiftSection.querySelector('.lift-icon-btn.selected');
+                    if (selectedLiftButton && typeof selectedLiftButton.focus === 'function') {
+                        selectedLiftButton.focus({ preventScroll: true });
                     }
                 }, 80);
             }
@@ -6464,6 +6484,7 @@ window.toggleDeliveryFloor = function(floor) {
             const value = this.getAttribute('data-value');
             if (liftInput) {
                 liftInput.value = value;
+                liftInput.dataset.userSelected = 'true';
                 liftInput.dispatchEvent(new Event('change', { bubbles: true }));
             }
             const liftQuestion = document.getElementById('pickup-lift-question');
