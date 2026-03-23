@@ -23,6 +23,18 @@ function initTransportDatePicker() {
     const preferredPickupTimeInput = document.getElementById('preferred-time-pickup');
     const preferredDeliveryTimeInput = document.getElementById('preferred-time-delivery');
     const timeWindowRow = document.getElementById('transport-time-window-row');
+    const pickupExactInput = document.getElementById('pickup-time-exact');
+    const pickupStartInput = document.getElementById('pickup-time-start');
+    const pickupEndInput = document.getElementById('pickup-time-end');
+    const pickupExactWrap = document.getElementById('pickup-time-exact-wrap');
+    const pickupRangeWrap = document.getElementById('pickup-time-range-wrap');
+    const pickupModeRadios = Array.from(document.querySelectorAll('input[name="pickup-time-mode"]'));
+    const deliveryExactInput = document.getElementById('delivery-time-exact');
+    const deliveryStartInput = document.getElementById('delivery-time-start');
+    const deliveryEndInput = document.getElementById('delivery-time-end');
+    const deliveryExactWrap = document.getElementById('delivery-time-exact-wrap');
+    const deliveryRangeWrap = document.getElementById('delivery-time-range-wrap');
+    const deliveryModeRadios = Array.from(document.querySelectorAll('input[name="delivery-time-mode"]'));
 
     if (!hiddenInput || !trigger || !panel || !display) return;
     if (hiddenInput.dataset.customDatePickerInit === '1') return;
@@ -87,22 +99,151 @@ function initTransportDatePicker() {
         display.classList.toggle('is-placeholder', !!isPlaceholder);
     }
 
+    function setupPreferredTimeControl(config) {
+        const {
+            hiddenField,
+            exactInput,
+            startInput,
+            endInput,
+            exactWrap,
+            rangeWrap,
+            modeRadios
+        } = config;
+
+        if (!hiddenField || !exactInput || !startInput || !endInput || !exactWrap || !rangeWrap || !Array.isArray(modeRadios) || modeRadios.length === 0) {
+            return {
+                syncEnabledState() {}
+            };
+        }
+
+        let updatingFromUi = false;
+        let updatingFromHidden = false;
+
+        function getSelectedMode() {
+            const selected = modeRadios.find((radio) => radio.checked);
+            return selected ? selected.value : 'exact';
+        }
+
+        function setSelectedMode(mode) {
+            const resolvedMode = mode === 'range' ? 'range' : 'exact';
+            modeRadios.forEach((radio) => {
+                radio.checked = radio.value === resolvedMode;
+            });
+            exactWrap.style.display = resolvedMode === 'exact' ? '' : 'none';
+            rangeWrap.style.display = resolvedMode === 'range' ? '' : 'none';
+        }
+
+        function buildHiddenValueFromUi() {
+            const mode = getSelectedMode();
+            if (mode === 'range') {
+                const start = (startInput.value || '').trim();
+                const end = (endInput.value || '').trim();
+                if (!start || !end) return '';
+                return `${start} - ${end}`;
+            }
+            return (exactInput.value || '').trim();
+        }
+
+        function syncUiFromHidden() {
+            if (updatingFromUi) return;
+            updatingFromHidden = true;
+
+            const raw = (hiddenField.value || '').trim();
+            const rangeMatch = raw.match(/^(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})$/);
+
+            if (rangeMatch) {
+                setSelectedMode('range');
+                startInput.value = rangeMatch[1];
+                endInput.value = rangeMatch[2];
+                exactInput.value = '';
+            } else {
+                setSelectedMode('exact');
+                exactInput.value = raw;
+                startInput.value = '';
+                endInput.value = '';
+            }
+
+            updatingFromHidden = false;
+        }
+
+        function syncHiddenFromUi() {
+            if (updatingFromHidden) return;
+            updatingFromUi = true;
+            const nextValue = buildHiddenValueFromUi();
+            if (hiddenField.value !== nextValue) {
+                hiddenField.value = nextValue;
+                hiddenField.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            updatingFromUi = false;
+        }
+
+        function syncEnabledState(hasConcreteDate) {
+            const controls = [exactInput, startInput, endInput, ...modeRadios];
+            controls.forEach((control) => {
+                if (!control) return;
+                control.disabled = !hasConcreteDate;
+                control.style.opacity = hasConcreteDate ? '1' : '0.65';
+                control.style.cursor = hasConcreteDate ? 'pointer' : 'not-allowed';
+            });
+
+            if (!hasConcreteDate) {
+                setSelectedMode('exact');
+                exactInput.value = '';
+                startInput.value = '';
+                endInput.value = '';
+                if (hiddenField.value) {
+                    hiddenField.value = '';
+                    hiddenField.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+        }
+
+        modeRadios.forEach((radio) => {
+            radio.addEventListener('change', () => {
+                setSelectedMode(getSelectedMode());
+                syncHiddenFromUi();
+            });
+        });
+
+        [exactInput, startInput, endInput].forEach((input) => {
+            input.addEventListener('change', syncHiddenFromUi);
+            input.addEventListener('input', syncHiddenFromUi);
+        });
+
+        hiddenField.addEventListener('change', syncUiFromHidden);
+        syncUiFromHidden();
+
+        return {
+            syncEnabledState
+        };
+    }
+
+    const pickupTimeControl = setupPreferredTimeControl({
+        hiddenField: preferredPickupTimeInput,
+        exactInput: pickupExactInput,
+        startInput: pickupStartInput,
+        endInput: pickupEndInput,
+        exactWrap: pickupExactWrap,
+        rangeWrap: pickupRangeWrap,
+        modeRadios: pickupModeRadios
+    });
+
+    const deliveryTimeControl = setupPreferredTimeControl({
+        hiddenField: preferredDeliveryTimeInput,
+        exactInput: deliveryExactInput,
+        startInput: deliveryStartInput,
+        endInput: deliveryEndInput,
+        exactWrap: deliveryExactWrap,
+        rangeWrap: deliveryRangeWrap,
+        modeRadios: deliveryModeRadios
+    });
+
     function syncPreferredTimeState() {
-        const preferredTimeInputs = [preferredPickupTimeInput, preferredDeliveryTimeInput].filter(Boolean);
-        if (preferredTimeInputs.length === 0) return;
         const selectedDateText = (hiddenInput.value || '').trim().toLowerCase();
         const hasConcreteDate = !!selectedDateText && !selectedDateText.includes("don't have a date yet");
 
-        preferredTimeInputs.forEach((input) => {
-            input.disabled = !hasConcreteDate;
-            input.style.opacity = hasConcreteDate ? '1' : '0.65';
-            input.style.cursor = hasConcreteDate ? 'pointer' : 'not-allowed';
-
-            if (!hasConcreteDate && input.value) {
-                input.value = '';
-                input.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-        });
+        pickupTimeControl.syncEnabledState(hasConcreteDate);
+        deliveryTimeControl.syncEnabledState(hasConcreteDate);
 
         if (timeWindowRow) {
             timeWindowRow.style.display = '';
@@ -572,6 +713,20 @@ function resetPickupLiftSelection() {
 }
 
 function applyPickupLiftSelection(value) {
+    if (isNoLiftService(getActiveServiceValue())) {
+        const vehiclePickupLiftSection = document.getElementById('pickup-lift-section');
+        const vehiclePickupLiftInput = document.getElementById('pickup-lift-available');
+        if (vehiclePickupLiftSection) {
+            vehiclePickupLiftSection.style.display = 'none';
+        }
+        if (vehiclePickupLiftInput) {
+            vehiclePickupLiftInput.value = '';
+            vehiclePickupLiftInput.dataset.userSelected = 'false';
+            vehiclePickupLiftInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        return;
+    }
+
     const liftInput = document.getElementById('pickup-lift-available');
     const pickupPropertyInput = document.getElementById('pickup-property-type');
     const hasPickupProperty = !!(pickupPropertyInput && pickupPropertyInput.value && pickupPropertyInput.value.trim());
@@ -604,6 +759,19 @@ function applyPickupLiftSelection(value) {
 }
 
 function applyDeliveryLiftSelection(value) {
+    if (isNoLiftService(getActiveServiceValue())) {
+        const vehicleDeliveryLiftSection = document.getElementById('delivery-lift-section');
+        const vehicleDeliveryLiftInput = document.getElementById('delivery-lift-available');
+        if (vehicleDeliveryLiftSection) {
+            vehicleDeliveryLiftSection.style.display = 'none';
+        }
+        if (vehicleDeliveryLiftInput) {
+            vehicleDeliveryLiftInput.value = '';
+            vehicleDeliveryLiftInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        return;
+    }
+
     const liftInput = document.getElementById('delivery-lift-available');
     if (liftInput) {
         liftInput.value = value || '';
@@ -1282,6 +1450,9 @@ document.addEventListener('DOMContentLoaded', function () {
             customItems: { ...(customItems || {}) },
             customItemPhotos: { ...(customItemPhotos || {}) },
             selectedPickupFloors: Array.from(window.selectedPickupFloors || []),
+            floorMediaItems: window.floorMediaItems && typeof window.floorMediaItems === 'object'
+                ? { ...window.floorMediaItems }
+                : {},
             multiFloorInventory: window.multiFloorInventory && typeof window.multiFloorInventory === 'object'
                 ? { ...window.multiFloorInventory }
                 : {}
@@ -1539,6 +1710,60 @@ const propertyFloors = {
     'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
 };
 
+const VEHICLE_TRANSPORT_SERVICES = new Set([
+    'Car Transport',
+    'Motorbike Transport',
+    'Trailers & Campervans Transport'
+]);
+
+const CUSTOMIZED_STYLE_SERVICES = new Set([
+    'Customized Items',
+    'Specialist & Antiques',
+    'Packaging',
+    'Packaged Parcels',
+    'Vehicle Parts'
+]);
+
+const PACKAGED_SERVICES = new Set([
+    'Packaging',
+    'Packaged Parcels'
+]);
+
+const VEHICLE_PARKING_LEVELS = ['Ground', '-1', '-2', '-3'];
+
+function getActiveServiceValue() {
+    return (
+        document.getElementById('item-description-hidden')?.value
+        || document.getElementById('create-job-hidden')?.value
+        || decodeURIComponent(new URLSearchParams(window.location.search).get('service') || '')
+        || ''
+    ).trim();
+}
+
+function isVehicleTransportService(serviceValue) {
+    return VEHICLE_TRANSPORT_SERVICES.has((serviceValue || '').trim());
+}
+
+function isCustomizedInventoryService(serviceValue) {
+    return CUSTOMIZED_STYLE_SERVICES.has((serviceValue || '').trim());
+}
+
+function isPackagedParcelsService(serviceValue) {
+    return PACKAGED_SERVICES.has((serviceValue || '').trim());
+}
+
+function isFreightService(serviceValue) {
+    return (serviceValue || '').trim() === 'Freight';
+}
+
+function isNoLiftService(serviceValue) {
+    return isVehicleTransportService(serviceValue) || isFreightService(serviceValue);
+}
+
+function isVehicleLikeStepFlowService(serviceValue) {
+    return isVehicleTransportService(serviceValue) || isFreightService(serviceValue);
+}
+
 function getFloorIconSvg(floor) {
     if (floor === 'Ground') {
         return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="16" width="14" height="3" rx="1.5" fill="currentColor"/></svg>';
@@ -1739,7 +1964,7 @@ function updateStep3InventoryWarning() {
 
 function isInventoryInputRequiredForStep3() {
     const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
-    if (serviceValue === 'Customized Items') {
+    if (isCustomizedInventoryService(serviceValue)) {
         return false;
     }
     const inventoryCardContainer = document.getElementById('inventory-card-container');
@@ -1775,11 +2000,27 @@ document.addEventListener('click', function(event) {
     const editBtn = event.target.closest('.overview-edit-btn');
     if (editBtn) {
         event.preventDefault();
+        const directOverviewEdit = (editBtn.getAttribute('data-overview-edit') || '').trim().toLowerCase();
+        if (directOverviewEdit === 'addresses') {
+            openOverviewEditModal('summary-addresses');
+            return;
+        }
+
+        const card = editBtn.closest('.overview-item');
+        const valueEl = card ? card.querySelector('.overview-item-value') : null;
+        const valueId = valueEl ? valueEl.id : '';
+        const overviewSection = document.querySelector('[data-form-step="8"]');
+        const overviewVisible = !!(overviewSection && overviewSection.offsetParent !== null);
+
+        // Address edits should open in-place editor whenever the overview is visible,
+        // even if body step data is temporarily stale.
+        if (overviewVisible && (valueId === 'summary-pickup-address' || valueId === 'summary-delivery-address')) {
+            openOverviewEditModal(valueId);
+            return;
+        }
+
         const currentStep = parseInt(document.body.dataset.formStep || '1', 10);
         if (currentStep === 8) {
-            const card = editBtn.closest('.overview-item');
-            const valueEl = card ? card.querySelector('.overview-item-value') : null;
-            const valueId = valueEl ? valueEl.id : '';
             if (valueId) {
                 openOverviewEditModal(valueId);
             }
@@ -1830,8 +2071,130 @@ document.addEventListener('DOMContentLoaded', function () {
                 stickyResetBtn.classList.add('hide');
             }
         }
+
+        const getVisibleVehicleStep3Section = () => {
+            const sectionIds = [
+                'car-transport-section',
+                'motorbike-transport-section',
+                'trailer-campervan-section'
+            ];
+
+            for (const sectionId of sectionIds) {
+                const section = document.getElementById(sectionId);
+                if (!section) continue;
+                if (section.classList.contains('step-hidden')) continue;
+                if (section.style.display === 'none') continue;
+                if (section.offsetParent === null) continue;
+                return section;
+            }
+
+            return null;
+        };
+
+        const getVehicleStep3MissingRequiredField = () => {
+            if (!isVehicleTransportService(getActiveServiceValue())) {
+                return null;
+            }
+
+            const section = getVisibleVehicleStep3Section();
+            if (!section) {
+                return null;
+            }
+
+            const requiredIds = Array.from(
+                new Set(
+                    Array.from(section.querySelectorAll('[data-required-for]'))
+                        .map((node) => (node.getAttribute('data-required-for') || '').trim())
+                        .filter(Boolean)
+                )
+            );
+
+            for (const fieldId of requiredIds) {
+                const field = document.getElementById(fieldId);
+                if (!field) continue;
+                const value = typeof field.value === 'string' ? field.value.trim() : '';
+                if (!value) {
+                    return field;
+                }
+            }
+
+            return null;
+        };
+
+        const getFreightStep3MissingRequiredField = () => {
+            if (!isFreightService(getActiveServiceValue())) {
+                return null;
+            }
+
+            const section = document.getElementById('office-removal-description-section');
+            if (!isOverviewElementVisible(section)) {
+                return null;
+            }
+
+            const freightDescriptionInput = document.getElementById('freight-job-description-input');
+            if (freightDescriptionInput && !freightDescriptionInput.value.trim()) {
+                return freightDescriptionInput;
+            }
+
+            const freightDescription = document.getElementById('office-removal-description');
+            if (!freightDescription || !freightDescription.value.trim()) {
+                return freightDescription || freightDescriptionInput;
+            }
+
+            return null;
+        };
+
+        const isOverviewElementVisible = (element) => {
+            return !!(
+                element
+                && element.style.display !== 'none'
+                && !element.classList.contains('step-hidden')
+                && element.offsetParent !== null
+            );
+        };
+
+        const getPianoStep3MissingRequiredField = () => {
+            if (getActiveServiceValue() !== 'Piano Transport') {
+                return null;
+            }
+
+            const section = document.getElementById('piano-delivery-section');
+            if (!isOverviewElementVisible(section)) {
+                return null;
+            }
+
+            const pianoType = document.getElementById('piano-type-hidden');
+            const pianoSize = document.getElementById('piano-size-hidden');
+            if (!pianoType || !pianoType.value.trim()) return pianoType;
+
+            const isCustomType = pianoType.value === 'custom';
+            if (!isCustomType && (!pianoSize || !pianoSize.value.trim())) return pianoSize;
+
+            const isCustom = isCustomType || (pianoSize && pianoSize.value === 'custom');
+            if (!isCustom) {
+                return null;
+            }
+
+            const customName = document.getElementById('piano-custom-name');
+            const customLength = document.getElementById('piano-custom-length');
+            const customWidth = document.getElementById('piano-custom-width');
+            const customHeight = document.getElementById('piano-custom-height');
+
+            if (!customName || !customName.value.trim()) return customName;
+            if (!customLength || !String(customLength.value || '').trim()) return customLength;
+            if (!customWidth || !String(customWidth.value || '').trim()) return customWidth;
+            if (!customHeight || !String(customHeight.value || '').trim()) return customHeight;
+
+            return null;
+        };
+
         // Requirements check for each step
         function requirementsMetForStep(step) {
+            const serviceValue = getActiveServiceValue();
+            const isVehicleService = isVehicleLikeStepFlowService(serviceValue);
+            const isPianoService = serviceValue === 'Piano Transport';
+            const isPackagedService = isPackagedParcelsService(serviceValue);
+            const isVehiclePartsService = serviceValue === 'Vehicle Parts';
             // Step 1: require all visible required fields
             if (step === 1) {
                 const pickupAddress = document.getElementById('pickup-address');
@@ -1846,11 +2209,64 @@ document.addEventListener('DOMContentLoaded', function () {
             // Step 2: property type required
             if (step === 2) {
                 const propertyType = document.getElementById('pickup-property-type');
-                return propertyType && propertyType.value.trim();
+                if (!(propertyType && propertyType.value.trim())) {
+                    return false;
+                }
+
+                const pickupLiftSection = document.getElementById('pickup-lift-section');
+                const liftVisible = !!(
+                    pickupLiftSection
+                    && pickupLiftSection.style.display !== 'none'
+                    && pickupLiftSection.offsetParent !== null
+                );
+
+                if (liftVisible) {
+                    const pickupLift = document.getElementById('pickup-lift-available');
+                    if (!(pickupLift && pickupLift.value && pickupLift.value.trim())) {
+                        return false;
+                    }
+                }
+
+                return true;
             }
             // Step 3: floor required, lift required if visible, and at least one inventory item when inventory is shown
             // lift also required if visible (when floor is not ground)
             if (step === 3) {
+                if (serviceValue === 'Piano Transport') {
+                    return !getPianoStep3MissingRequiredField();
+                }
+                if (isCustomizedInventoryService(serviceValue)) {
+                    const customizedItemsField = document.getElementById('customized-items-hidden');
+                    if (!customizedItemsField || !customizedItemsField.value.trim()) {
+                        return false;
+                    }
+                    try {
+                        const parsedItems = JSON.parse(customizedItemsField.value);
+                        return Array.isArray(parsedItems) && parsedItems.length > 0;
+                    } catch (error) {
+                        return false;
+                    }
+                }
+                if (isVehicleService) {
+                    if (isFreightService(serviceValue)) {
+                        const missingFreightField = getFreightStep3MissingRequiredField();
+                        if (missingFreightField) {
+                            return false;
+                        }
+                    } else {
+                        const missingVehicleField = getVehicleStep3MissingRequiredField();
+                        if (missingVehicleField) {
+                            return false;
+                        }
+                    }
+
+                    const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                    const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+                        .map((btn) => (btn.getAttribute('data-floor') || '').trim())
+                        .filter(Boolean);
+                    const effectiveFloors = selectedFloors.length > 0 ? selectedFloors : domSelectedFloors;
+                    return effectiveFloors.length > 0;
+                }
                 const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
                 const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
                     .map((btn) => (btn.getAttribute('data-floor') || '').trim())
@@ -1916,6 +2332,15 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             // Step 5: delivery details - validation depends on service type
             if (step === 5) {
+                if (isVehicleService) {
+                    const selectedDeliveryFloors = window.selectedDeliveryFloors ? Array.from(window.selectedDeliveryFloors) : [];
+                    const domSelectedFloors = Array.from(document.querySelectorAll('#delivery-floors-selector .delivery-floor-selector-btn.selected'))
+                        .map((btn) => (btn.getAttribute('data-floor') || '').trim())
+                        .filter(Boolean);
+                    const effectiveFloors = selectedDeliveryFloors.length > 0 ? selectedDeliveryFloors : domSelectedFloors;
+                    return effectiveFloors.length > 0;
+                }
+
                 const organizationSection = document.getElementById('item-organization-section');
                 const isOrganizationVisible = !!(organizationSection && organizationSection.offsetParent !== null);
 
@@ -1951,11 +2376,11 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             // Step 6: all service requirements must be answered
             if (step === 6) {
-                const services = [
-                    'service-packing',
-                    'service-storage',
-                    'service-disassembly'
-                ];
+                const services = (isVehicleService || isPackagedService)
+                    ? ['service-storage']
+                    : (isVehiclePartsService
+                        ? ['service-packing', 'service-storage']
+                        : ['service-packing', 'service-storage', 'service-disassembly']);
                 
                 // Check Yes/No services
                 for (const serviceId of services) {
@@ -1987,7 +2412,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 const packingInput = document.getElementById('service-packing');
-                if (packingInput && packingInput.value === 'yes') {
+                if (!isVehicleService && !isPianoService && !isPackagedService && packingInput && packingInput.value === 'yes') {
                     if (typeof window.hasValidPackingSelection === 'function' && !window.hasValidPackingSelection()) {
                         return false;
                     }
@@ -2001,12 +2426,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 const disassemblyInput = document.getElementById('service-disassembly');
-                if (disassemblyInput && disassemblyInput.value === 'yes') {
+                if (!isVehicleService && !isPianoService && !isPackagedService && !isVehiclePartsService && disassemblyInput && disassemblyInput.value === 'yes') {
                     if (typeof window.hasValidDisassemblySelection === 'function' && !window.hasValidDisassemblySelection()) {
                         return false;
                     }
                 }
-                
+
                 return true;
             }
             // Step 7: moving date is required
@@ -2060,18 +2485,24 @@ document.addEventListener('DOMContentLoaded', function () {
             const totalSteps = typeof window.totalSteps === 'number' ? window.totalSteps : 8;
             if (step >= totalSteps) {
                 stickyNextBtn.disabled = true;
+                stickyNextBtn.classList.add('disabled');
                 stickyNextBtn.style.opacity = '0.45';
                 stickyNextBtn.style.display = 'none';
                 return;
             }
             stickyNextBtn.style.display = '';
             stickyNextBtn.disabled = !requirementsMetForStep(step);
+            stickyNextBtn.classList.toggle('disabled', stickyNextBtn.disabled);
             stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
             ensureMultiFloorInventoryVisible();
             updateStep3InventoryWarning();
         };
 
         function getStep5EmptySelectedDeliveryFloors() {
+            if (isVehicleLikeStepFlowService(getActiveServiceValue())) {
+                return [];
+            }
+
             const selectedFloors = window.selectedDeliveryFloors;
             const assignments = window.itemFloorAssignments || {};
             if (!selectedFloors || !(selectedFloors instanceof Set) || selectedFloors.size === 0) {
@@ -2263,6 +2694,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 if (step === 5) {
+                    if (isVehicleLikeStepFlowService(getActiveServiceValue())) {
+                        stickyNextBtn.disabled = false;
+                        stickyNextBtn.classList.remove('disabled');
+                        stickyNextBtn.style.opacity = '1';
+                        if (typeof window.setFormStep === 'function') {
+                            window.setFormStep(step + 1);
+                        }
+                        return;
+                    }
+
                     const organizationSection = document.getElementById('item-organization-section');
                     const isOrganizationVisible = !!(organizationSection && organizationSection.offsetParent !== null);
                     if (isOrganizationVisible) {
@@ -2306,6 +2747,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 updateStickyNextBtnVisibility();
                 const step = getEffectiveCurrentStep();
                 stickyNextBtn.disabled = !requirementsMetForStep(step);
+                stickyNextBtn.classList.toggle('disabled', stickyNextBtn.disabled);
                 stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
                 updateStep3InventoryWarning();
             });
@@ -2313,6 +2755,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 updateStickyNextBtnVisibility();
                 const step = getEffectiveCurrentStep();
                 stickyNextBtn.disabled = !requirementsMetForStep(step);
+                stickyNextBtn.classList.toggle('disabled', stickyNextBtn.disabled);
                 stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
                 updateStep3InventoryWarning();
             });
@@ -2336,6 +2779,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Set initial disabled state for Next button
         const stepInit = getEffectiveCurrentStep();
         stickyNextBtn.disabled = !requirementsMetForStep(stepInit);
+        stickyNextBtn.classList.toggle('disabled', stickyNextBtn.disabled);
         stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
         updateStep3InventoryWarning();
         // Scroll logic: hide sticky button if footer is visible
@@ -2351,7 +2795,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     stickyResetBtn.style.pointerEvents = 'none';
                 }
             } else {
-                stickyNextBtn.style.opacity = '1';
+                stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
                 stickyNextBtn.style.pointerEvents = 'auto';
                 if (stickyResetBtn) {
                     stickyResetBtn.style.opacity = '1';
@@ -2526,6 +2970,34 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function getCustomizedStyleItems() {
+        const serviceValue = getActiveServiceValue();
+        if (!isCustomizedInventoryService(serviceValue)) {
+            return [];
+        }
+
+        const serializedItems = document.getElementById('customized-items-hidden')?.value || '';
+        if (!serializedItems) {
+            return [];
+        }
+
+        try {
+            const parsedItems = JSON.parse(serializedItems);
+            if (!Array.isArray(parsedItems)) {
+                return [];
+            }
+
+            return parsedItems
+                .map((item) => ({
+                    name: String(item?.name || '').trim(),
+                    qty: 1
+                }))
+                .filter((item) => !!item.name);
+        } catch (error) {
+            return [];
+        }
+    }
+
     function getPackingEligibleItems() {
         const totals = {};
         const useMultiFloorInventory = hasActiveMultiFloorInventory();
@@ -2551,6 +3023,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             });
         }
+
+        // Customized-style services (Customized Items, Specialist & Antiques, Packaging,
+        // Vehicle Parts) store inventory in customized-items-hidden, not in room maps.
+        getCustomizedStyleItems().forEach((item) => {
+            addQty(item.name, item.qty);
+        });
 
         return Object.keys(totals)
             .sort((a, b) => a.localeCompare(b))
@@ -2750,6 +3228,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function renderPackingItemsConfig() {
         const isNarrowPackingViewport = window.innerWidth <= 768;
+        const isPianoService = getActiveServiceValue() === 'Piano Transport';
         const packingInput = document.getElementById('service-packing');
         const packingModeInput = document.getElementById('service-packing-mode');
         const packingBoxProviderInput = document.getElementById('service-packing-box-provider');
@@ -2761,6 +3240,18 @@ document.addEventListener('DOMContentLoaded', function () {
         const hiddenInput = document.getElementById('service-packing-items');
 
         if (!packingInput || !packingModeInput || !packingBoxProviderInput || !packingModeConfig || !packingBoxProviderConfig || !container || !list || !empty || !hiddenInput) return;
+
+        if (isPianoService) {
+            packingModeConfig.style.display = 'none';
+            packingBoxProviderConfig.style.display = 'none';
+            container.style.display = 'none';
+            list.innerHTML = '';
+            empty.style.display = 'none';
+            packingModeInput.value = '';
+            packingBoxProviderInput.value = '';
+            hiddenInput.value = '';
+            return;
+        }
 
         const isPackingYes = packingInput.value === 'yes';
         packingModeConfig.style.display = isPackingYes ? 'block' : 'none';
@@ -2825,6 +3316,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (items && typeof items === 'object') {
                     Object.entries(items).forEach(([name, qty]) => addItem(floor, name, qty));
                 }
+            });
+        }
+
+        const customizedItems = getCustomizedStyleItems();
+        if (customizedItems.length > 0) {
+            const selectedPickupFloors = window.selectedPickupFloors instanceof Set
+                ? Array.from(window.selectedPickupFloors).filter(Boolean)
+                : [];
+            const preferredFloor = selectedPickupFloors[0]
+                || document.getElementById('pickup-floor-select')?.value
+                || 'Ground';
+
+            customizedItems.forEach((item) => {
+                addItem(preferredFloor, item.name, item.qty);
             });
         }
 
@@ -3108,6 +3613,20 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
+        const customizedItems = getCustomizedStyleItems();
+        if (customizedItems.length > 0) {
+            const selectedPickupFloors = window.selectedPickupFloors instanceof Set
+                ? Array.from(window.selectedPickupFloors).filter(Boolean)
+                : [];
+            const preferredFloor = selectedPickupFloors[0]
+                || document.getElementById('pickup-floor-select')?.value
+                || 'Ground';
+
+            customizedItems.forEach((item) => {
+                addItem(preferredFloor, item.name, item.qty);
+            });
+        }
+
         const sortedFloors = Object.keys(byFloor).sort((a, b) => {
             const ia = floorOrder.indexOf(a);
             const ib = floorOrder.indexOf(b);
@@ -3372,7 +3891,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function renderStorageConfig() {
         const isNarrowServiceViewport = window.innerWidth <= 540;
+        const isVehicleService = isVehicleLikeStepFlowService(getActiveServiceValue());
+        const isPianoService = getActiveServiceValue() === 'Piano Transport';
         const storageInput = document.getElementById('service-storage');
+        const storageModeInput = document.getElementById('service-storage-mode');
         const storageItemsInput = document.getElementById('service-storage-items');
         const storageItemsConfig = document.getElementById('storage-items-config');
         const storageItemsList = document.getElementById('storage-items-list');
@@ -3382,12 +3904,50 @@ document.addEventListener('DOMContentLoaded', function () {
         const storageEndInput = document.getElementById('service-storage-end-datetime');
         const storageDurationPreview = document.getElementById('storage-duration-preview');
 
-        if (!storageInput || !storageItemsInput || !storageItemsConfig || !storageItemsList || !storageItemsEmpty || !storageDurationConfig || !storageStartInput || !storageEndInput || !storageDurationPreview) {
+        if (!storageInput || !storageModeInput || !storageItemsInput || !storageItemsConfig || !storageItemsList || !storageItemsEmpty || !storageDurationConfig || !storageStartInput || !storageEndInput || !storageDurationPreview) {
+            return;
+        }
+
+        if (isPianoService) {
+            const isStorageYes = storageInput.value === 'yes';
+            storageItemsConfig.style.display = 'none';
+            storageItemsList.innerHTML = '';
+            storageItemsEmpty.style.display = 'none';
+            storageModeInput.value = '';
+            storageItemsInput.value = '';
+
+            storageDurationConfig.style.display = isStorageYes ? 'block' : 'none';
+            if (!isStorageYes) {
+                storageDurationPreview.textContent = '';
+                return;
+            }
+
+            if (!storageStartInput.value) {
+                const start = getTodayDate();
+                storageStartInput.value = toDateInputValue(start);
+            }
+            if (!storageEndInput.value) {
+                const defaultEnd = new Date(storageStartInput.value);
+                if (Number.isFinite(defaultEnd.getTime())) {
+                    defaultEnd.setDate(defaultEnd.getDate() + 7);
+                    storageEndInput.value = toDateInputValue(defaultEnd);
+                }
+            }
+
+            const startDate = new Date(storageStartInput.value);
+            const endDate = new Date(storageEndInput.value);
+            if (Number.isFinite(startDate.getTime()) && Number.isFinite(endDate.getTime()) && endDate > startDate) {
+                storageDurationPreview.textContent = getStorageDurationText(startDate, endDate);
+                storageDurationPreview.style.color = '#1e40af';
+            } else {
+                storageDurationPreview.textContent = 'Please choose a valid storage start and end date.';
+                storageDurationPreview.style.color = '#b91c1c';
+            }
             return;
         }
 
         const isStorageYes = storageInput.value === 'yes';
-        storageItemsConfig.style.display = isStorageYes ? 'block' : 'none';
+        storageItemsConfig.style.display = (isStorageYes && !isVehicleService) ? 'block' : 'none';
         storageDurationConfig.style.display = isStorageYes ? 'block' : 'none';
 
         if (!isStorageYes) {
@@ -3395,6 +3955,10 @@ document.addEventListener('DOMContentLoaded', function () {
             storageItemsEmpty.style.display = 'none';
             storageDurationPreview.textContent = '';
             return;
+        }
+
+        if (!storageModeInput.value) {
+            storageModeInput.value = 'all';
         }
 
         if (!storageStartInput.value) {
@@ -3417,6 +3981,14 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             storageDurationPreview.textContent = 'Storage end date must be later than start date.';
             storageDurationPreview.style.color = '#b91c1c';
+        }
+
+        if (isVehicleService) {
+            storageModeInput.value = 'duration';
+            storageItemsInput.value = '';
+            storageItemsList.innerHTML = '';
+            storageItemsEmpty.style.display = 'none';
+            return;
         }
 
         const { byFloor, sortedFloors } = getDisassemblyEligibleItems();
@@ -3486,34 +4058,75 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         });
 
-        const allStorageItemsSelected = eligibleStorageItems.length > 0 && eligibleStorageItems.every(({ itemKey, availableForStorage }) => {
-            return (parseInt(currentState[itemKey], 10) || 0) === availableForStorage;
-        });
-
         if (eligibleStorageItems.length > 0) {
             const actionsRow = document.createElement('div');
-            actionsRow.style.cssText = 'display:flex;justify-content:flex-start;align-items:center;margin-bottom:8px;';
+            actionsRow.style.cssText = 'display:flex;justify-content:flex-start;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;';
 
             const selectAllBtn = document.createElement('button');
             selectAllBtn.type = 'button';
             selectAllBtn.style.cssText = 'border:1px solid #16a34a;background:#dcfce7;color:#166534;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;';
-            selectAllBtn.textContent = allStorageItemsSelected ? 'Undo all items' : 'Select all items';
+            selectAllBtn.textContent = 'Select all items';
+
+            const partialBtn = document.createElement('button');
+            partialBtn.type = 'button';
+            partialBtn.style.cssText = 'border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;';
+            partialBtn.textContent = 'Partial Items';
+
+            const isAllMode = storageModeInput.value !== 'selected';
+            if (isAllMode) {
+                selectAllBtn.style.borderColor = '#1d4ed8';
+                selectAllBtn.style.background = '#1d4ed8';
+                selectAllBtn.style.color = '#fff';
+            } else {
+                partialBtn.style.borderColor = '#1d4ed8';
+                partialBtn.style.background = '#1d4ed8';
+                partialBtn.style.color = '#fff';
+            }
 
             selectAllBtn.addEventListener('click', () => {
                 const nextState = {};
-                if (!allStorageItemsSelected) {
-                    eligibleStorageItems.forEach(({ itemKey, availableForStorage }) => {
-                        nextState[itemKey] = availableForStorage;
-                    });
-                }
+                storageModeInput.value = 'all';
+                eligibleStorageItems.forEach(({ itemKey, availableForStorage }) => {
+                    nextState[itemKey] = availableForStorage;
+                });
                 storageItemsInput.value = Object.keys(nextState).length > 0 ? JSON.stringify(nextState) : '';
+                storageModeInput.dispatchEvent(new Event('change', { bubbles: true }));
+                storageItemsInput.dispatchEvent(new Event('change', { bubbles: true }));
+                renderStorageConfig();
+                if (window.updateNextButtonState) window.updateNextButtonState();
+            });
+
+            partialBtn.addEventListener('click', () => {
+                storageModeInput.value = 'selected';
+                // Match partial packing behavior: user explicitly picks items.
+                storageItemsInput.value = '';
+                storageModeInput.dispatchEvent(new Event('change', { bubbles: true }));
                 storageItemsInput.dispatchEvent(new Event('change', { bubbles: true }));
                 renderStorageConfig();
                 if (window.updateNextButtonState) window.updateNextButtonState();
             });
 
             actionsRow.appendChild(selectAllBtn);
+            actionsRow.appendChild(partialBtn);
             storageItemsList.appendChild(actionsRow);
+
+            if (isAllMode) {
+                const fullModeHint = document.createElement('div');
+                fullModeHint.style.cssText = 'font-size:0.86rem;color:#1e40af;font-weight:600;padding:2px 2px 8px;';
+                fullModeHint.textContent = 'All eligible items are selected for storage.';
+                storageItemsList.appendChild(fullModeHint);
+
+                const nextState = {};
+                eligibleStorageItems.forEach(({ itemKey, availableForStorage }) => {
+                    nextState[itemKey] = availableForStorage;
+                });
+                const nextSerialized = Object.keys(nextState).length > 0 ? JSON.stringify(nextState) : '';
+                if (storageItemsInput.value !== nextSerialized) {
+                    storageItemsInput.value = nextSerialized;
+                    storageItemsInput.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                return;
+            }
         }
 
         sortedFloors.forEach(floor => {
@@ -3826,6 +4439,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function renderDisassemblyConfig() {
         const isNarrowServiceViewport = window.innerWidth <= 540;
+        const isPianoService = getActiveServiceValue() === 'Piano Transport';
         const disassemblyInput = document.getElementById('service-disassembly');
         const disassemblyItemsInput = document.getElementById('service-disassembly-items');
         const assembleChoiceInput = document.getElementById('service-assemble-at-arrival');
@@ -3839,6 +4453,20 @@ document.addEventListener('DOMContentLoaded', function () {
         const assembleEmpty = document.getElementById('assemble-items-empty');
 
         if (!disassemblyInput || !disassemblyItemsInput || !assembleChoiceInput || !assembleItemsInput || !disassemblyConfig || !disassemblyList || !disassemblyEmpty || !assembleChoiceConfig || !assembleItemsConfig || !assembleList || !assembleEmpty) {
+            return;
+        }
+
+        if (isPianoService) {
+            disassemblyConfig.style.display = 'none';
+            assembleChoiceConfig.style.display = 'none';
+            assembleItemsConfig.style.display = 'none';
+            disassemblyList.innerHTML = '';
+            assembleList.innerHTML = '';
+            disassemblyEmpty.style.display = 'none';
+            assembleEmpty.style.display = 'none';
+            disassemblyItemsInput.value = '';
+            assembleChoiceInput.value = '';
+            assembleItemsInput.value = '';
             return;
         }
 
@@ -4323,6 +4951,17 @@ document.addEventListener('DOMContentLoaded', function () {
         const storageEndInput = document.getElementById('service-storage-end-datetime');
         if (!storageItemsInput || !storageStartInput || !storageEndInput) return false;
 
+        const isVehicleService = isVehicleLikeStepFlowService(getActiveServiceValue());
+        const isPianoService = getActiveServiceValue() === 'Piano Transport';
+        if (isVehicleService || isPianoService) {
+            const vehicleStart = new Date(storageStartInput.value);
+            const vehicleEnd = new Date(storageEndInput.value);
+            if (!Number.isFinite(vehicleStart.getTime()) || !Number.isFinite(vehicleEnd.getTime())) {
+                return false;
+            }
+            return vehicleEnd > vehicleStart;
+        }
+
         const state = parseStorageItemsSelection(storageItemsInput.value);
         const hasItems = Object.values(state).some(qty => (parseInt(qty, 10) || 0) > 0);
         if (!hasItems) return false;
@@ -4374,7 +5013,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        if (e.target.id === 'service-storage' || e.target.id === 'service-storage-items' || e.target.id === 'service-storage-start-datetime' || e.target.id === 'service-storage-end-datetime') {
+        if (e.target.id === 'service-storage' || e.target.id === 'service-storage-mode' || e.target.id === 'service-storage-items' || e.target.id === 'service-storage-start-datetime' || e.target.id === 'service-storage-end-datetime') {
             renderStorageConfig();
             if (window.updateNextButtonState) {
                 window.updateNextButtonState();
@@ -4509,6 +5148,7 @@ document.addEventListener('DOMContentLoaded', function () {
         e.preventDefault();
         const service = btn.getAttribute('data-service');
         const value = btn.getAttribute('data-value');
+        const isPianoService = getActiveServiceValue() === 'Piano Transport';
         const hiddenInput = document.getElementById(`service-${service}`);
         
         if (!hiddenInput) return;
@@ -4532,20 +5172,26 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (boxProviderInput) boxProviderInput.value = '';
                 if (itemsInput) itemsInput.value = '';
             } else {
-                if (modeInput && !modeInput.value) {
+                if (!isPianoService && modeInput && !modeInput.value) {
                     modeInput.value = 'all';
                 }
             }
         }
 
         if (service === 'storage') {
+            const storageModeInput = document.getElementById('service-storage-mode');
             const storageItemsInput = document.getElementById('service-storage-items');
             const storageStartInput = document.getElementById('service-storage-start-datetime');
             const storageEndInput = document.getElementById('service-storage-end-datetime');
             if (value === 'no') {
+                if (storageModeInput) storageModeInput.value = '';
                 if (storageItemsInput) storageItemsInput.value = '';
                 if (storageStartInput) storageStartInput.value = '';
                 if (storageEndInput) storageEndInput.value = '';
+            } else {
+                if (!isPianoService && storageModeInput && !storageModeInput.value) {
+                    storageModeInput.value = 'all';
+                }
             }
         }
 
@@ -4712,6 +5358,37 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         });
+
+        function syncServiceRequirementNumbering() {
+            const cards = Array.from(document.querySelectorAll('#service-requirements-section .service-requirement-card'));
+            let visibleIndex = 1;
+
+            cards.forEach((card) => {
+                const labelSpan = card.querySelector('.service-requirement-header .service-requirement-label > span');
+                if (!labelSpan) return;
+
+                const leadTextNode = Array.from(labelSpan.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
+                if (!leadTextNode) return;
+
+                if (!labelSpan.dataset.baseLeadText) {
+                    labelSpan.dataset.baseLeadText = leadTextNode.textContent || '';
+                }
+
+                const baseLead = labelSpan.dataset.baseLeadText || '';
+                const withoutNumber = baseLead.replace(/^\s*\d+\.\s*/, '').trim();
+                const computed = window.getComputedStyle(card);
+                const isVisible = card.offsetParent !== null && computed.display !== 'none' && computed.visibility !== 'hidden';
+
+                if (isVisible) {
+                    leadTextNode.textContent = `${visibleIndex}. ${withoutNumber} `;
+                    visibleIndex += 1;
+                } else {
+                    leadTextNode.textContent = baseLead;
+                }
+            });
+        }
+
+        window.syncServiceRequirementNumbering = syncServiceRequirementNumbering;
         
         // Initialize Step 6 when it's displayed
         function initializeStep6() {
@@ -4788,6 +5465,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 if (typeof window.renderDisassemblyConfig === 'function') {
                     window.renderDisassemblyConfig();
+                }
+                if (typeof syncVehicleTransportStepRules === 'function') {
+                    syncVehicleTransportStepRules();
+                }
+                if (typeof window.syncServiceRequirementNumbering === 'function') {
+                    window.syncServiceRequirementNumbering();
                 }
                 if (window.updateNextButtonState) {
                     window.updateNextButtonState();
@@ -5289,8 +5972,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             window.renderDeliveryFloors();
         }
 
-        if (pickupLiftValue && typeof window.renderSelectedPickupFloorsInventory === 'function') {
-            window.renderSelectedPickupFloorsInventory(pickupLiftValue);
+        const hasSelectedPickupFloors = !!(window.selectedPickupFloors && window.selectedPickupFloors.size > 0);
+        if ((pickupLiftValue || hasSelectedPickupFloors) && typeof window.renderSelectedPickupFloorsInventory === 'function') {
+            window.renderSelectedPickupFloorsInventory(pickupLiftValue || '');
         }
 
         if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
@@ -5358,7 +6042,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             selectedDeliveryFloors: Array.from(window.selectedDeliveryFloors || []),
             multiFloorInventory: safeClone(window.multiFloorInventory || {}, {}),
             itemQuantities: safeClone(window.itemQuantities || {}, {}),
-            customItems: safeClone(window.customItems || {}, {})
+            customItems: safeClone(window.customItems || {}, {}),
+            customItemPhotos: safeClone(window.customItemPhotos || {}, {}),
+            floorMediaItems: safeClone(window.floorMediaItems || {}, {})
         };
 
         const payload = {
@@ -5397,8 +6083,10 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 localStorage.setItem('house_removal_inventory', JSON.stringify({
                     itemQuantities: payload.itemQuantities,
                     customItems: payload.customItems,
+                    customItemPhotos: payload.customItemPhotos,
                     selectedPickupFloors: payload.selectedPickupFloors,
-                    multiFloorInventory: payload.multiFloorInventory
+                    multiFloorInventory: payload.multiFloorInventory,
+                    floorMediaItems: payload.floorMediaItems
                 }));
             }
         } catch (error) {
@@ -5452,6 +6140,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
             if (Array.isArray(payload.selectedPickupFloors)) {
                 window.selectedPickupFloors = new Set(payload.selectedPickupFloors);
+                if (typeof syncPickupFloorHiddenFromSelection === 'function') {
+                    syncPickupFloorHiddenFromSelection();
+                }
             }
             if (Array.isArray(payload.selectedDeliveryFloors)) {
                 window.selectedDeliveryFloors = new Set(payload.selectedDeliveryFloors);
@@ -5464,6 +6155,12 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             }
             if (payload.customItems && typeof payload.customItems === 'object') {
                 window.customItems = overwriteObjectPreserveReference(window.customItems, payload.customItems) || payload.customItems;
+            }
+            if (payload.customItemPhotos && typeof payload.customItemPhotos === 'object') {
+                window.customItemPhotos = overwriteObjectPreserveReference(window.customItemPhotos, payload.customItemPhotos) || payload.customItemPhotos;
+            }
+            if (payload.floorMediaItems && typeof payload.floorMediaItems === 'object') {
+                window.floorMediaItems = overwriteObjectPreserveReference(window.floorMediaItems, payload.floorMediaItems) || payload.floorMediaItems;
             }
 
             const controls = getControls().filter(shouldTrack);
@@ -5534,7 +6231,63 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 el.dispatchEvent(new Event('change', { bubbles: true }));
             });
 
+            // Media fallback restore path: if media store is still empty, hydrate from
+            // hidden field JSON or legacy Step 3 snapshot.
+            const hasFloorMedia = !!(window.floorMediaItems && typeof window.floorMediaItems === 'object'
+                && Object.keys(window.floorMediaItems).some((floor) => Array.isArray(window.floorMediaItems[floor]) && window.floorMediaItems[floor].length > 0));
+            if (!hasFloorMedia) {
+                let restoredFromHidden = false;
+                const mediaHidden = document.getElementById('step3-media-items');
+                const hiddenRaw = (mediaHidden && typeof mediaHidden.value === 'string') ? mediaHidden.value.trim() : '';
+                if (hiddenRaw) {
+                    try {
+                        const parsedHidden = JSON.parse(hiddenRaw);
+                        if (parsedHidden && typeof parsedHidden === 'object') {
+                            window.floorMediaItems = overwriteObjectPreserveReference(window.floorMediaItems, parsedHidden) || parsedHidden;
+                            restoredFromHidden = true;
+                        }
+                    } catch (error) {
+                        // Ignore malformed hidden media payload.
+                    }
+                }
+
+                if (!restoredFromHidden) {
+                    try {
+                        const legacyRaw = localStorage.getItem('house_removal_inventory');
+                        if (legacyRaw) {
+                            const legacyParsed = JSON.parse(legacyRaw);
+                            if (legacyParsed && legacyParsed.floorMediaItems && typeof legacyParsed.floorMediaItems === 'object') {
+                                window.floorMediaItems = overwriteObjectPreserveReference(window.floorMediaItems, legacyParsed.floorMediaItems) || legacyParsed.floorMediaItems;
+                            }
+                        }
+                    } catch (error) {
+                        // Ignore legacy media snapshot parse errors.
+                    }
+                }
+            }
+
+            // Keep the hidden input synced with restored floor media state.
+            if (typeof window.floorMediaItems === 'object') {
+                const mediaHidden = document.getElementById('step3-media-items');
+                if (mediaHidden) {
+                    const hasAnyMedia = Object.keys(window.floorMediaItems || {}).some((floor) => {
+                        const entries = window.floorMediaItems[floor];
+                        return Array.isArray(entries) && entries.length > 0;
+                    });
+                    mediaHidden.value = hasAnyMedia ? JSON.stringify(window.floorMediaItems) : '';
+                }
+            }
+
             applyUiState();
+
+            // Run one deferred UI sync so late DOMContentLoaded handlers can register
+            // Step 3 inventory render functions before restore-dependent rendering runs.
+            setTimeout(() => {
+                applyUiState();
+                if (typeof window.updateStep3InventoryWarning === 'function') {
+                    window.updateStep3InventoryWarning();
+                }
+            }, 0);
 
         } finally {
             isRestoring = false;
@@ -5575,12 +6328,21 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         window.addEventListener('pointerdown', markInteracted, true);
         window.addEventListener('keydown', markInteracted, true);
         window.addEventListener('touchstart', markInteracted, true);
+        // Scrolling without a click/tap should still lock out delayed restore passes.
+        window.addEventListener('wheel', markInteracted, { capture: true, passive: true });
+        window.addEventListener('touchmove', markInteracted, { capture: true, passive: true });
+        window.addEventListener('scroll', markInteracted, { capture: true, passive: true });
 
-        window.restoreCreateJobProgress();
-        setTimeout(() => window.restoreCreateJobProgress(), 250);
-        setTimeout(() => window.restoreCreateJobProgress(), 1200);
-        setTimeout(() => window.restoreCreateJobProgress(), 3200);
-        setTimeout(() => window.restoreCreateJobProgress(), 5500);
+        const runRestoreAttempt = () => {
+            if (hasUserInteracted) return;
+            window.restoreCreateJobProgress();
+        };
+
+        runRestoreAttempt();
+        setTimeout(runRestoreAttempt, 250);
+        setTimeout(runRestoreAttempt, 1200);
+        setTimeout(runRestoreAttempt, 3200);
+        setTimeout(runRestoreAttempt, 5500);
 
         setTimeout(() => {
             // Before unlocking startup saves, force the originally restored step once more
@@ -5653,13 +6415,30 @@ const propertyFloors = {
     'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
 };
 
+function syncPickupFloorHiddenFromSelection() {
+    const hidden = document.getElementById('pickup-floor-select');
+    if (!hidden) return;
+
+    const selected = getOrderedFloorList(Array.from(window.selectedPickupFloors || []));
+    const nextValue = selected[0] || '';
+    if ((hidden.value || '') === nextValue) return;
+
+    hidden.value = nextValue;
+    hidden.dispatchEvent(new Event('input', { bubbles: true }));
+    hidden.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 function renderPickupFloorSelector() {
     const selectorContainer = document.getElementById('pickup-floors-selector');
     if (!selectorContainer) return;
-    
+
+    const serviceValue = getActiveServiceValue();
+    const isVehicleService = isVehicleLikeStepFlowService(serviceValue);
     const propertyType = document.getElementById('pickup-property-type')?.value || 
                        document.getElementById('delivery-property-type')?.value || 'house';
-    const floors = propertyFloors[propertyType] || [];
+    const floors = isVehicleService
+        ? VEHICLE_PARKING_LEVELS
+        : (propertyFloors[propertyType] || []);
 
     // Keep selected floors in sync with currently available floors
     let removedInvalidFloor = false;
@@ -5699,17 +6478,18 @@ function renderPickupFloorSelector() {
         selectorContainer.appendChild(btn);
     });
     
-    // Show/hide confirm button and lift question based on selection
+    // Show/hide confirm button based on selection
     const confirmBtn = document.getElementById('confirm-pickup-floors-btn');
-    const liftQuestion = document.getElementById('pickup-lift-question');
     
     if (confirmBtn) {
-        confirmBtn.style.display = window.selectedPickupFloors.size > 0 ? 'block' : 'none';
+        if (isVehicleService) {
+            confirmBtn.style.display = 'none';
+        } else {
+            confirmBtn.style.display = window.selectedPickupFloors.size > 0 ? 'block' : 'none';
+        }
     }
-    if (liftQuestion) {
-        const liftValue = (document.getElementById('pickup-lift-available')?.value || '').trim();
-        liftQuestion.style.display = (window.selectedPickupFloors.size > 0 && !liftValue) ? 'block' : 'none';
-    }
+
+    syncPickupFloorHiddenFromSelection();
 
     // If selections were pruned, keep rendered multi-floor inventory blocks aligned.
     if (removedInvalidFloor && typeof window.renderSelectedPickupFloorsInventory === 'function') {
@@ -5717,6 +6497,10 @@ function renderPickupFloorSelector() {
         if (pickuplift && pickuplift.value) {
             window.renderSelectedPickupFloorsInventory(pickuplift.value);
         }
+    }
+
+    if (typeof window.renderVehicleStepParkingSelectors === 'function') {
+        window.renderVehicleStepParkingSelectors();
     }
 }
 
@@ -5735,8 +6519,12 @@ window.renderDeliveryFloorSelector = function() {
     
     console.log('renderDeliveryFloorSelector called, selectedDeliveryFloors:', window.selectedDeliveryFloors);
 
+    const serviceValue = getActiveServiceValue();
+    const isVehicleService = isVehicleLikeStepFlowService(serviceValue);
     const deliveryPropertyType = document.getElementById('delivery-property-type')?.value || 'house';
-    const availableDeliveryFloors = propertyFloors[deliveryPropertyType] || propertyFloors.house || ['Ground'];
+    const availableDeliveryFloors = isVehicleService
+        ? VEHICLE_PARKING_LEVELS
+        : (propertyFloors[deliveryPropertyType] || propertyFloors.house || ['Ground']);
 
     // Keep selected floors aligned with currently available floors for the selected property type.
     Array.from(window.selectedDeliveryFloors).forEach((floorName) => {
@@ -5783,9 +6571,124 @@ window.renderDeliveryFloorSelector = function() {
     if (typeof window.renderDeliveryFloors === 'function') {
         window.renderDeliveryFloors();
     }
+
+    if (typeof window.renderVehicleStepParkingSelectors === 'function') {
+        window.renderVehicleStepParkingSelectors();
+    }
 };
 
+window.renderVehicleStepParkingSelectors = function() {
+    const activeService = getActiveServiceValue();
+    const visibleVehicleSection = !![
+        document.getElementById('car-transport-section'),
+        document.getElementById('motorbike-transport-section'),
+        document.getElementById('trailer-campervan-section')
+    ].find((el) => el && el.style.display !== 'none' && el.offsetParent !== null);
+    const isVehicleService = isVehicleTransportService(activeService) || visibleVehicleSection;
+    const step2Section = document.getElementById('vehicle-pickup-parking-section');
+    const step4Section = document.getElementById('vehicle-delivery-parking-section');
+    const pickupContainer = document.getElementById('vehicle-step2-pickup-parking-selector');
+    const deliveryContainer = document.getElementById('vehicle-step4-delivery-parking-selector');
+
+    if (step2Section) step2Section.style.display = 'none';
+    if (step4Section) step4Section.style.display = 'none';
+
+    if (!isVehicleService) {
+        return;
+    }
+
+    if (pickupContainer) {
+        pickupContainer.innerHTML = '';
+        VEHICLE_PARKING_LEVELS.forEach((floor) => {
+            const selected = window.selectedPickupFloors && window.selectedPickupFloors.has(floor);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `pickup-floor-selector-btn ${selected ? 'selected' : ''}`;
+            btn.textContent = floor;
+            btn.setAttribute('data-floor', floor);
+            btn.setAttribute('role', 'radio');
+            btn.setAttribute('aria-checked', selected ? 'true' : 'false');
+            btn.style.cssText = `
+                min-width: 92px;
+                padding: 10px 14px;
+                border-radius: 10px;
+                border: 2px solid ${selected ? '#3b82f6' : '#d1d5db'};
+                background: ${selected ? '#dbeafe' : '#fff'};
+                color: ${selected ? '#1e40af' : '#374151'};
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.18s ease;
+            `;
+            btn.addEventListener('click', () => {
+                if (typeof window.togglePickupFloor === 'function') {
+                    window.togglePickupFloor(floor);
+                }
+            });
+            pickupContainer.appendChild(btn);
+        });
+    }
+
+    if (deliveryContainer) {
+        deliveryContainer.innerHTML = '';
+        VEHICLE_PARKING_LEVELS.forEach((floor) => {
+            const selected = window.selectedDeliveryFloors && window.selectedDeliveryFloors.has(floor);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `delivery-floor-selector-btn ${selected ? 'selected' : ''}`;
+            btn.textContent = floor;
+            btn.setAttribute('data-floor', floor);
+            btn.setAttribute('role', 'radio');
+            btn.setAttribute('aria-checked', selected ? 'true' : 'false');
+            btn.style.cssText = `
+                min-width: 92px;
+                padding: 10px 14px;
+                border-radius: 10px;
+                border: 2px solid ${selected ? '#10b981' : '#d1d5db'};
+                background: ${selected ? '#d1fae5' : '#fff'};
+                color: ${selected ? '#065f46' : '#374151'};
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.18s ease;
+            `;
+            btn.addEventListener('click', () => {
+                if (typeof window.toggleDeliveryFloor === 'function') {
+                    window.toggleDeliveryFloor(floor);
+                }
+            });
+            deliveryContainer.appendChild(btn);
+        });
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const rerenderVehicleParking = () => {
+        if (typeof window.renderVehicleStepParkingSelectors === 'function') {
+            window.renderVehicleStepParkingSelectors();
+        }
+    };
+
+    rerenderVehicleParking();
+    setTimeout(rerenderVehicleParking, 50);
+    setTimeout(rerenderVehicleParking, 250);
+
+    const stepObserver = new MutationObserver((mutations) => {
+        if (mutations.some((m) => m.type === 'attributes')) {
+            rerenderVehicleParking();
+        }
+    });
+
+    if (document.body) {
+        stepObserver.observe(document.body, {
+            attributes: true,
+            attributeFilter: ['data-form-step', 'data-current-step']
+        });
+    }
+});
+
 function getAvailablePickupFloorsForCurrentPropertyType() {
+    if (isVehicleLikeStepFlowService(getActiveServiceValue())) {
+        return VEHICLE_PARKING_LEVELS;
+    }
     const pickupPropertyType = document.getElementById('pickup-property-type')?.value || 'house';
     return propertyFloors[pickupPropertyType] || propertyFloors.house || [];
 }
@@ -5909,6 +6812,7 @@ function openPickupFloorInventoryActionModal(sourceFloor, candidateFloors, selec
 // Toggle pickup floor selection (multi-select for source floors)
 window.togglePickupFloor = async function(floor) {
     const selectedPickupFloors = window.selectedPickupFloors || new Set();
+    const isVehicleService = isVehicleLikeStepFlowService(getActiveServiceValue());
 
     const floorItems = (window.multiFloorInventory && window.multiFloorInventory[floor]) || null;
     const floorHasItems = !!(floorItems && Object.values(floorItems).some((qty) => (parseInt(qty, 10) || 0) > 0));
@@ -5955,8 +6859,12 @@ window.togglePickupFloor = async function(floor) {
 
         selectedPickupFloors.delete(floor);
     } else {
+        if (isVehicleService) {
+            selectedPickupFloors.clear();
+        }
         selectedPickupFloors.add(floor);
     }
+    syncPickupFloorHiddenFromSelection();
     renderPickupFloorSelector();
     if (window.renderInventoryByRoom) {
         window.renderInventoryByRoom();
@@ -5981,9 +6889,13 @@ window.togglePickupFloor = async function(floor) {
 // Toggle delivery floor selection (multi-select for destination floors)
 window.toggleDeliveryFloor = function(floor) {
     const selectedDeliveryFloors = window.selectedDeliveryFloors || new Set();
+    const isVehicleService = isVehicleLikeStepFlowService(getActiveServiceValue());
     if (selectedDeliveryFloors.has(floor)) {
         selectedDeliveryFloors.delete(floor);
     } else {
+        if (isVehicleService) {
+            selectedDeliveryFloors.clear();
+        }
         selectedDeliveryFloors.add(floor);
     }
     if (typeof renderDeliveryFloorSelector === 'function') {
@@ -6018,6 +6930,9 @@ window.toggleDeliveryFloor = function(floor) {
     const inventoryCardContainer = document.getElementById('inventory-card-container');
 
     const isPickupliftRequired = () => {
+        if (isNoLiftService(getActiveServiceValue())) {
+            return false;
+        }
         const floorVal = (floorHiddenInput?.value || '').trim().toLowerCase();
         return !!floorVal && floorVal !== 'ground';
     };
@@ -6028,7 +6943,8 @@ window.toggleDeliveryFloor = function(floor) {
             || decodeURIComponent(new URLSearchParams(window.location.search).get('service') || '')
             || ''
         ).trim();
-        const isCustomizedItems = serviceValue === 'Customized Items';
+        const isVehicleService = isNoLiftService(serviceValue);
+        const isCustomizedItems = isCustomizedInventoryService(serviceValue);
         const customInventorySection = document.getElementById('customized-items-inventory-section');
         const houseInventorySection = document.getElementById('house-removal-inventory-section');
 
@@ -6044,7 +6960,7 @@ window.toggleDeliveryFloor = function(floor) {
         // Inventory logic: only show in step 3 (now pickup details step)
         const body = document.body;
         const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
-        const liftRequired = isPickupliftRequired();
+        const liftRequired = !isVehicleService && isPickupliftRequired();
 
         if (liftOptionContainer) {
             if (liftRequired) {
@@ -6125,7 +7041,7 @@ window.toggleDeliveryFloor = function(floor) {
         
         // Add .customized-items-active to body if Customized Items is selected
         if (body) {
-            const isCustomizedItems = (document.getElementById('item-description-hidden')?.value || '').trim() === 'Customized Items';
+            const isCustomizedItems = isCustomizedInventoryService((document.getElementById('item-description-hidden')?.value || '').trim());
             body.classList.toggle('customized-items-active', isCustomizedItems);
             if (isCustomizedItems) {
                 body.classList.remove('house-removals-active');
@@ -6213,6 +7129,19 @@ window.toggleDeliveryFloor = function(floor) {
     // Icon button selection logic
     if (propertyTypeBtns && propertyTypeHidden) {
         const guideToPickupLiftSelection = () => {
+            if (isNoLiftService(getActiveServiceValue())) {
+                const vehiclePickupLiftSection = document.getElementById('pickup-lift-section');
+                const vehiclePickupLiftInput = document.getElementById('pickup-lift-available');
+                if (vehiclePickupLiftSection) {
+                    vehiclePickupLiftSection.style.display = 'none';
+                }
+                if (vehiclePickupLiftInput) {
+                    vehiclePickupLiftInput.value = '';
+                    vehiclePickupLiftInput.dataset.userSelected = 'false';
+                }
+                return;
+            }
+
             const pickupLiftSection = document.getElementById('pickup-lift-section');
             if (!pickupLiftSection) return;
 
@@ -6271,14 +7200,25 @@ window.toggleDeliveryFloor = function(floor) {
     if (propertyTypeHidden && propertyTypeHidden.value) {
         renderFloorIcons(propertyTypeHidden.value);
         renderPickupFloorSelector();
-        // Show and render Step 2 lift section when property is already selected
         const pickupLiftSection = document.getElementById('pickup-lift-section');
-        if (pickupLiftSection) {
+        const isVehicleService = isNoLiftService(getActiveServiceValue());
+        if (pickupLiftSection && !isVehicleService) {
             pickupLiftSection.style.display = 'flex';
             pickupLiftSection.style.flexDirection = 'column';
+            renderPickupliftIcons();
+            const pickupLiftInput = document.getElementById('pickup-lift-available');
+            const savedLiftValue = (pickupLiftInput?.value || '').trim();
+            if (savedLiftValue) {
+                applyPickupLiftSelection(savedLiftValue);
+            }
+        } else if (pickupLiftSection) {
+            pickupLiftSection.style.display = 'none';
+            const pickupLiftInput = document.getElementById('pickup-lift-available');
+            if (pickupLiftInput) {
+                pickupLiftInput.value = '';
+                pickupLiftInput.dataset.userSelected = 'false';
+            }
         }
-        renderPickupliftIcons();
-        resetPickupLiftSelection();
     }
 
     // When property type changes (e.g. by code), re-render floor icons
@@ -6286,15 +7226,20 @@ window.toggleDeliveryFloor = function(floor) {
         propertyTypeHidden.addEventListener('change', function () {
             renderFloorIcons(propertyTypeHidden.value);
             renderPickupFloorSelector();
-            // Show/hide Step 2 lift section when property type changes
             const pickupLiftSection = document.getElementById('pickup-lift-section');
+            const isVehicleService = isNoLiftService(getActiveServiceValue());
             if (pickupLiftSection) {
-                if (propertyTypeHidden.value) {
+                if (propertyTypeHidden.value && !isVehicleService) {
                     pickupLiftSection.style.display = 'flex';
                     pickupLiftSection.style.flexDirection = 'column';
                     renderPickupliftIcons();
                 } else {
                     pickupLiftSection.style.display = 'none';
+                    const pickupLiftInput = document.getElementById('pickup-lift-available');
+                    if (pickupLiftInput) {
+                        pickupLiftInput.value = '';
+                        pickupLiftInput.dataset.userSelected = 'false';
+                    }
                 }
             }
         });
@@ -6302,6 +7247,7 @@ window.toggleDeliveryFloor = function(floor) {
 
     function syncPickupStep2FromState() {
         const savedProperty = propertyTypeHidden ? propertyTypeHidden.value : '';
+        const isVehicleService = isNoLiftService(getActiveServiceValue());
         const currentStep = parseInt(document.body.dataset.formStep || document.body.dataset.currentStep || '1', 10);
 
         if (propertyTypeBtns) {
@@ -6317,7 +7263,7 @@ window.toggleDeliveryFloor = function(floor) {
         const pickupLiftSection = document.getElementById('pickup-lift-section');
         if (!pickupLiftSection) return;
 
-        if (savedProperty) {
+        if (savedProperty && !isVehicleService) {
             pickupLiftSection.style.display = 'flex';
             pickupLiftSection.style.flexDirection = 'column';
             renderPickupliftIcons();
@@ -6384,16 +7330,29 @@ window.toggleDeliveryFloor = function(floor) {
         document.body.classList.remove('multi-floor-inventory-mode');
     }
     
-    // Event listeners for confirm button and lift question
+    // Event listener for confirm button
     const confirmBtn = document.getElementById('confirm-pickup-floors-btn');
-    const liftBtns = document.querySelectorAll('.pickup-lift-btn');
     const liftInput = document.getElementById('pickup-lift-available');
     
     if (confirmBtn) {
         confirmBtn.addEventListener('click', async function() {
             const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
-            const isCustomizedItems = serviceValue === 'Customized Items';
+            const isVehicleService = isNoLiftService(serviceValue);
+            const isCustomizedItems = isCustomizedInventoryService(serviceValue);
             const liftValue = (liftInput && liftInput.value) ? liftInput.value.trim() : '';
+            const selectedPickupFloorCount = (window.selectedPickupFloors instanceof Set)
+                ? window.selectedPickupFloors.size
+                : 0;
+
+            if (selectedPickupFloorCount === 0) {
+                if (typeof window.renderPickupFloorSelector === 'function') {
+                    window.renderPickupFloorSelector();
+                }
+                if (typeof window.updateNextButtonState === 'function') {
+                    setTimeout(() => window.updateNextButtonState(), 0);
+                }
+                return;
+            }
 
             if (isCustomizedItems) {
                 const inventoryCardContainer = document.getElementById('inventory-card-container');
@@ -6423,18 +7382,21 @@ window.toggleDeliveryFloor = function(floor) {
                 return;
             }
 
+            // Vehicle services use floor selectors directly and do not require this inventory/lift confirm flow.
+            if (isVehicleService) {
+                if (typeof syncPickupFloorHiddenFromSelection === 'function') {
+                    syncPickupFloorHiddenFromSelection();
+                }
+                if (typeof window.updateNextButtonState === 'function') {
+                    setTimeout(() => window.updateNextButtonState(), 0);
+                }
+                return;
+            }
+
             // Check if lift question was answered
-            if (window.selectedPickupFloors.size > 0 && !liftValue) {
-                const step3LiftQuestion = document.getElementById('pickup-lift-question');
-                if (step3LiftQuestion) {
-                    step3LiftQuestion.style.display = 'block';
-                    setTimeout(() => {
-                        step3LiftQuestion.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        const firstStep3LiftButton = step3LiftQuestion.querySelector('.pickup-lift-btn');
-                        if (firstStep3LiftButton && typeof firstStep3LiftButton.focus === 'function') {
-                            firstStep3LiftButton.focus({ preventScroll: true });
-                        }
-                    }, 60);
+            if (!liftValue) {
+                if (typeof window.setFormStep === 'function') {
+                    window.setFormStep(2);
                 }
 
                 const pickupLiftSection = document.getElementById('pickup-lift-section');
@@ -6448,12 +7410,12 @@ window.toggleDeliveryFloor = function(floor) {
                         if (firstLiftButton && typeof firstLiftButton.focus === 'function') {
                             firstLiftButton.focus({ preventScroll: true });
                         }
-                    }, 80);
+                    }, 140);
                 }
                 return;
             }
             // If floors selected, verify lift is answered and proceed
-            if (window.selectedPickupFloors.size > 0 && liftValue) {
+            if (liftValue) {
                 // Render one old-style inventory block per selected pickup floor
                 if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
                     window.renderSelectedPickupFloorsInventory(liftValue);
@@ -6479,32 +7441,6 @@ window.toggleDeliveryFloor = function(floor) {
         });
     }
     
-    liftBtns.forEach(btn => {
-        btn.addEventListener('click', function() {
-            const value = this.getAttribute('data-value');
-            if (liftInput) {
-                liftInput.value = value;
-                liftInput.dataset.userSelected = 'true';
-                liftInput.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-            const liftQuestion = document.getElementById('pickup-lift-question');
-            if (liftQuestion) {
-                liftQuestion.style.display = 'none';
-            }
-            // Update button styles
-            liftBtns.forEach(b => {
-                b.style.borderColor = '#e5e7eb';
-                b.style.background = 'white';
-                b.style.color = '#4b5563';
-            });
-            this.style.borderColor = value === 'yes' ? '#10b981' : '#ef4444';
-            this.style.background = value === 'yes' ? '#d1fae5' : '#fee2e2';
-            this.style.color = value === 'yes' ? '#065f46' : '#991b1b';
-            if (typeof window.updateNextButtonState === 'function') {
-                window.updateNextButtonState();
-            }
-        });
-    });
 });
 
 // --- Delivery Property Type Selection ---
@@ -6521,6 +7457,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function syncDeliveryStep4FromState() {
         const savedProperty = deliveryPropertyTypeHidden ? deliveryPropertyTypeHidden.value : '';
+        const isVehicleService = isNoLiftService(getActiveServiceValue());
 
         deliveryPropertyTypeBtns.forEach((button) => {
             const isSelected = !!savedProperty && button.getAttribute('data-value') === savedProperty;
@@ -6531,13 +7468,24 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         const liftSection = document.getElementById('delivery-lift-section');
+        const deliveryLiftInput = document.getElementById('delivery-lift-available');
+
+        if (isVehicleService) {
+            if (liftSection) {
+                liftSection.style.display = 'none';
+            }
+            if (deliveryLiftInput) {
+                deliveryLiftInput.value = '';
+            }
+            return;
+        }
+
         if (liftSection && savedProperty) {
             liftSection.style.display = 'flex';
             liftSection.style.flexDirection = 'column';
             // Render the lift icons
             renderDeliveryliftIcons();
             // Apply the previously selected delivery lift value
-            const deliveryLiftInput = document.getElementById('delivery-lift-available');
             if (deliveryLiftInput && deliveryLiftInput.value) {
                 applyDeliveryLiftSelection(deliveryLiftInput.value);
             }
@@ -6548,6 +7496,18 @@ document.addEventListener('DOMContentLoaded', function () {
     
     if (deliveryPropertyTypeBtns && deliveryPropertyTypeHidden) {
         const guideToDeliveryLiftSelection = () => {
+            if (isNoLiftService(getActiveServiceValue())) {
+                const vehicleLiftSection = document.getElementById('delivery-lift-section');
+                const vehicleLiftInput = document.getElementById('delivery-lift-available');
+                if (vehicleLiftSection) {
+                    vehicleLiftSection.style.display = 'none';
+                }
+                if (vehicleLiftInput) {
+                    vehicleLiftInput.value = '';
+                }
+                return;
+            }
+
             const deliveryLiftSection = document.getElementById('delivery-lift-section');
             if (!deliveryLiftSection) return;
 
@@ -6794,16 +7754,24 @@ document.addEventListener('DOMContentLoaded', function () {
                         window.renderDeliveryFloors();
                     }
                     
-                    // Show the delivery lift section in step 5 for editing
+                    // Show the delivery lift section in step 5 for editing (non-vehicle only)
                     const deliveryLiftSection = document.getElementById('delivery-lift-section');
                     if (deliveryLiftSection) {
-                        deliveryLiftSection.style.display = 'flex';
-                        deliveryLiftSection.style.flexDirection = 'column';
+                        if (isNoLiftService(getActiveServiceValue())) {
+                            deliveryLiftSection.style.display = 'none';
+                            const deliveryLiftInput = document.getElementById('delivery-lift-available');
+                            if (deliveryLiftInput) {
+                                deliveryLiftInput.value = '';
+                            }
+                        } else {
+                            deliveryLiftSection.style.display = 'flex';
+                            deliveryLiftSection.style.flexDirection = 'column';
+                        }
                     }
                     
-                    // For Customized Items, populate the inventory list with customized items
+                    // For customized-style services, populate the inventory list from custom items.
                     const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
-                    if (serviceValue === 'Customized Items') {
+                    if (isCustomizedInventoryService(serviceValue)) {
                         const inventoryList = document.getElementById('delivery-inventory-list');
                         if (inventoryList) {
                             const serializedItems = document.getElementById('customized-items-hidden')?.value || '';
@@ -6859,11 +7827,19 @@ document.addEventListener('DOMContentLoaded', function () {
             window.renderDeliveryFloorSelector();
         }
         
-        // Show the delivery lift section in step 5 for editing
+        // Show the delivery lift section in step 5 for editing (non-vehicle only)
         const deliveryLiftSection = document.getElementById('delivery-lift-section');
         if (deliveryLiftSection) {
-            deliveryLiftSection.style.display = 'flex';
-            deliveryLiftSection.style.flexDirection = 'column';
+            if (isNoLiftService(getActiveServiceValue())) {
+                deliveryLiftSection.style.display = 'none';
+                const deliveryLiftInput = document.getElementById('delivery-lift-available');
+                if (deliveryLiftInput) {
+                    deliveryLiftInput.value = '';
+                }
+            } else {
+                deliveryLiftSection.style.display = 'flex';
+                deliveryLiftSection.style.flexDirection = 'column';
+            }
         }
     }
     
@@ -6889,6 +7865,58 @@ document.addEventListener('DOMContentLoaded', function () {
     const organizationSection = document.getElementById('item-organization-section');
     const inventoryList = document.getElementById('delivery-inventory-list');
     const floorsGrid = document.getElementById('delivery-floors-grid');
+    const step5MainTitle = document.getElementById('step5-main-title');
+    const step5SelectorLabel = document.getElementById('step5-delivery-selector-label');
+    const step5SelectorHelp = document.getElementById('step5-delivery-selector-help');
+    const step5AssignmentGuide = document.getElementById('step5-assignment-guide');
+    const step5VehicleNote = document.getElementById('step5-vehicle-note');
+    const step5OrganizationContainer = document.getElementById('step5-delivery-organization-container');
+
+    const defaultStep5Copy = {
+        title: 'Step 5: Organize Items by Delivery Floor',
+        selectorLabel: 'Select all Delivery Floors (multiple selections available)',
+        selectorHelp: 'Select the floor/floors you are delivering to'
+    };
+
+    const applyStep5ServiceCopy = () => {
+        const isVehicleService = isVehicleLikeStepFlowService(getActiveServiceValue());
+        const isFreight = isFreightService(getActiveServiceValue());
+
+        if (step5MainTitle) {
+            step5MainTitle.textContent = isVehicleService
+                ? 'Step 5: Confirm Delivery Parking Level'
+                : defaultStep5Copy.title;
+        }
+
+        if (step5SelectorLabel) {
+            step5SelectorLabel.textContent = isVehicleService
+                ? 'Select delivery parking level'
+                : defaultStep5Copy.selectorLabel;
+        }
+
+        if (step5SelectorHelp) {
+            step5SelectorHelp.textContent = isVehicleService
+                ? 'Choose the delivery parking level for vehicle handover'
+                : defaultStep5Copy.selectorHelp;
+        }
+
+        if (step5AssignmentGuide) {
+            step5AssignmentGuide.style.display = isVehicleService ? 'none' : '';
+        }
+
+        if (step5VehicleNote) {
+            step5VehicleNote.style.display = isVehicleService ? 'block' : 'none';
+            if (isVehicleService) {
+                step5VehicleNote.textContent = isFreight
+                    ? 'Freight transport does not require item assignment. Confirm the delivery parking level above, then continue to the next step.'
+                    : 'Vehicle transport does not require item assignment. Confirm the delivery parking level above, then continue to the next step.';
+            }
+        }
+
+        if (step5OrganizationContainer) {
+            step5OrganizationContainer.style.display = isVehicleService ? 'none' : '';
+        }
+    };
     
     // Item to floor assignments with quantity splitting (item name -> {floor: qty, floor2: qty2, ...})
     let itemFloorAssignments = {};
@@ -7099,9 +8127,9 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        // Get items from Customized Items inventory (Step 3)
+        // Get items from customized-style service inventory (Step 3)
         const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
-        if (serviceValue === 'Customized Items') {
+        if (isCustomizedInventoryService(serviceValue)) {
             const serializedItems = document.getElementById('customized-items-hidden')?.value || '';
             if (serializedItems) {
                 try {
@@ -7119,6 +8147,70 @@ document.addEventListener('DOMContentLoaded', function () {
                 } catch (error) {
                     // Ignore malformed customized items payload.
                 }
+            }
+        }
+
+        // For Piano Transport, create a single organization item from the Step 3 piano details
+        // so Step 5 behaves like House Removals assignment flow.
+        if (serviceValue === 'Piano Transport') {
+            const typeValue = (document.getElementById('piano-type-hidden')?.value || '').trim();
+            const sizeValue = (document.getElementById('piano-size-hidden')?.value || '').trim();
+            const customName = (document.getElementById('piano-custom-name')?.value || '').trim();
+            const customLength = (document.getElementById('piano-custom-length')?.value || '').trim();
+            const customWidth = (document.getElementById('piano-custom-width')?.value || '').trim();
+            const customHeight = (document.getElementById('piano-custom-height')?.value || '').trim();
+            const customUnit = (document.getElementById('piano-custom-size-unit')?.value || 'cm').trim();
+
+            const pianoTypeLabels = {
+                'upright-spinet': 'Upright - Spinet',
+                'upright-console': 'Upright - Console',
+                'upright-studio': 'Upright - Studio',
+                'upright-full': 'Upright - Full',
+                'baby-grand': 'Baby Grand',
+                'medium-grand': 'Medium Grand',
+                'parlor-grand': 'Parlor / Living Grand',
+                'concert-grand': 'Concert Grand',
+                'digital': 'Digital Piano',
+                'keyboard': 'Keyboard',
+                'custom': 'Custom Piano'
+            };
+
+            const pianoSizeLabels = {
+                '145x60x100cm': '145 x 60 x 100 cm',
+                '150x65x110cm': '150 x 65 x 110 cm',
+                '150x65x120cm': '150 x 65 x 120 cm',
+                '155x65x130cm': '155 x 65 x 130 cm',
+                '155x150x102cm': '155 x 150 x 102 cm',
+                '170x152x102cm': '170 x 152 x 102 cm',
+                '190x152x102cm': '190 x 152 x 102 cm',
+                '275x158x102cm': '275 x 158 x 102 cm',
+                '140x40x90cm': '140 x 40 x 90 cm',
+                '130x35x15cm': '130 x 35 x 15 cm'
+            };
+
+            if (typeValue) {
+                const baseName = typeValue === 'custom'
+                    ? (customName || 'Custom Piano')
+                    : (pianoTypeLabels[typeValue] || 'Piano');
+
+                const customSize = (customLength && customWidth && customHeight)
+                    ? `${customLength} x ${customWidth} x ${customHeight} ${customUnit}`
+                    : '';
+                const sizeText = sizeValue && sizeValue !== 'custom'
+                    ? (pianoSizeLabels[sizeValue] || '')
+                    : customSize;
+
+                const itemName = sizeText ? `${baseName} (${sizeText})` : baseName;
+                const selectedPickupFloors = getOrderedFloorList(Array.from(window.selectedPickupFloors || []));
+                const pickupFloor = selectedPickupFloors[0]
+                    || (document.getElementById('pickup-floor-select')?.value || '').trim()
+                    || 'Ground';
+                const itemKey = `${itemName}||${pickupFloor}`;
+                const floorRoomKey = `${pickupFloor} Floor`;
+                if (!roomItems[floorRoomKey]) {
+                    roomItems[floorRoomKey] = {};
+                }
+                roomItems[floorRoomKey][itemKey] = 1;
             }
         }
         
@@ -8520,6 +9612,8 @@ document.addEventListener('DOMContentLoaded', function () {
     function initializeOrganizationSection() {
         if (!organizationSection) return;
 
+        applyStep5ServiceCopy();
+
         if (typeof window.renderDeliveryFloorSelector === 'function') {
             window.renderDeliveryFloorSelector();
         }
@@ -8550,7 +9644,7 @@ document.addEventListener('DOMContentLoaded', function () {
     
     // Function to check if organization section should be visible
     function updateOrganizationSectionVisibility() {
-        // The organization section is now the main way to assign items to delivery floors
+        applyStep5ServiceCopy();
     }
     
     // Make function globally accessible for backward compatibility
@@ -8742,6 +9836,259 @@ document.addEventListener('DOMContentLoaded', function () {
         'Large Boxes',
         'Extra Large Boxes',
     ];
+
+    if (!window.floorMediaItems || typeof window.floorMediaItems !== 'object') {
+        window.floorMediaItems = {};
+    }
+
+    if (!window.floorMediaObjectUrls || typeof window.floorMediaObjectUrls !== 'object') {
+        window.floorMediaObjectUrls = {};
+    }
+
+    function setFloorMediaObjectUrl(entryId, objectUrl) {
+        const key = String(entryId || '').trim();
+        if (!key) return;
+        const existingUrl = window.floorMediaObjectUrls[key];
+        if (existingUrl && existingUrl !== objectUrl) {
+            try {
+                URL.revokeObjectURL(existingUrl);
+            } catch (_) {}
+        }
+        window.floorMediaObjectUrls[key] = objectUrl;
+    }
+
+    function clearFloorMediaObjectUrl(entryId) {
+        const key = String(entryId || '').trim();
+        if (!key) return;
+        const existingUrl = window.floorMediaObjectUrls[key];
+        if (existingUrl) {
+            try {
+                URL.revokeObjectURL(existingUrl);
+            } catch (_) {}
+            delete window.floorMediaObjectUrls[key];
+        }
+    }
+
+    function clearFloorMediaObjectUrlsForEntries(entries) {
+        if (!Array.isArray(entries) || !entries.length) return;
+        entries.forEach((entry) => {
+            clearFloorMediaObjectUrl(entry && entry.id);
+        });
+    }
+
+    function resolveFloorMediaPreviewSrc(entry) {
+        if (!entry || typeof entry !== 'object') return '';
+        const key = String(entry.id || '').trim();
+        if (key && window.floorMediaObjectUrls[key]) {
+            return window.floorMediaObjectUrls[key];
+        }
+        if (typeof entry.previewDataUrl === 'string' && entry.previewDataUrl) {
+            return entry.previewDataUrl;
+        }
+        return '';
+    }
+
+    function openFloorMediaPreviewModal(entry) {
+        const mediaType = String(entry?.mediaType || '').toLowerCase() === 'video' ? 'video' : 'photo';
+        const previewSrc = resolveFloorMediaPreviewSrc(entry);
+        if (!previewSrc) {
+            alert('Preview not available for this file. Please use Change to upload it again.');
+            return;
+        }
+
+        let modal = document.getElementById('inventory-media-preview-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'inventory-media-preview-modal';
+            modal.style.position = 'fixed';
+            modal.style.left = '0';
+            modal.style.top = '0';
+            modal.style.width = '100vw';
+            modal.style.height = '100vh';
+            modal.style.background = 'rgba(15,23,42,0.9)';
+            modal.style.display = 'none';
+            modal.style.zIndex = '10050';
+            modal.style.justifyContent = 'center';
+            modal.style.alignItems = 'center';
+            modal.style.padding = '20px';
+            modal.style.boxSizing = 'border-box';
+            modal.innerHTML = `
+                <div style="position:relative;width:min(96vw,960px);max-height:92vh;background:#0b1220;border:1px solid rgba(148,163,184,0.45);border-radius:12px;padding:16px;box-sizing:border-box;">
+                    <button type="button" id="inventory-media-preview-close" style="position:absolute;top:10px;right:10px;width:34px;height:34px;border:none;border-radius:50%;background:#e2e8f0;color:#0f172a;font-size:20px;font-weight:700;cursor:pointer;line-height:1;">×</button>
+                    <div style="padding-right:42px;margin-bottom:10px;">
+                        <div id="inventory-media-preview-title" style="font-weight:700;color:#f8fafc;font-size:1rem;"></div>
+                        <div id="inventory-media-preview-subtitle" style="font-size:0.84rem;color:#94a3b8;"></div>
+                    </div>
+                    <div id="inventory-media-preview-content" style="width:100%;max-height:78vh;display:flex;align-items:center;justify-content:center;"></div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            const closeBtn = modal.querySelector('#inventory-media-preview-close');
+            const closeModal = () => {
+                const content = modal.querySelector('#inventory-media-preview-content');
+                if (content) {
+                    content.innerHTML = '';
+                }
+                modal.style.display = 'none';
+            };
+
+            closeBtn?.addEventListener('click', closeModal);
+            modal.addEventListener('click', (event) => {
+                if (event.target === modal) {
+                    closeModal();
+                }
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && modal.style.display === 'flex') {
+                    closeModal();
+                }
+            });
+        }
+
+        const titleEl = modal.querySelector('#inventory-media-preview-title');
+        const subtitleEl = modal.querySelector('#inventory-media-preview-subtitle');
+        const contentEl = modal.querySelector('#inventory-media-preview-content');
+
+        if (titleEl) {
+            titleEl.textContent = String(entry?.itemName || 'Uploaded media');
+        }
+        if (subtitleEl) {
+            subtitleEl.textContent = `${mediaType === 'video' ? 'Video' : 'Photo'} - ${String(entry?.fileName || 'file')}`;
+        }
+        if (contentEl) {
+            contentEl.innerHTML = '';
+            if (mediaType === 'video') {
+                const video = document.createElement('video');
+                video.controls = true;
+                video.playsInline = true;
+                video.src = previewSrc;
+                video.style.maxWidth = '100%';
+                video.style.maxHeight = '78vh';
+                video.style.borderRadius = '10px';
+                video.style.background = '#000';
+                contentEl.appendChild(video);
+            } else {
+                const image = document.createElement('img');
+                image.src = previewSrc;
+                image.alt = String(entry?.itemName || 'Uploaded photo');
+                image.style.maxWidth = '100%';
+                image.style.maxHeight = '78vh';
+                image.style.borderRadius = '10px';
+                image.style.objectFit = 'contain';
+                contentEl.appendChild(image);
+            }
+        }
+
+        modal.style.display = 'flex';
+    }
+
+    function ensureFloorMediaStore(floorName) {
+        const key = String(floorName || '').trim();
+        if (!key) return [];
+        if (!Array.isArray(window.floorMediaItems[key])) {
+            window.floorMediaItems[key] = [];
+        }
+        return window.floorMediaItems[key];
+    }
+
+    function syncStep3MediaHiddenInput() {
+        const hiddenInput = document.getElementById('step3-media-items');
+        if (!hiddenInput) return;
+        const hasAnyMedia = Object.keys(window.floorMediaItems || {}).some((floor) => {
+            const entries = window.floorMediaItems[floor];
+            return Array.isArray(entries) && entries.length > 0;
+        });
+        const nextValue = hasAnyMedia ? JSON.stringify(window.floorMediaItems) : '';
+        if (hiddenInput.value !== nextValue) {
+            hiddenInput.value = nextValue;
+            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+
+    function createInventoryMediaModal() {
+        let modal = document.getElementById('inventory-media-upload-modal');
+        if (modal) return modal;
+
+        modal = document.createElement('div');
+        modal.id = 'inventory-media-upload-modal';
+        modal.style.display = 'none';
+        modal.style.position = 'fixed';
+        modal.style.left = '0';
+        modal.style.top = '0';
+        modal.style.width = '100vw';
+        modal.style.height = '100vh';
+        modal.style.background = 'rgba(0,0,0,0.35)';
+        modal.style.zIndex = '10000';
+        modal.style.justifyContent = 'center';
+        modal.style.alignItems = 'center';
+        modal.innerHTML = `
+            <div style="background:#fff;padding:22px 24px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.16);min-width:320px;max-width:92vw;">
+                <h4 style="margin:0 0 14px;font-size:1.1rem;color:#1f2937;">Add Item Photos / Videos</h4>
+                <label style="display:block;margin-bottom:6px;font-weight:600;color:#334155;">Item Name</label>
+                <input type="text" id="inventory-media-item-name" style="width:100%;padding:9px 10px;margin-bottom:12px;border:1px solid #cbd5e1;border-radius:8px;" placeholder="e.g. Glass table">
+                <label style="display:block;margin-bottom:6px;font-weight:600;color:#334155;">Upload Photos / Videos</label>
+                <input type="file" id="inventory-media-file-input" accept="image/*,video/*" multiple style="width:100%;margin-bottom:12px;">
+                <div style="font-size:0.82rem;color:#64748b;margin-bottom:14px;">You can select multiple files at once.</div>
+                <div style="text-align:right;display:flex;justify-content:flex-end;gap:10px;">
+                    <button type="button" id="inventory-media-cancel" style="padding:8px 12px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;color:#334155;font-weight:600;">Cancel</button>
+                    <button type="button" id="inventory-media-add" style="padding:8px 12px;border-radius:6px;border:none;background:#2563eb;color:#fff;font-weight:700;">Add Media</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const mediaNameInput = modal.querySelector('#inventory-media-item-name');
+        const mediaFileInput = modal.querySelector('#inventory-media-file-input');
+        const mediaCancelBtn = modal.querySelector('#inventory-media-cancel');
+        const mediaAddBtn = modal.querySelector('#inventory-media-add');
+
+        const closeMediaModal = () => {
+            modal.style.display = 'none';
+            if (mediaNameInput) mediaNameInput.value = '';
+            if (mediaFileInput) mediaFileInput.value = '';
+            modal.__onAdd = null;
+        };
+
+        mediaCancelBtn?.addEventListener('click', closeMediaModal);
+        modal.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                closeMediaModal();
+            }
+        });
+
+        mediaAddBtn?.addEventListener('click', () => {
+            const itemName = (mediaNameInput?.value || '').trim();
+            const files = Array.from(mediaFileInput?.files || []);
+
+            if (!itemName) {
+                alert('Please enter an item name for the media.');
+                return;
+            }
+            if (!files.length) {
+                alert('Please select at least one photo or video.');
+                return;
+            }
+
+            const acceptedFiles = files.filter((file) => {
+                const type = String(file.type || '').toLowerCase();
+                return type.startsWith('image/') || type.startsWith('video/');
+            });
+
+            if (!acceptedFiles.length) {
+                alert('Please upload only image or video files.');
+                return;
+            }
+
+            if (typeof modal.__onAdd === 'function') {
+                modal.__onAdd({ itemName, acceptedFiles });
+            }
+            closeMediaModal();
+        });
+
+        return modal;
+    }
 
     function openEditMultiFloorCustomItemModal(labelElement, listItem, ul) {
         let modal = document.getElementById('edit-multi-floor-custom-item-modal');
@@ -8988,6 +10335,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     delete multiFloorInventory[oldFloor];
                 }
 
+                if (oldFloor in window.floorMediaItems) {
+                    window.floorMediaItems[newFloor] = window.floorMediaItems[oldFloor];
+                    delete window.floorMediaItems[oldFloor];
+                    syncStep3MediaHiddenInput();
+                }
+
                 // Sync selected pickup floors
                 if (window.selectedPickupFloors) {
                     window.selectedPickupFloors.delete(oldFloor);
@@ -9055,6 +10408,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 addedFloors.delete(floorRef.name);
                 delete multiFloorInventory[floorRef.name];
                 delete floorliftMap[floorRef.name];  // Also delete lift info
+                clearFloorMediaObjectUrlsForEntries(window.floorMediaItems[floorRef.name]);
+                delete window.floorMediaItems[floorRef.name];
+                syncStep3MediaHiddenInput();
 
                 if (window.selectedPickupFloors) {
                     window.selectedPickupFloors.delete(floorRef.name);
@@ -9631,15 +10987,210 @@ document.addEventListener('DOMContentLoaded', function () {
         addCustomBtn.style.marginTop = '18px';
         block.appendChild(addCustomBtn);
 
+        const addMediaBtn = document.createElement('button');
+        addMediaBtn.className = 'add-custom-inventory-btn';
+        addMediaBtn.type = 'button';
+        addMediaBtn.textContent = '+ Add Photos / Videos';
+        addMediaBtn.style.marginTop = '10px';
+        block.appendChild(addMediaBtn);
+
         saveFloorBtn = document.createElement('button');
         saveFloorBtn.type = 'button';
         saveFloorBtn.className = 'step3-floor-save-btn';
         saveFloorBtn.textContent = `Save ${floorRef.name} Floor`;
         block.appendChild(saveFloorBtn);
 
+        const mediaListWrap = document.createElement('div');
+        mediaListWrap.style.cssText = 'margin-top:12px;padding:10px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;';
+        block.appendChild(mediaListWrap);
+
+        const renderFloorMediaList = () => {
+            const escapeMediaText = (value) => String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+            const entries = ensureFloorMediaStore(floorRef.name);
+            if (!entries.length) {
+                mediaListWrap.innerHTML = '<div style="font-size:0.85rem;color:#64748b;">No media uploaded for this floor yet.</div>';
+                return;
+            }
+
+            mediaListWrap.innerHTML = '<div style="font-weight:700;color:#1f2937;margin-bottom:8px;">Uploaded Item Media</div>';
+            entries.forEach((entry, index) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 8px;border:1px solid #e2e8f0;border-radius:7px;background:#fff;margin-bottom:6px;';
+
+                const typeLabel = entry.mediaType === 'video' ? 'Video' : 'Photo';
+                row.innerHTML = `
+                    <div style="display:flex;flex-direction:column;min-width:0;">
+                        <span style="font-weight:600;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeMediaText(entry.itemName || 'Unnamed item')}</span>
+                        <span style="font-size:0.8rem;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeMediaText(typeLabel)} - ${escapeMediaText(entry.fileName || 'file')}</span>
+                    </div>
+                `;
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.textContent = 'Remove';
+                removeBtn.style.cssText = 'border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:6px;padding:5px 8px;font-size:0.78rem;font-weight:700;cursor:pointer;';
+
+                const inspectBtn = document.createElement('button');
+                inspectBtn.type = 'button';
+                inspectBtn.textContent = 'Inspect';
+                inspectBtn.style.cssText = 'border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;border-radius:6px;padding:5px 8px;font-size:0.78rem;font-weight:700;cursor:pointer;margin-right:6px;';
+                inspectBtn.addEventListener('click', () => {
+                    openFloorMediaPreviewModal(entry);
+                });
+
+                const changeBtn = document.createElement('button');
+                changeBtn.type = 'button';
+                changeBtn.textContent = 'Change';
+                changeBtn.style.cssText = 'border:1px solid #dbeafe;background:#f8fbff;color:#1e40af;border-radius:6px;padding:5px 8px;font-size:0.78rem;font-weight:700;cursor:pointer;margin-right:6px;';
+                changeBtn.addEventListener('click', () => {
+                    pendingReplaceMediaId = String(entry.id || '');
+                    replaceMediaInput.value = '';
+                    replaceMediaInput.click();
+                });
+
+                removeBtn.addEventListener('click', () => {
+                    const floorEntries = ensureFloorMediaStore(floorRef.name);
+                    const removedEntry = floorEntries[index];
+                    floorEntries.splice(index, 1);
+                    clearFloorMediaObjectUrl(removedEntry && removedEntry.id);
+                    if (floorEntries.length === 0) {
+                        delete window.floorMediaItems[floorRef.name];
+                    }
+                    syncStep3MediaHiddenInput();
+                    renderFloorMediaList();
+                });
+
+                const actionsWrap = document.createElement('div');
+                actionsWrap.style.cssText = 'display:flex;align-items:center;';
+                actionsWrap.appendChild(inspectBtn);
+                actionsWrap.appendChild(changeBtn);
+                actionsWrap.appendChild(removeBtn);
+
+                row.appendChild(actionsWrap);
+                mediaListWrap.appendChild(row);
+            });
+        };
+
+        const mediaModal = createInventoryMediaModal();
+        const mediaNameInput = mediaModal.querySelector('#inventory-media-item-name');
+        const mediaFileInput = mediaModal.querySelector('#inventory-media-file-input');
+        const replaceMediaInput = document.createElement('input');
+        replaceMediaInput.type = 'file';
+        replaceMediaInput.accept = 'image/*,video/*';
+        replaceMediaInput.style.display = 'none';
+        block.appendChild(replaceMediaInput);
+
+        const buildPersistablePreviewData = (file) => {
+            return new Promise((resolve) => {
+                const lowerType = String(file?.type || '').toLowerCase();
+                // Persist image previews so Inspect still works after page reload.
+                if (!lowerType.startsWith('image/')) {
+                    resolve('');
+                    return;
+                }
+                try {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        resolve(typeof reader.result === 'string' ? reader.result : '');
+                    };
+                    reader.onerror = () => resolve('');
+                    reader.readAsDataURL(file);
+                } catch (error) {
+                    resolve('');
+                }
+            });
+        };
+
+        let pendingReplaceMediaId = '';
+
+        replaceMediaInput.addEventListener('change', async () => {
+            const replacement = replaceMediaInput.files && replaceMediaInput.files[0];
+            if (!replacement) return;
+
+            const lowerType = String(replacement.type || '').toLowerCase();
+            if (!lowerType.startsWith('image/') && !lowerType.startsWith('video/')) {
+                alert('Please select an image or video file.');
+                replaceMediaInput.value = '';
+                return;
+            }
+
+            const floorEntries = ensureFloorMediaStore(floorRef.name);
+            const targetIndex = floorEntries.findIndex((entry) => String(entry && entry.id) === String(pendingReplaceMediaId));
+            if (targetIndex === -1) {
+                replaceMediaInput.value = '';
+                pendingReplaceMediaId = '';
+                return;
+            }
+
+            const entry = floorEntries[targetIndex];
+            entry.fileName = replacement.name || 'upload';
+            entry.mediaType = lowerType.startsWith('video/') ? 'video' : 'photo';
+            entry.fileSize = Number(replacement.size || 0);
+            entry.mimeType = lowerType;
+            entry.previewDataUrl = await buildPersistablePreviewData(replacement);
+
+            const previewObjectUrl = URL.createObjectURL(replacement);
+            setFloorMediaObjectUrl(entry.id, previewObjectUrl);
+
+            syncStep3MediaHiddenInput();
+            renderFloorMediaList();
+
+            if (typeof window.saveCreateJobProgress === 'function') {
+                window.saveCreateJobProgress();
+            }
+
+            replaceMediaInput.value = '';
+            pendingReplaceMediaId = '';
+        });
+
+        addMediaBtn.addEventListener('click', () => {
+            mediaModal.style.display = 'flex';
+            if (mediaNameInput) {
+                mediaNameInput.value = '';
+                mediaNameInput.focus();
+            }
+            if (mediaFileInput) {
+                mediaFileInput.value = '';
+            }
+
+            mediaModal.__onAdd = async ({ itemName, acceptedFiles }) => {
+                const targetStore = ensureFloorMediaStore(floorRef.name);
+                for (const file of acceptedFiles) {
+                    const lowerType = String(file.type || '').toLowerCase();
+                    const mediaId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                    targetStore.push({
+                        id: mediaId,
+                        itemName,
+                        fileName: file.name || 'upload',
+                        mediaType: lowerType.startsWith('video/') ? 'video' : 'photo',
+                        fileSize: Number(file.size || 0),
+                        mimeType: lowerType,
+                        previewDataUrl: await buildPersistablePreviewData(file)
+                    });
+
+                    const previewObjectUrl = URL.createObjectURL(file);
+                    setFloorMediaObjectUrl(mediaId, previewObjectUrl);
+                }
+
+                syncStep3MediaHiddenInput();
+                renderFloorMediaList();
+
+                if (typeof window.saveCreateJobProgress === 'function') {
+                    window.saveCreateJobProgress();
+                }
+            };
+        });
+
+        renderFloorMediaList();
+
         const showFloorSavedState = () => {
             if (!saveFloorBtn) return;
-            saveFloorBtn.textContent = `${floorRef.name} Saved`;
+            saveFloorBtn.textContent = `${floorRef.name} Floor Saved`;
             clearTimeout(saveFloorBtn.__resetLabelTimer);
             saveFloorBtn.__resetLabelTimer = setTimeout(() => {
                 saveFloorBtn.textContent = `Save ${floorRef.name} Floor`;
@@ -9877,6 +11428,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 delete multiFloorInventory[key];
             }
         });
+        Object.keys(window.floorMediaItems || {}).forEach((key) => {
+            if (!selectedFloors.includes(key)) {
+                delete window.floorMediaItems[key];
+            }
+        });
+        syncStep3MediaHiddenInput();
         Object.keys(floorliftMap).forEach(key => {
             if (!selectedFloors.includes(key)) {
                 delete floorliftMap[key];
@@ -10857,7 +12414,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (cjHidden) {
                 cjHidden.value = matchedServiceValue;
             }
-            if (matchedServiceValue === 'Customized Items') {
+            if (isCustomizedInventoryService(matchedServiceValue)) {
                 document.body.classList.add('customized-items-active');
             }
         }
@@ -11238,8 +12795,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const deliveryPropertyTypeValue = getInputValue('delivery-property-type');
             let pickupType = formatPropertyTypeValue(pickupPropertyTypeValue) || getSelectText('pickup-location-type') || getSelectText('office-pickup-location-type');
             let deliveryType = formatPropertyTypeValue(deliveryPropertyTypeValue) || getSelectText('delivery-location-type') || getSelectText('office-delivery-location-type');
-            let pickupFloor = getOrderedFloorList(Array.from(window.selectedPickupFloors || [])).join(', ') || getSelectText('pickup-floor') || getSelectText('office-pickup-floor');
-            let deliveryFloor = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || [])).join(', ') || getSelectText('delivery-floor') || getSelectText('office-delivery-floor');
+            if (isVehicleLikeStepFlowService(serviceValue)) {
+                const pickupParkingLevels = getOrderedFloorList(Array.from(window.selectedPickupFloors || [])).join(', ');
+                const deliveryParkingLevels = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || [])).join(', ');
+                pickupType = formatPropertyTypeValue(pickupPropertyTypeValue) || pickupParkingLevels || '—';
+                deliveryType = formatPropertyTypeValue(deliveryPropertyTypeValue) || deliveryParkingLevels || '—';
+            }
+            let pickupFloor = getOverviewFloorSummaryText('pickup') || getSelectText('pickup-floor') || getSelectText('office-pickup-floor');
+            let deliveryFloor = getOverviewFloorSummaryText('delivery') || getSelectText('delivery-floor') || getSelectText('office-delivery-floor');
             const pickupAddress = formatAddress('pickup-address', 'pickup-city', 'pickup-postcode');
             const deliveryAddress = formatAddress('delivery-address', 'delivery-city', 'delivery-postcode');
             const moveDate = getInputValue('service-transport-date') || getInputValue('office-move-date');
@@ -11297,15 +12860,45 @@ document.addEventListener('DOMContentLoaded', function() {
                 const extras = [];
                 const typeLabel = getOptionNavLabel('trailer-campervan-type-hidden') || getDropdownLabel('trailer-campervan-type-hidden', 'trailer-campervan-type-label');
                 const valueLabel = getOptionNavLabel('trailer-campervan-value-hidden') || getDropdownLabel('trailer-campervan-value-hidden', 'trailer-campervan-value-label');
-                const deliveryLabel = getOptionNavLabel('trailer-campervan-delivery-hidden') || getDropdownLabel('trailer-campervan-delivery-hidden', 'trailer-campervan-delivery-label');
+                const methodLabel = getOptionNavLabel('trailer-campervan-delivery-hidden') || getDropdownLabel('trailer-campervan-delivery-hidden', 'trailer-campervan-delivery-label');
+                const conditionLabel = getOptionNavLabel('trailer-campervan-condition-hidden') || getDropdownLabel('trailer-campervan-condition-hidden', 'trailer-campervan-condition-label');
+                const weightLabel = getOptionNavLabel('trailer-campervan-weight-hidden') || getDropdownLabel('trailer-campervan-weight-hidden', 'trailer-campervan-weight-label');
+                const lengthLabel = getOptionNavLabel('trailer-campervan-length-hidden') || getDropdownLabel('trailer-campervan-length-hidden', 'trailer-campervan-length-label');
+                const operationalLabel = getOptionNavLabel('trailer-campervan-operational-hidden');
                 if (typeLabel) extras.push(`Type: ${typeLabel}`);
                 if (valueLabel) extras.push(`Value: ${valueLabel}`);
-                if (deliveryLabel) extras.push(`Delivery: ${deliveryLabel}`);
+                if (conditionLabel) extras.push(`Condition: ${conditionLabel}`);
+                if (weightLabel) extras.push(`Weight: ${weightLabel}`);
+                if (lengthLabel) extras.push(`Length: ${lengthLabel}`);
+                if (methodLabel) extras.push(`Method: ${methodLabel}`);
+                if (operationalLabel) extras.push(`Operational: ${operationalLabel}`);
                 itemsSummary = [base, ...extras].filter(Boolean).join(' | ');
             } else if (serviceValue === 'Piano Transport') {
-                const pianoType = getOptionNavLabel('piano-type-hidden');
-                itemsSummary = pianoType ? `Type: ${pianoType}` : '';
-            } else if (serviceValue === 'Customized Items') {
+                const pianoType = getOptionNavLabel('piano-type-hidden') || getDropdownLabel('piano-type-hidden', 'piano-type-label');
+                const pianoSize = getOptionNavLabel('piano-size-hidden') || getDropdownLabel('piano-size-hidden', 'piano-size-label');
+                const pianoTypeValue = getInputValue('piano-type-hidden');
+                const pianoSizeValue = getInputValue('piano-size-hidden');
+                const parts = [];
+                if (pianoType) parts.push(`Type: ${pianoType}`);
+                if (pianoSize) parts.push(`Size: ${pianoSize}`);
+                if (pianoTypeValue === 'custom' || pianoSizeValue === 'custom') {
+                    const customName = getInputValue('piano-custom-name');
+                    const customLength = getInputValue('piano-custom-length');
+                    const customWidth = getInputValue('piano-custom-width');
+                    const customHeight = getInputValue('piano-custom-height');
+                    const customUnit = getInputValue('piano-custom-size-unit') || 'cm';
+                    const sizeText = (customLength && customWidth && customHeight)
+                        ? `${customLength}x${customWidth}x${customHeight}${customUnit}`
+                        : '';
+                    const customBits = [];
+                    if (customName) customBits.push(customName);
+                    if (sizeText) customBits.push(sizeText);
+                    if (customBits.length > 0) {
+                        parts.push(`Custom: ${customBits.join(' | ')}`);
+                    }
+                }
+                itemsSummary = parts.join(' | ');
+            } else if (isCustomizedInventoryService(serviceValue)) {
                 const serializedItems = getInputValue('customized-items-hidden');
                 if (serializedItems) {
                     try {
@@ -11458,7 +13051,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            if (step === 3) {
+            if (step === 3 && getActiveServiceValue() === 'Piano Transport') {
+                const missingPianoField = getPianoStep3MissingRequiredField();
+                if (missingPianoField) {
+                    markFieldError(missingPianoField);
+                    setInlineError(missingPianoField, getInlineRequiredMessage(missingPianoField, quoteForm));
+                    return firstInvalid || missingPianoField;
+                }
+            }
+
+            if (
+                step === 3
+                && !isVehicleLikeStepFlowService(getActiveServiceValue())
+                && getActiveServiceValue() !== 'Piano Transport'
+                && !isCustomizedInventoryService(getActiveServiceValue())
+            ) {
                 const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
                 const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
                     .map((btn) => (btn.getAttribute('data-floor') || '').trim())
@@ -11510,6 +13117,28 @@ document.addEventListener('DOMContentLoaded', function() {
                             || document.getElementById('house-removal-inventory-section')
                             || document.getElementById('pickup-floor-select');
                     }
+                }
+            }
+
+            if (step === 3 && isVehicleTransportService(getActiveServiceValue())) {
+                const missingVehicleField = getVehicleStep3MissingRequiredField();
+                if (missingVehicleField) {
+                    markFieldError(missingVehicleField);
+                    setInlineError(missingVehicleField, getInlineRequiredMessage(missingVehicleField, quoteForm));
+                    if (missingVehicleField.type === 'hidden') {
+                        const wrapperToggle = missingVehicleField.closest('.custom-dropdown-wrapper')?.querySelector('.dropdown-toggle');
+                        markFieldError(wrapperToggle);
+                    }
+                    return firstInvalid || missingVehicleField;
+                }
+            }
+
+            if (step === 3 && isFreightService(getActiveServiceValue())) {
+                const missingFreightField = getFreightStep3MissingRequiredField();
+                if (missingFreightField) {
+                    markFieldError(missingFreightField);
+                    setInlineError(missingFreightField, getInlineRequiredMessage(missingFreightField, quoteForm));
+                    return firstInvalid || missingFreightField;
                 }
             }
 
@@ -11888,8 +13517,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const deliveryPropertyTypeValue = getInputValue('delivery-property-type');
             let pickupType = formatPropertyTypeValue(pickupPropertyTypeValue) || getSelectText('pickup-location-type') || getSelectText('office-pickup-location-type');
             let deliveryType = formatPropertyTypeValue(deliveryPropertyTypeValue) || getSelectText('delivery-location-type') || getSelectText('office-delivery-location-type');
-            let pickupFloor = getOrderedFloorList(Array.from(window.selectedPickupFloors || [])).join(', ') || getSelectText('pickup-floor') || getSelectText('office-pickup-floor');
-            let deliveryFloor = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || [])).join(', ') || getSelectText('delivery-floor') || getSelectText('office-delivery-floor');
+            if (isVehicleLikeStepFlowService(serviceValue)) {
+                const pickupParkingLevels = getOrderedFloorList(Array.from(window.selectedPickupFloors || [])).join(', ');
+                const deliveryParkingLevels = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || [])).join(', ');
+                pickupType = formatPropertyTypeValue(pickupPropertyTypeValue) || pickupParkingLevels || '—';
+                deliveryType = formatPropertyTypeValue(deliveryPropertyTypeValue) || deliveryParkingLevels || '—';
+            }
+            let pickupFloor = getOverviewFloorSummaryText('pickup') || getSelectText('pickup-floor') || getSelectText('office-pickup-floor');
+            let deliveryFloor = getOverviewFloorSummaryText('delivery') || getSelectText('delivery-floor') || getSelectText('office-delivery-floor');
             const pickupAddress = formatAddress('pickup-address', 'pickup-city', 'pickup-postcode');
             const deliveryAddress = formatAddress('delivery-address', 'delivery-city', 'delivery-postcode');
             const moveDate = getInputValue('service-transport-date') || getInputValue('office-move-date');
@@ -11946,15 +13581,45 @@ document.addEventListener('DOMContentLoaded', function() {
                 const extras = [];
                 const typeLabel = getOptionNavLabel('trailer-campervan-type-hidden') || getDropdownLabel('trailer-campervan-type-hidden', 'trailer-campervan-type-label');
                 const valueLabel = getOptionNavLabel('trailer-campervan-value-hidden') || getDropdownLabel('trailer-campervan-value-hidden', 'trailer-campervan-value-label');
-                const deliveryLabel = getOptionNavLabel('trailer-campervan-delivery-hidden') || getDropdownLabel('trailer-campervan-delivery-hidden', 'trailer-campervan-delivery-label');
+                const methodLabel = getOptionNavLabel('trailer-campervan-delivery-hidden') || getDropdownLabel('trailer-campervan-delivery-hidden', 'trailer-campervan-delivery-label');
+                const conditionLabel = getOptionNavLabel('trailer-campervan-condition-hidden') || getDropdownLabel('trailer-campervan-condition-hidden', 'trailer-campervan-condition-label');
+                const weightLabel = getOptionNavLabel('trailer-campervan-weight-hidden') || getDropdownLabel('trailer-campervan-weight-hidden', 'trailer-campervan-weight-label');
+                const lengthLabel = getOptionNavLabel('trailer-campervan-length-hidden') || getDropdownLabel('trailer-campervan-length-hidden', 'trailer-campervan-length-label');
+                const operationalLabel = getOptionNavLabel('trailer-campervan-operational-hidden');
                 if (typeLabel) extras.push(`Type: ${typeLabel}`);
                 if (valueLabel) extras.push(`Value: ${valueLabel}`);
-                if (deliveryLabel) extras.push(`Delivery: ${deliveryLabel}`);
+                if (conditionLabel) extras.push(`Condition: ${conditionLabel}`);
+                if (weightLabel) extras.push(`Weight: ${weightLabel}`);
+                if (lengthLabel) extras.push(`Length: ${lengthLabel}`);
+                if (methodLabel) extras.push(`Method: ${methodLabel}`);
+                if (operationalLabel) extras.push(`Operational: ${operationalLabel}`);
                 itemsSummary = [base, ...extras].filter(Boolean).join(' | ');
             } else if (serviceValue === 'Piano Transport') {
-                const pianoType = getOptionNavLabel('piano-type-hidden');
-                itemsSummary = pianoType ? `Type: ${pianoType}` : '';
-            } else if (serviceValue === 'Customized Items') {
+                const pianoType = getOptionNavLabel('piano-type-hidden') || getDropdownLabel('piano-type-hidden', 'piano-type-label');
+                const pianoSize = getOptionNavLabel('piano-size-hidden') || getDropdownLabel('piano-size-hidden', 'piano-size-label');
+                const pianoTypeValue = getInputValue('piano-type-hidden');
+                const pianoSizeValue = getInputValue('piano-size-hidden');
+                const parts = [];
+                if (pianoType) parts.push(`Type: ${pianoType}`);
+                if (pianoSize) parts.push(`Size: ${pianoSize}`);
+                if (pianoTypeValue === 'custom' || pianoSizeValue === 'custom') {
+                    const customName = getInputValue('piano-custom-name');
+                    const customLength = getInputValue('piano-custom-length');
+                    const customWidth = getInputValue('piano-custom-width');
+                    const customHeight = getInputValue('piano-custom-height');
+                    const customUnit = getInputValue('piano-custom-size-unit') || 'cm';
+                    const sizeText = (customLength && customWidth && customHeight)
+                        ? `${customLength}x${customWidth}x${customHeight}${customUnit}`
+                        : '';
+                    const customBits = [];
+                    if (customName) customBits.push(customName);
+                    if (sizeText) customBits.push(sizeText);
+                    if (customBits.length > 0) {
+                        parts.push(`Custom: ${customBits.join(' | ')}`);
+                    }
+                }
+                itemsSummary = parts.join(' | ');
+            } else if (isCustomizedInventoryService(serviceValue)) {
                 const serializedItems = getInputValue('customized-items-hidden');
                 if (serializedItems) {
                     try {
@@ -12095,7 +13760,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            if (step === 3) {
+            if (step === 3 && getActiveServiceValue() === 'Piano Transport') {
+                const missingPianoField = getPianoStep3MissingRequiredField();
+                if (missingPianoField) {
+                    markFieldError(missingPianoField);
+                    setInlineError(missingPianoField, getInlineRequiredMessage(missingPianoField, quoteForm));
+                    return firstInvalid || missingPianoField;
+                }
+            }
+
+            if (
+                step === 3
+                && !isVehicleLikeStepFlowService(getActiveServiceValue())
+                && getActiveServiceValue() !== 'Piano Transport'
+                && !isCustomizedInventoryService(getActiveServiceValue())
+            ) {
                 const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
                 const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
                     .map((btn) => (btn.getAttribute('data-floor') || '').trim())
@@ -12147,6 +13826,28 @@ document.addEventListener('DOMContentLoaded', function() {
                             || document.getElementById('house-removal-inventory-section')
                             || document.getElementById('pickup-floor-select');
                     }
+                }
+            }
+
+            if (step === 3 && isVehicleTransportService(getActiveServiceValue())) {
+                const missingVehicleField = getVehicleStep3MissingRequiredField();
+                if (missingVehicleField) {
+                    markFieldError(missingVehicleField);
+                    setInlineError(missingVehicleField, getInlineRequiredMessage(missingVehicleField, quoteForm));
+                    if (missingVehicleField.type === 'hidden') {
+                        const wrapperToggle = missingVehicleField.closest('.custom-dropdown-wrapper')?.querySelector('.dropdown-toggle');
+                        markFieldError(wrapperToggle);
+                    }
+                    return firstInvalid || missingVehicleField;
+                }
+            }
+
+            if (step === 3 && isFreightService(getActiveServiceValue())) {
+                const missingFreightField = getFreightStep3MissingRequiredField();
+                if (missingFreightField) {
+                    markFieldError(missingFreightField);
+                    setInlineError(missingFreightField, getInlineRequiredMessage(missingFreightField, quoteForm));
+                    return firstInvalid || missingFreightField;
                 }
             }
 
@@ -12351,6 +14052,16 @@ document.addEventListener('DOMContentLoaded', function() {
             hideMotorbikeTransportSection();
             hideTrailerCampervanSection();
             hideIndustrialSection();
+            const pickupPropertyType = document.getElementById('pickup-property-type');
+            if (pickupPropertyType) {
+                pickupPropertyType.value = '';
+                pickupPropertyType.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            const deliveryPropertyType = document.getElementById('delivery-property-type');
+            if (deliveryPropertyType) {
+                deliveryPropertyType.value = '';
+                deliveryPropertyType.dispatchEvent(new Event('change', { bubbles: true }));
+            }
             setTimeout(() => {
                 initCarTransportDropdowns();
             }, 100);
@@ -12360,8 +14071,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 inventorySection.classList.add('progressive-hidden');
             }
             if (genericSection) {
-                genericSection.style.display = 'none';
-                genericSection.classList.add('progressive-hidden');
+                genericSection.style.display = 'block';
+                genericSection.classList.remove('progressive-hidden');
             }
             if (carTransportSection) carTransportSection.style.display = 'none';
             resetMandatoryAdditionalInfoForm();
@@ -12392,6 +14103,16 @@ document.addEventListener('DOMContentLoaded', function() {
             hidePianoDeliverySection();
             hideIndustrialSection();
             showTrailerCampervanSection();
+            const pickupPropertyType = document.getElementById('pickup-property-type');
+            if (pickupPropertyType) {
+                pickupPropertyType.value = '';
+                pickupPropertyType.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            const deliveryPropertyType = document.getElementById('delivery-property-type');
+            if (deliveryPropertyType) {
+                deliveryPropertyType.value = '';
+                deliveryPropertyType.dispatchEvent(new Event('change', { bubbles: true }));
+            }
             setTimeout(() => {
                 initTrailerCampervanDropdowns();
             }, 100);
@@ -12518,23 +14239,7 @@ document.addEventListener('DOMContentLoaded', function() {
             hidePianoDeliverySection();
             hideIndustrialSection();
             showFreightSection();
-        } else if (value === 'Packaging') {
-            if (inventorySection) {
-                inventorySection.style.display = 'none';
-                inventorySection.classList.add('progressive-hidden');
-            }
-            if (genericSection) genericSection.style.display = 'block';
-            if (carTransportSection) carTransportSection.style.display = 'none';
-            resetMandatoryAdditionalInfoForm();
-            hideManpowerSection();
-            hideOfficeRemovalSection();
-            hideVehiclePartsSection();
-            hideMotorbikeTransportSection();
-            hideTrailerCampervanSection();
-            hidePianoDeliverySection();
-            hideIndustrialSection();
-            showPackagingSection();
-        } else if (value === 'Customized Items') {
+        } else if (isCustomizedInventoryService(value)) {
             if (inventorySection) {
                 inventorySection.style.display = 'none';
                 inventorySection.classList.add('progressive-hidden');
@@ -12554,22 +14259,6 @@ document.addEventListener('DOMContentLoaded', function() {
             hidePackagingSection();
             hideFreightSection();
             hideClearanceSection();
-        } else if (value === 'Specialist & Antiques') {
-            if (inventorySection) {
-                inventorySection.style.display = 'none';
-                inventorySection.classList.add('progressive-hidden');
-            }
-            if (genericSection) genericSection.style.display = 'block';
-            if (carTransportSection) carTransportSection.style.display = 'none';
-            resetMandatoryAdditionalInfoForm();
-            hideManpowerSection();
-            hideOfficeRemovalSection();
-            hideVehiclePartsSection();
-            hideMotorbikeTransportSection();
-            hideTrailerCampervanSection();
-            hidePianoDeliverySection();
-            hideIndustrialSection();
-            showSpecialistAntiquesSection();
         } else if (value === 'Office Removals') {
             if (inventorySection) {
                 inventorySection.style.display = 'none';
@@ -12586,22 +14275,6 @@ document.addEventListener('DOMContentLoaded', function() {
             hidePianoDeliverySection();
             hideIndustrialSection();
             showOfficeRemovalSection();
-        } else if (value === 'Vehicle Parts') {
-            if (inventorySection) {
-                inventorySection.style.display = 'none';
-                inventorySection.classList.add('progressive-hidden');
-            }
-            if (genericSection) genericSection.style.display = 'block';
-            if (carTransportSection) carTransportSection.style.display = 'none';
-            resetMandatoryAdditionalInfoForm();
-            hideManpowerSection();
-            hidePackagingSection();
-            hideSpecialistAntiquesSection();
-            hideMotorbikeTransportSection();
-            hideTrailerCampervanSection();
-            hidePianoDeliverySection();
-            hideIndustrialSection();
-            showVehiclePartsSection();
         } else {
             if (inventorySection) {
                 inventorySection.style.display = 'none';
@@ -12630,9 +14303,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (typeof window.updateFormSummary === 'function') {
             window.updateFormSummary();
         }
+        if (typeof syncVehicleTransportStepRules === 'function') {
+            syncVehicleTransportStepRules();
+        }
         
-        // Immediately update inventory visibility for Customized Items (without waiting for floor selection)
-        if (value === 'Customized Items') {
+        // Immediately update inventory visibility for customized-style services.
+        if (isCustomizedInventoryService(value)) {
             document.body.classList.add('customized-items-active');
             const isStep3 = document.body.getAttribute('data-form-step') === '3' || document.body.getAttribute('data-current-step') === '3';
             
@@ -12703,7 +14379,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ).trim();
         const body = document.body;
         const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
-        const isCustomizedService = serviceValue === 'Customized Items';
+        const isCustomizedService = isCustomizedInventoryService(serviceValue);
 
         const inventoryCardContainer = document.getElementById('inventory-card-container');
         const houseInventorySection = document.getElementById('house-removal-inventory-section');
@@ -12739,7 +14415,7 @@ document.addEventListener('DOMContentLoaded', function() {
             customSection.style.display = 'none';
             customSection.classList.add('step-hidden');
 
-            if (serviceValue !== 'House Removals' && serviceValue !== 'Customized Items') {
+            if (serviceValue !== 'House Removals' && !isCustomizedInventoryService(serviceValue)) {
                 inventoryCardContainer.style.display = 'none';
             }
 
@@ -12752,13 +14428,107 @@ document.addEventListener('DOMContentLoaded', function() {
         updateCustomizedItemsHiddenValue();
     };
 
+    const syncPianoStep3Visibility = () => {
+        const serviceValue = (
+            cjHidden?.value
+            || decodeURIComponent(new URLSearchParams(window.location.search).get('service') || '')
+            || ''
+        ).trim();
+        const body = document.body;
+        const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
+        const isPianoService = serviceValue === 'Piano Transport';
+        const isCustomizedService = isCustomizedInventoryService(serviceValue);
+
+        const pianoSection = document.getElementById('piano-delivery-section');
+        const pickupWrapper = document.getElementById('pickup-room-list-wrapper');
+        const inventoryCardContainer = document.getElementById('inventory-card-container');
+        const step3Title = document.getElementById('step3-title-wrapper');
+        const step3TitleHeading = step3Title ? step3Title.querySelector('.section-title') : null;
+
+        if (!pianoSection) return;
+
+        const shouldShowPiano = isPianoService && isStep3;
+        pianoSection.style.display = shouldShowPiano ? 'block' : 'none';
+
+        if (pickupWrapper && !isCustomizedService) {
+            pickupWrapper.style.display = shouldShowPiano ? 'none' : '';
+        }
+
+        if (inventoryCardContainer && isPianoService) {
+            inventoryCardContainer.style.display = 'none';
+        }
+
+        if (step3TitleHeading) {
+            step3TitleHeading.textContent = shouldShowPiano
+                ? 'Step 3: Select Your Piano Type and Size'
+                : 'Step 3: Please select all the floors you are moving from (multiple selections available)';
+        }
+    };
+
+    const syncPianoCustomFields = () => {
+        const pianoType = document.getElementById('piano-type-hidden');
+        const pianoSize = document.getElementById('piano-size-hidden');
+        const pianoSizeGroup = document.getElementById('piano-size-group');
+        const pianoSizeRequired = document.getElementById('piano-size-required');
+        const pianoSizeNav = document.querySelector('.option-nav[data-option-nav-for="piano-size-hidden"]');
+        const customSection = document.getElementById('piano-custom-section');
+        const customName = document.getElementById('piano-custom-name');
+        const customLength = document.getElementById('piano-custom-length');
+        const customWidth = document.getElementById('piano-custom-width');
+        const customHeight = document.getElementById('piano-custom-height');
+
+        const requiredName = document.getElementById('piano-custom-name-required');
+        const requiredLength = document.getElementById('piano-custom-length-required');
+        const requiredWidth = document.getElementById('piano-custom-width-required');
+        const requiredHeight = document.getElementById('piano-custom-height-required');
+
+        if (!pianoType || !pianoSize || !customSection) return;
+
+        const isCustomType = pianoType.value === 'custom';
+        const isCustomSize = pianoSize.value === 'custom';
+        const isCustom = isCustomType || isCustomSize;
+
+        if (pianoSizeGroup) {
+            pianoSizeGroup.style.display = isCustomType ? 'none' : '';
+        }
+        if (pianoSizeRequired) {
+            pianoSizeRequired.style.display = isCustomType ? 'none' : 'inline';
+        }
+
+        if (isCustomType) {
+            pianoSize.value = '';
+            if (pianoSizeNav) {
+                pianoSizeNav.querySelectorAll('.option-nav-btn').forEach((btn) => {
+                    btn.classList.remove('selected');
+                    btn.setAttribute('aria-checked', 'false');
+                    btn.removeAttribute('aria-pressed');
+                });
+            }
+        }
+
+        customSection.style.display = isCustom ? 'block' : 'none';
+
+        [requiredName, requiredLength, requiredWidth, requiredHeight].forEach((el) => {
+            if (el) el.style.display = isCustom ? 'inline' : 'none';
+        });
+
+        if (!isCustom) {
+            [customName, customLength, customWidth, customHeight].forEach((field) => {
+                if (!field) return;
+                field.value = '';
+                field.classList.remove('field-error');
+                field.removeAttribute('aria-invalid');
+            });
+        }
+    };
+
     function addDimensionItem() {
         if (!dimensionsList) return;
         const itemIndex = dimensionsList.querySelectorAll('.dimension-item').length + 1;
         const item = document.createElement('div');
         item.className = 'dimension-item';
         item.innerHTML = `
-            <label class="form-label" style="margin:0;">Add photos</label>
+            <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">Optional</span></label>
             <div class="photo-upload-grid">
                 <div class="photo-upload-area">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -12788,8 +14558,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input type="file" class="photo-input" accept="image/*" id="custom-item-photo-${itemIndex}-3">
                 </div>
             </div>
-            <label class="form-label" style="margin:0;">Add Dimensions</label>
-            <input type="text" class="form-input dimension-description" placeholder="Enter Item Description here">
+            <label class="form-label" style="margin:0;">Add Approximate Dimensions</label>
+            <input type="text" class="form-input dimension-description" placeholder="Enter Item Description here (Naming the Item name and model will help Transport Provider with what exact item they will be transporting)" maxlength="200">
             <div class="dimension-inputs">
                 <input type="number" class="form-input dimension-field dimension-width" placeholder="Width" min="0" step="0.1">
                 <input type="number" class="form-input dimension-field dimension-depth" placeholder="Depth" min="0" step="0.1">
@@ -12821,16 +14591,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (cjHidden) {
         cjHidden.addEventListener('change', syncCustomizedItemsStep3Visibility);
+        cjHidden.addEventListener('change', syncPianoStep3Visibility);
+        cjHidden.addEventListener('change', syncPianoCustomFields);
     }
+
+    const pianoTypeField = document.getElementById('piano-type-hidden');
+    const pianoSizeField = document.getElementById('piano-size-hidden');
+    if (pianoTypeField) pianoTypeField.addEventListener('change', syncPianoCustomFields);
+    if (pianoSizeField) pianoSizeField.addEventListener('change', syncPianoCustomFields);
 
     document.addEventListener('click', (event) => {
         if (event.target.closest('.service-icon-btn')) {
             setTimeout(syncCustomizedItemsStep3Visibility, 0);
+            setTimeout(syncPianoStep3Visibility, 0);
+            setTimeout(syncPianoCustomFields, 0);
         }
     });
 
     const stepObserver = new MutationObserver(() => {
         syncCustomizedItemsStep3Visibility();
+        syncPianoStep3Visibility();
+        syncPianoCustomFields();
     });
     stepObserver.observe(document.body, {
         attributes: true,
@@ -12838,6 +14619,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     syncCustomizedItemsStep3Visibility();
+    syncPianoStep3Visibility();
+    syncPianoCustomFields();
 
     const quoteForm = document.getElementById('create-job-form');
 
@@ -14041,7 +15824,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const inventoryCardContainer = document.getElementById('inventory-card-container');
         const serviceValue = document.getElementById('item-description-hidden')?.value || '';
         const isHouse = serviceValue === 'House Removals';
-        const isCustomizedItems = serviceValue === 'Customized Items';
+        const isCustomizedItems = isCustomizedInventoryService(serviceValue);
         const currentStep = document.body.dataset.formStep;
 
         document.body.classList.toggle('floor-block-mode', isHouse);
@@ -14143,9 +15926,144 @@ document.addEventListener('DOMContentLoaded', function() {
         if (illustrationPanel) illustrationPanel.style.display = '';
     };
 
+    function syncVehicleTransportStepRules() {
+        const serviceValue = getActiveServiceValue();
+        const isVehicleService = isVehicleLikeStepFlowService(serviceValue);
+        const isPianoService = serviceValue === 'Piano Transport';
+        const isPackagedService = isPackagedParcelsService(serviceValue);
+        const isVehiclePartsService = serviceValue === 'Vehicle Parts';
+        const shouldHidePacking = isVehicleService || isPackagedService;
+        const shouldHideDisassembly = isVehicleService || isPackagedService || isVehiclePartsService;
+
+        const pickupPropertySection = document.getElementById('property-type-selection-section');
+        const pickupLiftSection = document.getElementById('pickup-lift-section');
+        const deliveryPropertySection = document.getElementById('delivery-property-type-selection-section');
+        const deliveryLiftSection = document.getElementById('delivery-lift-section');
+
+        if (pickupPropertySection) pickupPropertySection.style.display = '';
+        if (deliveryPropertySection) deliveryPropertySection.style.display = '';
+
+        if (pickupLiftSection && isVehicleService) pickupLiftSection.style.display = 'none';
+        if (deliveryLiftSection && isVehicleService) deliveryLiftSection.style.display = 'none';
+
+        if (isVehicleService) {
+            const pickupLiftInput = document.getElementById('pickup-lift-available');
+            const deliveryLiftInput = document.getElementById('delivery-lift-available');
+
+            if (pickupLiftInput) {
+                pickupLiftInput.value = '';
+                pickupLiftInput.dataset.userSelected = 'false';
+            }
+            if (deliveryLiftInput) {
+                deliveryLiftInput.value = '';
+            }
+
+            if (typeof renderPickupFloorSelector === 'function') {
+                renderPickupFloorSelector();
+            }
+            if (typeof window.renderDeliveryFloorSelector === 'function') {
+                window.renderDeliveryFloorSelector();
+            }
+        }
+
+        const packingInput = document.getElementById('service-packing');
+        const disassemblyInput = document.getElementById('service-disassembly');
+        const packingCard = packingInput ? packingInput.closest('.service-requirement-card') : null;
+        const disassemblyCard = disassemblyInput ? disassemblyInput.closest('.service-requirement-card') : null;
+
+        if (packingCard) packingCard.style.display = shouldHidePacking ? 'none' : '';
+        if (disassemblyCard) disassemblyCard.style.display = shouldHideDisassembly ? 'none' : '';
+
+        if (shouldHidePacking) {
+            if (packingInput) {
+                if (packingInput.value !== 'no') {
+                    packingInput.value = 'no';
+                    packingInput.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+            const packingModeInput = document.getElementById('service-packing-mode');
+            const packingBoxProviderInput = document.getElementById('service-packing-box-provider');
+            const packingItemsInput = document.getElementById('service-packing-items');
+            if (packingModeInput) packingModeInput.value = '';
+            if (packingBoxProviderInput) packingBoxProviderInput.value = '';
+            if (packingItemsInput) packingItemsInput.value = '';
+
+        }
+
+        if (shouldHideDisassembly && disassemblyInput) {
+            if (disassemblyInput.value !== 'no') {
+                disassemblyInput.value = 'no';
+                disassemblyInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }
+        const disassemblyItemsInput = document.getElementById('service-disassembly-items');
+        const assembleChoiceInput = document.getElementById('service-assemble-at-arrival');
+        const assembleItemsInput = document.getElementById('service-assemble-items');
+        const disassemblyItemsConfig = document.getElementById('disassembly-items-config');
+        const assembleChoiceConfig = document.getElementById('assemble-choice-config');
+        const assembleItemsConfig = document.getElementById('assemble-items-config');
+        if (shouldHideDisassembly) {
+            if (disassemblyItemsInput) disassemblyItemsInput.value = '';
+            if (assembleChoiceInput) assembleChoiceInput.value = '';
+            if (assembleItemsInput) assembleItemsInput.value = '';
+            if (disassemblyItemsConfig) disassemblyItemsConfig.style.display = 'none';
+            if (assembleChoiceConfig) assembleChoiceConfig.style.display = 'none';
+            if (assembleItemsConfig) assembleItemsConfig.style.display = 'none';
+        }
+
+        if (isPianoService) {
+            const packingModeInput = document.getElementById('service-packing-mode');
+            const packingBoxProviderInput = document.getElementById('service-packing-box-provider');
+            const packingItemsInput = document.getElementById('service-packing-items');
+            const packingModeConfig = document.getElementById('packing-mode-config');
+            const packingBoxProviderConfig = document.getElementById('packing-box-provider-config');
+            const packingItemsConfig = document.getElementById('packing-items-config');
+
+            if (packingModeInput) packingModeInput.value = '';
+            if (packingBoxProviderInput) packingBoxProviderInput.value = '';
+            if (packingItemsInput) packingItemsInput.value = '';
+            if (packingModeConfig) packingModeConfig.style.display = 'none';
+            if (packingBoxProviderConfig) packingBoxProviderConfig.style.display = 'none';
+            if (packingItemsConfig) packingItemsConfig.style.display = 'none';
+
+            if (disassemblyItemsInput) disassemblyItemsInput.value = '';
+            if (assembleChoiceInput) assembleChoiceInput.value = '';
+            if (assembleItemsInput) assembleItemsInput.value = '';
+            if (disassemblyItemsConfig) disassemblyItemsConfig.style.display = 'none';
+            if (assembleChoiceConfig) assembleChoiceConfig.style.display = 'none';
+            if (assembleItemsConfig) assembleItemsConfig.style.display = 'none';
+
+            const storageModeInput = document.getElementById('service-storage-mode');
+            const storageItemsInput = document.getElementById('service-storage-items');
+            const storageItemsConfig = document.getElementById('storage-items-config');
+
+            if (storageModeInput) storageModeInput.value = '';
+            if (storageItemsInput) storageItemsInput.value = '';
+            if (storageItemsConfig) storageItemsConfig.style.display = 'none';
+        }
+
+        if (typeof window.renderPackingItemsConfig === 'function') {
+            window.renderPackingItemsConfig();
+        }
+        if (typeof window.renderDisassemblyConfig === 'function') {
+            window.renderDisassemblyConfig();
+        }
+        if (typeof window.syncServiceRequirementNumbering === 'function') {
+            window.syncServiceRequirementNumbering();
+        }
+        if (typeof window.renderVehicleStepParkingSelectors === 'function') {
+            window.renderVehicleStepParkingSelectors();
+        }
+        if (typeof syncOverviewVehicleVisibility === 'function') {
+            syncOverviewVehicleVisibility();
+        }
+    }
+
     if (!stepFlowReady) {
         applyServiceSelection(pendingServiceValue || cjHidden?.value || '');
     }
+
+    syncVehicleTransportStepRules();
 
     const getFieldLabelText = (field, formEl) => {
         if (!field || !formEl) return '';
@@ -14384,7 +16302,7 @@ document.addEventListener('DOMContentLoaded', function() {
             inventorySection.style.display = serviceValue === 'House Removals' ? 'block' : 'none';
         }
         if (customizedItemsSection) {
-            customizedItemsSection.style.display = serviceValue === 'Customized Items' ? 'block' : 'none';
+            customizedItemsSection.style.display = isCustomizedInventoryService(serviceValue) ? 'block' : 'none';
         }
         if (officeInventorySection) {
             officeInventorySection.style.display = serviceValue === 'Office Removals' ? 'block' : 'none';
@@ -14413,7 +16331,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 return;
             }
-            if (block.id === 'customized-items-inventory-section' && serviceValue === 'Customized Items') {
+            if (block.id === 'customized-items-inventory-section' && isCustomizedInventoryService(serviceValue)) {
                 block.classList.remove('progressive-hidden');
                 if (!isBlockComplete(block)) {
                     allowShow = false;
@@ -15059,6 +16977,48 @@ function hideOtherSection() {
     }
 }
 
+function setOfficeDescriptionMode(isFreightMode) {
+    const freightLayout = document.getElementById('freight-step3-layout');
+    const genericCard = document.getElementById('office-generic-description-card');
+    const descriptionField = document.getElementById('office-removal-description');
+    const freightDescriptionInput = document.getElementById('freight-job-description-input');
+
+    if (freightLayout) {
+        freightLayout.style.display = isFreightMode ? 'block' : 'none';
+    }
+    if (genericCard) {
+        genericCard.style.display = isFreightMode ? 'none' : 'block';
+    }
+
+    if (!descriptionField || !freightDescriptionInput) {
+        return;
+    }
+
+    if (isFreightMode) {
+        if (!freightDescriptionInput.value.trim() && descriptionField.value.trim()) {
+            freightDescriptionInput.value = descriptionField.value.trim();
+        }
+        descriptionField.value = freightDescriptionInput.value.trim();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const descriptionField = document.getElementById('office-removal-description');
+    const freightDescriptionInput = document.getElementById('freight-job-description-input');
+    if (!descriptionField || !freightDescriptionInput) {
+        return;
+    }
+
+    const syncToHiddenDescription = () => {
+        descriptionField.value = freightDescriptionInput.value.trim();
+        descriptionField.dispatchEvent(new Event('input', { bubbles: true }));
+        descriptionField.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    freightDescriptionInput.addEventListener('input', syncToHiddenDescription);
+    freightDescriptionInput.addEventListener('change', syncToHiddenDescription);
+});
+
 function showOfficeRemovalSection() {
     const officeInventorySection = document.getElementById('office-removal-inventory-section');
     const officeMoveDateSection = document.getElementById('office-move-date-section');
@@ -15070,6 +17030,7 @@ function showOfficeRemovalSection() {
     const deliveryLocationCol = document.getElementById('delivery-location-col');
     const formGrid = document.querySelector('.form-v2-grid');
     const formStepper = document.getElementById('form-stepper');
+    setOfficeDescriptionMode(false);
     if (officeInventorySection) {
         officeInventorySection.style.display = 'block';
     }
@@ -15085,6 +17046,7 @@ function showOfficeRemovalSection() {
         officeDeliveryFloorsSection.classList.remove('office-hidden');
     }
     if (officeDescSection) {
+        officeDescSection.setAttribute('data-form-step', '2');
         officeDescSection.style.display = 'none';
     }
     if (genericFloorsSection) {
@@ -15117,6 +17079,7 @@ function hideOfficeRemovalSection() {
     const deliveryLocationCol = document.getElementById('delivery-location-col');
     const formGrid = document.querySelector('.form-v2-grid');
     const formStepper = document.getElementById('form-stepper');
+    setOfficeDescriptionMode(false);
     if (officeInventorySection) {
         officeInventorySection.style.display = 'none';
     }
@@ -15132,6 +17095,7 @@ function hideOfficeRemovalSection() {
         officeDeliveryFloorsSection.classList.add('office-hidden');
     }
     if (officeDescSection) {
+        officeDescSection.setAttribute('data-form-step', '2');
         officeDescSection.style.display = 'none';
     }
     if (genericFloorsSection) {
@@ -15153,11 +17117,13 @@ function hideOfficeRemovalSection() {
 function showBoatsSection() {
     const boatsSection = document.getElementById('office-removal-description-section');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
+    setOfficeDescriptionMode(false);
     if (boatsSection) {
+        boatsSection.setAttribute('data-form-step', '2');
         boatsSection.style.display = 'block';
     }
     if (deliveryLocationCol) {
-        deliveryLocationCol.style.display = 'block';
+        deliveryLocationCol.style.display = '';
     }
 }
 
@@ -15165,17 +17131,20 @@ function hideBoatsSection() {
     const boatsSection = document.getElementById('office-removal-description-section');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
     if (boatsSection) {
+        boatsSection.setAttribute('data-form-step', '2');
         boatsSection.style.display = 'none';
     }
     if (deliveryLocationCol) {
-        deliveryLocationCol.style.display = 'block';
+        deliveryLocationCol.style.display = '';
     }
 }
 
 function showClearanceSection() {
     const clearanceSection = document.getElementById('office-removal-description-section');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
+    setOfficeDescriptionMode(false);
     if (clearanceSection) {
+        clearanceSection.setAttribute('data-form-step', '2');
         clearanceSection.style.display = 'block';
     }
     if (deliveryLocationCol) {
@@ -15187,43 +17156,50 @@ function hideClearanceSection() {
     const clearanceSection = document.getElementById('office-removal-description-section');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
     if (clearanceSection) {
+        clearanceSection.setAttribute('data-form-step', '2');
         clearanceSection.style.display = 'none';
     }
     if (deliveryLocationCol) {
-        deliveryLocationCol.style.display = 'block';
+        deliveryLocationCol.style.display = '';
     }
 }
 
 function showFreightSection() {
     const freightSection = document.getElementById('office-removal-description-section');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
+    setOfficeDescriptionMode(true);
     if (freightSection) {
+        freightSection.setAttribute('data-form-step', '3');
         freightSection.style.display = 'block';
     }
     if (deliveryLocationCol) {
-        deliveryLocationCol.style.display = 'none';
+        deliveryLocationCol.style.display = '';
     }
 }
 
 function hideFreightSection() {
     const freightSection = document.getElementById('office-removal-description-section');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
+    setOfficeDescriptionMode(false);
     if (freightSection) {
+        freightSection.setAttribute('data-form-step', '2');
         freightSection.style.display = 'none';
     }
     if (deliveryLocationCol) {
-        deliveryLocationCol.style.display = 'block';
+        deliveryLocationCol.style.display = '';
     }
 }
 
 function showVehiclePartsSection() {
     const vehiclePartsSection = document.getElementById('office-removal-description-section');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
+    setOfficeDescriptionMode(false);
     if (vehiclePartsSection) {
+        vehiclePartsSection.setAttribute('data-form-step', '2');
         vehiclePartsSection.style.display = 'block';
     }
     if (deliveryLocationCol) {
-        deliveryLocationCol.style.display = 'block';
+        deliveryLocationCol.style.display = '';
     }
 }
 
@@ -15231,21 +17207,24 @@ function hideVehiclePartsSection() {
     const vehiclePartsSection = document.getElementById('office-removal-description-section');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
     if (vehiclePartsSection) {
+        vehiclePartsSection.setAttribute('data-form-step', '2');
         vehiclePartsSection.style.display = 'none';
     }
     if (deliveryLocationCol) {
-        deliveryLocationCol.style.display = 'block';
+        deliveryLocationCol.style.display = '';
     }
 }
 
 function showPackagingSection() {
     const packagingSection = document.getElementById('office-removal-description-section');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
+    setOfficeDescriptionMode(false);
     if (packagingSection) {
+        packagingSection.setAttribute('data-form-step', '2');
         packagingSection.style.display = 'block';
     }
     if (deliveryLocationCol) {
-        deliveryLocationCol.style.display = 'block';
+        deliveryLocationCol.style.display = '';
     }
 }
 
@@ -15253,21 +17232,24 @@ function hidePackagingSection() {
     const packagingSection = document.getElementById('office-removal-description-section');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
     if (packagingSection) {
+        packagingSection.setAttribute('data-form-step', '2');
         packagingSection.style.display = 'none';
     }
     if (deliveryLocationCol) {
-        deliveryLocationCol.style.display = 'block';
+        deliveryLocationCol.style.display = '';
     }
 }
 
 function showSpecialistAntiquesSection() {
     const specialistSection = document.getElementById('office-removal-description-section');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
+    setOfficeDescriptionMode(false);
     if (specialistSection) {
+        specialistSection.setAttribute('data-form-step', '2');
         specialistSection.style.display = 'block';
     }
     if (deliveryLocationCol) {
-        deliveryLocationCol.style.display = 'block';
+        deliveryLocationCol.style.display = '';
     }
 }
 
@@ -15275,10 +17257,11 @@ function hideSpecialistAntiquesSection() {
     const specialistSection = document.getElementById('office-removal-description-section');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
     if (specialistSection) {
+        specialistSection.setAttribute('data-form-step', '2');
         specialistSection.style.display = 'none';
     }
     if (deliveryLocationCol) {
-        deliveryLocationCol.style.display = 'block';
+        deliveryLocationCol.style.display = '';
     }
 }
 
@@ -17309,8 +19292,12 @@ function initRoutePlanner() {
     const mapEl = document.getElementById('route-map');
     if (!mapEl) return;
 
-    // Set your Mapbox access token here
-    mapboxgl.accessToken = 'pk.eyJ1IjoiZmlsa28iLCJhIjoiY2x6dmdlODUwMDZsMjJqcGcxY2U2b290dCJ9.9DRj6-luEwljI3xea5ATHQ'; // Replace with your actual token
+    // Ensure Mapbox access token is present before creating map instances.
+    if (!ensureMapboxAccessToken()) {
+        console.warn('Mapbox access token is missing. Showing static route preview.');
+        showStaticRoutePreview();
+        return;
+    }
     
     try {
         map = new mapboxgl.Map({
@@ -17335,6 +19322,21 @@ function initRoutePlanner() {
         console.error('Error initializing Mapbox:', error);
         showStaticRoutePreview();
     }
+}
+
+const ANYTRANSPORT_MAPBOX_TOKEN = 'pk.eyJ1IjoiZmlsa28iLCJhIjoiY2x6dmdlODUwMDZsMjJqcGcxY2U2b290dCJ9.9DRj6-luEwljI3xea5ATHQ';
+
+function ensureMapboxAccessToken() {
+    if (!window.mapboxgl) return false;
+
+    const currentToken = String(mapboxgl.accessToken || '').trim();
+    if (currentToken) return true;
+
+    const fallbackToken = String(ANYTRANSPORT_MAPBOX_TOKEN || '').trim();
+    if (!fallbackToken) return false;
+
+    mapboxgl.accessToken = fallbackToken;
+    return !!String(mapboxgl.accessToken || '').trim();
 }
 
 function showStaticRoutePreview() {
@@ -17765,6 +19767,116 @@ function removeAutocompleteList(inputEl) {
     if (existing) {
         existing.remove();
     }
+}
+
+function getOverviewAddressMainLine(feature) {
+    if (!feature) return '';
+    const addressParts = String(feature.place_name || '').split(',');
+    return (addressParts[0] || '').trim();
+}
+
+function showOverviewAutocompleteList(inputEl, features, onSelect) {
+    removeAutocompleteList(inputEl);
+    if (!inputEl || !Array.isArray(features) || features.length === 0) return;
+
+    const container = inputEl.parentElement;
+    if (!container) return;
+
+    const list = document.createElement('ul');
+    list.className = 'autocomplete-list';
+    list.style.cssText = `
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid #ccc;
+        border-top: none;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 1000;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    `;
+
+    features.forEach((feature) => {
+        const li = document.createElement('li');
+        li.style.cssText = 'padding: 10px; cursor: pointer; border-bottom: 1px solid #eee;';
+        li.textContent = feature.place_name;
+
+        li.addEventListener('mouseenter', () => {
+            li.style.backgroundColor = '#f5f5f5';
+        });
+        li.addEventListener('mouseleave', () => {
+            li.style.backgroundColor = 'white';
+        });
+        li.addEventListener('click', () => {
+            if (typeof onSelect === 'function') {
+                onSelect(feature);
+            }
+            removeAutocompleteList(inputEl);
+        });
+
+        list.appendChild(li);
+    });
+
+    container.style.position = 'relative';
+    container.appendChild(list);
+}
+
+function bindOverviewModalAddressAutocomplete(addressInput, cityInput, postcodeInput) {
+    if (!addressInput) return;
+    if (!window.mapboxgl) return;
+    if (typeof ensureMapboxAccessToken === 'function' && !ensureMapboxAccessToken()) return;
+
+    let debounceTimer;
+
+    const selectFeature = (feature) => {
+        addressInput.value = getOverviewAddressMainLine(feature);
+        const city = getCityFromFeature(feature);
+        const postcode = getEircodeFromFeature(feature);
+
+        if (cityInput && city) {
+            cityInput.value = city;
+        }
+        if (postcodeInput && postcode) {
+            postcodeInput.value = postcode;
+        }
+    };
+
+    addressInput.addEventListener('input', (event) => {
+        clearTimeout(debounceTimer);
+        const query = String(event.target.value || '').trim();
+        if (query.length < 2) {
+            removeAutocompleteList(addressInput);
+            return;
+        }
+
+        debounceTimer = setTimeout(() => {
+            const encodedQuery = encodeURIComponent(query);
+            const countryParam = getGeocodeCountryParam(query);
+            const typesParam = getGeocodeTypesParam(query, true);
+            const geocodeUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${mapboxgl.accessToken}&limit=5&country=${countryParam}&types=${typesParam}`;
+
+            fetch(geocodeUrl)
+                .then((response) => response.json())
+                .then((data) => {
+                    const features = Array.isArray(data.features) ? data.features : [];
+                    showOverviewAutocompleteList(addressInput, features, selectFeature);
+                })
+                .catch(() => {
+                    removeAutocompleteList(addressInput);
+                });
+        }, 300);
+    });
+
+    addressInput.addEventListener('blur', () => {
+        setTimeout(() => {
+            removeAutocompleteList(addressInput);
+        }, 200);
+    });
 }
 
 function applyEircodeFeature(feature, type, postcodeInput) {
@@ -18363,6 +20475,11 @@ function initOverviewRouteMap() {
         return;
     }
 
+    if (!ensureMapboxAccessToken()) {
+        mapEl.innerHTML = '<div style="padding:16px; color:#64748b; font-size:0.9rem;">Map preview unavailable. Address summary is shown above.</div>';
+        return;
+    }
+
     if (overviewMap) {
         renderOverviewRouteMap();
         return;
@@ -18579,6 +20696,8 @@ function formatPropertyTypeValue(value) {
         warehouse: 'Warehouse/Shop',
         'warehouse/shop': 'Warehouse/Shop',
         bungalow: 'Bungalow',
+        'parking-level': 'Parking Level',
+        parkinglevel: 'Parking Level',
         'storage-unit': 'Storage Unit',
         storageunit: 'Storage Unit'
     };
@@ -18597,8 +20716,11 @@ function getOverviewElevatorStatus(kind) {
     const isPickup = kind === 'pickup';
     const mainId = isPickup ? 'pickup-lift-available' : 'delivery-lift-available';
     const officeId = isPickup ? 'office-pickup-lift' : 'office-delivery-lift';
+    const legacyId = isPickup ? 'lift-available' : '';
 
-    const mainValue = normalizeElevatorValue(document.getElementById(mainId)?.value || '');
+    const mainFieldValue = document.getElementById(mainId)?.value || '';
+    const legacyValue = legacyId ? (document.getElementById(legacyId)?.value || '') : '';
+    const mainValue = normalizeElevatorValue(mainFieldValue || legacyValue);
     const officeValue = normalizeElevatorValue(document.getElementById(officeId)?.value || '');
 
     return mainValue || officeValue || '—';
@@ -18624,6 +20746,62 @@ function getOrderedFloorList(values) {
         });
 }
 
+function getPianoOverviewInventoryLabel() {
+    const typeValue = (document.getElementById('piano-type-hidden')?.value || '').trim();
+    const sizeValue = (document.getElementById('piano-size-hidden')?.value || '').trim();
+    const customName = (document.getElementById('piano-custom-name')?.value || '').trim();
+    const customLength = (document.getElementById('piano-custom-length')?.value || '').trim();
+    const customWidth = (document.getElementById('piano-custom-width')?.value || '').trim();
+    const customHeight = (document.getElementById('piano-custom-height')?.value || '').trim();
+    const customUnit = (document.getElementById('piano-custom-size-unit')?.value || 'cm').trim();
+
+    const pianoTypeLabels = {
+        'upright-spinet': 'Upright - Spinet',
+        'upright-console': 'Upright - Console',
+        'upright-studio': 'Upright - Studio',
+        'upright-full': 'Upright - Full',
+        'baby-grand': 'Baby Grand',
+        'medium-grand': 'Medium Grand',
+        'parlor-grand': 'Parlor / Living Grand',
+        'concert-grand': 'Concert Grand',
+        'digital': 'Digital Piano',
+        'keyboard': 'Keyboard',
+        'custom': 'Custom Piano'
+    };
+
+    const pianoSizeLabels = {
+        '145x60x100cm': '145 x 60 x 100 cm',
+        '150x65x110cm': '150 x 65 x 110 cm',
+        '150x65x120cm': '150 x 65 x 120 cm',
+        '155x65x130cm': '155 x 65 x 130 cm',
+        '155x150x102cm': '155 x 150 x 102 cm',
+        '170x152x102cm': '170 x 152 x 102 cm',
+        '190x152x102cm': '190 x 152 x 102 cm',
+        '275x158x102cm': '275 x 158 x 102 cm',
+        '140x40x90cm': '140 x 40 x 90 cm',
+        '130x35x15cm': '130 x 35 x 15 cm'
+    };
+
+    if (!typeValue && !customName) {
+        return '';
+    }
+
+    const isCustomType = typeValue === 'custom';
+    const isCustomSize = sizeValue === 'custom';
+    const baseName = isCustomType
+        ? (customName || 'Custom Piano')
+        : (pianoTypeLabels[typeValue] || 'Piano');
+
+    const customSize = (customLength && customWidth && customHeight)
+        ? `${customLength} x ${customWidth} x ${customHeight} ${customUnit}`
+        : '';
+    const sizeText = !isCustomType && sizeValue && !isCustomSize
+        ? (pianoSizeLabels[sizeValue] || '')
+        : customSize;
+
+    return sizeText ? `${baseName} (${sizeText})` : baseName;
+}
+
 function buildOverviewFloorInventoryMarkup(kind) {
     const grouped = {};
     const selectedPickup = getOrderedFloorList(Array.from(window.selectedPickupFloors || []));
@@ -18631,6 +20809,14 @@ function buildOverviewFloorInventoryMarkup(kind) {
     const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
 
     if (kind === 'pickup') {
+        if (serviceValue === 'Piano Transport') {
+            const targetFloor = selectedPickup[0]
+                || (document.getElementById('pickup-floor-select')?.value || '').trim()
+                || 'Ground';
+            const pianoLabel = getPianoOverviewInventoryLabel() || 'Piano';
+            grouped[targetFloor] = { [pianoLabel]: 1 };
+        }
+
         const singleFloor = document.getElementById('pickup-floor-select')?.value || 'Ground';
         const singleItems = window.itemQuantities || {};
         Object.keys(singleItems).forEach((itemName) => {
@@ -18655,8 +20841,8 @@ function buildOverviewFloorInventoryMarkup(kind) {
             });
         });
 
-        // For Customized Items service, surface dimensions/weight in Pickup Floor Inventory.
-        if (serviceValue === 'Customized Items') {
+        // For customized-style services, surface dimensions/weight in Pickup Floor Inventory.
+        if (isCustomizedInventoryService(serviceValue)) {
             const serializedItems = document.getElementById('customized-items-hidden')?.value || '';
             if (serializedItems) {
                 try {
@@ -18687,6 +20873,17 @@ function buildOverviewFloorInventoryMarkup(kind) {
             }
         }
     } else {
+        if (serviceValue === 'Piano Transport') {
+            const pianoLabel = getPianoOverviewInventoryLabel() || 'Piano';
+            const targetFloor = selectedDelivery[0]
+                || (document.getElementById('delivery-floor-select')?.value || '').trim()
+                || '';
+
+            if (targetFloor) {
+                grouped[targetFloor] = { [pianoLabel]: 1 };
+            }
+        }
+
         const assignments = window.itemFloorAssignments || {};
         Object.keys(assignments).forEach((itemKey) => {
             const perFloor = assignments[itemKey] || {};
@@ -18703,6 +20900,11 @@ function buildOverviewFloorInventoryMarkup(kind) {
 
     const floors = getOrderedFloorList(Object.keys(grouped));
     if (floors.length === 0) {
+        if (serviceValue === 'Piano Transport') {
+            return kind === 'pickup'
+                ? 'Select a pickup floor to place your piano.'
+                : 'Select a delivery floor to place your piano.';
+        }
         return kind === 'pickup'
             ? 'No pickup inventory selected yet.'
             : 'No delivery floor assignments yet.';
@@ -18725,11 +20927,56 @@ function buildOverviewFloorInventoryMarkup(kind) {
     }).join('');
 }
 
+function getOverviewFloorSummaryText(kind) {
+    const isPickup = kind === 'pickup';
+    const selectedFloors = isPickup
+        ? getOrderedFloorList(Array.from(window.selectedPickupFloors || []))
+        : getOrderedFloorList(Array.from(window.selectedDeliveryFloors || []));
+
+    if (selectedFloors.length > 0) {
+        return selectedFloors.join(', ');
+    }
+
+    const domSelector = isPickup
+        ? '#pickup-floors-selector .pickup-floor-selector-btn.selected'
+        : '#delivery-floors-selector .delivery-floor-selector-btn.selected';
+    const domSelectedFloors = Array.from(document.querySelectorAll(domSelector))
+        .map((btn) => (btn.getAttribute('data-floor') || '').trim())
+        .filter(Boolean);
+    if (domSelectedFloors.length > 0) {
+        return getOrderedFloorList(domSelectedFloors).join(', ');
+    }
+
+    const hiddenFloorId = isPickup ? 'pickup-floor-select' : 'delivery-floor-select';
+    const officeFloorId = isPickup ? 'office-pickup-floor' : 'office-delivery-floor';
+    const hiddenFloor = (document.getElementById(hiddenFloorId)?.value || '').trim();
+    const officeFloor = (document.getElementById(officeFloorId)?.value || '').trim();
+
+    if (hiddenFloor || officeFloor) {
+        return hiddenFloor || officeFloor;
+    }
+
+    if (isPickup) {
+        const pickupInventoryFloors = Object.keys(window.multiFloorInventory || {}).filter((floorName) => {
+            const items = (window.multiFloorInventory || {})[floorName] || {};
+            return Object.values(items).some((qty) => (parseInt(qty, 10) || 0) > 0);
+        });
+        const orderedPickupInventoryFloors = getOrderedFloorList(pickupInventoryFloors);
+        if (orderedPickupInventoryFloors.length > 0) {
+            return orderedPickupInventoryFloors.join(', ');
+        }
+
+        if (getActiveServiceValue() === 'Piano Transport') {
+            return 'Ground';
+        }
+    }
+
+    return '';
+}
+
 function updateOverviewFloorAndInventorySummary() {
-    const pickupFloors = getOrderedFloorList(Array.from(window.selectedPickupFloors || []));
-    const deliveryFloors = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || []));
-    const pickupText = pickupFloors.length ? pickupFloors.join(', ') : '—';
-    const deliveryText = deliveryFloors.length ? deliveryFloors.join(', ') : '—';
+    const pickupText = getOverviewFloorSummaryText('pickup') || '—';
+    const deliveryText = getOverviewFloorSummaryText('delivery') || '—';
 
     const pickupFloorsEl = document.getElementById('summary-pickup-floors');
     const deliveryFloorsEl = document.getElementById('summary-delivery-floors');
@@ -18742,14 +20989,37 @@ function updateOverviewFloorAndInventorySummary() {
     const deliveryInventoryEl = document.getElementById('summary-delivery-inventory');
     if (pickupInventoryEl) pickupInventoryEl.innerHTML = buildOverviewFloorInventoryMarkup('pickup');
     if (deliveryInventoryEl) deliveryInventoryEl.innerHTML = buildOverviewFloorInventoryMarkup('delivery');
+
+    if (typeof syncOverviewVehicleVisibility === 'function') {
+        syncOverviewVehicleVisibility();
+    }
+}
+
+function syncOverviewVehicleVisibility() {
+    const isVehicleService = isVehicleLikeStepFlowService(getActiveServiceValue());
+    const serviceSummaryCard = document.getElementById('summary-service')?.closest('.overview-item');
+    const inventoryGrid = document.querySelector('.overview-inventory-grid');
+
+    if (serviceSummaryCard) {
+        serviceSummaryCard.style.display = isVehicleService ? 'none' : '';
+    }
+    if (inventoryGrid) {
+        inventoryGrid.style.display = isVehicleService ? 'none' : '';
+    }
 }
 
 function getOverviewAllFloors() {
+    if (isVehicleLikeStepFlowService(getActiveServiceValue())) {
+        return Array.isArray(VEHICLE_PARKING_LEVELS) && VEHICLE_PARKING_LEVELS.length
+            ? VEHICLE_PARKING_LEVELS.slice()
+            : ['Ground', '-1', '-2', '-3'];
+    }
     return ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
 }
 
 function getOverviewPropertyTypeOptions() {
     return [
+        { value: 'parking-level', label: 'Parking Level' },
         { value: 'house', label: 'House' },
         { value: 'apartment', label: 'Apartment' },
         { value: 'duplex', label: 'Duplex' },
@@ -18850,6 +21120,8 @@ function openOverviewEditModal(valueId) {
 
     const propertyTypeOptions = getOverviewPropertyTypeOptions();
     const floorOptions = getOverviewAllFloors();
+    const isVehicleOverviewService = isVehicleLikeStepFlowService(getActiveServiceValue());
+    const isPianoOverviewService = getActiveServiceValue() === 'Piano Transport';
 
     let onSave = null;
 
@@ -18877,24 +21149,70 @@ function openOverviewEditModal(valueId) {
             modal.classList.remove('active');
         };
     } else if (valueId === 'summary-pickup-type' || valueId === 'summary-delivery-type') {
-        const targetField = valueId === 'summary-pickup-type' ? 'pickup-property-type' : 'delivery-property-type';
-        const current = document.getElementById(targetField)?.value || '';
-        title.textContent = valueId === 'summary-pickup-type' ? 'Edit Pickup Type' : 'Edit Delivery Type';
-        subtitle.textContent = 'Select the property type.';
-        body.innerHTML = `
-            <div class="overview-editor-field">
-                <label for="overview-edit-type">Property Type</label>
-                <select id="overview-edit-type">${propertyTypeOptions.map((opt) => `<option value="${opt.value}" ${opt.value === current ? 'selected' : ''}>${escapeOverviewHtml(opt.label)}</option>`).join('')}</select>
-            </div>
-        `;
-        onSave = () => {
-            const value = body.querySelector('#overview-edit-type')?.value || '';
-            if (!value) return;
-            setOverviewFieldValue(targetField, value);
-            refreshOverviewAfterEdit();
-            modal.classList.remove('active');
-        };
+        if (isVehicleOverviewService) {
+            const isPickup = valueId === 'summary-pickup-type';
+            const selectedSet = isPickup ? new Set(Array.from(window.selectedPickupFloors || [])) : new Set(Array.from(window.selectedDeliveryFloors || []));
+            const current = getOrderedFloorList(Array.from(selectedSet))[0] || '';
+            const targetLabel = isPickup ? 'Pickup' : 'Delivery';
+            const parkingOptions = (Array.isArray(VEHICLE_PARKING_LEVELS) && VEHICLE_PARKING_LEVELS.length)
+                ? VEHICLE_PARKING_LEVELS
+                : ['Ground', '-1', '-2', '-3'];
+
+            title.textContent = `Edit ${targetLabel} Parking Level`;
+            subtitle.textContent = 'Select the parking level.';
+            body.innerHTML = `
+                <div class="overview-editor-field">
+                    <label for="overview-edit-parking-level">Parking Level</label>
+                    <select id="overview-edit-parking-level">${parkingOptions.map((opt) => `<option value="${opt}" ${opt === current ? 'selected' : ''}>${escapeOverviewHtml(opt)}</option>`).join('')}</select>
+                </div>
+            `;
+
+            onSave = () => {
+                const value = body.querySelector('#overview-edit-parking-level')?.value || '';
+                if (!value) return;
+
+                if (isPickup) {
+                    window.selectedPickupFloors = new Set([value]);
+                    if (typeof window.renderPickupFloorSelector === 'function') window.renderPickupFloorSelector();
+                    setOverviewFieldValue('pickup-property-type', 'parking-level');
+                } else {
+                    window.selectedDeliveryFloors = new Set([value]);
+                    if (typeof window.renderDeliveryFloorSelector === 'function') window.renderDeliveryFloorSelector();
+                    if (typeof window.renderDeliveryFloors === 'function') window.renderDeliveryFloors();
+                    setOverviewFieldValue('delivery-property-type', 'parking-level');
+                }
+
+                refreshOverviewAfterEdit();
+                modal.classList.remove('active');
+            };
+        } else {
+            const targetField = valueId === 'summary-pickup-type' ? 'pickup-property-type' : 'delivery-property-type';
+            const current = document.getElementById(targetField)?.value || '';
+            title.textContent = valueId === 'summary-pickup-type' ? 'Edit Pickup Type' : 'Edit Delivery Type';
+            subtitle.textContent = 'Select the property type.';
+            body.innerHTML = `
+                <div class="overview-editor-field">
+                    <label for="overview-edit-type">Property Type</label>
+                    <select id="overview-edit-type">${propertyTypeOptions.map((opt) => `<option value="${opt.value}" ${opt.value === current ? 'selected' : ''}>${escapeOverviewHtml(opt.label)}</option>`).join('')}</select>
+                </div>
+            `;
+            onSave = () => {
+                const value = body.querySelector('#overview-edit-type')?.value || '';
+                if (!value) return;
+                setOverviewFieldValue(targetField, value);
+                refreshOverviewAfterEdit();
+                modal.classList.remove('active');
+            };
+        }
     } else if (valueId === 'summary-pickup-elevator' || valueId === 'summary-delivery-elevator') {
+        if (isVehicleOverviewService) {
+            const isPickup = valueId === 'summary-pickup-elevator';
+            title.textContent = isPickup ? 'Pickup Lift Status Not Required' : 'Delivery Lift Status Not Required';
+            subtitle.textContent = 'Lift status does not apply to vehicle transport flow.';
+            body.innerHTML = '<div class="overview-editor-field"><p style="margin:0;color:#64748b;">No edits are needed for lift status in vehicle transport.</p></div>';
+            saveBtn.textContent = 'Close';
+            onSave = () => modal.classList.remove('active');
+        } else {
         const isPickup = valueId === 'summary-pickup-elevator';
         const mainFieldId = isPickup ? 'pickup-lift-available' : 'delivery-lift-available';
         const officeFieldId = isPickup ? 'office-pickup-lift' : 'office-delivery-lift';
@@ -18934,31 +21252,143 @@ function openOverviewEditModal(valueId) {
             refreshOverviewAfterEdit();
             modal.classList.remove('active');
         };
+        }
     } else if (valueId === 'summary-pickup-floors' || valueId === 'summary-delivery-floors') {
         const isPickup = valueId === 'summary-pickup-floors';
         const selectedSet = isPickup ? new Set(Array.from(window.selectedPickupFloors || [])) : new Set(Array.from(window.selectedDeliveryFloors || []));
-        title.textContent = isPickup ? 'Edit Pickup Floors' : 'Edit Delivery Floors';
-        subtitle.textContent = 'Select one or more floors.';
+        if (selectedSet.size === 0) {
+            const fallbackSummary = getOverviewFloorSummaryText(isPickup ? 'pickup' : 'delivery');
+            fallbackSummary
+                .split(',')
+                .map((floor) => floor.trim())
+                .filter((floor) => floor && floorOptions.includes(floor))
+                .forEach((floor) => selectedSet.add(floor));
+        }
+
+        if (selectedSet.size === 0 && isPianoOverviewService) {
+            selectedSet.add('Ground');
+        }
+
+        if (isVehicleOverviewService) {
+            const parkingOptions = (Array.isArray(VEHICLE_PARKING_LEVELS) && VEHICLE_PARKING_LEVELS.length)
+                ? VEHICLE_PARKING_LEVELS
+                : ['Ground', '-1', '-2', '-3'];
+            const current = getOrderedFloorList(Array.from(selectedSet))[0] || '';
+            title.textContent = isPickup ? 'Edit Pickup Parking Level' : 'Edit Delivery Parking Level';
+            subtitle.textContent = 'Select one parking level.';
+            body.innerHTML = `
+                <div class="overview-editor-checkbox-list">
+                    ${parkingOptions.map((floor) => `
+                        <label class="overview-editor-checkbox-item">
+                            <input type="radio" name="overview-edit-parking" value="${floor}" ${floor === current ? 'checked' : ''}>
+                            <span>${floor}</span>
+                        </label>
+                    `).join('')}
+                </div>
+            `;
+            onSave = () => {
+                const selected = body.querySelector('input[name="overview-edit-parking"]:checked')?.value || '';
+                if (!selected) return;
+                if (isPickup) {
+                    window.selectedPickupFloors = new Set([selected]);
+                    if (typeof window.renderPickupFloorSelector === 'function') window.renderPickupFloorSelector();
+                    setOverviewFieldValue('pickup-property-type', 'parking-level');
+                } else {
+                    window.selectedDeliveryFloors = new Set([selected]);
+                    if (typeof window.renderDeliveryFloorSelector === 'function') window.renderDeliveryFloorSelector();
+                    if (typeof window.renderDeliveryFloors === 'function') window.renderDeliveryFloors();
+                    setOverviewFieldValue('delivery-property-type', 'parking-level');
+                }
+                refreshOverviewAfterEdit();
+                modal.classList.remove('active');
+            };
+        } else {
+            title.textContent = isPickup ? 'Edit Pickup Floors' : 'Edit Delivery Floors';
+            subtitle.textContent = 'Select one or more floors.';
+            body.innerHTML = `
+                <div class="overview-editor-checkbox-list">
+                    ${floorOptions.map((floor) => `
+                        <label class="overview-editor-checkbox-item">
+                            <input type="checkbox" value="${floor}" ${selectedSet.has(floor) ? 'checked' : ''}>
+                            <span>${floor}</span>
+                        </label>
+                    `).join('')}
+                </div>
+            `;
+            onSave = () => {
+                let selected = Array.from(body.querySelectorAll('input[type="checkbox"]:checked')).map((cb) => cb.value);
+                if (selected.length === 0 && isPianoOverviewService) {
+                    const fallback = getOverviewFloorSummaryText(isPickup ? 'pickup' : 'delivery') || 'Ground';
+                    selected = [fallback.split(',')[0].trim() || 'Ground'];
+                }
+                if (isPickup) {
+                    window.selectedPickupFloors = new Set(selected);
+                    if (selected.length > 0) {
+                        setOverviewFieldValue('pickup-floor-select', selected[0]);
+                    }
+                    if (typeof window.renderPickupFloorSelector === 'function') window.renderPickupFloorSelector();
+                } else {
+                    window.selectedDeliveryFloors = new Set(selected);
+                    if (selected.length > 0) {
+                        setOverviewFieldValue('delivery-floor-select', selected[0]);
+                    }
+                    if (typeof window.renderDeliveryFloorSelector === 'function') window.renderDeliveryFloorSelector();
+                    if (typeof window.renderDeliveryFloors === 'function') window.renderDeliveryFloors();
+                }
+                refreshOverviewAfterEdit();
+                modal.classList.remove('active');
+            };
+        }
+    } else if (valueId === 'summary-addresses') {
+        title.textContent = 'Edit Pickup & Delivery Addresses';
+        subtitle.textContent = 'Update both addresses directly from overview.';
         body.innerHTML = `
-            <div class="overview-editor-checkbox-list">
-                ${floorOptions.map((floor) => `
-                    <label class="overview-editor-checkbox-item">
-                        <input type="checkbox" value="${floor}" ${selectedSet.has(floor) ? 'checked' : ''}>
-                        <span>${floor}</span>
-                    </label>
-                `).join('')}
+            <div class="overview-editor-grid">
+                <div class="overview-editor-field" style="grid-column: 1 / -1;">
+                    <label for="overview-edit-pickup-address">Pickup Street Address</label>
+                    <input id="overview-edit-pickup-address" value="${escapeOverviewHtml(document.getElementById('pickup-address')?.value || '')}">
+                </div>
+                <div class="overview-editor-field">
+                    <label for="overview-edit-pickup-city">Pickup City</label>
+                    <input id="overview-edit-pickup-city" value="${escapeOverviewHtml(document.getElementById('pickup-city')?.value || '')}">
+                </div>
+                <div class="overview-editor-field">
+                    <label for="overview-edit-pickup-postcode">Pickup Postcode</label>
+                    <input id="overview-edit-pickup-postcode" value="${escapeOverviewHtml(document.getElementById('pickup-postcode')?.value || '')}">
+                </div>
+                <div class="overview-editor-field" style="grid-column: 1 / -1; margin-top: 6px;">
+                    <label for="overview-edit-delivery-address">Delivery Street Address</label>
+                    <input id="overview-edit-delivery-address" value="${escapeOverviewHtml(document.getElementById('delivery-address')?.value || '')}">
+                </div>
+                <div class="overview-editor-field">
+                    <label for="overview-edit-delivery-city">Delivery City</label>
+                    <input id="overview-edit-delivery-city" value="${escapeOverviewHtml(document.getElementById('delivery-city')?.value || '')}">
+                </div>
+                <div class="overview-editor-field">
+                    <label for="overview-edit-delivery-postcode">Delivery Postcode</label>
+                    <input id="overview-edit-delivery-postcode" value="${escapeOverviewHtml(document.getElementById('delivery-postcode')?.value || '')}">
+                </div>
             </div>
         `;
+
+        bindOverviewModalAddressAutocomplete(
+            body.querySelector('#overview-edit-pickup-address'),
+            body.querySelector('#overview-edit-pickup-city'),
+            body.querySelector('#overview-edit-pickup-postcode')
+        );
+        bindOverviewModalAddressAutocomplete(
+            body.querySelector('#overview-edit-delivery-address'),
+            body.querySelector('#overview-edit-delivery-city'),
+            body.querySelector('#overview-edit-delivery-postcode')
+        );
+
         onSave = () => {
-            const selected = Array.from(body.querySelectorAll('input[type="checkbox"]:checked')).map((cb) => cb.value);
-            if (isPickup) {
-                window.selectedPickupFloors = new Set(selected);
-                if (typeof window.renderPickupFloorSelector === 'function') window.renderPickupFloorSelector();
-            } else {
-                window.selectedDeliveryFloors = new Set(selected);
-                if (typeof window.renderDeliveryFloorSelector === 'function') window.renderDeliveryFloorSelector();
-                if (typeof window.renderDeliveryFloors === 'function') window.renderDeliveryFloors();
-            }
+            setOverviewFieldValue('pickup-address', body.querySelector('#overview-edit-pickup-address')?.value || '');
+            setOverviewFieldValue('pickup-city', body.querySelector('#overview-edit-pickup-city')?.value || '');
+            setOverviewFieldValue('pickup-postcode', body.querySelector('#overview-edit-pickup-postcode')?.value || '');
+            setOverviewFieldValue('delivery-address', body.querySelector('#overview-edit-delivery-address')?.value || '');
+            setOverviewFieldValue('delivery-city', body.querySelector('#overview-edit-delivery-city')?.value || '');
+            setOverviewFieldValue('delivery-postcode', body.querySelector('#overview-edit-delivery-postcode')?.value || '');
             refreshOverviewAfterEdit();
             modal.classList.remove('active');
         };
@@ -18983,6 +21413,13 @@ function openOverviewEditModal(valueId) {
                 </div>
             </div>
         `;
+
+        bindOverviewModalAddressAutocomplete(
+            body.querySelector('#overview-edit-address'),
+            body.querySelector('#overview-edit-city'),
+            body.querySelector('#overview-edit-postcode')
+        );
+
         onSave = () => {
             setOverviewFieldValue(`${prefix}-address`, body.querySelector('#overview-edit-address')?.value || '');
             setOverviewFieldValue(`${prefix}-city`, body.querySelector('#overview-edit-city')?.value || '');
@@ -19579,12 +22016,12 @@ function initTrailerCampervanDropdowns() {
             e.stopPropagation();
             
             // Close other trailer/campervan dropdowns
-            document.querySelectorAll('#trailer-campervan-type-menu, #trailer-campervan-value-menu, #trailer-campervan-delivery-menu').forEach(m => {
+            document.querySelectorAll('#trailer-campervan-type-menu, #trailer-campervan-value-menu, #trailer-campervan-delivery-menu, #trailer-campervan-condition-menu, #trailer-campervan-weight-menu, #trailer-campervan-length-menu').forEach(m => {
                 if (m !== menu) {
                     m.classList.remove('active');
                 }
             });
-            document.querySelectorAll('#trailer-campervan-type-toggle, #trailer-campervan-value-toggle, #trailer-campervan-delivery-toggle').forEach(t => {
+            document.querySelectorAll('#trailer-campervan-type-toggle, #trailer-campervan-value-toggle, #trailer-campervan-delivery-toggle, #trailer-campervan-condition-toggle, #trailer-campervan-weight-toggle, #trailer-campervan-length-toggle').forEach(t => {
                 if (t !== toggle) {
                     t.classList.remove('active');
                 }
@@ -19616,14 +22053,17 @@ function initTrailerCampervanDropdowns() {
     setupDropdown('trailer-campervan-type-toggle', 'trailer-campervan-type-menu', 'trailer-campervan-type-label', 'trailer-campervan-type-hidden');
     setupDropdown('trailer-campervan-value-toggle', 'trailer-campervan-value-menu', 'trailer-campervan-value-label', 'trailer-campervan-value-hidden');
     setupDropdown('trailer-campervan-delivery-toggle', 'trailer-campervan-delivery-menu', 'trailer-campervan-delivery-label', 'trailer-campervan-delivery-hidden');
+    setupDropdown('trailer-campervan-condition-toggle', 'trailer-campervan-condition-menu', 'trailer-campervan-condition-label', 'trailer-campervan-condition-hidden');
+    setupDropdown('trailer-campervan-weight-toggle', 'trailer-campervan-weight-menu', 'trailer-campervan-weight-label', 'trailer-campervan-weight-hidden');
+    setupDropdown('trailer-campervan-length-toggle', 'trailer-campervan-length-menu', 'trailer-campervan-length-label', 'trailer-campervan-length-hidden');
     
     // Close dropdowns when clicking outside
     document.addEventListener('click', function(e) {
         if (!e.target.closest('.custom-dropdown-wrapper')) {
-            document.querySelectorAll('#trailer-campervan-type-menu, #trailer-campervan-value-menu, #trailer-campervan-delivery-menu').forEach(menu => {
+            document.querySelectorAll('#trailer-campervan-type-menu, #trailer-campervan-value-menu, #trailer-campervan-delivery-menu, #trailer-campervan-condition-menu, #trailer-campervan-weight-menu, #trailer-campervan-length-menu').forEach(menu => {
                 menu.classList.remove('active');
             });
-            document.querySelectorAll('#trailer-campervan-type-toggle, #trailer-campervan-value-toggle, #trailer-campervan-delivery-toggle').forEach(toggle => {
+            document.querySelectorAll('#trailer-campervan-type-toggle, #trailer-campervan-value-toggle, #trailer-campervan-delivery-toggle, #trailer-campervan-condition-toggle, #trailer-campervan-weight-toggle, #trailer-campervan-length-toggle').forEach(toggle => {
                 toggle.classList.remove('active');
             });
         }
@@ -19650,9 +22090,9 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelector('.service-icon-btn[data-value="Car Transport"]')?.click();
     }
     
-    // Handle Customized Items service from URL
+    // Handle customized-style services from URL
     const decodedService = decodeURIComponent(service || '').trim();
-    if (decodedService.toLowerCase() === 'customized items') {
+    if (isCustomizedInventoryService(decodedService)) {
         if (window.pendingServiceFromUrl && typeof window.applyServiceSelection === 'function') {
             window.applyServiceSelection(window.pendingServiceFromUrl, window.pendingServiceFromUrl);
         } else {

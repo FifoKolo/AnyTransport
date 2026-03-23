@@ -43,6 +43,12 @@
     pointer-events: auto;
 }
 
+.sticky-next-btn:disabled,
+.sticky-next-btn.disabled {
+    opacity: 0.5 !important;
+    cursor: not-allowed;
+}
+
 .sticky-reset-btn {
     top: 92px;
     bottom: auto;
