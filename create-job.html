@@ -340,8 +340,8 @@
                 </div>
 
                                                             <div class="card-section" id="customized-items-inventory-section" data-form-step="3" style="display:none; margin-top:2rem;">
-                                                                <h3 style="margin-bottom: 10px; color: var(--text-primary);">Customized Items <span class="required-text" data-required-for="customized-items-hidden">(required)</span></h3>
-                                                                <p style="margin: 0 0 14px; color: #64748b; font-size: 0.9rem;">Add each custom item with photos, dimensions, and weight.</p>
+                                                                <h3 style="margin-bottom: 10px; color: var(--text-primary);"><span id="customized-items-heading-text">Customized Items</span> <span class="required-text" data-required-for="customized-items-hidden">(required)</span></h3>
+                                                                <p id="customized-items-subheading" style="margin: 0 0 14px; color: #64748b; font-size: 0.9rem;">Add each custom item with photos, dimensions, and weight.</p>
                                                                 <input type="hidden" id="customized-items-hidden" name="customized-items" data-required="true" value="">
                                                                 <div id="dimensions-list" class="dimensions-list"></div>
                                                                 <button type="button" id="add-dimension-btn" class="btn-add-dimension">
@@ -529,15 +529,14 @@
                         </div>
 
                         <!-- Estimated Move Date (for Office Removals) -->
-                        <div class="card-section" id="office-move-date-section" data-form-step="6" style="display: none;">
-                            <h2 class="section-title">Step 6: Move Date</h2>
+                        <div class="card-section" id="office-move-date-section" data-form-step="2" style="display: none;">
+                            <h2 class="section-title">Step 7: Move Date</h2>
                             <label for="office-move-date" class="form-label">Estimated move date</label>
                             <input type="date" id="office-move-date" class="form-input" placeholder="Select a Date Option" required>
                         </div>
 
                         <!-- Floors Section (for Office Removals) -->
                         <div class="card-section floors-row office-hidden" id="office-removal-floors-section" data-form-step="2" style="display: none;">
-                            <h2 class="section-title">Step 2: Office Pickup Floors</h2>
                             <div class="floors-fields">
                                 <div class="step-slice" data-step-slice="2">
                                     <div class="location-group" data-location-group="office-pickup">
@@ -585,7 +584,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="step-slice" data-step-slice="3">
+                                <div class="step-slice" data-step-slice="2">
                                     <div class="location-group" data-location-group="office-pickup-details">
                                         <label class="form-label">Pickup floors</label>
                                         <div class="location-details" id="office-pickup-location-details">
@@ -640,8 +639,7 @@
                         </div>
 
                         <!-- Floors Section (for Office Removals - Delivery) -->
-                        <div class="card-section floors-row office-hidden" id="office-delivery-floors-section" data-form-step="5">
-                            <h2 class="section-title">Step 5: Office Delivery Floors</h2>
+                        <div class="card-section floors-row office-hidden" id="office-delivery-floors-section" data-form-step="2">
                             <div class="floors-fields">
                                 <div class="step-slice" data-step-slice="5">
                                     <div class="location-group" data-location-group="office-delivery">
@@ -744,26 +742,43 @@
                         </div>
 
                         <!-- Office Removals Inventory Section -->
-                        <div id="office-removal-inventory-section" data-form-step="2" style="display: none;">
+                        <div id="office-removal-inventory-section" data-form-step="3" style="display: none;">
                             <div class="card-section">
                                 <h3 style="margin-bottom: 16px; color: var(--text-primary);">Add your inventory <span class="required-text" data-required-for="office-inventory">(required)</span></h3>
 
-                                <div class="office-tabs" id="office-inventory-tabs">
-                                    <button type="button" class="office-tab-btn" data-category="workstations" aria-pressed="false">
+                                <div class="form-group" style="max-width: 260px; margin-bottom: 16px;">
+                                    <label for="office-count" class="form-label">Number of offices <span class="required-text">(required)</span></label>
+                                    <input type="number" id="office-count" class="form-input" min="1" step="1" value="1" placeholder="e.g. 3">
+                                </div>
+
+                                <div class="office-tabs office-unit-tabs" id="office-unit-tabs" style="margin-bottom: 16px;"></div>
+
+                                <div class="form-group office-active-type-group" style="max-width: 320px; margin-bottom: 16px;">
+                                    <label for="office-active-type" class="form-label">Office type for selected office</label>
+                                    <select id="office-active-type" class="form-input">
+                                        <option value="traditional">Traditional</option>
+                                        <option value="cubicle">Cubicle</option>
+                                        <option value="open-space">Open space</option>
+                                        <option value="team-cluster">Team cluster</option>
+                                    </select>
+                                </div>
+
+                                <div class="inventory-tabs" id="office-inventory-tabs">
+                                    <button type="button" class="inventory-tab office-tab-btn" data-category="workstations" aria-pressed="false">
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                             <rect x="3" y="6" width="18" height="10" rx="2"></rect>
                                             <rect x="7" y="4" width="10" height="2"></rect>
                                         </svg>
                                         Workstations
                                     </button>
-                                    <button type="button" class="office-tab-btn" data-category="seating" aria-pressed="false">
+                                    <button type="button" class="inventory-tab office-tab-btn" data-category="seating" aria-pressed="false">
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                             <rect x="7" y="5" width="10" height="7" rx="2"></rect>
                                             <rect x="6" y="12" width="12" height="7" rx="2"></rect>
                                         </svg>
                                         Seating
                                     </button>
-                                    <button type="button" class="office-tab-btn" data-category="storage" aria-pressed="false">
+                                    <button type="button" class="inventory-tab office-tab-btn" data-category="storage" aria-pressed="false">
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                             <rect x="4" y="5" width="16" height="14" rx="2"></rect>
                                             <rect x="7" y="8" width="10" height="2" fill="#fff"></rect>
@@ -771,14 +786,14 @@
                                         </svg>
                                         Storage
                                     </button>
-                                    <button type="button" class="office-tab-btn" data-category="electronics" aria-pressed="false">
+                                    <button type="button" class="inventory-tab office-tab-btn" data-category="electronics" aria-pressed="false">
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                             <rect x="3" y="5" width="18" height="12" rx="2"></rect>
                                             <rect x="9" y="18" width="6" height="2"></rect>
                                         </svg>
                                         Electronics
                                     </button>
-                                    <button type="button" class="office-tab-btn" data-category="meeting" aria-pressed="false">
+                                    <button type="button" class="inventory-tab office-tab-btn" data-category="meeting" aria-pressed="false">
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                             <rect x="4" y="8" width="16" height="8" rx="2"></rect>
                                             <circle cx="7" cy="12" r="1" fill="#fff"></circle>
@@ -787,14 +802,14 @@
                                         </svg>
                                         Meeting
                                     </button>
-                                    <button type="button" class="office-tab-btn" data-category="packing" aria-pressed="false">
+                                    <button type="button" class="inventory-tab office-tab-btn" data-category="packing" aria-pressed="false">
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                             <path d="M4 7l8-4 8 4-8 4z"></path>
                                             <path d="M4 7v10l8 4 8-4V7" fill="none" stroke="#fff" stroke-width="2"></path>
                                         </svg>
                                         Packing
                                     </button>
-                                    <button type="button" class="office-tab-btn" data-category="other" aria-pressed="false">
+                                    <button type="button" class="inventory-tab office-tab-btn" data-category="other" aria-pressed="false">
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                             <circle cx="6" cy="12" r="2"></circle>
                                             <circle cx="12" cy="12" r="2"></circle>
@@ -810,42 +825,108 @@
                                     <!-- Items will be dynamically loaded here -->
                                 </div>
                             </div>
-
-                            <!-- Packing Options -->
-                            <div class="card-section">
-                                <h3 style="margin-bottom: 16px; color: var(--text-primary);">Do you require packing? Tick relevant options.</h3>
-                                <div class="form-group checkbox-group">
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" name="office-packing" value="full">
-                                        <span>Full packing service including packing materials</span>
-                                    </label>
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" name="office-packing" value="one-person">
-                                        <span>Only require 1 person (happy to help myself if needed)</span>
-                                    </label>
-                                </div>
-                            </div>
                         </div>
 
                         <!-- Office Removals Section -->
                         <div id="office-removal-description-section" data-form-step="2" style="display: none;">
-                            <div id="freight-step3-layout" class="freight-step3-layout" style="display:none;">
+                            <div id="freight-step3-form" class="freight-step3-form" style="display:none;">
                                 <div class="card-section freight-step3-card">
-                                    <h3 class="freight-step3-card-title">Pallet information</h3>
+                                    <h3 class="freight-step3-card-title">Step 3: Freight Shipment Details</h3>
+                                    <p class="freight-step3-subtitle">Add the key shipment details so movers can quote accurately.</p>
                                     <div class="freight-step3-grid">
-                                        <input type="number" id="freight-pallet-count" class="form-input" min="1" step="1" placeholder="Number pallets">
-                                        <input type="number" id="freight-pallet-volume" class="form-input" min="0" step="0.01" placeholder="Volume(m3)">
-                                        <input type="number" id="freight-pallet-weight" class="form-input" min="0" step="0.1" placeholder="Weight">
-                                        <select id="freight-pallet-weight-unit" class="form-input" aria-label="Weight unit">
-                                            <option value="kg">kg</option>
-                                            <option value="lb">lb</option>
-                                        </select>
+                                        <div class="freight-step3-field">
+                                            <label for="freight3-shipment-type" class="form-label">Shipment type <span class="required-text">(required)</span></label>
+                                            <select id="freight3-shipment-type" class="form-input" data-required="true" aria-required="true">
+                                                <option value="">Select shipment type</option>
+                                                <option value="Palletised">Palletised</option>
+                                                <option value="Boxes / Cartons">Boxes / Cartons</option>
+                                                <option value="Machinery">Machinery</option>
+                                                <option value="Mixed Load">Mixed Load</option>
+                                            </select>
+                                        </div>
+                                        <div class="freight-step3-field">
+                                            <label for="freight3-pallet-count" class="form-label">Number of pallets <span class="required-text">(required)</span></label>
+                                            <input type="number" id="freight3-pallet-count" class="form-input" min="1" step="1" placeholder="e.g. 4" data-required="true" aria-required="true">
+                                        </div>
+                                        <div class="freight-step3-field">
+                                            <label for="freight3-total-weight" class="form-label">Total weight <span class="required-text">(required)</span></label>
+                                            <input type="number" id="freight3-total-weight" class="form-input" min="1" step="0.1" placeholder="e.g. 1200" data-required="true" aria-required="true">
+                                        </div>
+                                        <div class="freight-step3-field">
+                                            <label for="freight3-weight-unit" class="form-label">Weight unit</label>
+                                            <select id="freight3-weight-unit" class="form-input">
+                                                <option value="kg">kg</option>
+                                                <option value="lb">lb</option>
+                                                <option value="tonne">tonne</option>
+                                            </select>
+                                        </div>
+                                        <div class="freight-step3-field freight-step3-field--wide">
+                                            <label for="freight3-description" class="form-label">What are you moving? <span class="required-text">(required)</span></label>
+                                            <textarea id="freight3-description" class="form-input" rows="4" placeholder="e.g. 4 pallets of kitchen appliances, shrink wrapped and ready for forklift loading" data-required="true" aria-required="true"></textarea>
+                                        </div>
+                                        <div class="freight-step3-field freight-step3-field--wide">
+                                            <label for="freight3-notes" class="form-label">Access / loading notes (optional)</label>
+                                            <textarea id="freight3-notes" class="form-input" rows="3" placeholder="e.g. Tail-lift required at delivery, loading bay closes at 17:30"></textarea>
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
 
-                                <div class="card-section freight-step3-card">
-                                    <h3 class="freight-step3-card-title">Enter what you want moving</h3>
-                                    <input type="text" id="freight-job-description-input" class="form-input" placeholder="e.g. 1 Pallet">
+                              <div id="clearance-step3-form" class="clearance-step3-form" style="display:none;">
+                                <div class="card-section clearance-customized-shell">
+                                    <h3 class="clearance-customized-title">Clearance Items <span class="required-text">(required)</span></h3>
+                                    <p class="clearance-customized-subtitle">Add photos and details about what needs to be cleared so movers can quote accurately.</p>
+
+                                    <div class="dimension-item clearance-customized-card">
+                                        <div class="clearance-section-label-wrap">
+                                            <label class="form-label" style="margin:0;">Add photos</label>
+                                            <span class="clearance-optional-badge">OPTIONAL</span>
+                                        </div>
+
+                                        <div class="photo-upload-grid">
+                                            <label class="photo-upload-area" for="clearance-photo-1">
+                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                                </svg>
+                                                <span>Drag photo here <strong>upload</strong></span>
+                                                <input type="file" class="photo-input" id="clearance-photo-1" accept="image/*">
+                                            </label>
+                                            <label class="photo-upload-area" for="clearance-photo-2">
+                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                                </svg>
+                                                <span>Drag photo here <strong>upload</strong></span>
+                                                <input type="file" class="photo-input" id="clearance-photo-2" accept="image/*">
+                                            </label>
+                                            <label class="photo-upload-area" for="clearance-photo-3">
+                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                                </svg>
+                                                <span>Drag photo here <strong>upload</strong></span>
+                                                <input type="file" class="photo-input" id="clearance-photo-3" accept="image/*">
+                                            </label>
+                                        </div>
+
+                                        <label for="clearance3-description" class="form-label" style="margin-top:4px;">Add clearance details <span class="required-text">(required)</span></label>
+                                        <textarea id="clearance3-description" class="dimension-description form-input" rows="2" placeholder="Enter what needs to be cleared (e.g. sofa, old fridge, boxes, loose items)" data-required="true" aria-required="true"></textarea>
+
+                                        <div class="dimension-inputs clearance-dimension-inputs">
+                                            <select id="clearance3-weight-range" class="dimension-field form-input" data-required="true" aria-required="true">
+                                                <option value="">Weight (required)</option>
+                                                <option value="0-10">0-10</option>
+                                                <option value="10-25">10-25</option>
+                                                <option value="25-50">25-50</option>
+                                                <option value="50-100">50-100</option>
+                                                <option value="100+">100+</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1965,7 +2046,7 @@
                             <div class="card-section">
                                 
                                 <!-- Packing Service -->
-                                <div class="service-requirement-card">
+                                <div class="service-requirement-card" id="service-card-packing">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
                                             <span>1. Packing Service ? <span class="required-text">(required)</span></span>
@@ -2006,7 +2087,7 @@
                                 </div>
 
                                 <!-- Furniture Disassembly/Assembly -->
-                                <div class="service-requirement-card">
+                                <div class="service-requirement-card" id="service-card-disassembly">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
                                             <span>2. Furniture Disassembly &amp; Assembly ? <span class="required-text">(required)</span></span>
@@ -2049,7 +2130,7 @@
                                 </div>
 
                                 <!-- Movers at Pickup Location -->
-                                <div class="service-requirement-card">
+                                <div class="service-requirement-card" id="service-card-pickup-movers">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
                                             <span>3. Number of Movers at Pickup Location <span class="required-text">(required)</span></span>
@@ -2072,7 +2153,7 @@
                                 </div>
 
                                 <!-- Movers at Delivery Location -->
-                                <div class="service-requirement-card">
+                                <div class="service-requirement-card" id="service-card-delivery-movers">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
                                             <span>4. Number of Movers at Delivery Location <span class="required-text">(required)</span></span>
@@ -2095,7 +2176,7 @@
                                 </div>
 
                                 <!-- Storage Service -->
-                                <div class="service-requirement-card">
+                                <div class="service-requirement-card" id="service-card-storage">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
                                             <span>5. Storage Service <span class="required-text">(required)</span></span>
@@ -2138,7 +2219,7 @@
                                 </div>
 
                                 <!-- Special Instructions -->
-                                <div class="service-requirement-card">
+                                <div class="service-requirement-card" id="service-card-special-instructions">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
                                             <span>6. Special Instructions <span style="color:#64748b; font-size:0.9em; font-weight:600;">(optional)</span></span>
