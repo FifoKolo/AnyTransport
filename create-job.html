@@ -128,12 +128,13 @@
                                 <!-- Location Editor Section (Below Map) -->
                                 <div class="location-editor open" id="route-editor">
                                     <div class="location-col">
-                                        <label class="form-label" for="pickup-address">Pickup location <span class="required-text" data-required-for="pickup-address">(required)</span></label>
-                                        <input type="text" id="pickup-address" class="form-input" placeholder="Street address" autocomplete="address-line1" data-required="true" aria-required="true">
+                                        <label class="form-label" for="pickup-address">City <span class="required-text" data-required-for="pickup-address">(required)</span></label>
+                                        <input type="text" id="pickup-address" class="form-input" placeholder="City" autocomplete="address-level2" data-required="true" aria-required="true">
+                                        <input type="hidden" id="pickup-city" value="" data-required="true" aria-required="true">
                                         <div class="location-inline">
                                             <div class="location-field">
-                                                <label class="form-label" for="pickup-city">City <span class="required-text" data-required-for="pickup-city">(required)</span></label>
-                                                <input type="text" id="pickup-city" class="form-input" placeholder="City" autocomplete="address-level2" data-required="true" aria-required="true">
+                                                <label class="form-label" for="pickup-city-area">City Area <span class="required-text" data-required-for="pickup-city-area">(required)</span></label>
+                                                <input type="text" id="pickup-city-area" class="form-input" placeholder="City Area" autocomplete="address-level3" data-required="true" aria-required="true">
                                             </div>
                                             <div class="location-field">
                                                 <label class="form-label" for="pickup-postcode">Eircode</label>
@@ -142,12 +143,13 @@
                                         </div>
                                     </div>
                                     <div class="location-col" id="delivery-location-col">
-                                        <label class="form-label" for="delivery-address">Delivery location <span class="required-text" data-required-for="delivery-address">(required)</span></label>
-                                        <input type="text" id="delivery-address" class="form-input" placeholder="Street address" autocomplete="address-line1" data-required="true" aria-required="true">
+                                        <label class="form-label" for="delivery-address">City <span class="required-text" data-required-for="delivery-address">(required)</span></label>
+                                        <input type="text" id="delivery-address" class="form-input" placeholder="City" autocomplete="address-level2" data-required="true" aria-required="true">
+                                        <input type="hidden" id="delivery-city" value="" data-required="true" aria-required="true">
                                         <div class="location-inline">
                                             <div class="location-field">
-                                                <label class="form-label" for="delivery-city">City <span class="required-text" data-required-for="delivery-city">(required)</span></label>
-                                                <input type="text" id="delivery-city" class="form-input" placeholder="City" autocomplete="address-level2" data-required="true" aria-required="true">
+                                                <label class="form-label" for="delivery-city-area">City Area <span class="required-text" data-required-for="delivery-city-area">(required)</span></label>
+                                                <input type="text" id="delivery-city-area" class="form-input" placeholder="City Area" autocomplete="address-level3" data-required="true" aria-required="true">
                                             </div>
                                             <div class="location-field">
                                                 <label class="form-label" for="delivery-postcode">Eircode</label>
@@ -308,7 +310,7 @@
                                 role="radiogroup"
                                 aria-label="Delivery parking level"
                             ></div>
-                            <p style="margin:10px 0 0;color:#6b7280;font-size:0.9rem;">Choose one: Ground, -1, -2, or -3.</p>
+                            <p style="margin:10px 0 0;color:#6b7280;font-size:0.9rem;">Choose one: 1st, 2nd, 3rd, 4th, 5th, Higher than 5th, Ground, -1, -2, -3, -4, -5, Lower Than -5.</p>
                         </div>
 
                             <!-- Inventory System (Step 3) - full width card at bottom of step 3 -->
@@ -875,11 +877,11 @@
                               <div id="clearance-step3-form" class="clearance-step3-form" style="display:none;">
                                 <div class="card-section clearance-customized-shell">
                                     <h3 class="clearance-customized-title">Clearance Items <span class="required-text">(required)</span></h3>
-                                    <p class="clearance-customized-subtitle">Add photos and details about what needs to be cleared so movers can quote accurately.</p>
+                                    <p class="clearance-customized-subtitle">Add photos or videos and details about what needs to be cleared so movers can quote accurately.</p>
 
                                     <div class="dimension-item clearance-customized-card">
                                         <div class="clearance-section-label-wrap">
-                                            <label class="form-label" style="margin:0;">Add photos</label>
+                                            <label class="form-label" style="margin:0;">Add photos or videos</label>
                                             <span class="clearance-optional-badge">OPTIONAL</span>
                                         </div>
 
@@ -890,8 +892,8 @@
                                                     <circle cx="8.5" cy="8.5" r="1.5"></circle>
                                                     <polyline points="21 15 16 10 5 21"></polyline>
                                                 </svg>
-                                                <span>Drag photo here <strong>upload</strong></span>
-                                                <input type="file" class="photo-input" id="clearance-photo-1" accept="image/*">
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                                <input type="file" class="photo-input" id="clearance-photo-1" accept="image/*,video/*">
                                             </label>
                                             <label class="photo-upload-area" for="clearance-photo-2">
                                                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
@@ -899,8 +901,8 @@
                                                     <circle cx="8.5" cy="8.5" r="1.5"></circle>
                                                     <polyline points="21 15 16 10 5 21"></polyline>
                                                 </svg>
-                                                <span>Drag photo here <strong>upload</strong></span>
-                                                <input type="file" class="photo-input" id="clearance-photo-2" accept="image/*">
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                                <input type="file" class="photo-input" id="clearance-photo-2" accept="image/*,video/*">
                                             </label>
                                             <label class="photo-upload-area" for="clearance-photo-3">
                                                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
@@ -908,8 +910,8 @@
                                                     <circle cx="8.5" cy="8.5" r="1.5"></circle>
                                                     <polyline points="21 15 16 10 5 21"></polyline>
                                                 </svg>
-                                                <span>Drag photo here <strong>upload</strong></span>
-                                                <input type="file" class="photo-input" id="clearance-photo-3" accept="image/*">
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                                <input type="file" class="photo-input" id="clearance-photo-3" accept="image/*,video/*">
                                             </label>
                                         </div>
 
@@ -925,6 +927,21 @@
                                                 <option value="50-100">50-100</option>
                                                 <option value="100+">100+</option>
                                             </select>
+                                        </div>
+
+                                        <div class="form-group" style="margin-top: 10px; margin-bottom: 0;">
+                                            <label class="form-label">Include Recycling Fee? <span class="required-text" data-required-for="clearance3-recycling-fee-hidden">(required)</span></label>
+                                            <div class="custom-dropdown-wrapper has-option-nav">
+                                                <div class="option-nav option-nav--compact" data-option-nav-for="clearance3-recycling-fee-hidden" role="radiogroup" aria-label="Include recycling fee">
+                                                    <button type="button" class="option-nav-btn" data-value="yes" role="radio" aria-checked="false">
+                                                        <span>Yes</span>
+                                                    </button>
+                                                    <button type="button" class="option-nav-btn" data-value="no" role="radio" aria-checked="false">
+                                                        <span>No</span>
+                                                    </button>
+                                                </div>
+                                                <input type="hidden" id="clearance3-recycling-fee-hidden" name="clearance3-recycling-fee" data-required="true" aria-required="true">
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -983,9 +1000,6 @@
                             </div>
                             <p id="step5-assignment-guide" style="color: #6b7280; margin-bottom: 20px; font-size: 0.95rem;">
                                 <strong>How to assign items:</strong> Items are grouped by room on the left so you can see where each item comes from. Select individual items or use "Select all from [Room]", then use <strong>+ Add Selected</strong> on a floor. Use <strong>+ Assign All Remaining Items</strong> to place all remaining inventory on one floor.
-                            </p>
-                            <p id="step5-vehicle-note" style="display:none; color:#374151; margin-bottom: 20px; font-size: 0.95rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:12px 14px;">
-                                Vehicle transport does not require item assignment. Confirm the delivery parking level above, then continue to the next step.
                             </p>
                             
                             <style>
@@ -1397,6 +1411,14 @@
                                                     <path d="M9 12h6" stroke="#fff" stroke-width="2"/>
                                                 </svg>
                                                 <span>2001-2500kg</span>
+                                            </button>
+                                            <button type="button" class="option-nav-btn" data-value="2501+" role="radio" aria-checked="false">
+                                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path d="M5 6h14v2H5z" fill="currentColor"/>
+                                                    <path d="M7 8h10l2 10H5z" fill="currentColor"/>
+                                                    <path d="M9 12h6" stroke="#fff" stroke-width="2"/>
+                                                </svg>
+                                                <span>Over 2500kg</span>
                                             </button>
                                         </div>
                                         <div class="custom-dropdown">
@@ -2065,21 +2087,21 @@
                                     <input type="hidden" id="service-packing-box-provider" name="service-packing-box-provider" value="">
                                     <input type="hidden" id="service-packing-items" name="service-packing-items" value="">
                                     <div id="packing-mode-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
-                                        <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">How would you like packing done?</div>
+                                        <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">How would you like packing done?<span class="required-text">(required)</span></div>
                                         <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                             <button type="button" class="packing-mode-btn" data-value="all" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Full Packing Service</button>
                                             <button type="button" class="packing-mode-btn" data-value="selected" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Partial Packing Service</button>
                                         </div>
                                     </div>
                                     <div id="packing-box-provider-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
-                                        <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">Who will provide the boxes?</div>
+                                        <div style="font-weight:700; color:#1f2937; margin-bottom:6px; font-size:1rem;">Who will provide the Packing Materials?<span class="required-text">(required)</span></div>
                                         <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                             <button type="button" class="packing-box-provider-btn" data-value="homeowner" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">I will provide Packing Materials</button>
                                             <button type="button" class="packing-box-provider-btn" data-value="transport-provider" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;">Transport Provider provides Packing Materials</button>
                                         </div>
                                     </div>
                                     <div id="packing-items-config" style="display:none; margin-top:12px; padding:10px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
-                                        <div style="font-weight:700; color:#1f2937; margin-bottom:4px; font-size:1rem;">Choose items to pack</div>
+                                        <div style="font-weight:700; color:#1f2937; margin-bottom:4px; font-size:1rem;">Choose items to pack<span class="required-text">(required)</span></div>
                                         <div style="font-size:0.86rem; color:#4b5563; margin-bottom:8px;">Items are grouped by pickup floor and room. Expand a floor, then a room, to select items and set how many units you want packed.</div>
                                         <div id="packing-items-list" style="display:flex; flex-direction:column; gap:6px;"></div>
                                         <div id="packing-items-empty" style="display:none; color:#6b7280; font-size:0.9rem; padding:8px 0;">No inventory items available to pack yet.</div>

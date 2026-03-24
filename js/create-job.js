@@ -1254,7 +1254,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!photoInput) {
                     photoInput = document.createElement('input');
                     photoInput.type = 'file';
-                    photoInput.accept = 'image/*';
+                    photoInput.accept = 'image/*,video/*';
                     photoInput.id = 'custom-item-photo-input';
                     photoInput.style.display = 'none';
                     document.body.appendChild(photoInput);
@@ -1264,8 +1264,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         const selectedItem = photoInput.getAttribute('data-item');
                         const selectedRoom = photoInput.getAttribute('data-room') || room;
                         if (!file || !selectedItem) return;
-                        if (!file.type || !file.type.startsWith('image/')) {
-                            alert('Please select a valid image file.');
+                        if (!file.type || (!file.type.startsWith('image/') && !file.type.startsWith('video/'))) {
+                            alert('Please select a valid image or video file.');
                             return;
                         }
 
@@ -1731,7 +1731,7 @@ const PACKAGED_SERVICES = new Set([
     'Packaged Parcels'
 ]);
 
-const VEHICLE_PARKING_LEVELS = ['Ground', '-1', '-2', '-3'];
+const VEHICLE_PARKING_LEVELS = ['1st', '2nd', '3rd', '4th', '5th', 'Higher than 5th', 'Ground', '-1', '-2', '-3', '-4', '-5', 'Lower Than -5'];
 
 function getActiveServiceValue() {
     return (
@@ -2179,7 +2179,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const requiredClearanceFieldIds = [
                 'clearance3-weight-range',
-                'clearance3-description'
+                'clearance3-description',
+                'clearance3-recycling-fee-hidden'
             ];
 
             for (const fieldId of requiredClearanceFieldIds) {
@@ -2488,7 +2489,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 const packingInput = document.getElementById('service-packing');
-                if (!isClearance && !isVehicleService && !isPianoService && !isPackagedService && packingInput && packingInput.value === 'yes') {
+                const packingCard = document.getElementById('service-card-packing');
+                const isPackingCardVisible = !!(
+                    packingCard
+                    && packingCard.style.display !== 'none'
+                    && packingCard.offsetParent !== null
+                );
+                if (!isClearance && packingInput && packingInput.value === 'yes' && isPackingCardVisible) {
                     if (typeof window.hasValidPackingSelection === 'function' && !window.hasValidPackingSelection()) {
                         return false;
                     }
@@ -2547,6 +2554,279 @@ document.addEventListener('DOMContentLoaded', function () {
                 document.body.dataset.currentStep = value;
             }
         }
+
+        function clearNextMissingHighlights() {
+            document.querySelectorAll('.next-missing-highlight').forEach((node) => {
+                node.classList.remove('next-missing-highlight');
+            });
+        }
+
+        function highlightAndFocusMissingTarget(target) {
+            if (!target) return false;
+
+            clearNextMissingHighlights();
+
+            const container = target.closest(
+                '.service-requirement-card, .card-section, .location-nav-wrapper, .custom-dropdown-wrapper, #pickup-floors-selector, #delivery-floors-selector, #inventory-card-container, #item-organization-section'
+            ) || target;
+
+            container.classList.add('next-missing-highlight');
+            target.classList.add('input-error');
+            target.setAttribute('aria-invalid', 'true');
+
+            container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            if (typeof target.focus === 'function') {
+                setTimeout(() => {
+                    try {
+                        target.focus({ preventScroll: true });
+                    } catch (error) {
+                        target.focus();
+                    }
+                }, 140);
+            }
+
+            setTimeout(() => {
+                container.classList.remove('next-missing-highlight');
+            }, 3000);
+
+            return true;
+        }
+
+        function getFirstMissingTargetForStep(step) {
+            if (typeof validateRequiredFieldsInStep === 'function') {
+                const missingFromValidator = validateRequiredFieldsInStep(step);
+                if (missingFromValidator) {
+                    return missingFromValidator;
+                }
+            }
+
+            const serviceValue = getActiveServiceValue();
+            const isVehicleService = isVehicleLikeStepFlowService(serviceValue);
+            const isClearance = isClearanceService(serviceValue);
+            const isPianoService = serviceValue === 'Piano Transport';
+            const isPackagedService = isPackagedParcelsService(serviceValue);
+            const isVehiclePartsService = serviceValue === 'Vehicle Parts';
+
+            if (step === 1) {
+                const step1Ids = ['pickup-address', 'pickup-city', 'delivery-address', 'delivery-city'];
+                for (const fieldId of step1Ids) {
+                    const field = document.getElementById(fieldId);
+                    const value = field && typeof field.value === 'string' ? field.value.trim() : '';
+                    if (!value) return field;
+                }
+            }
+
+            if (step === 2) {
+                const propertyType = document.getElementById('pickup-property-type');
+                if (!(propertyType && propertyType.value && propertyType.value.trim())) {
+                    return propertyType || document.getElementById('property-type-selection-section');
+                }
+
+                const pickupLiftSection = document.getElementById('pickup-lift-section');
+                const liftVisible = !!(
+                    pickupLiftSection
+                    && pickupLiftSection.style.display !== 'none'
+                    && pickupLiftSection.offsetParent !== null
+                );
+
+                if (liftVisible) {
+                    const pickupLift = document.getElementById('pickup-lift-available');
+                    if (!(pickupLift && pickupLift.value && pickupLift.value.trim())) {
+                        return pickupLift || pickupLiftSection;
+                    }
+                }
+            }
+
+            if (step === 3) {
+                if (isPianoService) {
+                    return getPianoStep3MissingRequiredField() || document.getElementById('piano-delivery-section');
+                }
+
+                if (isCustomizedInventoryService(serviceValue)) {
+                    const customizedItemsField = document.getElementById('customized-items-hidden');
+                    const customizedSection = document.getElementById('customized-items-inventory-section');
+                    const rawValue = (customizedItemsField && customizedItemsField.value) ? customizedItemsField.value.trim() : '';
+                    if (!rawValue) {
+                        return customizedSection || customizedItemsField;
+                    }
+
+                    try {
+                        const parsedItems = JSON.parse(rawValue);
+                        if (!Array.isArray(parsedItems) || parsedItems.length === 0) {
+                            return customizedSection || customizedItemsField;
+                        }
+                    } catch (error) {
+                        return customizedSection || customizedItemsField;
+                    }
+                }
+
+                if (isVehicleService) {
+                    if (isFreightService(serviceValue)) {
+                        return getFreightStep3MissingRequiredField() || document.getElementById('freight-step3-form');
+                    }
+                    if (isClearance) {
+                        return getClearanceStep3MissingRequiredField() || document.getElementById('clearance-step3-form');
+                    }
+
+                    const missingVehicleField = getVehicleStep3MissingRequiredField();
+                    if (missingVehicleField) return missingVehicleField;
+
+                    const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                    if (selectedFloors.length === 0) {
+                        return document.getElementById('pickup-floors-selector') || document.getElementById('pickup-floor-select');
+                    }
+                } else {
+                    const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                    const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+                        .map((btn) => (btn.getAttribute('data-floor') || '').trim())
+                        .filter(Boolean);
+                    const effectiveFloors = selectedFloors.length > 0 ? selectedFloors : domSelectedFloors;
+
+                    if (effectiveFloors.length === 0) {
+                        return document.getElementById('pickup-floors-selector') || document.getElementById('pickup-floor-select');
+                    }
+
+                    const hasNonGroundFloor = effectiveFloors.some((floor) => {
+                        const normalized = String(floor || '').trim().toLowerCase();
+                        return normalized && normalized !== 'ground' && normalized !== 'ground floor' && !normalized.includes('ground');
+                    });
+                    const pickupLift = document.getElementById('pickup-lift-available');
+                    if (hasNonGroundFloor && !(pickupLift && pickupLift.value && pickupLift.value.trim())) {
+                        return pickupLift || document.getElementById('pickup-lift-option-container');
+                    }
+
+                    if (isInventoryInputRequiredForStep3()) {
+                        const missingFloors = effectiveFloors.filter((floorName) => {
+                            const floorItems = window.multiFloorInventory && window.multiFloorInventory[floorName];
+                            if (!floorItems || typeof floorItems !== 'object') {
+                                return true;
+                            }
+                            return !Object.values(floorItems).some((qty) => (parseInt(qty, 10) || 0) > 0);
+                        });
+                        if (missingFloors.length > 0 || !hasAnyInventorySelection()) {
+                            return document.getElementById('inventory-card-container') || document.getElementById('house-removal-inventory-section');
+                        }
+                    }
+                }
+            }
+
+            if (step === 4) {
+                const deliveryPropertyType = document.getElementById('delivery-property-type');
+                if (!(deliveryPropertyType && deliveryPropertyType.value && deliveryPropertyType.value.trim())) {
+                    return deliveryPropertyType || document.getElementById('delivery-property-type-selection-section');
+                }
+
+                const deliveryLiftSection = document.getElementById('delivery-lift-section');
+                const liftVisible = !!(
+                    deliveryLiftSection
+                    && deliveryLiftSection.style.display !== 'none'
+                    && deliveryLiftSection.offsetParent !== null
+                );
+
+                if (liftVisible) {
+                    const deliveryLift = document.getElementById('delivery-lift-available');
+                    if (!(deliveryLift && deliveryLift.value && deliveryLift.value.trim())) {
+                        return deliveryLift || deliveryLiftSection;
+                    }
+                }
+            }
+
+            if (step === 5) {
+                if (isVehicleService) {
+                    const selectedFloors = window.selectedDeliveryFloors ? Array.from(window.selectedDeliveryFloors) : [];
+                    if (selectedFloors.length === 0) {
+                        return document.getElementById('delivery-floors-selector') || document.getElementById('delivery-floor-select');
+                    }
+                }
+
+                const organizationSection = document.getElementById('item-organization-section');
+                const isOrganizationVisible = !!(organizationSection && organizationSection.offsetParent !== null);
+                if (isOrganizationVisible && typeof window.isStep5DeliveryOrganizationComplete === 'function' && !window.isStep5DeliveryOrganizationComplete()) {
+                    return organizationSection;
+                }
+            }
+
+            if (step === 6) {
+                const services = isClearance
+                    ? []
+                    : (isVehicleService || isPackagedService)
+                    ? ['service-storage']
+                    : (isVehiclePartsService
+                        ? ['service-packing', 'service-storage']
+                        : ['service-packing', 'service-storage', 'service-disassembly']);
+
+                const serviceCardByInput = {
+                    'service-packing': 'service-card-packing',
+                    'service-disassembly': 'service-card-disassembly',
+                    'service-storage': 'service-card-storage'
+                };
+
+                for (const serviceId of services) {
+                    const input = document.getElementById(serviceId);
+                    if (!input || !input.value) {
+                        return document.getElementById(serviceCardByInput[serviceId]) || input || document.getElementById('service-requirements-section');
+                    }
+                }
+
+                const pickupMovers = document.getElementById('service-pickup-movers');
+                const deliveryMovers = document.getElementById('service-delivery-movers');
+                const pickupMoversMode = document.getElementById('service-pickup-movers-mode');
+                const deliveryMoversMode = document.getElementById('service-delivery-movers-mode');
+                const pickupMoversConfirmed = document.getElementById('service-pickup-movers-confirmed');
+                const deliveryMoversConfirmed = document.getElementById('service-delivery-movers-confirmed');
+
+                if (!pickupMovers || ((pickupMoversMode?.value || 'count') !== 'unsure' && pickupMovers.value === '')) {
+                    return pickupMovers || document.getElementById('service-card-pickup-movers');
+                }
+                if (!isClearance && (!deliveryMovers || ((deliveryMoversMode?.value || 'count') !== 'unsure' && deliveryMovers.value === ''))) {
+                    return deliveryMovers || document.getElementById('service-card-delivery-movers');
+                }
+                if ((pickupMoversMode?.value || 'count') !== 'unsure' && pickupMoversConfirmed?.value !== 'yes') {
+                    return document.querySelector('.movers-confirm-btn[data-target-input="service-pickup-movers"]') || document.getElementById('service-card-pickup-movers');
+                }
+                if (!isClearance && (deliveryMoversMode?.value || 'count') !== 'unsure' && deliveryMoversConfirmed?.value !== 'yes') {
+                    return document.querySelector('.movers-confirm-btn[data-target-input="service-delivery-movers"]') || document.getElementById('service-card-delivery-movers');
+                }
+
+                if (!isClearance) {
+                    const packingInput = document.getElementById('service-packing');
+                    const packingCard = document.getElementById('service-card-packing');
+                    const isPackingCardVisible = !!(
+                        packingCard
+                        && packingCard.style.display !== 'none'
+                        && packingCard.offsetParent !== null
+                    );
+                    if (packingInput && packingInput.value === 'yes' && isPackingCardVisible && typeof window.hasValidPackingSelection === 'function' && !window.hasValidPackingSelection()) {
+                        const packingModeInput = document.getElementById('service-packing-mode');
+                        const packingBoxProviderInput = document.getElementById('service-packing-box-provider');
+                        if (!packingModeInput || !packingModeInput.value) {
+                            return document.getElementById('packing-mode-config') || packingCard;
+                        }
+                        if (!packingBoxProviderInput || !packingBoxProviderInput.value) {
+                            return document.getElementById('packing-box-provider-config') || packingCard;
+                        }
+                        return document.getElementById('packing-items-config') || packingCard;
+                    }
+                }
+
+                const storageInput = document.getElementById('service-storage');
+                if (!isClearance && storageInput && storageInput.value === 'yes' && typeof window.hasValidStorageSelection === 'function' && !window.hasValidStorageSelection()) {
+                    return document.getElementById('service-card-storage');
+                }
+
+                const disassemblyInput = document.getElementById('service-disassembly');
+                if (!isClearance && !isVehicleService && !isPianoService && !isPackagedService && !isVehiclePartsService && disassemblyInput && disassemblyInput.value === 'yes' && typeof window.hasValidDisassemblySelection === 'function' && !window.hasValidDisassemblySelection()) {
+                    return document.getElementById('service-card-disassembly');
+                }
+            }
+
+            if (step === 7) {
+                return document.getElementById('service-transport-date') || document.querySelector('[data-form-step="7"]');
+            }
+
+            return null;
+        }
         // Scroll/visibility logic
         function updateStickyNextBtnVisibility() {
             const step = getEffectiveCurrentStep();
@@ -2567,9 +2847,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
             stickyNextBtn.style.display = '';
-            stickyNextBtn.disabled = !requirementsMetForStep(step);
-            stickyNextBtn.classList.toggle('disabled', stickyNextBtn.disabled);
-            stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
+            stickyNextBtn.disabled = false;
+            stickyNextBtn.classList.remove('disabled');
+            stickyNextBtn.style.opacity = '1';
             ensureMultiFloorInventoryVisible();
             updateStep3InventoryWarning();
         };
@@ -2763,9 +3043,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     return;
                 }
                 if (!requirementsMetForStep(step)) {
-                    stickyNextBtn.disabled = true;
-                    stickyNextBtn.classList.add('disabled');
-                    stickyNextBtn.style.opacity = '0.5';
+                    const missingTarget = getFirstMissingTargetForStep(step);
+                    if (missingTarget) {
+                        highlightAndFocusMissingTarget(missingTarget);
+                    }
                     return;
                 }
 
@@ -2821,18 +3102,16 @@ document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('input, select').forEach(el => {
             el.addEventListener('input', function() {
                 updateStickyNextBtnVisibility();
-                const step = getEffectiveCurrentStep();
-                stickyNextBtn.disabled = !requirementsMetForStep(step);
-                stickyNextBtn.classList.toggle('disabled', stickyNextBtn.disabled);
-                stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
+                stickyNextBtn.disabled = false;
+                stickyNextBtn.classList.remove('disabled');
+                stickyNextBtn.style.opacity = '1';
                 updateStep3InventoryWarning();
             });
             el.addEventListener('change', function() {
                 updateStickyNextBtnVisibility();
-                const step = getEffectiveCurrentStep();
-                stickyNextBtn.disabled = !requirementsMetForStep(step);
-                stickyNextBtn.classList.toggle('disabled', stickyNextBtn.disabled);
-                stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
+                stickyNextBtn.disabled = false;
+                stickyNextBtn.classList.remove('disabled');
+                stickyNextBtn.style.opacity = '1';
                 updateStep3InventoryWarning();
             });
         });
@@ -2853,10 +3132,9 @@ document.addEventListener('DOMContentLoaded', function () {
         // Initial visibility
         updateStickyNextBtnVisibility();
         // Set initial disabled state for Next button
-        const stepInit = getEffectiveCurrentStep();
-        stickyNextBtn.disabled = !requirementsMetForStep(stepInit);
-        stickyNextBtn.classList.toggle('disabled', stickyNextBtn.disabled);
-        stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
+        stickyNextBtn.disabled = false;
+        stickyNextBtn.classList.remove('disabled');
+        stickyNextBtn.style.opacity = '1';
         updateStep3InventoryWarning();
         // Scroll logic: hide sticky button if footer is visible
         window.addEventListener('scroll', function() {
@@ -2871,7 +3149,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     stickyResetBtn.style.pointerEvents = 'none';
                 }
             } else {
-                stickyNextBtn.style.opacity = stickyNextBtn.disabled ? '0.5' : '1';
+                stickyNextBtn.style.opacity = '1';
                 stickyNextBtn.style.pointerEvents = 'auto';
                 if (stickyResetBtn) {
                     stickyResetBtn.style.opacity = '1';
@@ -3238,9 +3516,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 input.value = input.getAttribute('data-last-count-value') || '0';
             }
 
-            button.style.background = isUnsure ? '#16a34a' : '#eff6ff';
+            button.style.background = isUnsure ? '#2563eb' : '#eff6ff';
             button.style.color = isUnsure ? '#fff' : '#1d4ed8';
-            button.style.borderColor = isUnsure ? '#16a34a' : '#93c5fd';
+            button.style.borderColor = isUnsure ? '#2563eb' : '#93c5fd';
             button.setAttribute('aria-pressed', isUnsure ? 'true' : 'false');
             button.textContent = isUnsure ? 'Number Of Movers Required' : "I Don't Know";
         });
@@ -3278,9 +3556,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 input.readOnly = true;
                 confirmBtn.disabled = true;
                 confirmBtn.textContent = 'Provider Will Decide';
-                confirmBtn.style.background = '#f8fafc';
-                confirmBtn.style.color = '#64748b';
-                confirmBtn.style.borderColor = '#cbd5e1';
+                confirmBtn.style.background = '#16a34a';
+                confirmBtn.style.color = '#fff';
+                confirmBtn.style.borderColor = '#16a34a';
                 confirmBtn.style.cursor = 'not-allowed';
                 return;
             }
@@ -3618,8 +3896,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (currentlyEnabled) {
                             setPackingItemQty(itemName, 0, maxQty);
                         } else {
-                            const currentQty = parseInt(qtyInput.value, 10) || 0;
-                            const nextQty = Math.max(1, Math.min(maxQty, currentQty || 1));
+                            const nextQty = Math.max(1, maxQty);
                             setPackingItemQty(itemName, nextQty, maxQty);
                         }
                         renderPackingItemsConfig();
@@ -4251,7 +4528,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const floorSelectAllBtn = document.createElement('button');
             floorSelectAllBtn.type = 'button';
             floorSelectAllBtn.style.cssText = 'border:1px solid #16a34a;background:#dcfce7;color:#166534;border-radius:8px;padding:5px 9px;font-weight:700;cursor:pointer;font-size:0.78rem;';
-            floorSelectAllBtn.textContent = floorAllSelected ? 'Clear floor' : 'Select all items on this floor';
+            floorSelectAllBtn.textContent = floorAllSelected ? 'Clear all from this floor' : 'Select all items on this floor';
             floorSelectAllBtn.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -4486,8 +4763,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (currentlyEnabled) {
                             setStorageItemQty(itemKey, 0, availableForStorage);
                         } else {
-                            const currentQty = parseInt(qtyInput.value, 10) || 0;
-                            const nextQty = Math.max(1, Math.min(availableForStorage, currentQty || 1));
+                            const nextQty = Math.max(1, availableForStorage);
                             setStorageItemQty(itemKey, nextQty, availableForStorage);
                         }
                         renderStorageConfig();
@@ -6479,10 +6755,28 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             setExitPurgePending();
         });
 
-        window.addEventListener('pagehide', () => {
+        window.addEventListener('pagehide', (event) => {
             isUnloadingForm = true;
             clearTimeout(saveTimer);
+            // Do not mark for purge when page enters BFCache; user may return via browser back/forward.
+            if (event && event.persisted) {
+                return;
+            }
             setExitPurgePending();
+        });
+
+        window.addEventListener('pageshow', (event) => {
+            // Restore normal runtime behavior after BFCache resume.
+            isUnloadingForm = false;
+
+            if (event && event.persisted) {
+                if (typeof window.restoreCreateJobProgress === 'function') {
+                    window.restoreCreateJobProgress();
+                }
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+            }
         });
 
     };
@@ -8120,7 +8414,7 @@ document.addEventListener('DOMContentLoaded', function () {
     
     // Function to get room for an item
     function getRoomForItem(itemName) {
-        const activeService = (document.getElementById('item-description-hidden')?.value || '').trim();
+        const activeService = getActiveServiceValue();
 
         // In Office Removals, "Boxes - ..." items belong to Office, not Custom Items.
         if (activeService === 'Office Removals' && /^boxes\s*-\s*/i.test(String(itemName || ''))) {
@@ -8149,7 +8443,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Function to get all items grouped by room (keeping items from different source floors separate)
     function getItemsByRoom() {
         const roomItems = {};
-        const currentServiceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
+        const currentServiceValue = getActiveServiceValue();
         
         // Initialize all rooms
         Object.keys(ROOM_CATEGORIES).forEach(roomKey => {
@@ -10158,11 +10452,11 @@ document.addEventListener('DOMContentLoaded', function () {
         modal.innerHTML = `
             <div style="background:#fff;padding:22px 24px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.16);min-width:320px;max-width:92vw;">
                 <h4 style="margin:0 0 14px;font-size:1.1rem;color:#1f2937;">Add Item Photos / Videos</h4>
-                <label style="display:block;margin-bottom:6px;font-weight:600;color:#334155;">Item Name</label>
-                <input type="text" id="inventory-media-item-name" style="width:100%;padding:9px 10px;margin-bottom:12px;border:1px solid #cbd5e1;border-radius:8px;" placeholder="e.g. Glass table">
                 <label style="display:block;margin-bottom:6px;font-weight:600;color:#334155;">Upload Photos / Videos</label>
                 <input type="file" id="inventory-media-file-input" accept="image/*,video/*" multiple style="width:100%;margin-bottom:12px;">
                 <div style="font-size:0.82rem;color:#64748b;margin-bottom:14px;">You can select multiple files at once.</div>
+                <label style="display:block;margin-bottom:6px;font-weight:600;color:#334155;">Add Notes</label>
+                <input type="text" id="inventory-media-item-name" style="width:100%;padding:9px 10px;margin-bottom:12px;border:1px solid #cbd5e1;border-radius:8px;" placeholder="e.g. Glass table">
                 <div style="text-align:right;display:flex;justify-content:flex-end;gap:10px;">
                     <button type="button" id="inventory-media-cancel" style="padding:8px 12px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;color:#334155;font-weight:600;">Cancel</button>
                     <button type="button" id="inventory-media-add" style="padding:8px 12px;border-radius:6px;border:none;background:#2563eb;color:#fff;font-weight:700;">Add Media</button>
@@ -10866,7 +11160,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (!photoInput) {
                             photoInput = document.createElement('input');
                             photoInput.type = 'file';
-                            photoInput.accept = 'image/*';
+                            photoInput.accept = 'image/*,video/*';
                             photoInput.id = 'custom-item-photo-input-multifloor';
                             photoInput.style.display = 'none';
                             document.body.appendChild(photoInput);
@@ -10875,8 +11169,8 @@ document.addEventListener('DOMContentLoaded', function () {
                                 const file = photoInput.files && photoInput.files[0];
                                 const selectedTrackingKey = photoInput.getAttribute('data-tracking-key');
                                 if (!file || !selectedTrackingKey) return;
-                                if (!file.type || !file.type.startsWith('image/')) {
-                                    alert('Please select a valid image file.');
+                                if (!file.type || (!file.type.startsWith('image/') && !file.type.startsWith('video/'))) {
+                                    alert('Please select a valid image or video file.');
                                     return;
                                 }
                                 const reader = new FileReader();
@@ -11753,6 +12047,7 @@ function buildMultiStopAdditionalInfoSection(stopId) {
 
     const photoInputs = Array.from(clone.querySelectorAll('.photo-input'));
     photoInputs.forEach((input) => {
+        input.setAttribute('accept', 'image/*,video/*');
         input.classList.add('multi-stop-photo-input');
         input.setAttribute('data-stop-id', stopId);
     });
@@ -12391,6 +12686,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (area.dataset.photoBound === 'true') return;
             const input = area.querySelector('.photo-input');
             if (!input) return;
+            input.setAttribute('accept', 'image/*,video/*');
 
             area.addEventListener('click', () => input.click());
 
@@ -14616,7 +14912,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 houseInventorySection.classList.add('step-hidden');
             }
 
-            if (dimensionsList && dimensionsList.children.length === 0) {
+            const hasSavedCustomizedItems = !!(customizedItemsHiddenInput && String(customizedItemsHiddenInput.value || '').trim());
+            if (dimensionsList && dimensionsList.children.length === 0 && !hasSavedCustomizedItems) {
                 addDimensionItem();
             }
         } else {
@@ -14635,8 +14932,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 houseInventorySection.classList.remove('step-hidden');
             }
         }
-
-        updateCustomizedItemsHiddenValue();
     };
 
     const syncPianoStep3Visibility = () => {
@@ -14858,7 +15153,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const item = document.createElement('div');
         item.className = 'dimension-item';
         item.innerHTML = `
-            <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">Optional</span></label>
+            <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">Optional</span></label>
             <div class="photo-upload-grid">
                 <div class="photo-upload-area">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -14866,8 +15161,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         <circle cx="8.5" cy="8.5" r="1.5"></circle>
                         <path d="M21 15l-5-5L5 21"></path>
                     </svg>
-                    <span>Drag photo here <strong>upload</strong></span>
-                    <input type="file" class="photo-input" accept="image/*" id="custom-item-photo-${itemIndex}-1">
+                    <span>Drag photo or video here <strong>upload</strong></span>
+                    <input type="file" class="photo-input" accept="image/*,video/*" id="custom-item-photo-${itemIndex}-1">
                 </div>
                 <div class="photo-upload-area">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -14875,8 +15170,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         <circle cx="8.5" cy="8.5" r="1.5"></circle>
                         <path d="M21 15l-5-5L5 21"></path>
                     </svg>
-                    <span>Drag photo here <strong>upload</strong></span>
-                    <input type="file" class="photo-input" accept="image/*" id="custom-item-photo-${itemIndex}-2">
+                    <span>Drag photo or video here <strong>upload</strong></span>
+                    <input type="file" class="photo-input" accept="image/*,video/*" id="custom-item-photo-${itemIndex}-2">
                 </div>
                 <div class="photo-upload-area">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -14884,26 +15179,44 @@ document.addEventListener('DOMContentLoaded', function() {
                         <circle cx="8.5" cy="8.5" r="1.5"></circle>
                         <path d="M21 15l-5-5L5 21"></path>
                     </svg>
-                    <span>Drag photo here <strong>upload</strong></span>
-                    <input type="file" class="photo-input" accept="image/*" id="custom-item-photo-${itemIndex}-3">
+                    <span>Drag photo or video here <strong>upload</strong></span>
+                    <input type="file" class="photo-input" accept="image/*,video/*" id="custom-item-photo-${itemIndex}-3">
                 </div>
             </div>
             <label class="form-label" style="margin:0;">Add Approximate Dimensions</label>
             <input type="text" class="form-input dimension-description" placeholder="Enter Item Description here (Naming the Item name and model will help Transport Provider with what exact item they will be transporting)" maxlength="200">
             <div class="dimension-inputs">
-                <input type="number" class="form-input dimension-field dimension-width" placeholder="Width" min="0" step="0.1">
-                <input type="number" class="form-input dimension-field dimension-depth" placeholder="Depth" min="0" step="0.1">
-                <input type="number" class="form-input dimension-field dimension-height" placeholder="Height" min="0" step="0.1">
-                <select class="form-input dimension-unit dimension-size-unit">
-                    <option value="cm">cm</option>
-                    <option value="m">m</option>
-                    <option value="ft">ft</option>
-                </select>
-                <input type="number" class="form-input dimension-field dimension-weight" placeholder="Weight" min="0" step="0.1">
-                <select class="form-input dimension-unit dimension-weight-unit">
-                    <option value="kg">kg</option>
-                    <option value="lbs">lbs</option>
-                </select>
+                <div class="dimension-field-stack">
+                    <span class="dimension-input-label">Width</span>
+                    <input type="number" class="form-input dimension-field dimension-width" placeholder="Width" aria-label="Width" min="0" step="0.1">
+                </div>
+                <div class="dimension-field-stack">
+                    <span class="dimension-input-label">Depth</span>
+                    <input type="number" class="form-input dimension-field dimension-depth" placeholder="Depth" aria-label="Depth" min="0" step="0.1">
+                </div>
+                <div class="dimension-field-stack">
+                    <span class="dimension-input-label">Height</span>
+                    <input type="number" class="form-input dimension-field dimension-height" placeholder="Height" aria-label="Height" min="0" step="0.1">
+                </div>
+                <div class="dimension-field-stack">
+                    <span class="dimension-input-label">Size Unit</span>
+                    <select class="form-input dimension-unit dimension-size-unit" aria-label="Size unit">
+                        <option value="cm">cm</option>
+                        <option value="m">m</option>
+                        <option value="ft">ft</option>
+                    </select>
+                </div>
+                <div class="dimension-field-stack">
+                    <span class="dimension-input-label">Weight</span>
+                    <input type="number" class="form-input dimension-field dimension-weight" placeholder="Weight" aria-label="Weight" min="0" step="0.1">
+                </div>
+                <div class="dimension-field-stack">
+                    <span class="dimension-input-label">Weight Unit</span>
+                    <select class="form-input dimension-unit dimension-weight-unit" aria-label="Weight unit">
+                        <option value="kg">kg</option>
+                        <option value="lbs">lbs</option>
+                    </select>
+                </div>
             </div>
             <button type="button" class="btn-delete-dimension">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -15027,7 +15340,26 @@ document.addEventListener('DOMContentLoaded', function() {
             node = document.createElement('div');
             node.className = 'field-error-message';
             node.setAttribute('data-error-for', key);
-            target.insertAdjacentElement('afterend', node);
+
+            const isDimensionField = target.classList && (
+                target.classList.contains('dimension-width')
+                || target.classList.contains('dimension-depth')
+                || target.classList.contains('dimension-height')
+                || target.classList.contains('dimension-weight')
+            );
+
+            if (isDimensionField) {
+                let wrapper = target.closest('.dimension-field-stack');
+                if (!wrapper) {
+                    wrapper = document.createElement('div');
+                    wrapper.className = 'dimension-field-stack';
+                    target.parentNode.insertBefore(wrapper, target);
+                    wrapper.appendChild(target);
+                }
+                wrapper.appendChild(node);
+            } else {
+                target.insertAdjacentElement('afterend', node);
+            }
         }
         node.textContent = message;
     };
@@ -16476,6 +16808,10 @@ document.addEventListener('DOMContentLoaded', function() {
             return 'Please choose what you are moving.';
         }
 
+        if (field.id === 'customized-items-hidden') {
+            return 'Please add required dimensions: Width, Depth, Height, and Weight.';
+        }
+
         const labelText = getFieldLabelText(field, formEl);
         if (!labelText) {
             return 'Please fill out all required fields highlighted below.';
@@ -16495,6 +16831,22 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!field) return '';
         if (field.id === 'item-description-hidden') {
             return 'Choose what you are moving.';
+        }
+        if (field.id === 'customized-items-hidden') {
+            return 'Enter required dimensions: Width, Depth, Height, and Weight.';
+        }
+
+        if (field.classList?.contains('dimension-width')) {
+            return 'Enter The Width.';
+        }
+        if (field.classList?.contains('dimension-depth')) {
+            return 'Enter The Depth.';
+        }
+        if (field.classList?.contains('dimension-height')) {
+            return 'Enter The Height.';
+        }
+        if (field.classList?.contains('dimension-weight')) {
+            return 'Enter The Weight.';
         }
 
         let labelText = getFieldLabelText(field, formEl);
@@ -17384,10 +17736,12 @@ function buildClearanceDescriptionSummary() {
     const heavyItems = document.getElementById('clearance3-heavy-items')?.value?.trim() || '';
     const clearanceDescription = document.getElementById('clearance3-description')?.value?.trim() || '';
     const clearanceNotes = document.getElementById('clearance3-notes')?.value?.trim() || '';
+    const recyclingFee = document.getElementById('clearance3-recycling-fee-hidden')?.value?.trim() || '';
 
     const parts = [];
     if (weightRange) parts.push(`Weight range: ${weightRange}`);
     if (heavyItems) parts.push(`Heavy items: ${heavyItems}`);
+    if (recyclingFee) parts.push(`Recycling fee: ${recyclingFee === 'yes' ? 'Included' : 'Not included'}`);
     if (clearanceDescription) parts.push(`Clearance items: ${clearanceDescription}`);
     if (clearanceNotes) parts.push(`Notes: ${clearanceNotes}`);
 
@@ -17459,7 +17813,8 @@ document.addEventListener('DOMContentLoaded', function () {
         'clearance3-weight-range',
         'clearance3-heavy-items',
         'clearance3-description',
-        'clearance3-notes'
+        'clearance3-notes',
+        'clearance3-recycling-fee-hidden'
     ];
 
     clearanceFieldIds.forEach((fieldId) => {
@@ -18138,6 +18493,7 @@ function initMultiStopPhotoAreas(card) {
         if (area.dataset.multiStopPhotoReady === 'true') return;
         const input = area.querySelector('.photo-input');
         if (!input) return;
+        input.setAttribute('accept', 'image/*,video/*');
 
         area.addEventListener('click', () => input.click());
 
@@ -20035,8 +20391,8 @@ function ensureMapboxAccessToken() {
 
 function showStaticRoutePreview() {
     // Fallback: show distance/price based on city/postcode (without Google Maps)
-    const pickupCity = document.getElementById('pickup-city');
-    const deliveryCity = document.getElementById('delivery-city');
+    const pickupCity = document.getElementById('pickup-address');
+    const deliveryCity = document.getElementById('delivery-address');
     
     if (pickupCity && deliveryCity) {
         pickupCity.addEventListener('blur', estimateFromCities);
@@ -20077,15 +20433,28 @@ function setupRouteListeners() {
     const deliveryCity = document.getElementById('delivery-city');
     const pickupPostcode = document.getElementById('pickup-postcode');
     const deliveryPostcode = document.getElementById('delivery-postcode');
+
+    const syncHiddenCityFromPrimaryInputs = () => {
+        const hiddenPickupCity = document.getElementById('pickup-city');
+        const hiddenDeliveryCity = document.getElementById('delivery-city');
+        if (hiddenPickupCity && pickupInput) {
+            hiddenPickupCity.value = (pickupInput.value || '').trim();
+        }
+        if (hiddenDeliveryCity && deliveryInput) {
+            hiddenDeliveryCity.value = (deliveryInput.value || '').trim();
+        }
+    };
     
     // Setup address autocomplete
     if (pickupInput) {
         setupAddressAutocomplete(pickupInput, 'pickup');
+        pickupInput.addEventListener('input', syncHiddenCityFromPrimaryInputs);
         pickupInput.addEventListener('blur', updateRouteIfReady);
         pickupInput.addEventListener('change', updateRouteIfReady);
     }
     if (deliveryInput) {
         setupAddressAutocomplete(deliveryInput, 'delivery');
+        deliveryInput.addEventListener('input', syncHiddenCityFromPrimaryInputs);
         deliveryInput.addEventListener('blur', updateRouteIfReady);
         deliveryInput.addEventListener('change', updateRouteIfReady);
     }
@@ -20101,6 +20470,8 @@ function setupRouteListeners() {
         deliveryPostcode.addEventListener('blur', () => handleEircodeLookup(deliveryPostcode, 'delivery'));
         deliveryPostcode.addEventListener('change', () => handleEircodeLookup(deliveryPostcode, 'delivery'));
     }
+
+    syncHiddenCityFromPrimaryInputs();
 }
 
 function setupMultiStopRouteListeners() {
@@ -20434,11 +20805,17 @@ function selectAddressSuggestion(feature, inputEl, type) {
         city = addressParts[addressParts.length - 2].trim();
     }
     
-    // Set city and postcode fields
+    const cityArea = getCityAreaFromFeature(feature, city);
+
+    // Set city/city-area fields
     if (type === 'pickup') {
         if (city) document.getElementById('pickup-city').value = city;
+        const pickupCityArea = document.getElementById('pickup-city-area');
+        if (pickupCityArea) pickupCityArea.value = cityArea || '';
     } else if (type === 'delivery') {
         if (city) document.getElementById('delivery-city').value = city;
+        const deliveryCityArea = document.getElementById('delivery-city-area');
+        if (deliveryCityArea) deliveryCityArea.value = cityArea || '';
     }
     
     // Trigger route update if both addresses are filled
@@ -20597,8 +20974,14 @@ function applyEircodeFeature(feature, type, postcodeInput) {
     }
 
     const city = getCityFromFeature(feature);
+    const cityArea = getCityAreaFromFeature(feature, city);
     if (cityInput && city) {
         cityInput.value = city;
+    }
+
+    const cityAreaInput = document.getElementById(type === 'pickup' ? 'pickup-city-area' : 'delivery-city-area');
+    if (cityAreaInput) {
+        cityAreaInput.value = cityArea || '';
     }
 
     updateRouteIfReady();
@@ -20671,9 +21054,54 @@ function geocodeEircode(eircode) {
 }
 
 function getCityFromFeature(feature) {
-    if (!feature || !feature.context) return '';
-    const place = feature.context.find(ctx => ctx.id && ctx.id.includes('place'));
-    return place ? place.text : '';
+    if (!feature) return '';
+    const context = Array.isArray(feature.context) ? feature.context : [];
+
+    const place = context.find((ctx) => ctx.id && ctx.id.includes('place'));
+    if (place && place.text) {
+        return place.text;
+    }
+
+    if (feature.place_type && feature.place_type.includes('place') && feature.text) {
+        return feature.text;
+    }
+
+    const addressParts = String(feature.place_name || '').split(',').map((part) => part.trim()).filter(Boolean);
+    if (addressParts.length >= 2) {
+        return addressParts[addressParts.length - 2];
+    }
+
+    return '';
+}
+
+function getCityAreaFromFeature(feature, resolvedCity = '') {
+    if (!feature) return '';
+
+    const city = String(resolvedCity || getCityFromFeature(feature)).trim().toLowerCase();
+    const context = Array.isArray(feature.context) ? feature.context : [];
+
+    const areaContext = context.find((ctx) => {
+        const id = String(ctx.id || '').toLowerCase();
+        return id.includes('locality') || id.includes('neighborhood') || id.includes('district');
+    });
+
+    if (areaContext && areaContext.text) {
+        const areaText = String(areaContext.text).trim();
+        if (areaText && areaText.toLowerCase() !== city) {
+            return areaText;
+        }
+    }
+
+    const addressParts = String(feature.place_name || '').split(',').map((part) => part.trim()).filter(Boolean);
+    if (addressParts.length >= 3) {
+        const candidate = addressParts[addressParts.length - 3];
+        const lowerCandidate = String(candidate || '').toLowerCase();
+        if (candidate && lowerCandidate !== city && lowerCandidate !== 'ireland') {
+            return candidate;
+        }
+    }
+
+    return '';
 }
 
 function extractAndFillAddressComponents(components, type) {
@@ -21381,6 +21809,74 @@ function normalizeOverviewItemName(name) {
     return boxPrefixMatch && boxPrefixMatch[2] ? boxPrefixMatch[2] : raw;
 }
 
+function normalizeOverviewChoiceValue(value) {
+    return String(value || '')
+        .trim()
+        .replace(/[-_]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function getOverviewHiddenFieldText(hiddenId) {
+    const hidden = document.getElementById(hiddenId);
+    const raw = (hidden?.value || '').trim();
+    if (!raw) return '';
+
+    const navButtons = Array.from(document.querySelectorAll(`.option-nav[data-option-nav-for="${hiddenId}"] .option-nav-btn`));
+    const valueToLabel = new Map();
+    navButtons.forEach((btn) => {
+        const value = (btn.getAttribute('data-value') || '').trim();
+        const label = (btn.querySelector('span')?.textContent || btn.textContent || '').trim();
+        if (value && label) {
+            valueToLabel.set(value, label);
+        }
+    });
+
+    const parts = raw.split(',').map((entry) => entry.trim()).filter(Boolean);
+    if (parts.length === 0) return '';
+
+    return parts
+        .map((entry) => valueToLabel.get(entry) || normalizeOverviewChoiceValue(entry))
+        .join(', ');
+}
+
+function getVehicleOverviewDetailRows(serviceValue) {
+    const rows = [];
+    const addRow = (label, value) => {
+        const text = String(value || '').trim();
+        if (!text) return;
+        rows.push(`<li><strong>${escapeOverviewHtml(label)}:</strong> ${escapeOverviewHtml(text)}</li>`);
+    };
+
+    if (serviceValue === 'Car Transport') {
+        addRow('Model', document.getElementById('car-make-model')?.value || '');
+        addRow('Year', getOverviewHiddenFieldText('car-year-hidden'));
+        addRow('Condition', getOverviewHiddenFieldText('car-condition-hidden'));
+        addRow('Estimated Value', getOverviewHiddenFieldText('car-value-hidden'));
+        addRow('Transport Method', getOverviewHiddenFieldText('car-transport-method-hidden'));
+        addRow('Weight', getOverviewHiddenFieldText('car-weight-hidden'));
+        addRow('Length', getOverviewHiddenFieldText('car-length-hidden'));
+    } else if (serviceValue === 'Motorbike Transport') {
+        addRow('Model', document.getElementById('motorbike-make-model')?.value || '');
+        addRow('Year', getOverviewHiddenFieldText('motorbike-year-hidden'));
+        addRow('Condition', getOverviewHiddenFieldText('motorbike-condition-hidden'));
+        addRow('Estimated Value', getOverviewHiddenFieldText('motorbike-value-hidden'));
+        addRow('Operational', getOverviewHiddenFieldText('motorbike-operational-hidden'));
+        addRow('Weight', getOverviewHiddenFieldText('motorbike-weight-hidden'));
+    } else if (serviceValue === 'Trailers & Campervans Transport' || serviceValue === 'Boats') {
+        addRow(serviceValue === 'Boats' ? 'Boat Type' : 'Vehicle Type', getOverviewHiddenFieldText('trailer-campervan-type-hidden'));
+        addRow('Model', document.getElementById('trailer-campervan-make-model')?.value || '');
+        addRow('Year', getOverviewHiddenFieldText('trailer-campervan-year-hidden'));
+        addRow('Condition', getOverviewHiddenFieldText('trailer-campervan-condition-hidden'));
+        addRow('Estimated Value', getOverviewHiddenFieldText('trailer-campervan-value-hidden'));
+        addRow('Transport Method', getOverviewHiddenFieldText('trailer-campervan-delivery-hidden'));
+        addRow('Weight', getOverviewHiddenFieldText('trailer-campervan-weight-hidden'));
+        addRow('Length', getOverviewHiddenFieldText('trailer-campervan-length-hidden'));
+    }
+
+    return rows;
+}
+
 function formatPropertyTypeValue(value) {
     const key = String(value || '').trim().toLowerCase();
     const map = {
@@ -21501,6 +21997,23 @@ function buildOverviewFloorInventoryMarkup(kind) {
     const selectedPickup = getOrderedFloorList(Array.from(window.selectedPickupFloors || []));
     const selectedDelivery = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || []));
     const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
+
+    if (isVehicleTransportService(serviceValue)) {
+        const detailRows = getVehicleOverviewDetailRows(serviceValue);
+        if (detailRows.length === 0) {
+            return kind === 'pickup'
+                ? 'No vehicle details added yet.'
+                : 'No delivery vehicle details available yet.';
+        }
+
+        const blockTitle = kind === 'pickup' ? 'Vehicle Details' : 'Vehicle Details (Delivery)';
+        return `
+            <div class="overview-floor-block">
+                <div class="overview-floor-title">${escapeOverviewHtml(blockTitle)}</div>
+                <ul class="overview-floor-items">${detailRows.join('')}</ul>
+            </div>
+        `;
+    }
 
     if (kind === 'pickup') {
         if (serviceValue === 'Piano Transport') {
@@ -21690,15 +22203,16 @@ function updateOverviewFloorAndInventorySummary() {
 }
 
 function syncOverviewVehicleVisibility() {
-    const isVehicleService = isVehicleLikeStepFlowService(getActiveServiceValue());
+    const isVehicleLikeService = isVehicleLikeStepFlowService(getActiveServiceValue());
+    const isVehicleTransport = isVehicleTransportService(getActiveServiceValue());
     const serviceSummaryCard = document.getElementById('summary-service')?.closest('.overview-item');
     const inventoryGrid = document.querySelector('.overview-inventory-grid');
 
     if (serviceSummaryCard) {
-        serviceSummaryCard.style.display = isVehicleService ? 'none' : '';
+        serviceSummaryCard.style.display = isVehicleLikeService ? 'none' : '';
     }
     if (inventoryGrid) {
-        inventoryGrid.style.display = isVehicleService ? 'none' : '';
+        inventoryGrid.style.display = isVehicleLikeService && !isVehicleTransport ? 'none' : '';
     }
 }
 
@@ -21706,7 +22220,7 @@ function getOverviewAllFloors() {
     if (isParkingLevelService(getActiveServiceValue())) {
         return Array.isArray(VEHICLE_PARKING_LEVELS) && VEHICLE_PARKING_LEVELS.length
             ? VEHICLE_PARKING_LEVELS.slice()
-            : ['Ground', '-1', '-2', '-3'];
+            : ['1st', '2nd','3rd','4th','5th','Higher than 5th','Ground', '-1', '-2', '-3','-4','-5','Lower Than -5'];
     }
     return ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
 }
@@ -21850,7 +22364,7 @@ function openOverviewEditModal(valueId) {
             const targetLabel = isPickup ? 'Pickup' : 'Delivery';
             const parkingOptions = (Array.isArray(VEHICLE_PARKING_LEVELS) && VEHICLE_PARKING_LEVELS.length)
                 ? VEHICLE_PARKING_LEVELS
-                : ['Ground', '-1', '-2', '-3'];
+                : ['1st', '2nd', '3rd', '4th', '5th', 'Higher than 5th', 'Ground', '-1', '-2', '-3', '-4', '-5', 'Lower Than -5'];
 
             title.textContent = `Edit ${targetLabel} Parking Level`;
             subtitle.textContent = 'Select the parking level.';
@@ -21966,7 +22480,7 @@ function openOverviewEditModal(valueId) {
         if (isVehicleOverviewService) {
             const parkingOptions = (Array.isArray(VEHICLE_PARKING_LEVELS) && VEHICLE_PARKING_LEVELS.length)
                 ? VEHICLE_PARKING_LEVELS
-                : ['Ground', '-1', '-2', '-3'];
+                : ['1st', '2nd', '3rd', '4th', '5th', 'Higher than 5th', 'Ground', '-1', '-2', '-3', '-4', '-5', 'Lower Than -5'];
             const current = getOrderedFloorList(Array.from(selectedSet))[0] || '';
             title.textContent = isPickup ? 'Edit Pickup Parking Level' : 'Edit Delivery Parking Level';
             subtitle.textContent = 'Select one parking level.';
@@ -22812,5 +23326,89 @@ document.addEventListener('DOMContentLoaded', function() {
                 houseSection.classList.add('step-hidden');
             }
         }
+    }
+});
+
+window.addEventListener('pageshow', function(event) {
+    if (!event || !event.persisted) {
+        return;
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const decodedService = decodeURIComponent(urlParams.get('service') || '').trim();
+    if (!decodedService) {
+        return;
+    }
+
+    const serviceHidden = document.getElementById('item-description-hidden');
+    const createJobHidden = document.getElementById('create-job-hidden');
+
+    const getStepFromUi = () => {
+        const fromBody = parseInt(document.body?.dataset?.formStep || document.body?.dataset?.currentStep || '', 10);
+        if (Number.isFinite(fromBody) && fromBody > 0) {
+            return fromBody;
+        }
+        const activeStepperItem = document.querySelector('.stepper-item.is-active[data-step]');
+        const fromStepper = parseInt(activeStepperItem?.getAttribute('data-step') || '', 10);
+        if (Number.isFinite(fromStepper) && fromStepper > 0) {
+            return fromStepper;
+        }
+        return 1;
+    };
+
+    const forceCustomizedStep3Layout = () => {
+        const inventoryCardContainer = document.getElementById('inventory-card-container');
+        const customSection = document.getElementById('customized-items-inventory-section');
+        const houseSection = document.getElementById('house-removal-inventory-section');
+        const pickupFloorsImage = document.getElementById('pickup-floors-image');
+        const pickupRoomList = document.getElementById('pickup-room-list');
+        const step3Title = document.getElementById('step3-title-wrapper');
+
+        document.body.classList.add('customized-items-active');
+        if (inventoryCardContainer) inventoryCardContainer.style.display = '';
+        if (customSection) {
+            customSection.style.display = 'block';
+            customSection.classList.remove('step-hidden');
+        }
+        if (houseSection) {
+            houseSection.style.display = 'none';
+            houseSection.classList.add('step-hidden');
+        }
+        if (pickupFloorsImage) pickupFloorsImage.style.display = 'none';
+        if (pickupRoomList) pickupRoomList.style.display = 'none';
+        if (step3Title) step3Title.style.display = 'none';
+    };
+
+    const rehydrateFromBrowserReturn = () => {
+        if (serviceHidden) {
+            serviceHidden.value = decodedService;
+            serviceHidden.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (createJobHidden) {
+            createJobHidden.value = decodedService;
+            createJobHidden.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        if (typeof window.applyServiceSelection === 'function') {
+            window.applyServiceSelection(decodedService, decodedService);
+        }
+
+        const effectiveStep = getStepFromUi();
+        if (typeof window.setFormStep === 'function') {
+            window.setFormStep(effectiveStep);
+        }
+
+        if (isCustomizedInventoryService(decodedService) && effectiveStep === 3) {
+            forceCustomizedStep3Layout();
+        }
+    };
+
+    rehydrateFromBrowserReturn();
+    setTimeout(rehydrateFromBrowserReturn, 0);
+    setTimeout(rehydrateFromBrowserReturn, 120);
+    setTimeout(rehydrateFromBrowserReturn, 320);
+
+    if (typeof window.updateNextButtonState === 'function') {
+        setTimeout(() => window.updateNextButtonState(), 0);
     }
 });

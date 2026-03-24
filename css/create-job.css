@@ -2035,6 +2035,18 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     background: #fff1f2;
 }
 
+.next-missing-highlight {
+    border: 2px solid #ef4444 !important;
+    background: #fff1f2 !important;
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+    animation: nextMissingPulse 0.8s ease-in-out 2;
+}
+
+@keyframes nextMissingPulse {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.28); }
+    100% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+}
+
 /* Custom dropdown (match landing mega menu) */
 .custom-dropdown-wrapper {
     position: relative;
@@ -3031,6 +3043,33 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     width: 24px;
     height: 24px;
 }
+
+.office-unit-tabs .office-unit-btn {
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 2px;
+    padding: 10px 12px;
+    border-color: var(--office-accent, #cbd5e1);
+    background: var(--office-bg, #eff6ff);
+    color: var(--office-text, #1e40af);
+}
+
+.office-unit-tabs .office-unit-btn .office-unit-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.office-unit-tabs .office-unit-btn .office-unit-type {
+    font-size: 0.72rem;
+    font-weight: 600;
+    opacity: 0.9;
+    line-height: 1.2;
+}
+
+.office-unit-tabs .office-unit-btn.active {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
 .has-option-nav .custom-dropdown {
     display: none;
 }
@@ -3386,11 +3425,8 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
 }
 
 /* Freight Step 3 layout */
-.freight-step3-layout {
+.freight-step3-form {
     width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
 }
 
 .freight-step3-card {
@@ -3400,21 +3436,112 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
 .freight-step3-card-title {
     margin: 0 0 0.9rem;
     color: var(--text-primary);
-    font-size: 1.85rem;
+    font-size: 1.65rem;
     font-weight: 700;
+}
+
+.freight-step3-subtitle {
+    margin: 0 0 1rem;
+    color: #4b5563;
+    font-size: 0.98rem;
 }
 
 .freight-step3-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr 0.5fr;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 1rem;
-    align-items: center;
+    align-items: start;
 }
 
-.freight-step3-layout .form-input {
+.freight-step3-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.freight-step3-field--wide {
+    grid-column: 1 / -1;
+}
+
+.freight-step3-form .form-input {
     min-height: 52px;
     border-color: #d1d5db;
     font-size: 1.02rem;
+}
+
+.freight-step3-form textarea.form-input {
+    min-height: 112px;
+    resize: vertical;
+}
+
+/* Clearance Step 3 mirrors customized-items layout with clearance-specific fields. */
+.clearance-step3-form {
+    width: 100%;
+}
+
+.clearance-customized-shell {
+    padding: 18px;
+}
+
+.clearance-customized-title {
+    margin: 0 0 10px;
+    color: var(--text-primary);
+    font-size: 2.15rem;
+    font-weight: 700;
+}
+
+.clearance-customized-subtitle {
+    margin: 0 0 14px;
+    color: #64748b;
+    font-size: 1.34rem;
+}
+
+.clearance-customized-card {
+    margin-top: 8px;
+}
+
+.clearance-section-label-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.clearance-optional-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #bfdbfe;
+    background: #e2e8f0;
+    color: #334155;
+    border-radius: 999px;
+    font-size: 0.88rem;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    padding: 6px 12px;
+    font-weight: 700;
+}
+
+.clearance-step3-form .dimension-description {
+    min-height: 54px;
+    resize: vertical;
+}
+
+.clearance-dimension-inputs {
+    grid-template-columns: 1.2fr 1fr 1.6fr;
+}
+
+@media (max-width: 900px) {
+    .clearance-customized-title {
+        font-size: 1.8rem;
+    }
+
+    .clearance-customized-subtitle {
+        font-size: 1.02rem;
+    }
+
+    .clearance-dimension-inputs {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 1100px) {
@@ -3598,6 +3725,29 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     align-items: flex-end;
 }
 
+.dimension-input-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #475569;
+    letter-spacing: 0.01em;
+}
+
+.dimension-field-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.dimension-field-stack .form-input {
+    width: 100%;
+}
+
+.dimension-field-stack .field-error-message {
+    margin-top: 0;
+    font-size: 0.8rem;
+    line-height: 1.2;
+}
+
 .dimension-field {
     font-size: 1rem;
     padding: 12px 12px;
@@ -3667,6 +3817,7 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     .photo-upload-grid {
         grid-template-columns: 1fr;
     }
+
     .dimension-inputs {
         grid-template-columns: repeat(2, 1fr);
     }
