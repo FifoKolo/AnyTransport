@@ -2148,18 +2148,118 @@ document.addEventListener('DOMContentLoaded', function () {
                 return section;
             }
 
+            const vehiclePrefix = jsonFieldId === 'car-json-hidden'
+                ? 'car'
+                : jsonFieldId === 'motorbike-json-hidden'
+                    ? 'motorbike'
+                    : 'trailer';
+
+            const addVehicleBtn = document.getElementById(`add-${vehiclePrefix}-btn`);
+
+            const orderedRequiredFieldIds = vehiclePrefix === 'car'
+                ? [
+                    'car-make-model-entry',
+                    'car-year-entry-hidden',
+                    'car-value-entry-hidden',
+                    'car-type-entry-hidden',
+                    'car-condition-entry-hidden',
+                    'car-method-entry-hidden',
+                    'car-weight-entry-hidden',
+                    'car-length-entry-hidden',
+                    'car-roadworthy-entry-hidden',
+                    'car-insurance-entry-hidden',
+                    'car-roadtax-entry-hidden'
+                ]
+                : vehiclePrefix === 'motorbike'
+                    ? [
+                        'motorbike-make-model-entry',
+                        'motorbike-year-entry-hidden',
+                        'motorbike-value-entry-hidden',
+                        'motorbike-condition-entry-hidden',
+                        'motorbike-weight-entry-hidden',
+                        'motorbike-length-entry-hidden',
+                        'motorbike-roadworthy-entry-hidden',
+                        'motorbike-insurance-entry-hidden',
+                        'motorbike-roadtax-entry-hidden'
+                    ]
+                    : [
+                        'trailer-make-model-entry',
+                        'trailer-year-entry-hidden',
+                        'trailer-value-entry-hidden',
+                        'trailer-type-entry-hidden',
+                        'trailer-condition-entry-hidden',
+                        'trailer-method-entry-hidden',
+                        'trailer-weight-entry-hidden',
+                        'trailer-length-entry-hidden',
+                        'trailer-roadworthy-entry-hidden'
+                    ];
+
+            for (const fieldId of orderedRequiredFieldIds) {
+                const field = document.getElementById(fieldId);
+                if (!field || field.disabled) {
+                    continue;
+                }
+                if (field.type !== 'hidden' && field.offsetParent === null) {
+                    continue;
+                }
+
+                const value = typeof field.value === 'string'
+                    ? field.value.trim()
+                    : String(field.value || '').trim();
+                if (!value) {
+                    return field;
+                }
+            }
+
+            if (vehiclePrefix === 'trailer' && getActiveServiceValue() !== 'Boats') {
+                const selectedWeight = (document.getElementById('trailer-weight-entry-hidden')?.value || '').trim();
+                let requiresTested = selectedWeight === 'over-3500';
+
+                if (!requiresTested && selectedWeight === 'custom') {
+                    const customWeightValue = parseFloat((document.getElementById('trailer-custom-weight')?.value || '').trim());
+                    const customWeightUnit = (document.getElementById('trailer-custom-weight-unit')?.value || 'kg').trim().toLowerCase();
+                    if (Number.isFinite(customWeightValue)) {
+                        const weightInKg = customWeightUnit === 'lb' ? (customWeightValue * 0.45359237) : customWeightValue;
+                        requiresTested = weightInKg > 3500;
+                    }
+                }
+
+                if (requiresTested) {
+                    const testedField = document.getElementById('trailer-tested-entry-hidden');
+                    const testedValue = (testedField && typeof testedField.value === 'string') ? testedField.value.trim() : '';
+                    if (testedField && !testedValue) {
+                        return testedField;
+                    }
+                }
+            }
+
             const raw = (jsonField.value || '').trim();
             if (!raw) {
-                return jsonField;
+                // If the form is complete but user did not click Add yet, try to save it now.
+                if (addVehicleBtn && typeof addVehicleBtn.click === 'function') {
+                    addVehicleBtn.click();
+                    const postClickRaw = (jsonField.value || '').trim();
+                    if (postClickRaw) {
+                        try {
+                            const postClickParsed = JSON.parse(postClickRaw);
+                            if (Array.isArray(postClickParsed) && postClickParsed.length > 0) {
+                                return null;
+                            }
+                        } catch (error) {
+                            // fall through to explicit missing add button path
+                        }
+                    }
+                }
+                return addVehicleBtn || jsonField;
             }
 
             try {
                 const parsed = JSON.parse(raw);
                 if (!Array.isArray(parsed) || parsed.length === 0) {
-                    return jsonField;
+                    return addVehicleBtn || jsonField;
                 }
             } catch (error) {
-                return jsonField;
+                return addVehicleBtn || jsonField;
             }
 
             return null;
@@ -2624,6 +2724,81 @@ document.addEventListener('DOMContentLoaded', function () {
             return true;
         }
 
+        function getMissingFieldDisplayName(field) {
+            if (!field) return 'required field';
+
+            const cleanLabel = (text) => String(text || '')
+                .replace(/\(required\)/ig, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            const fieldId = field.id || '';
+
+            if (fieldId.startsWith('add-') && fieldId.endsWith('-btn')) {
+                const btnText = cleanLabel(field.textContent);
+                if (btnText) return btnText;
+                return 'Add item details';
+            }
+
+            const explicitFieldLabels = {
+                'pickup-lift-available': 'Pickup lift availability',
+                'delivery-lift-available': 'Delivery lift availability',
+                'pickup-floor-select': 'Pickup floors',
+                'delivery-floor-select': 'Delivery floors',
+                'pickup-floors-selector': 'Pickup floors',
+                'delivery-floors-selector': 'Delivery floors',
+                'inventory-card-container': 'Inventory details',
+                'item-organization-section': 'Delivery item organization',
+                'car-json-hidden': 'Car/Campervan details (click + Add Campervan / Car)',
+                'motorbike-json-hidden': 'Motorbike details (click + Add Motorbike)',
+                'trailer-json-hidden': 'Trailer/Caravan details (click + Add Caravan / Trailer)'
+            };
+
+            if (fieldId && explicitFieldLabels[fieldId]) {
+                return explicitFieldLabels[fieldId];
+            }
+
+            if (fieldId) {
+                const directLabel = document.querySelector(`label[for="${fieldId}"]`);
+                const directText = cleanLabel(directLabel?.textContent);
+                if (directText) return directText;
+            }
+
+            if (field.type === 'hidden' && fieldId) {
+                const optionNav = document.querySelector(`.option-nav[data-option-nav-for="${fieldId}"]`);
+                if (optionNav) {
+                    const navAria = cleanLabel(optionNav.getAttribute('aria-label'));
+                    if (navAria) return navAria;
+
+                    const navLabel = cleanLabel(
+                        optionNav.closest('.custom-dropdown-wrapper')?.previousElementSibling?.textContent
+                    );
+                    if (navLabel) return navLabel;
+                }
+            }
+
+            const groupLabel = cleanLabel(field.closest?.('.form-group')?.querySelector('.form-label')?.textContent);
+            if (groupLabel) return groupLabel;
+
+            const sectionHeading = cleanLabel(
+                field.querySelector?.('h2, h3, .section-title, .form-label')?.textContent
+            );
+            if (sectionHeading) return sectionHeading;
+
+            const ariaLabel = cleanLabel(field.getAttribute?.('aria-label'));
+            if (ariaLabel) return ariaLabel;
+
+            const placeholder = cleanLabel(field.placeholder);
+            if (placeholder) return placeholder;
+
+            return 'required field';
+        }
+
+        function alertMissingRestriction(field) {
+            const label = getMissingFieldDisplayName(field);
+            alert(`Please fill in the required field: ${label}`);
+        }
+
         function getFirstMissingTargetForStep(step) {
             if (typeof validateRequiredFieldsInStep === 'function') {
                 const missingFromValidator = validateRequiredFieldsInStep(step);
@@ -3077,6 +3252,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     const missingTarget = getFirstMissingTargetForStep(step);
                     if (missingTarget) {
                         highlightAndFocusMissingTarget(missingTarget);
+                        alertMissingRestriction(missingTarget);
                     }
                     return;
                 }
@@ -13690,6 +13866,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const firstInvalid = validateRequiredFieldsInStep(currentStep);
                 if (firstInvalid) {
                     scrollToField(firstInvalid);
+                    alertMissingRestriction(firstInvalid);
                     return;
                 }
                 setFormStep(currentStep + 1);
@@ -13705,6 +13882,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const firstInvalid = validateRequiredFieldsInStep(currentStep);
                     if (firstInvalid) {
                         scrollToField(firstInvalid);
+                        alertMissingRestriction(firstInvalid);
                         return;
                     }
                 }
@@ -16648,10 +16826,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
             e.preventDefault();
 
+            const showSubmitValidationError = (message, targetEl, fieldForAlert) => {
+                const text = String(message || '').trim();
+                if (formErrorSummary && text) {
+                    formErrorSummary.textContent = text;
+                    formErrorSummary.style.display = 'block';
+                }
+
+                if (targetEl && typeof targetEl.scrollIntoView === 'function') {
+                    targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+
+                if (fieldForAlert) {
+                    alertMissingRestriction(fieldForAlert);
+                } else if (text) {
+                    alert(text);
+                }
+            };
+
             applyRequiredRules();
             const firstInvalidField = validateRequiredFields(quoteForm);
             if (firstInvalidField) {
                 scrollToField(firstInvalidField);
+                alertMissingRestriction(firstInvalidField);
                 const serviceGrid = document.getElementById('service-icon-grid');
                 if (firstInvalidField.id === 'item-description-hidden' && serviceGrid) {
                     markFieldError(serviceGrid);
@@ -16758,6 +16955,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     markFieldError(itemTypeField);
                     setInlineError(itemTypeField, getInlineRequiredMessage(itemTypeField, quoteForm));
                     scrollToField(itemTypeField);
+                    alertMissingRestriction(itemTypeField);
                 }
                 return;
             }
@@ -16765,11 +16963,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isMultiStopMode) {
                 const stops = collectMultiStopStops();
                 if (stops.length < 2) {
-                    if (formErrorSummary) {
-                        formErrorSummary.textContent = 'Please add at least two stops.';
-                        formErrorSummary.style.display = 'block';
-                    }
-                    document.getElementById('multi-stop-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    showSubmitValidationError('Please add at least two stops.', document.getElementById('multi-stop-section'));
                     return;
                 }
                 const vehicleCategories = new Set([
@@ -16791,29 +16985,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     return !hideFloor && !stop.floor;
                 });
                 if (invalidStop) {
-                    if (formErrorSummary) {
-                        formErrorSummary.textContent = `Please complete all required fields for stop ${invalidStop.index}.`;
-                        formErrorSummary.style.display = 'block';
-                    }
-                    document.getElementById('multi-stop-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    showSubmitValidationError(`Please complete all required fields for stop ${invalidStop.index}.`, document.getElementById('multi-stop-section'));
                     return;
                 }
                 const missingHouseInventory = stops.find((stop) => stop.category === 'House Removals' && (!stop.houseInventory || (!Object.values(stop.houseInventory.items || {}).some((qty) => qty > 0) && !stop.houseInventory.customItems && !stop.houseInventory.extraItems)));
                 if (missingHouseInventory) {
-                    if (formErrorSummary) {
-                        formErrorSummary.textContent = `Please add at least one house inventory item for stop ${missingHouseInventory.index}.`;
-                        formErrorSummary.style.display = 'block';
-                    }
-                    document.getElementById('multi-stop-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    showSubmitValidationError(`Please add at least one house inventory item for stop ${missingHouseInventory.index}.`, document.getElementById('multi-stop-section'));
                     return;
                 }
                 const missingOfficeInventory = stops.find((stop) => stop.category === 'Office Removals' && (!stop.officeInventory || (!Object.values(stop.officeInventory.items || {}).some((qty) => qty > 0) && !stop.officeInventory.customItems)));
                 if (missingOfficeInventory) {
-                    if (formErrorSummary) {
-                        formErrorSummary.textContent = `Please add at least one office inventory item for stop ${missingOfficeInventory.index}.`;
-                        formErrorSummary.style.display = 'block';
-                    }
-                    document.getElementById('multi-stop-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    showSubmitValidationError(`Please add at least one office inventory item for stop ${missingOfficeInventory.index}.`, document.getElementById('multi-stop-section'));
                     return;
                 }
                 quoteData.multiStop = true;
@@ -16826,11 +17008,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (isSingleForm) {
                     const blocks = collectFloorBlocks();
                     if (blocks.length === 0) {
-                        if (formErrorSummary) {
-                            formErrorSummary.textContent = 'Please add at least one floor and inventory block.';
-                            formErrorSummary.style.display = 'block';
-                        }
-                        document.getElementById('floor-inventory-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        showSubmitValidationError('Please add at least one floor and inventory block.', document.getElementById('floor-inventory-section'));
                         return;
                     }
 
@@ -16853,11 +17031,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
 
                     if (invalidBlock) {
-                        if (formErrorSummary) {
-                            formErrorSummary.textContent = `Please add at least one house inventory item for floor ${invalidBlock.index}.`;
-                            formErrorSummary.style.display = 'block';
-                        }
-                        document.getElementById('floor-inventory-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        showSubmitValidationError(`Please add at least one house inventory item for floor ${invalidBlock.index}.`, document.getElementById('floor-inventory-section'));
                         return;
                     }
                 } else {
@@ -16865,15 +17039,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     ? window.getSelectedHouseRooms()
                     : [];
                 if (!selectedRooms || selectedRooms.length === 0) {
-                    if (formErrorSummary) {
-                        formErrorSummary.textContent = 'Please select at least one room.';
-                        formErrorSummary.style.display = 'block';
-                    }
+                    showSubmitValidationError('Please select at least one room.', document.getElementById('house-removal-inventory-section'));
                     const roomTabs = document.getElementById('room-tabs');
                     if (roomTabs) roomTabs.classList.add('is-required');
                     const roomError = document.getElementById('room-selection-error');
                     if (roomError) roomError.style.display = 'block';
-                    document.getElementById('house-removal-inventory-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     return;
                 }
                 const roomTabs = document.getElementById('room-tabs');
@@ -16887,13 +17057,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 const extraItems = document.getElementById('extra-items-textarea')?.value.trim() || '';
 
                 if (!hasItems && !customItems && !extraItems) {
-                    if (formErrorSummary) {
-                        formErrorSummary.textContent = 'Please add at least one house removal item.';
-                        formErrorSummary.style.display = 'block';
-                    }
+                    showSubmitValidationError('Please add at least one house removal item.', document.getElementById('house-removal-inventory-section'));
                     setRequiredTextState('house-inventory', true);
                     setInventoryHighlight('house-removal-inventory-section', true);
-                    document.getElementById('house-removal-inventory-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     return;
                 }
                 setRequiredTextState('house-inventory', false);
@@ -16905,11 +17071,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (isSingleForm) {
                     const blocks = collectFloorBlocks();
                     if (blocks.length === 0) {
-                        if (formErrorSummary) {
-                            formErrorSummary.textContent = 'Please add at least one floor and inventory block.';
-                            formErrorSummary.style.display = 'block';
-                        }
-                        document.getElementById('floor-inventory-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        showSubmitValidationError('Please add at least one floor and inventory block.', document.getElementById('floor-inventory-section'));
                         return;
                     }
 
@@ -16921,11 +17083,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
 
                     if (missingOffice) {
-                        if (formErrorSummary) {
-                            formErrorSummary.textContent = `Please add at least one office inventory item for floor ${missingOffice.index}.`;
-                            formErrorSummary.style.display = 'block';
-                        }
-                        document.getElementById('floor-inventory-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        showSubmitValidationError(`Please add at least one office inventory item for floor ${missingOffice.index}.`, document.getElementById('floor-inventory-section'));
                         return;
                     }
                 } else {
@@ -16939,13 +17097,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 if (missingOfficeIndex) {
-                    if (formErrorSummary) {
-                        formErrorSummary.textContent = `Please add at least one office inventory item for office ${missingOfficeIndex}.`;
-                        formErrorSummary.style.display = 'block';
-                    }
+                    showSubmitValidationError(`Please add at least one office inventory item for office ${missingOfficeIndex}.`, document.getElementById('office-removal-inventory-section'));
                     setRequiredTextState('office-inventory', true);
                     setInventoryHighlight('office-removal-inventory-section', true);
-                    document.getElementById('office-removal-inventory-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     return;
                 }
 
@@ -21681,12 +21835,20 @@ function syncOverviewVehicleVisibility() {
     const isVehicleTransport = isVehicleTransportService(getActiveServiceValue());
     const serviceSummaryCard = document.getElementById('summary-service')?.closest('.overview-item');
     const inventoryGrid = document.querySelector('.overview-inventory-grid');
+    const pickupLiftCard = document.getElementById('summary-pickup-elevator')?.closest('.overview-item');
+    const deliveryLiftCard = document.getElementById('summary-delivery-elevator')?.closest('.overview-item');
 
     if (serviceSummaryCard) {
         serviceSummaryCard.style.display = isVehicleLikeService ? 'none' : '';
     }
     if (inventoryGrid) {
         inventoryGrid.style.display = isVehicleLikeService && !isVehicleTransport ? 'none' : '';
+    }
+    if (pickupLiftCard) {
+        pickupLiftCard.style.display = isVehicleTransport ? 'none' : '';
+    }
+    if (deliveryLiftCard) {
+        deliveryLiftCard.style.display = isVehicleTransport ? 'none' : '';
     }
 }
 
