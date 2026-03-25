@@ -6859,8 +6859,6 @@ window.renderDeliveryFloorSelector = function() {
         window.selectedDeliveryFloors = new Set();
     }
     
-    console.log('renderDeliveryFloorSelector called, selectedDeliveryFloors:', window.selectedDeliveryFloors);
-
     const serviceValue = getActiveServiceValue();
     const isVehicleService = isParkingLevelService(serviceValue);
     const deliveryPropertyType = document.getElementById('delivery-property-type')?.value || 'house';
@@ -6901,8 +6899,6 @@ window.renderDeliveryFloorSelector = function() {
         });
         selectorContainer.appendChild(btn);
     });
-    
-    console.log('Rendered', availableDeliveryFloors.length, 'delivery floor buttons for property type:', deliveryPropertyType);
     
     // Show/hide confirm button based on selection
     const confirmBtn = document.getElementById('confirm-delivery-floors-btn');
@@ -7887,7 +7883,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 deliveryPropertyTypeHidden.dispatchEvent(event);
                 
                 // Render delivery floor icons with lift option based on property type
-                console.log('Property type selected in step 4:', propertyTypeValue);
                 setTimeout(() => {
                     // Render lift icons in step 4
                     if (typeof window.renderDeliveryliftIcons === 'function') {
@@ -8070,7 +8065,6 @@ document.addEventListener('DOMContentLoaded', function () {
             if (mutation.attributeName === 'data-form-step') {
                 const currentStep = parseInt(document.body.dataset.formStep, 10);
                 if (currentStep === 5) {
-                    console.log('Step 5 entered, rendering delivery floor selector');
                     // Render delivery floors and lift when entering step 5
                     const deliveryPropType = document.getElementById('delivery-property-type');
                     if (deliveryPropType && deliveryPropType.value) {
@@ -14195,12 +14189,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const isBoatsService = serviceValue === 'Boats';
         const isOfficeService = serviceValue === 'Office Removals';
         const isCustomizedService = isCustomizedInventoryService(serviceValue);
+        const isVehicleParkingService = isParkingLevelService(serviceValue);
 
         const pianoSection = document.getElementById('piano-delivery-section');
         const pickupWrapper = document.getElementById('pickup-room-list-wrapper');
         const inventoryCardContainer = document.getElementById('inventory-card-container');
         const step3Title = document.getElementById('step3-title-wrapper');
         const step3TitleHeading = step3Title ? step3Title.querySelector('.section-title') : null;
+        const pickupFloorsImage = document.getElementById('pickup-floors-image');
+        const step3PickupLabel = document.getElementById('step3-pickup-label');
+        const step3PickupHelp = document.getElementById('step3-pickup-help');
 
         if (!pianoSection) return;
 
@@ -14223,6 +14221,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 step3TitleHeading.textContent = 'Step 3: Office Inventory';
             } else if (isBoatsService && isStep3) {
                 step3TitleHeading.textContent = 'Step 3: Boat Transport Details';
+            } else if (isVehicleParkingService) {
+                step3TitleHeading.textContent = 'Step 3: Select Pickup Parking Level and Vehicle Details';
             } else {
                 step3TitleHeading.textContent = 'Step 3: Please select all the floors you are moving from (multiple selections available)';
             }
@@ -14230,6 +14230,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (step3Title) {
             step3Title.style.display = shouldHideGenericStep3Pickup ? 'none' : '';
+        }
+
+        if (pickupFloorsImage) {
+            pickupFloorsImage.style.display = isVehicleParkingService ? 'none' : '';
+        }
+
+        if (step3PickupLabel) {
+            step3PickupLabel.textContent = isVehicleParkingService
+                ? 'Select Pickup Parking Level'
+                : 'Select Pickup Floors';
+        }
+
+        if (step3PickupHelp) {
+            step3PickupHelp.textContent = isVehicleParkingService
+                ? 'Select the pickup parking level for your vehicle'
+                : 'Select which floors have items you need to move';
         }
     };
 
@@ -14992,7 +15008,6 @@ document.addEventListener('DOMContentLoaded', function() {
             card.querySelectorAll('select.location-nav-select').forEach((select) => {
                 select.disabled = false;
                 select.style.cssText = 'position: static !important; display: block !important; visibility: visible !important; opacity: 1 !important; width: 100% !important; height: auto !important; min-height: 44px !important; padding: 10px 12px !important; border: 1px solid #e5e7eb !important; border-radius: 8px !important; background: #ffffff !important; color: #111827 !important; font-size: 14px !important; margin-top: 8px !important; pointer-events: auto !important; left: auto !important; top: auto !important;';
-                console.log('Floor block select found:', select.id, 'Options:', select.options.length);
             });
             // Force all selects to be visible regardless of class
             card.querySelectorAll('select').forEach((select) => {
@@ -19636,8 +19651,6 @@ function toggleOfficeItem(item, isChecked) {
 }
 
 function saveOfficeItemMeasurements(item) {
-    // Save measurements - could be stored in a data structure for later use
-    console.log('Measurements saved for:', item);
     const optionalSection = document.getElementById('optional-' + item.replace(/\s+/g, '-'));
     if (optionalSection) {
         optionalSection.style.display = 'none';
@@ -20535,7 +20548,6 @@ function updateRouteIfReady() {
     const deliveryInput = document.getElementById('delivery-address');
     
     if (!pickupAddr || !pickupCity || !deliveryAddr || !deliveryCity) {
-        console.log('Waiting for all address fields to be filled');
         return;
     }
     
@@ -20556,7 +20568,6 @@ function updateRouteIfReady() {
     const origin = pickupPlaceName || pickupQuery;
     const destination = deliveryPlaceName || deliveryQuery;
     
-    console.log('Calculating route from:', origin, 'to:', destination);
     updateRouteLabels();
     calculateAndRenderRoute(origin, destination);
 }
@@ -20833,7 +20844,6 @@ function fetchDirectionsAndRender(pickupCoords, deliveryCoords) {
                 const durationText = `${durationMinutes} min`;
                 const price = calculatePrice(distanceKm);
                 
-                console.log('Route calculated - Distance:', distanceKm.toFixed(2), 'km, Duration:', durationText);
                 updateRouteUI(distanceKm, durationText, price);
                 persistRouteHiddenFields(distanceKm, durationText, price);
             } else {
