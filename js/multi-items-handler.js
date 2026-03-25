@@ -789,7 +789,36 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
 
-                if (vehicleType === 'trailer' && !isBoatsServiceActive() && lookup.weight === 'over-3500' && !String(lookup.tested || '').trim()) {
+                const customWeightInput = document.getElementById(`${vehicleType}-custom-weight`);
+                const customWeightUnitInput = document.getElementById(`${vehicleType}-custom-weight-unit`);
+                const customLengthInput = document.getElementById(`${vehicleType}-custom-length`);
+                const customLengthUnitInput = document.getElementById(`${vehicleType}-custom-length-unit`);
+
+                const customWeightValue = lookup.weight === 'custom'
+                    ? String(customWeightInput?.value || '').trim()
+                    : '';
+                const customLengthValue = lookup.length === 'custom'
+                    ? String(customLengthInput?.value || '').trim()
+                    : '';
+
+                if (lookup.weight === 'custom' && !customWeightValue) {
+                    alert('Please enter approximate weight');
+                    if (customWeightInput) customWeightInput.focus();
+                    return;
+                }
+
+                if (lookup.length === 'custom' && !customLengthValue) {
+                    alert('Please enter exact length');
+                    if (customLengthInput) customLengthInput.focus();
+                    return;
+                }
+
+                const trailerNeedsTested = vehicleType === 'trailer' && !isBoatsServiceActive() && (
+                    lookup.weight === 'over-3500'
+                    || (lookup.weight === 'custom' && isCustomWeightAboveTrailerThreshold())
+                );
+
+                if (trailerNeedsTested && !String(lookup.tested || '').trim()) {
                     alert('Please select tested certification status for trailers over 3500kg');
                     return;
                 }
