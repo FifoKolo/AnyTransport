@@ -6174,7 +6174,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         if (!hasExitPurgePending()) return;
 
         const navigationType = getNavigationType();
-        if (navigationType === 'reload') {
+        // Preserve draft on page reload and on browser back/forward navigation —
+        // in both cases the user intends to return to exactly where they were.
+        if (navigationType === 'reload' || navigationType === 'back_forward') {
             clearExitPurgePending();
             return;
         }
@@ -22680,6 +22682,13 @@ window.addEventListener('pageshow', function(event) {
     };
 
     const rehydrateFromBrowserReturn = () => {
+        // Lock in the step BEFORE service-change events fire — those handlers
+        // can reset the visible step, so we need to read the authoritative
+        // restore target first and re-apply it afterwards.
+        const savedStep = Number.isFinite(parseInt(window.__createJobRestoreTargetStep, 10))
+            ? parseInt(window.__createJobRestoreTargetStep, 10)
+            : getStepFromUi();
+
         if (serviceHidden) {
             serviceHidden.value = decodedService;
             serviceHidden.dispatchEvent(new Event('change', { bubbles: true }));
@@ -22693,7 +22702,9 @@ window.addEventListener('pageshow', function(event) {
             window.applyServiceSelection(decodedService, decodedService);
         }
 
-        const effectiveStep = getStepFromUi();
+        // Re-apply the saved step now that service initialisation may have
+        // altered data-form-step.
+        const effectiveStep = savedStep || getStepFromUi();
         if (typeof window.setFormStep === 'function') {
             window.setFormStep(effectiveStep);
         }
