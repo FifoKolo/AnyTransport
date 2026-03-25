@@ -5807,6 +5807,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
     const WINDOW_NAME_PREFIX = 'ANYTRANSPORT_CREATE_JOB_DRAFT::';
     let saveTimer = null;
     let isRestoring = false;
+    window.__cjIsRestoring = () => isRestoring;
     let bootRestoreDone = false;
     let hasUserInteracted = false;
     let bootLockedStep = null;
@@ -6610,6 +6611,17 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             // Step 3 inventory render functions before restore-dependent rendering runs.
             setTimeout(() => {
                 applyUiState();
+                // If floors were restored, force-show the inventory container even if
+                // updateInventoryAndliftVisibility ran earlier with isRestoring=false.
+                if (window.selectedPickupFloors && window.selectedPickupFloors.size > 0) {
+                    const ic = document.getElementById('inventory-card-container');
+                    if (ic && ic.style.display === 'none') {
+                        ic.style.display = '';
+                    }
+                    if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
+                        window.ensureMultiFloorInventoryVisible();
+                    }
+                }
                 if (typeof window.updateStep3InventoryWarning === 'function') {
                     window.updateStep3InventoryWarning();
                 }
@@ -6847,6 +6859,7 @@ function renderPickupFloorSelector() {
         window.renderVehicleStepParkingSelectors();
     }
 }
+window.renderPickupFloorSelector = renderPickupFloorSelector;
 
 // Step 5: Floor Selector Function (made global)
 window.renderDeliveryFloorSelector = function() {
@@ -7323,7 +7336,8 @@ window.toggleDeliveryFloor = function(floor) {
 
             // In multi-floor flow, selected floors are the source of truth.
             const floorReady = hasSelectedPickupFloors || !!(floorHiddenInput && floorHiddenInput.value);
-            let canShowInventory = !propertyPrompt && floorReady && isStep3 && (!liftRequired || liftSelected);
+            const _isRestoring = typeof window.__cjIsRestoring === 'function' ? window.__cjIsRestoring() : false;
+            let canShowInventory = !propertyPrompt && floorReady && isStep3 && (!liftRequired || liftSelected || (_isRestoring && hasSelectedPickupFloors));
 
             if (isCustomizedItems && isStep3) {
                 canShowInventory = true;

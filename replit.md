@@ -96,11 +96,18 @@ JSON storage: `{type}s-json-hidden` (e.g. `pianos-json-hidden`, `cars-json-hidde
 - Deleted dead `initTrailerCampervanDropdowns()` (was logging 6 console errors)
 - Fixed `getClearanceStep3MissingRequiredField` to not skip hidden inputs
 
-### Session 3 (latest)
+### Session 3
 - Fixed Piano Transport: all JS references to `piano-type-hidden` and `piano-size-hidden` updated to `piano-type-entry-hidden` and `piano-size-entry-hidden` (6 occurrences across `syncPianoCustomFields`, event listeners, summary reads, and the piano item builder)
 - Added `data-option-nav-for` attributes to piano type and size option-navs in HTML so `setupOptionNavs()` can initialize them
 - Added IDs to piano `(required)` label spans: `piano-size-required`, `piano-custom-name-required`, `piano-custom-length-required`, `piano-custom-width-required`, `piano-custom-height-required`
 - Deleted dead `initCarTransportDropdowns()` and `initMotorbikeTransportDropdowns()` functions and their call sites (were logging console.warn for stale dropdown toggle/menu elements)
+
+### Session 4 (latest)
+- **Fixed refresh-breaks-form bug (House Removals step 3):** On page refresh, the inventory container (`inventory-card-container`) was permanently hidden because `updateInventoryAndliftVisibility()` required the lift to be selected (`liftRequired && !liftSelected`), but lift is intentionally excluded from restore so users must re-select it each load. Three-part fix:
+  1. Exposed `isRestoring` flag via `window.__cjIsRestoring = () => isRestoring` inside the `setupSimpleCreateJobDraft` IIFE, so `updateInventoryAndliftVisibility` can read it cross-scope.
+  2. Modified `updateInventoryAndliftVisibility` → `canShowInventory` to bypass the lift check (`|| (_isRestoring && hasSelectedPickupFloors)`) while a restore is in progress and floors are already selected.
+  3. Added an explicit inventory-reveal block in the deferred `applyUiState()` callback (the `setTimeout(..., 0)` inside `restoreCreateJobProgress`): if `selectedPickupFloors.size > 0` and the container is still `display:none`, force it open and call `ensureMultiFloorInventoryVisible()`.
+- **Exposed `window.renderPickupFloorSelector`**: The pickup floor selector function was a local DOMContentLoaded declaration never assigned to `window`, so `applyUiState`'s `window.renderPickupFloorSelector()` call was always a no-op. Added `window.renderPickupFloorSelector = renderPickupFloorSelector;` after the function definition (matching the pattern already used for `window.renderDeliveryFloorSelector`).
 
 ## Known Remaining Items (non-critical)
 - Mapbox WebGL fails in Replit env — geocoding is not a priority per user
