@@ -1712,8 +1712,10 @@ const propertyFloors = {
 
 const VEHICLE_TRANSPORT_SERVICES = new Set([
     'Car Transport',
+    'Campervan/Car Transport',
     'Motorbike Transport',
     'Trailers & Campervans Transport',
+    'Caravan/Trailer Transport',
     'Boats'
 ]);
 
@@ -1744,6 +1746,23 @@ function getActiveServiceValue() {
 
 function isVehicleTransportService(serviceValue) {
     return VEHICLE_TRANSPORT_SERVICES.has((serviceValue || '').trim());
+}
+
+function isCarCamperTransportService(serviceValue) {
+    const normalized = (serviceValue || '').trim();
+    return normalized === 'Car Transport' || normalized === 'Campervan/Car Transport';
+}
+
+function isCaravanTrailerTransportService(serviceValue) {
+    const normalized = (serviceValue || '').trim();
+    return normalized === 'Trailers & Campervans Transport' || normalized === 'Caravan/Trailer Transport';
+}
+
+function getServiceDisplayName(serviceValue) {
+    const normalized = (serviceValue || '').trim();
+    if (normalized === 'Car Transport') return 'Campervan/Car Transport';
+    if (normalized === 'Trailers & Campervans Transport') return 'Caravan/Trailer Transport';
+    return normalized;
 }
 
 function isCustomizedInventoryService(serviceValue) {
@@ -2111,21 +2130,36 @@ document.addEventListener('DOMContentLoaded', function () {
                 return null;
             }
 
-            const requiredIds = Array.from(
-                new Set(
-                    Array.from(section.querySelectorAll('[data-required-for]'))
-                        .map((node) => (node.getAttribute('data-required-for') || '').trim())
-                        .filter(Boolean)
-                )
-            );
+            const serviceValue = getActiveServiceValue();
+            const jsonFieldId = isCarCamperTransportService(serviceValue)
+                ? 'car-json-hidden'
+                : serviceValue === 'Motorbike Transport'
+                    ? 'motorbike-json-hidden'
+                    : (isCaravanTrailerTransportService(serviceValue) || serviceValue === 'Boats')
+                        ? 'trailer-json-hidden'
+                        : null;
 
-            for (const fieldId of requiredIds) {
-                const field = document.getElementById(fieldId);
-                if (!field) continue;
-                const value = typeof field.value === 'string' ? field.value.trim() : '';
-                if (!value) {
-                    return field;
+            if (!jsonFieldId) {
+                return null;
+            }
+
+            const jsonField = document.getElementById(jsonFieldId);
+            if (!jsonField) {
+                return section;
+            }
+
+            const raw = (jsonField.value || '').trim();
+            if (!raw) {
+                return jsonField;
+            }
+
+            try {
+                const parsed = JSON.parse(raw);
+                if (!Array.isArray(parsed) || parsed.length === 0) {
+                    return jsonField;
                 }
+            } catch (error) {
+                return jsonField;
             }
 
             return null;
@@ -2221,27 +2255,19 @@ document.addEventListener('DOMContentLoaded', function () {
                 return null;
             }
 
-            const pianoType = document.getElementById('piano-type-hidden');
-            const pianoSize = document.getElementById('piano-size-hidden');
-            if (!pianoType || !pianoType.value.trim()) return pianoType;
+            const pianoJsonInput = document.getElementById('pianos-json-hidden');
+            if (!pianoJsonInput) return pianoJsonInput;
 
-            const isCustomType = pianoType.value === 'custom';
-            if (!isCustomType && (!pianoSize || !pianoSize.value.trim())) return pianoSize;
-
-            const isCustom = isCustomType || (pianoSize && pianoSize.value === 'custom');
-            if (!isCustom) {
+            const pianoData = pianoJsonInput.value.trim();
+            if (!pianoData) {
+                // No pianos added yet - check if there's at least one in the form being entered
+                const typeInput = document.getElementById('piano-type-entry-hidden');
+                if (!typeInput || !typeInput.value.trim()) return pianoJsonInput;
                 return null;
             }
 
-            const customName = document.getElementById('piano-custom-name');
-            const customLength = document.getElementById('piano-custom-length');
-            const customWidth = document.getElementById('piano-custom-width');
-            const customHeight = document.getElementById('piano-custom-height');
+            // At least one piano has been added
 
-            if (!customName || !customName.value.trim()) return customName;
-            if (!customLength || !String(customLength.value || '').trim()) return customLength;
-            if (!customWidth || !String(customWidth.value || '').trim()) return customWidth;
-            if (!customHeight || !String(customHeight.value || '').trim()) return customHeight;
 
             return null;
         };
@@ -3830,7 +3856,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     qtyInput.type = 'number';
                     qtyInput.min = '0';
                     qtyInput.max = String(maxQty);
-                    qtyInput.value = String(selectedQty);
+                    qtyInput.value = isChecked ? String(selectedQty) : String(maxQty);
                     qtyInput.style.cssText = isNarrowPackingViewport
                         ? 'width:62px;padding:6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:1rem;'
                         : 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
@@ -4311,7 +4337,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (!storageModeInput.value) {
-            storageModeInput.value = 'all';
+            storageModeInput.value = 'selected';
         }
 
         if (!storageStartInput.value) {
@@ -4411,75 +4437,8 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         });
 
-        if (eligibleStorageItems.length > 0) {
-            const actionsRow = document.createElement('div');
-            actionsRow.style.cssText = 'display:flex;justify-content:flex-start;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;';
-
-            const selectAllBtn = document.createElement('button');
-            selectAllBtn.type = 'button';
-            selectAllBtn.style.cssText = 'border:1px solid #16a34a;background:#dcfce7;color:#166534;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;';
-            selectAllBtn.textContent = 'Select all items';
-
-            const partialBtn = document.createElement('button');
-            partialBtn.type = 'button';
-            partialBtn.style.cssText = 'border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;';
-            partialBtn.textContent = 'Partial Items';
-
-            const isAllMode = storageModeInput.value !== 'selected';
-            if (isAllMode) {
-                selectAllBtn.style.borderColor = '#1d4ed8';
-                selectAllBtn.style.background = '#1d4ed8';
-                selectAllBtn.style.color = '#fff';
-            } else {
-                partialBtn.style.borderColor = '#1d4ed8';
-                partialBtn.style.background = '#1d4ed8';
-                partialBtn.style.color = '#fff';
-            }
-
-            selectAllBtn.addEventListener('click', () => {
-                const nextState = {};
-                storageModeInput.value = 'all';
-                eligibleStorageItems.forEach(({ itemKey, availableForStorage }) => {
-                    nextState[itemKey] = availableForStorage;
-                });
-                storageItemsInput.value = Object.keys(nextState).length > 0 ? JSON.stringify(nextState) : '';
-                storageModeInput.dispatchEvent(new Event('change', { bubbles: true }));
-                storageItemsInput.dispatchEvent(new Event('change', { bubbles: true }));
-                renderStorageConfig();
-                if (window.updateNextButtonState) window.updateNextButtonState();
-            });
-
-            partialBtn.addEventListener('click', () => {
-                storageModeInput.value = 'selected';
-                // Match partial packing behavior: user explicitly picks items.
-                storageItemsInput.value = '';
-                storageModeInput.dispatchEvent(new Event('change', { bubbles: true }));
-                storageItemsInput.dispatchEvent(new Event('change', { bubbles: true }));
-                renderStorageConfig();
-                if (window.updateNextButtonState) window.updateNextButtonState();
-            });
-
-            actionsRow.appendChild(selectAllBtn);
-            actionsRow.appendChild(partialBtn);
-            storageItemsList.appendChild(actionsRow);
-
-            if (isAllMode) {
-                const fullModeHint = document.createElement('div');
-                fullModeHint.style.cssText = 'font-size:0.86rem;color:#1e40af;font-weight:600;padding:2px 2px 8px;';
-                fullModeHint.textContent = 'All eligible items are selected for storage.';
-                storageItemsList.appendChild(fullModeHint);
-
-                const nextState = {};
-                eligibleStorageItems.forEach(({ itemKey, availableForStorage }) => {
-                    nextState[itemKey] = availableForStorage;
-                });
-                const nextSerialized = Object.keys(nextState).length > 0 ? JSON.stringify(nextState) : '';
-                if (storageItemsInput.value !== nextSerialized) {
-                    storageItemsInput.value = nextSerialized;
-                    storageItemsInput.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-                return;
-            }
+        if (storageModeInput.value !== 'selected') {
+            storageModeInput.value = 'selected';
         }
 
         sortedFloors.forEach(floor => {
@@ -4525,37 +4484,54 @@ document.addEventListener('DOMContentLoaded', function () {
             const floorActionsWrap = document.createElement('div');
             floorActionsWrap.style.cssText = 'display:flex;align-items:center;gap:8px;';
 
-            const floorSelectAllBtn = document.createElement('button');
-            floorSelectAllBtn.type = 'button';
-            floorSelectAllBtn.style.cssText = 'border:1px solid #16a34a;background:#dcfce7;color:#166534;border-radius:8px;padding:5px 9px;font-weight:700;cursor:pointer;font-size:0.78rem;';
-            floorSelectAllBtn.textContent = floorAllSelected ? 'Clear all from this floor' : 'Select all items on this floor';
-            floorSelectAllBtn.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (floorAllSelected) {
-                    floorEligibleItems.forEach(({ itemKey }) => {
-                        delete currentState[itemKey];
-                    });
-                } else {
-                    floorEligibleItems.forEach(({ itemKey, availableForStorage }) => {
-                        currentState[itemKey] = availableForStorage;
-                    });
-                }
-                storageItemsInput.value = Object.keys(currentState).length > 0 ? JSON.stringify(currentState) : '';
-                storageItemsInput.dispatchEvent(new Event('change', { bubbles: true }));
-                renderStorageConfig();
-                if (window.updateNextButtonState) window.updateNextButtonState();
-            });
-
             floorLabelWrap.appendChild(floorLabel);
             floorHeader.appendChild(floorLabelWrap);
-            floorActionsWrap.appendChild(floorSelectAllBtn);
             floorActionsWrap.appendChild(floorChevron);
             floorHeader.appendChild(floorActionsWrap);
             floorEl.appendChild(floorHeader);
 
             const floorContent = document.createElement('div');
             floorContent.style.cssText = `max-height:${floorExpanded ? '2000px' : '0'};padding:${floorExpanded ? '10px' : '0'};background:#f8fbff;overflow:hidden;transition:max-height 0.35s ease, padding 0.35s ease;`;
+
+            const floorSelectAllBtn = document.createElement('button');
+            floorSelectAllBtn.type = 'button';
+            floorSelectAllBtn.innerHTML = `<input type="checkbox" class="storage-floor-select-all" data-floor="${floor}" ${floorAllSelected ? 'checked' : ''} style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"> Select all from ${floor} Floor`;
+            floorSelectAllBtn.style.cssText = 'width:100%;padding:8px 12px;margin-bottom:8px;background:#ecfdf5;border:2px solid #10b981;border-radius:6px;color:#065f46;font-weight:600;font-size:0.85rem;cursor:pointer;transition:all 0.2s ease;display:flex;align-items:center;';
+
+            floorSelectAllBtn.addEventListener('mouseover', () => {
+                floorSelectAllBtn.style.background = '#d1fae5';
+            });
+
+            floorSelectAllBtn.addEventListener('mouseout', () => {
+                floorSelectAllBtn.style.background = '#ecfdf5';
+            });
+
+            floorSelectAllBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const checkbox = floorSelectAllBtn.querySelector('.storage-floor-select-all');
+                if (!checkbox) return;
+
+                const clickedCheckbox = event.target && event.target.classList && event.target.classList.contains('storage-floor-select-all');
+                const nextChecked = clickedCheckbox ? checkbox.checked : !checkbox.checked;
+                checkbox.checked = nextChecked;
+
+                if (nextChecked) {
+                    floorEligibleItems.forEach(({ itemKey, availableForStorage }) => {
+                        currentState[itemKey] = availableForStorage;
+                    });
+                } else {
+                    floorEligibleItems.forEach(({ itemKey }) => {
+                        delete currentState[itemKey];
+                    });
+                }
+
+                storageItemsInput.value = Object.keys(currentState).length > 0 ? JSON.stringify(currentState) : '';
+                storageItemsInput.dispatchEvent(new Event('change', { bubbles: true }));
+                renderStorageConfig();
+                if (window.updateNextButtonState) window.updateNextButtonState();
+            });
+
+            floorContent.appendChild(floorSelectAllBtn);
 
             floorHeader.addEventListener('click', () => {
                 const willExpand = !storageExpandedFloors.has(floor);
@@ -4616,32 +4592,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 const roomActionsWrap = document.createElement('div');
                 roomActionsWrap.style.cssText = 'display:flex;align-items:center;gap:8px;';
 
-                const roomSelectAllBtn = document.createElement('button');
-                roomSelectAllBtn.type = 'button';
-                roomSelectAllBtn.style.cssText = 'border:1px solid #16a34a;background:#dcfce7;color:#166534;border-radius:8px;padding:4px 8px;font-weight:700;cursor:pointer;font-size:0.75rem;';
-                roomSelectAllBtn.textContent = roomAllSelected ? 'Clear room' : 'Select room';
-                roomSelectAllBtn.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    if (roomAllSelected) {
-                        roomEligibleItems.forEach(({ itemKey }) => {
-                            delete currentState[itemKey];
-                        });
-                    } else {
-                        roomEligibleItems.forEach(({ itemKey, availableForStorage }) => {
-                            currentState[itemKey] = availableForStorage;
-                        });
-                    }
-                    storageItemsInput.value = Object.keys(currentState).length > 0 ? JSON.stringify(currentState) : '';
-                    storageItemsInput.dispatchEvent(new Event('change', { bubbles: true }));
-                    renderStorageConfig();
-                    if (window.updateNextButtonState) window.updateNextButtonState();
-                });
-
                 roomLabelWrap.appendChild(roomLabel);
                 roomLabelWrap.appendChild(roomCount);
                 roomHeader.appendChild(roomLabelWrap);
-                roomActionsWrap.appendChild(roomSelectAllBtn);
                 roomActionsWrap.appendChild(roomChevron);
                 roomHeader.appendChild(roomActionsWrap);
                 roomEl.appendChild(roomHeader);
@@ -4697,7 +4650,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     qtyInput.type = 'number';
                     qtyInput.min = '0';
                     qtyInput.max = String(availableForStorage);
-                    qtyInput.value = String(selectedQty);
+                    qtyInput.value = isChecked ? String(selectedQty) : String(availableForStorage);
                     qtyInput.style.cssText = isNarrowServiceViewport
                         ? 'width:62px;padding:6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:1rem;'
                         : 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
@@ -4714,7 +4667,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     const setTickUi = (enabled) => {
                         tickBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
                         tickBtn.style.cssText = enabled
-                            ? 'width:36px;height:36px;border:2px solid #16a34a;background:#22c55e;color:#fff;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;'
+                            ? 'width:36px;height:36px;border:2px solid #1d4ed8;background:#2563eb;color:#fff;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;'
                             : 'width:36px;height:36px;border:2px solid #cbd5e1;background:#f8fafc;color:#94a3b8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;';
                     };
 
@@ -5244,7 +5197,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     qtyInput.type = 'number';
                     qtyInput.min = '0';
                     qtyInput.max = String(maxQty);
-                    qtyInput.value = String(selectedQty);
+                    qtyInput.value = isChecked ? String(selectedQty) : String(maxQty);
                     qtyInput.style.cssText = isNarrowServiceViewport
                         ? 'width:62px;padding:6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:1rem;'
                         : 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
@@ -5542,7 +5495,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (storageEndInput) storageEndInput.value = '';
             } else {
                 if (!isPianoService && storageModeInput && !storageModeInput.value) {
-                    storageModeInput.value = 'all';
+                    storageModeInput.value = 'selected';
                 }
             }
         }
@@ -7293,7 +7246,7 @@ window.toggleDeliveryFloor = function(floor) {
     }
 };
 
-        const inventoryFloorTitle = document.querySelector('.inventory-floor-title');
+
     // Property type icon selection step
     const propertyTypeBtns = document.querySelectorAll('#property-type-selection-section .property-type-icon-btn');
     const propertyTypeHidden = document.getElementById('pickup-property-type');
@@ -7332,15 +7285,6 @@ window.toggleDeliveryFloor = function(floor) {
         const customInventorySection = document.getElementById('customized-items-inventory-section');
         const houseInventorySection = document.getElementById('house-removal-inventory-section');
 
-                // Update inventory title to match selected floor
-                if (inventoryFloorTitle && floorHiddenInput) {
-                    const floor = floorHiddenInput.value;
-                    if (floor) {
-                        inventoryFloorTitle.textContent = `Add Inventory To ${floor} Floor`;
-                    } else {
-                        inventoryFloorTitle.textContent = '';
-                    }
-                }
         // Inventory logic: only show in step 3 (now pickup details step)
         const body = document.body;
         const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
@@ -10625,10 +10569,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Title
         const title = document.createElement('h3');
-        title.className = 'inventory-floor-title';
-        title.textContent = `Add Inventory To ${floorRef.name} Floor`;
+        title.textContent = `${floorRef.name} Floor`;
         title.style.margin = '0';
         title.style.flex = '1';
+        title.style.fontSize = '1.1rem';
+        title.style.fontWeight = '700';
+        title.style.color = '#1f2937';
         titleWrapper.appendChild(title);
 
         // Edit floor button
@@ -13129,8 +13075,38 @@ document.addEventListener('DOMContentLoaded', function() {
         const getVehicleSummary = (makeModelId, yearId) => {
             const makeModel = getInputValue(makeModelId);
             const year = getInputValue(yearId);
-            if (!makeModel && !year) return '';
-            return year ? `${makeModel} (${year})`.trim() : makeModel;
+            if (makeModel || year) {
+                return year ? `${makeModel} (${year})`.trim() : makeModel;
+            }
+
+            const jsonFieldIdMap = {
+                'car-make-model': 'car-json-hidden',
+                'motorbike-make-model': 'motorbike-json-hidden',
+                'trailer-campervan-make-model': 'trailer-json-hidden'
+            };
+            const jsonFieldId = jsonFieldIdMap[makeModelId];
+            if (!jsonFieldId) return '';
+
+            const raw = (document.getElementById(jsonFieldId)?.value || '').trim();
+            if (!raw) return '';
+
+            try {
+                const vehicles = JSON.parse(raw);
+                if (!Array.isArray(vehicles) || vehicles.length === 0) return '';
+
+                const labels = vehicles.map((vehicle) => {
+                    const model = String(vehicle?.makeModel || '').trim();
+                    const vehicleYear = String(vehicle?.year || '').trim();
+                    if (!model && !vehicleYear) return '';
+                    return vehicleYear ? `${model} (${vehicleYear})`.trim() : model;
+                }).filter(Boolean);
+
+                if (labels.length === 0) return '';
+                if (labels.length === 1) return labels[0];
+                return `${labels.length} vehicles: ${labels.join(', ')}`;
+            } catch (error) {
+                return '';
+            }
         };
 
         const getOptionNavLabel = (hiddenId) => {
@@ -13260,7 +13236,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 itemsSummary = buildFreightDescriptionSummary() || getInputValue('office-removal-description');
             } else if (serviceValue === 'Office Removals') {
                 itemsSummary = buildOfficeInventorySummary() || getInputValue('office-removal-description') || getInputValue('office-inventory-category');
-            } else if (serviceValue === 'Car Transport') {
+            } else if (isCarCamperTransportService(serviceValue)) {
                 const base = getVehicleSummary('car-make-model', 'car-year-hidden');
                 const extras = [];
                 const valueLabel = getOptionNavLabel('car-value-hidden') || getDropdownLabel('car-value-hidden', 'car-value-label');
@@ -13288,7 +13264,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (weightLabel) extras.push(`Weight: ${weightLabel}`);
                 if (operationalLabel) extras.push(`Operational: ${operationalLabel}`);
                 itemsSummary = [base, ...extras].filter(Boolean).join(' | ');
-            } else if (serviceValue === 'Trailers & Campervans Transport' || serviceValue === 'Boats') {
+            } else if (isCaravanTrailerTransportService(serviceValue) || serviceValue === 'Boats') {
                 const base = getVehicleSummary('trailer-campervan-make-model', 'trailer-campervan-year-hidden');
                 const extras = [];
                 const typeLabel = getOptionNavLabel('trailer-campervan-type-hidden') || getDropdownLabel('trailer-campervan-type-hidden', 'trailer-campervan-type-label');
@@ -13383,7 +13359,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 floorSummary = `${pickupText} | ${deliveryText}`;
             }
 
-            setSummaryValue('summary-service', serviceLabel || '—');
+            setSummaryValue('summary-service', getServiceDisplayName(serviceLabel || '') || '—');
             setSummaryValue('summary-pickup-type', pickupType || '—');
             setSummaryValue('summary-delivery-type', deliveryType || '—');
             setSummaryValue('summary-pickup-elevator', getOverviewElevatorStatus('pickup'));
@@ -13864,8 +13840,38 @@ document.addEventListener('DOMContentLoaded', function() {
         const getVehicleSummary = (makeModelId, yearId) => {
             const makeModel = getInputValue(makeModelId);
             const year = getInputValue(yearId);
-            if (!makeModel && !year) return '';
-            return year ? `${makeModel} (${year})`.trim() : makeModel;
+            if (makeModel || year) {
+                return year ? `${makeModel} (${year})`.trim() : makeModel;
+            }
+
+            const jsonFieldIdMap = {
+                'car-make-model': 'car-json-hidden',
+                'motorbike-make-model': 'motorbike-json-hidden',
+                'trailer-campervan-make-model': 'trailer-json-hidden'
+            };
+            const jsonFieldId = jsonFieldIdMap[makeModelId];
+            if (!jsonFieldId) return '';
+
+            const raw = (document.getElementById(jsonFieldId)?.value || '').trim();
+            if (!raw) return '';
+
+            try {
+                const vehicles = JSON.parse(raw);
+                if (!Array.isArray(vehicles) || vehicles.length === 0) return '';
+
+                const labels = vehicles.map((vehicle) => {
+                    const model = String(vehicle?.makeModel || '').trim();
+                    const vehicleYear = String(vehicle?.year || '').trim();
+                    if (!model && !vehicleYear) return '';
+                    return vehicleYear ? `${model} (${vehicleYear})`.trim() : model;
+                }).filter(Boolean);
+
+                if (labels.length === 0) return '';
+                if (labels.length === 1) return labels[0];
+                return `${labels.length} vehicles: ${labels.join(', ')}`;
+            } catch (error) {
+                return '';
+            }
         };
 
         const getOptionNavLabel = (hiddenId) => {
@@ -13994,7 +14000,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 itemsSummary = buildFreightDescriptionSummary() || getInputValue('office-removal-description');
             } else if (serviceValue === 'Office Removals') {
                 itemsSummary = buildOfficeInventorySummary() || getInputValue('office-removal-description') || getInputValue('office-inventory-category');
-            } else if (serviceValue === 'Car Transport') {
+            } else if (isCarCamperTransportService(serviceValue)) {
                 const base = getVehicleSummary('car-make-model', 'car-year-hidden');
                 const extras = [];
                 const valueLabel = getOptionNavLabel('car-value-hidden') || getDropdownLabel('car-value-hidden', 'car-value-label');
@@ -14022,7 +14028,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (weightLabel) extras.push(`Weight: ${weightLabel}`);
                 if (operationalLabel) extras.push(`Operational: ${operationalLabel}`);
                 itemsSummary = [base, ...extras].filter(Boolean).join(' | ');
-            } else if (serviceValue === 'Trailers & Campervans Transport' || serviceValue === 'Boats') {
+            } else if (isCaravanTrailerTransportService(serviceValue) || serviceValue === 'Boats') {
                 const base = getVehicleSummary('trailer-campervan-make-model', 'trailer-campervan-year-hidden');
                 const extras = [];
                 const typeLabel = getOptionNavLabel('trailer-campervan-type-hidden') || getDropdownLabel('trailer-campervan-type-hidden', 'trailer-campervan-type-label');
@@ -14105,7 +14111,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 floorSummary = `${pickupText} | ${deliveryText}`;
             }
 
-            setSummaryValue('summary-service', serviceLabel || '—');
+            setSummaryValue('summary-service', getServiceDisplayName(serviceLabel || '') || '—');
             setSummaryValue('summary-pickup-type', pickupType || '—');
             setSummaryValue('summary-delivery-type', deliveryType || '—');
             setSummaryValue('summary-pickup-elevator', getOverviewElevatorStatus('pickup'));
@@ -14491,7 +14497,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => {
                 updateHouseInventoryVisibility();
             }, 100);
-        } else if (value === 'Car Transport') {
+        } else if (isCarCamperTransportService(value)) {
             if (inventorySection) {
                 inventorySection.style.display = 'none';
                 inventorySection.classList.add('progressive-hidden');
@@ -14541,7 +14547,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => {
                 initMotorbikeTransportDropdowns();
             }, 100);
-        } else if (value === 'Trailers & Campervans Transport') {
+        } else if (isCaravanTrailerTransportService(value)) {
             if (inventorySection) {
                 inventorySection.style.display = 'none';
                 inventorySection.classList.add('progressive-hidden');
@@ -15092,7 +15098,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 { value: 'sailboat', label: 'Sailboat' }
             ]
             : [
-                { value: 'campervan', label: 'Campervan' },
+                { value: 'caravan', label: 'Caravan' },
                 { value: 'trailer', label: 'Trailer' }
             ];
 
@@ -15270,6 +15276,116 @@ document.addEventListener('DOMContentLoaded', function() {
     syncBoatsTransportLabels();
 
     const quoteForm = document.getElementById('create-job-form');
+    window.globalServiceMediaFiles = Array.isArray(window.globalServiceMediaFiles)
+        ? window.globalServiceMediaFiles
+        : [];
+
+    const initGlobalServiceMediaUploader = () => {
+        const input = document.getElementById('global-service-media-input');
+        const list = document.getElementById('global-service-media-list');
+        const hidden = document.getElementById('global-service-media-hidden');
+        if (!input || !list || !hidden) return;
+
+        const maxFiles = 6;
+        const toSizeLabel = (bytes) => {
+            const size = Number(bytes) || 0;
+            if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+            if (size >= 1024) return `${Math.round(size / 1024)} KB`;
+            return `${size} B`;
+        };
+
+        const syncHidden = () => {
+            const payload = (window.globalServiceMediaFiles || []).map((file) => ({
+                name: file.name || '',
+                type: file.type || '',
+                size: Number(file.size) || 0,
+                mediaType: String(file.type || '').startsWith('video/') ? 'video' : 'photo'
+            }));
+            hidden.value = payload.length ? JSON.stringify(payload) : '';
+            hidden.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+
+        const renderList = () => {
+            const files = window.globalServiceMediaFiles || [];
+            list.innerHTML = '';
+
+            if (files.length === 0) {
+                const empty = document.createElement('div');
+                empty.style.cssText = 'font-size:0.86rem; color:#64748b;';
+                empty.textContent = 'No files selected yet.';
+                list.appendChild(empty);
+                return;
+            }
+
+            files.forEach((file, index) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid #dbeafe; border-radius:8px; background:#f8fbff;';
+
+                const mediaTypeLabel = String(file.type || '').startsWith('video/') ? 'Video' : 'Photo';
+                const details = document.createElement('div');
+                details.style.cssText = 'display:grid; gap:2px; min-width:0;';
+                details.innerHTML = `<strong style="font-size:0.9rem; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${file.name || 'Attachment'}</strong><span style="font-size:0.8rem; color:#64748b;">${mediaTypeLabel} • ${toSizeLabel(file.size)}</span>`;
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.setAttribute('data-remove-global-media', String(index));
+                removeBtn.textContent = 'Remove';
+                removeBtn.style.cssText = 'border:1px solid #fecaca; background:#fff1f2; color:#b91c1c; border-radius:6px; padding:6px 10px; font-weight:700; cursor:pointer;';
+
+                row.appendChild(details);
+                row.appendChild(removeBtn);
+                list.appendChild(row);
+            });
+        };
+
+        input.addEventListener('change', () => {
+            const picked = Array.from(input.files || []);
+            if (picked.length === 0) return;
+
+            const existing = window.globalServiceMediaFiles || [];
+            const next = [...existing];
+
+            for (const file of picked) {
+                const type = String(file?.type || '');
+                if (!type.startsWith('image/') && !type.startsWith('video/')) {
+                    continue;
+                }
+                if (next.length >= maxFiles) {
+                    alert(`You can upload up to ${maxFiles} files.`);
+                    break;
+                }
+                next.push(file);
+            }
+
+            window.globalServiceMediaFiles = next;
+            input.value = '';
+            syncHidden();
+            renderList();
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
+        });
+
+        list.addEventListener('click', (event) => {
+            const removeBtn = event.target.closest('button[data-remove-global-media]');
+            if (!removeBtn) return;
+            const index = Number(removeBtn.getAttribute('data-remove-global-media'));
+            if (Number.isNaN(index)) return;
+
+            const files = window.globalServiceMediaFiles || [];
+            window.globalServiceMediaFiles = files.filter((_, i) => i !== index);
+            syncHidden();
+            renderList();
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
+        });
+
+        syncHidden();
+        renderList();
+    };
+
+    initGlobalServiceMediaUploader();
 
     const isElementVisible = (el) => {
         if (!el) return false;
@@ -15514,8 +15630,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const vehicleNoFloorCategories = new Set([
         'Car Transport',
+        'Campervan/Car Transport',
         'Motorbike Transport',
         'Trailers & Campervans Transport',
+        'Caravan/Trailer Transport',
         'Vehicle Parts',
         'Boats'
     ]);
@@ -17003,8 +17121,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const serviceValue = document.getElementById('item-description-hidden')?.value || '';
         const vehicleNoFloorCategories = new Set([
             'Car Transport',
+            'Campervan/Car Transport',
             'Motorbike Transport',
             'Trailers & Campervans Transport',
+            'Caravan/Trailer Transport',
             'Vehicle Parts',
             'Boats'
         ]);
@@ -17321,6 +17441,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 customerEmail: getElementValue('customer-email'),
                 customerPhone: getElementValue('customer-phone'),
                 serviceSpecialInstructions: getElementValue('service-special-instructions'),
+                mediaAttachments: (() => {
+                    const raw = getElementValue('global-service-media-hidden');
+                    if (!raw) return [];
+                    try {
+                        const parsed = JSON.parse(raw);
+                        return Array.isArray(parsed) ? parsed : [];
+                    } catch (_error) {
+                        return [];
+                    }
+                })(),
                 transportDate: getElementValue('service-transport-date'),
                 routeDistanceKm: parseFloat(getElementValue('route-distance-km')) || null,
                 routeDurationText: getElementValue('route-duration-text'),
@@ -17351,8 +17481,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 const vehicleCategories = new Set([
                     'Car Transport',
+                    'Campervan/Car Transport',
                     'Motorbike Transport',
                     'Trailers & Campervans Transport',
+                    'Caravan/Trailer Transport',
                     'Vehicle Parts',
                     'Boats'
                 ]);
@@ -21848,30 +21980,53 @@ function getVehicleOverviewDetailRows(serviceValue) {
         rows.push(`<li><strong>${escapeOverviewHtml(label)}:</strong> ${escapeOverviewHtml(text)}</li>`);
     };
 
-    if (serviceValue === 'Car Transport') {
-        addRow('Model', document.getElementById('car-make-model')?.value || '');
-        addRow('Year', getOverviewHiddenFieldText('car-year-hidden'));
-        addRow('Condition', getOverviewHiddenFieldText('car-condition-hidden'));
-        addRow('Estimated Value', getOverviewHiddenFieldText('car-value-hidden'));
-        addRow('Transport Method', getOverviewHiddenFieldText('car-transport-method-hidden'));
-        addRow('Weight', getOverviewHiddenFieldText('car-weight-hidden'));
-        addRow('Length', getOverviewHiddenFieldText('car-length-hidden'));
-    } else if (serviceValue === 'Motorbike Transport') {
-        addRow('Model', document.getElementById('motorbike-make-model')?.value || '');
-        addRow('Year', getOverviewHiddenFieldText('motorbike-year-hidden'));
-        addRow('Condition', getOverviewHiddenFieldText('motorbike-condition-hidden'));
-        addRow('Estimated Value', getOverviewHiddenFieldText('motorbike-value-hidden'));
-        addRow('Operational', getOverviewHiddenFieldText('motorbike-operational-hidden'));
-        addRow('Weight', getOverviewHiddenFieldText('motorbike-weight-hidden'));
-    } else if (serviceValue === 'Trailers & Campervans Transport' || serviceValue === 'Boats') {
-        addRow(serviceValue === 'Boats' ? 'Boat Type' : 'Vehicle Type', getOverviewHiddenFieldText('trailer-campervan-type-hidden'));
-        addRow('Model', document.getElementById('trailer-campervan-make-model')?.value || '');
-        addRow('Year', getOverviewHiddenFieldText('trailer-campervan-year-hidden'));
-        addRow('Condition', getOverviewHiddenFieldText('trailer-campervan-condition-hidden'));
-        addRow('Estimated Value', getOverviewHiddenFieldText('trailer-campervan-value-hidden'));
-        addRow('Transport Method', getOverviewHiddenFieldText('trailer-campervan-delivery-hidden'));
-        addRow('Weight', getOverviewHiddenFieldText('trailer-campervan-weight-hidden'));
-        addRow('Length', getOverviewHiddenFieldText('trailer-campervan-length-hidden'));
+    const jsonFieldId = isCarCamperTransportService(serviceValue)
+        ? 'car-json-hidden'
+        : serviceValue === 'Motorbike Transport'
+            ? 'motorbike-json-hidden'
+            : (isCaravanTrailerTransportService(serviceValue) || serviceValue === 'Boats')
+                ? 'trailer-json-hidden'
+                : '';
+
+    if (!jsonFieldId) {
+        return rows;
+    }
+
+    const raw = (document.getElementById(jsonFieldId)?.value || '').trim();
+    if (!raw) {
+        return rows;
+    }
+
+    try {
+        const vehicles = JSON.parse(raw);
+        if (!Array.isArray(vehicles)) {
+            return rows;
+        }
+
+        const baseLabel = isCarCamperTransportService(serviceValue)
+            ? 'Campervan/Car'
+            : serviceValue === 'Motorbike Transport'
+                ? 'Motorbike'
+                : (serviceValue === 'Boats' ? 'Boat' : 'Caravan/Trailer');
+
+        vehicles.forEach((vehicle, index) => {
+            const itemLabel = `${baseLabel} ${index + 1}`;
+            addRow(itemLabel, vehicle?.makeModel || '');
+            addRow(`${itemLabel} Year`, vehicle?.year || '');
+            addRow(`${itemLabel} Estimated Value`, vehicle?.value || '');
+            addRow(`${itemLabel} Type`, vehicle?.type || '');
+            addRow(`${itemLabel} Condition`, vehicle?.condition || '');
+            addRow(`${itemLabel} Method`, vehicle?.method || '');
+            addRow(`${itemLabel} Weight`, vehicle?.weight || '');
+            addRow(`${itemLabel} Length`, vehicle?.length || '');
+            addRow(`${itemLabel} Operational`, vehicle?.operational || '');
+            addRow(`${itemLabel} Roadworthy (NCT/DOE)`, vehicle?.roadworthy || '');
+            addRow(`${itemLabel} Insurance`, vehicle?.insurance || '');
+            addRow(`${itemLabel} Road Tax`, vehicle?.roadtax || '');
+            addRow(`${itemLabel} Tested Certification`, vehicle?.tested || '');
+        });
+    } catch (error) {
+        return rows;
     }
 
     return rows;
@@ -21937,59 +22092,70 @@ function getOrderedFloorList(values) {
 }
 
 function getPianoOverviewInventoryLabel() {
-    const typeValue = (document.getElementById('piano-type-hidden')?.value || '').trim();
-    const sizeValue = (document.getElementById('piano-size-hidden')?.value || '').trim();
-    const customName = (document.getElementById('piano-custom-name')?.value || '').trim();
-    const customLength = (document.getElementById('piano-custom-length')?.value || '').trim();
-    const customWidth = (document.getElementById('piano-custom-width')?.value || '').trim();
-    const customHeight = (document.getElementById('piano-custom-height')?.value || '').trim();
-    const customUnit = (document.getElementById('piano-custom-size-unit')?.value || 'cm').trim();
-
-    const pianoTypeLabels = {
-        'upright-spinet': 'Upright - Spinet',
-        'upright-console': 'Upright - Console',
-        'upright-studio': 'Upright - Studio',
-        'upright-full': 'Upright - Full',
-        'baby-grand': 'Baby Grand',
-        'medium-grand': 'Medium Grand',
-        'parlor-grand': 'Parlor / Living Grand',
-        'concert-grand': 'Concert Grand',
-        'digital': 'Digital Piano',
-        'keyboard': 'Keyboard',
-        'custom': 'Custom Piano'
-    };
-
-    const pianoSizeLabels = {
-        '145x60x100cm': '145 x 60 x 100 cm',
-        '150x65x110cm': '150 x 65 x 110 cm',
-        '150x65x120cm': '150 x 65 x 120 cm',
-        '155x65x130cm': '155 x 65 x 130 cm',
-        '155x150x102cm': '155 x 150 x 102 cm',
-        '170x152x102cm': '170 x 152 x 102 cm',
-        '190x152x102cm': '190 x 152 x 102 cm',
-        '275x158x102cm': '275 x 158 x 102 cm',
-        '140x40x90cm': '140 x 40 x 90 cm',
-        '130x35x15cm': '130 x 35 x 15 cm'
-    };
-
-    if (!typeValue && !customName) {
+    const pianoJsonInput = document.getElementById('pianos-json-hidden');
+    if (!pianoJsonInput || !pianoJsonInput.value) {
         return '';
     }
 
-    const isCustomType = typeValue === 'custom';
-    const isCustomSize = sizeValue === 'custom';
-    const baseName = isCustomType
-        ? (customName || 'Custom Piano')
-        : (pianoTypeLabels[typeValue] || 'Piano');
+    try {
+        const pianos = JSON.parse(pianoJsonInput.value);
+        if (!Array.isArray(pianos) || pianos.length === 0) {
+            return '';
+        }
 
-    const customSize = (customLength && customWidth && customHeight)
-        ? `${customLength} x ${customWidth} x ${customHeight} ${customUnit}`
-        : '';
-    const sizeText = !isCustomType && sizeValue && !isCustomSize
-        ? (pianoSizeLabels[sizeValue] || '')
-        : customSize;
+        const pianoTypeLabels = {
+            'upright-spinet': 'Upright - Spinet',
+            'upright-console': 'Upright - Console',
+            'upright-studio': 'Upright - Studio',
+            'upright-full': 'Upright - Full',
+            'baby-grand': 'Baby Grand',
+            'medium-grand': 'Medium Grand',
+            'parlor-grand': 'Parlor / Living Grand',
+            'concert-grand': 'Concert Grand',
+            'digital': 'Digital Piano',
+            'keyboard': 'Keyboard',
+            'custom': 'Custom Piano',
+            'unknown': "I don't know"
+        };
 
-    return sizeText ? `${baseName} (${sizeText})` : baseName;
+        const pianoSizeLabels = {
+            '145x60x100cm': '145 x 60 x 100 cm',
+            '150x65x110cm': '150 x 65 x 110 cm',
+            '150x65x120cm': '150 x 65 x 120 cm',
+            '155x65x130cm': '155 x 65 x 130 cm',
+            '155x150x102cm': '155 x 150 x 102 cm',
+            '170x152x102cm': '170 x 152 x 102 cm',
+            '190x152x102cm': '190 x 152 x 102 cm',
+            '275x158x102cm': '275 x 158 x 102 cm',
+            '140x40x90cm': '140 x 40 x 90 cm',
+            '130x35x15cm': '130 x 35 x 15 cm'
+        };
+
+        // Format each piano for display
+        const descriptions = pianos.map((piano) => {
+            const baseType = pianoTypeLabels[piano.type] || 'Piano';
+            let sizeText = '';
+
+            if (piano.isCustomSize || piano.isCustomType) {
+                sizeText = piano.customName
+                    ? `${piano.customName} (${piano.customLength}x${piano.customWidth}x${piano.customHeight}${piano.customUnit})`
+                    : `${piano.customLength}x${piano.customWidth}x${piano.customHeight}${piano.customUnit}`;
+            } else {
+                sizeText = pianoSizeLabels[piano.size] || '';
+            }
+
+            return sizeText ? `${baseType} (${sizeText})` : baseType;
+        });
+
+        // Return as comma-separated list or with count
+        if (pianos.length === 1) {
+            return descriptions[0];
+        } else {
+            return `${pianos.length} pianos: ${descriptions.join(', ')}`;
+        }
+    } catch (e) {
+        return '';
+    }
 }
 
 function buildOverviewFloorInventoryMarkup(kind) {
@@ -22092,9 +22258,29 @@ function buildOverviewFloorInventoryMarkup(kind) {
         }
 
         const assignments = window.itemFloorAssignments || {};
+        const indexedCustomizedNames = new Set();
+
+        if (isCustomizedInventoryService(serviceValue)) {
+            Object.keys(assignments).forEach((assignmentKey) => {
+                const split = String(assignmentKey || '').split('||');
+                const baseName = normalizeOverviewItemName(split[0] || assignmentKey);
+                const sourceFloor = split[1] || '';
+                const hasIndexSegment = split.length >= 3;
+                if (sourceFloor === 'Customized' && hasIndexSegment && baseName) {
+                    indexedCustomizedNames.add(baseName);
+                }
+            });
+        }
+
         Object.keys(assignments).forEach((itemKey) => {
             const perFloor = assignments[itemKey] || {};
-            const baseName = normalizeOverviewItemName(itemKey.includes('||') ? itemKey.split('||')[0] : itemKey);
+            const split = String(itemKey || '').split('||');
+            const baseName = normalizeOverviewItemName(split[0] || itemKey);
+            const sourceFloor = split[1] || '';
+            const isLegacyCustomizedKey = sourceFloor === 'Customized' && split.length < 3;
+            if (isLegacyCustomizedKey && indexedCustomizedNames.has(baseName)) {
+                return;
+            }
             Object.keys(perFloor).forEach((floorName) => {
                 const qty = parseInt(perFloor[floorName], 10) || 0;
                 if (qty <= 0) return;
@@ -22717,6 +22903,8 @@ function openOverviewInventoryModal(kind) {
     const floorOrder = getOverviewAllFloors();
     const selectedPickupFloors = getOrderedFloorList(Array.from(window.selectedPickupFloors || []));
     const selectedDeliveryFloors = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || []));
+    const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
+    const isVehicleService = isVehicleTransportService(serviceValue);
 
     const sortFloors = (floors) => {
         return (floors || []).slice().sort((a, b) => {
@@ -22777,7 +22965,103 @@ function openOverviewInventoryModal(kind) {
         return row;
     };
 
+    const renderVehicleReadOnly = (mode) => {
+        const vehicleType = isCarCamperTransportService(serviceValue)
+            ? 'car'
+            : serviceValue === 'Motorbike Transport'
+                ? 'motorbike'
+                : (isCaravanTrailerTransportService(serviceValue) || serviceValue === 'Boats')
+                    ? 'trailer'
+                    : '';
+
+        const vehicles = vehicleType && window.multiItemsManager && typeof window.multiItemsManager.parseVehicles === 'function'
+            ? window.multiItemsManager.parseVehicles(vehicleType)
+            : [];
+
+        body.innerHTML = '';
+
+        if (!Array.isArray(vehicles) || vehicles.length === 0) {
+            body.innerHTML = `<div style="padding:8px 0;color:#6b7280;">No ${mode} vehicle details to manage yet.</div>`;
+            return;
+        }
+
+        const card = document.createElement('div');
+        card.style.cssText = 'border:1px solid #bfdbfe;border-radius:10px;overflow:hidden;';
+
+        const header = document.createElement('div');
+        header.style.cssText = 'padding:8px 12px;background:#dbeafe;font-weight:700;color:#1e40af;';
+        header.textContent = mode === 'delivery' ? 'Vehicle Details (Delivery)' : 'Vehicle Details';
+        card.appendChild(header);
+
+        const content = document.createElement('div');
+        content.style.cssText = 'padding:8px 12px;background:#f8fbff;display:grid;gap:8px;';
+
+        const toLabel = (value) => String(value || '').trim();
+        const typeLabelMap = {
+            car: 'Campervan/Car',
+            motorbike: 'Motorbike',
+            trailer: serviceValue === 'Boats' ? 'Boat' : 'Caravan/Trailer'
+        };
+        const itemTypeLabel = typeLabelMap[vehicleType] || 'Vehicle';
+
+        vehicles.forEach((vehicle, index) => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid #bfdbfe;border-radius:8px;background:#fff;';
+
+            const details = document.createElement('div');
+            details.style.cssText = 'display:grid;gap:2px;min-width:0;';
+            const title = `${itemTypeLabel} ${index + 1}: ${toLabel(vehicle.makeModel) || 'Unnamed'}`;
+            const meta = [toLabel(vehicle.year), toLabel(vehicle.value), toLabel(vehicle.condition)].filter(Boolean).join(' | ');
+            details.innerHTML = `<strong style="color:#1f2937;word-break:break-word;">${escapeOverviewHtml(title)}</strong>${meta ? `<span style="font-size:0.8rem;color:#64748b;">${escapeOverviewHtml(meta)}</span>` : ''}`;
+
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.textContent = 'Edit';
+            editBtn.style.cssText = 'border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer;white-space:nowrap;';
+            editBtn.addEventListener('click', () => {
+                modal.classList.remove('active');
+
+                if (typeof window.setFormStep === 'function') {
+                    window.setFormStep(3);
+                } else {
+                    document.body.dataset.formStep = '3';
+                    document.body.dataset.currentStep = '3';
+                }
+
+                setTimeout(() => {
+                    if (!window.multiItemsManager) return;
+                    window.multiItemsManager.editingVehicleIds = window.multiItemsManager.editingVehicleIds || {};
+                    window.multiItemsManager.editingVehicleIds[vehicleType] = vehicle.id;
+                    if (typeof window.multiItemsManager.populateVehicleForm === 'function') {
+                        window.multiItemsManager.populateVehicleForm(vehicleType, vehicle);
+                    }
+                    if (typeof window.multiItemsManager.updateVehicleEditUi === 'function') {
+                        window.multiItemsManager.updateVehicleEditUi(vehicleType);
+                    }
+
+                    const input = document.getElementById(`${vehicleType}-make-model-entry`);
+                    if (input) {
+                        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        input.focus();
+                    }
+                }, 80);
+            });
+
+            row.appendChild(details);
+            row.appendChild(editBtn);
+            content.appendChild(row);
+        });
+
+        card.appendChild(content);
+        body.appendChild(card);
+    };
+
     const renderPickupManager = () => {
+        if (isVehicleService) {
+            renderVehicleReadOnly('pickup');
+            return;
+        }
+
         const grouped = {};
         const allowedFloors = selectedPickupFloors.length > 0 ? new Set(selectedPickupFloors) : null;
 
@@ -22893,13 +23177,35 @@ function openOverviewInventoryModal(kind) {
     };
 
     const renderDeliveryManager = () => {
+        if (isVehicleService) {
+            renderVehicleReadOnly('delivery');
+            return;
+        }
+
         const assignments = window.itemFloorAssignments || {};
         const grouped = {};
+        const indexedCustomizedNames = new Set();
+
+        if (isCustomizedInventoryService(serviceValue)) {
+            Object.keys(assignments).forEach((assignmentKey) => {
+                const split = String(assignmentKey || '').split('||');
+                const baseName = normalizeOverviewItemName(split[0] || assignmentKey);
+                const sourceFloor = split[1] || '';
+                const hasIndexSegment = split.length >= 3;
+                if (sourceFloor === 'Customized' && hasIndexSegment && baseName) {
+                    indexedCustomizedNames.add(baseName);
+                }
+            });
+        }
 
         Object.entries(assignments).forEach(([itemKey, perFloor]) => {
-            const split = itemKey.split('||');
+            const split = String(itemKey || '').split('||');
             const baseName = normalizeOverviewItemName(split[0] || itemKey);
             const sourceFloor = split[1] || '';
+            const isLegacyCustomizedKey = sourceFloor === 'Customized' && split.length < 3;
+            if (isLegacyCustomizedKey && indexedCustomizedNames.has(baseName)) {
+                return;
+            }
             Object.entries(perFloor || {}).forEach(([deliveryFloor, qtyValue]) => {
                 const qty = parseInt(qtyValue, 10) || 0;
                 if (qty <= 0) return;
@@ -22987,7 +23293,9 @@ function openOverviewInventoryModal(kind) {
     };
 
     title.textContent = kind === 'delivery' ? 'Quick Manage Delivery Inventory' : 'Quick Manage Pickup Inventory';
-    subtitle.textContent = 'Use +/- to adjust quantities directly.';
+    subtitle.textContent = isVehicleService
+        ? 'Use Edit to jump to Step 3 and update that vehicle.'
+        : 'Use +/- to adjust quantities directly.';
     saveBtn.textContent = 'Done';
     saveBtn.onclick = () => {
         modal.classList.remove('active');
