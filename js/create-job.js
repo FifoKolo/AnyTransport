@@ -22584,7 +22584,7 @@ function openOverviewInventoryModal(kind) {
     modal.classList.add('active');
 }
 
-
+document.addEventListener('DOMContentLoaded', function() {
     const urlParams = new URLSearchParams(window.location.search);
     const service = urlParams.get('service');
 
