@@ -15055,8 +15055,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ).trim();
         const isBoatsService = serviceValue === 'Boats';
 
-        const setLabelText = (selector, baseText) => {
-            const label = document.querySelector(selector);
+        const setLabelInner = (label, baseText) => {
             if (!label) return;
             const required = label.querySelector('.required-text');
             const requiredMarkup = required ? required.outerHTML : '';
@@ -15074,21 +15073,15 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         };
 
-        const setDropdownItems = (menuSelector, valuesAndLabels) => {
-            const items = Array.from(document.querySelectorAll(`${menuSelector} .dropdown-item`));
-            valuesAndLabels.forEach((entry, index) => {
-                const item = items[index];
-                if (!item) return;
-                item.setAttribute('data-value', entry.value);
-                item.textContent = entry.label;
-            });
-        };
-
         const normalizeHiddenValue = (hiddenId, allowedValues) => {
             const hidden = document.getElementById(hiddenId);
             if (!hidden) return;
             if (hidden.value && !allowedValues.includes(hidden.value)) {
                 hidden.value = '';
+                document.querySelectorAll(`.option-nav[data-option-nav-for="${hiddenId}"] .option-nav-btn`).forEach((btn) => {
+                    btn.classList.remove('selected');
+                    btn.setAttribute('aria-checked', 'false');
+                });
             }
         };
 
@@ -15105,52 +15098,78 @@ document.addEventListener('DOMContentLoaded', function() {
         const methodOptions = isBoatsService
             ? [
                 { value: 'on-trailer', label: 'On trailer' },
-                { value: 'on-truck', label: 'On truck' },
-             
+                { value: 'on-truck', label: 'On truck' }
             ]
             : [
-                { value: 'driven', label: 'Driven' },
                 { value: 'towed', label: 'Towed' },
                 { value: 'transported', label: 'Transported on a truck' }
             ];
 
-        normalizeHiddenValue('trailer-campervan-type-hidden', typeOptions.map((entry) => entry.value));
-        normalizeHiddenValue('trailer-campervan-delivery-hidden', methodOptions.map((entry) => entry.value));
+        normalizeHiddenValue('trailer-type-entry-hidden', typeOptions.map((entry) => entry.value));
+        normalizeHiddenValue('trailer-method-entry-hidden', methodOptions.map((entry) => entry.value));
 
-        setLabelText('label:has(.required-text[data-required-for="trailer-campervan-type-hidden"])', isBoatsService ? 'Boat type' : 'Vehicle type');
-        setLabelText('label:has(.required-text[data-required-for="trailer-campervan-delivery-hidden"])', isBoatsService ? 'Preferred transport method' : 'Preferred transport method');
-        setLabelText('label:has(.required-text[data-required-for="trailer-campervan-condition-hidden"])', isBoatsService ? 'Boat condition' : 'Vehicle condition');
-        setLabelText('label:has(.required-text[data-required-for="trailer-campervan-weight-hidden"])', isBoatsService ? 'Weight of boat' : 'Weight of vehicle');
-        setLabelText('label:has(.required-text[data-required-for="trailer-campervan-length-hidden"])', isBoatsService ? 'Length of boat' : 'Length of vehicle');
-        setLabelText('label[for="trailer-campervan-operational-hidden"]', isBoatsService ? 'Boat is seaworthy' : 'Vehicle is operational');
+        setOptionNavItems('.trailer-type-entry-nav', typeOptions);
+        setOptionNavItems('.trailer-method-entry-nav', methodOptions);
 
-        const makeModelLabel = document.querySelector('label[for="trailer-campervan-make-model"]');
-        if (makeModelLabel) {
-            const req = makeModelLabel.querySelector('.required-text');
-            makeModelLabel.innerHTML = `Make & model ${req ? req.outerHTML : ''}`;
+        const sectionHeading = document.getElementById('trailer-section-heading');
+        if (sectionHeading) {
+            sectionHeading.textContent = isBoatsService ? 'Boat Details' : 'Caravan / Trailer Details';
         }
-        const makeModelInput = document.getElementById('trailer-campervan-make-model');
+
+        const sectionSubtitle = document.getElementById('trailer-section-subtitle');
+        if (sectionSubtitle) {
+            sectionSubtitle.textContent = isBoatsService
+                ? 'Add boat details. You can add multiple items.'
+                : 'Add caravan or trailer details. You can add multiple items.';
+        }
+
+        const addBtn = document.getElementById('add-trailer-btn');
+        if (addBtn) {
+            addBtn.textContent = isBoatsService ? '+ Add Boat' : '+ Add Caravan / Trailer';
+        }
+
+        const makeModelInput = document.getElementById('trailer-make-model-entry');
         if (makeModelInput) {
-            makeModelInput.placeholder = isBoatsService ? 'e.g. Bayliner VR5' : 'e.g. Volkswagen California';
+            makeModelInput.placeholder = isBoatsService ? 'e.g. Bayliner VR5' : 'e.g. Swift Caravan 560';
         }
 
-        const typeToggleLabel = document.getElementById('trailer-campervan-type-label');
-        const typeHidden = document.getElementById('trailer-campervan-type-hidden');
-        if (typeToggleLabel && !(typeHidden && typeHidden.value)) {
-            typeToggleLabel.textContent = isBoatsService ? 'Select boat type' : 'Select vehicle type';
-            typeToggleLabel.style.color = '#9ca3af';
-        }
-        const methodToggleLabel = document.getElementById('trailer-campervan-delivery-label');
-        const methodHidden = document.getElementById('trailer-campervan-delivery-hidden');
-        if (methodToggleLabel && !(methodHidden && methodHidden.value)) {
-            methodToggleLabel.textContent = isBoatsService ? 'Select preferred transport method' : 'Select preferred transport method';
-            methodToggleLabel.style.color = '#9ca3af';
+        const typeNavEl = document.querySelector('.trailer-type-entry-nav');
+        const typeLabel = typeNavEl?.closest('.custom-dropdown-wrapper')?.previousElementSibling;
+        setLabelInner(typeLabel, isBoatsService ? 'Boat type' : 'Vehicle type');
+
+        const methodNavEl = document.querySelector('.trailer-method-entry-nav');
+        const methodLabel = methodNavEl?.closest('.custom-dropdown-wrapper')?.previousElementSibling;
+        setLabelInner(methodLabel, 'Transport method');
+
+        const conditionNavEl = document.querySelector('.trailer-condition-entry-nav');
+        const conditionLabel = conditionNavEl?.closest('.custom-dropdown-wrapper')?.previousElementSibling;
+        setLabelInner(conditionLabel, isBoatsService ? 'Boat condition' : 'Condition');
+
+        const weightNavEl = document.querySelector('.trailer-weight-entry-nav');
+        const weightLabel = weightNavEl?.closest('.custom-dropdown-wrapper')?.previousElementSibling;
+        setLabelInner(weightLabel, isBoatsService ? 'Weight of boat' : 'Weight');
+
+        const roadworthyNavEl = document.querySelector('.trailer-roadworthy-entry-nav');
+        const roadworthyLabel = roadworthyNavEl?.closest('.custom-dropdown-wrapper')?.previousElementSibling;
+        setLabelInner(roadworthyLabel, isBoatsService ? 'Seaworthy' : 'Roadworthy');
+
+        const cvrtNote = document.getElementById('trailer-3500-note');
+        if (cvrtNote) {
+            cvrtNote.style.display = isBoatsService ? 'none' : '';
         }
 
-        setOptionNavItems('.option-nav[data-option-nav-for="trailer-campervan-type-hidden"]', typeOptions);
-        setDropdownItems('#trailer-campervan-type-menu', typeOptions);
-        setOptionNavItems('.option-nav[data-option-nav-for="trailer-campervan-delivery-hidden"]', methodOptions);
-        setDropdownItems('#trailer-campervan-delivery-menu', methodOptions);
+        if (isBoatsService) {
+            const testedWrap = document.getElementById('trailer-tested-entry-wrap');
+            if (testedWrap) testedWrap.style.display = 'none';
+            const testedHidden = document.getElementById('trailer-tested-entry-hidden');
+            if (testedHidden) {
+                testedHidden.value = '';
+                document.querySelectorAll('.trailer-tested-entry-nav .option-nav-btn').forEach((btn) => {
+                    btn.classList.remove('selected');
+                    btn.setAttribute('aria-checked', 'false');
+                });
+            }
+        }
     };
 
     function addDimensionItem() {

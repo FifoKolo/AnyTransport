@@ -253,7 +253,7 @@
                                     <input type="hidden" id="pickup-floor-select" name="pickup-floor-select" value="">
                                     <!-- lift Option (shown only for Apartment) - placed directly under floor field -->
                                     <div id="lift-option-container">
-                                        <label style="font-size: 1.05rem; font-weight: 600; display: block; margin-bottom: 8px;">Is there an lift available in the building? <span class="required-text" data-required-for="lift-available">(required)</span></label>
+                                        <label style="font-size: 1.05rem; font-weight: 600; display: block; margin-bottom: 8px;">Is there a lift available in the building? <span class="required-text" data-required-for="lift-available">(required)</span></label>
                                         <div id="lift-icon-grid"></div>
                                     </div>
                                 </div>
@@ -295,7 +295,7 @@
 
                         <!-- Delivery lift Section (Step 4) -->
                         <div class="card-section" id="delivery-lift-section" data-form-step="4" style="display: none;">
-                            <label class="form-label">Is an lift available for delivery? <span class="required-text">(required)</span></label>
+                            <label class="form-label">Is a lift available for delivery? <span class="required-text">(required)</span></label>
                             <div id="delivery-lift-option-container" style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px;">
                                 <!-- lift buttons will be dynamically rendered here -->
                             </div>
@@ -383,7 +383,7 @@
                 <option value="20th">20th</option>
             </select>
             <div id="floor-lift-selection" style="display:none; margin-top:18px; width:100%; text-align:left;">
-                <label style="display:block; font-size:0.95rem; color:#333; margin-bottom:12px;">Is an lift available for this floor?</label>
+                <label style="display:block; font-size:0.95rem; color:#333; margin-bottom:12px;">Is a lift available for this floor?</label>
                 <div style="display:flex; gap:12px;">
                     <label style="display:flex; align-items:center; cursor:pointer;">
                         <input type="radio" name="floor-lift-option" value="yes" style="margin-right:8px; cursor:pointer;">
@@ -1388,8 +1388,8 @@
                         <!-- Caravan/Trailer Transport Section -->
                         <div id="trailer-campervan-section" data-form-step="3" style="display: none;">
                             <div class="card-section">
-                                <h3 style="margin-bottom: 10px; color: var(--text-primary);">Caravan / Trailer Details</h3>
-                                <p style="margin: 0 0 14px; color: #64748b; font-size: 0.92rem;">Add caravan or trailer details. You can add multiple items.</p>
+                                <h3 id="trailer-section-heading" style="margin-bottom: 10px; color: var(--text-primary);">Caravan / Trailer Details</h3>
+                                <p id="trailer-section-subtitle" style="margin: 0 0 14px; color: #64748b; font-size: 0.92rem;">Add caravan or trailer details. You can add multiple items.</p>
                                 <div id="trailer-list" style="margin-bottom: 16px;"></div>
                                 <input type="hidden" id="trailer-json-hidden" name="trailer-data" value="">
                                 <div style="border: 1px solid #dbeafe; border-radius: 10px; padding: 16px; background: #f8fbff; margin-bottom: 16px;">
@@ -1473,7 +1473,7 @@
                                             </div>
                                             <input type="hidden" id="trailer-weight-entry-hidden" value="">
                                         </div>
-                                        <p style="margin:8px 0 0; color:#6b7280; font-size:0.82rem;">Trailers over 3500kg require testing certification.</p>
+                                        <p id="trailer-3500-note" style="margin:8px 0 0; color:#6b7280; font-size:0.82rem;">Trailers over 3500kg require testing certification.</p>
                                     </div>
                                     <div class="form-group" id="trailer-tested-entry-wrap" style="margin-bottom: 16px; display: none;">
                                         <label class="form-label">CVRT tested<span class="required-text">(required if over 3500kg)</span></label>

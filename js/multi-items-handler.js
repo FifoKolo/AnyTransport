@@ -607,6 +607,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initial render
     window.multiItemsManager.renderPianosList();
 
+    const isBoatsServiceActive = () => {
+        const serviceHidden = document.getElementById('item-description-hidden')
+            || document.getElementById('create-job-hidden');
+        return (serviceHidden?.value || '').trim() === 'Boats';
+    };
+
     // Initialize vehicle handlers for each type
     ['car', 'motorbike', 'trailer'].forEach(vehicleType => {
         const syncTrailerTestedRequirement = () => {
@@ -614,6 +620,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const testedWrap = document.getElementById('trailer-tested-entry-wrap');
             const testedHidden = document.getElementById('trailer-tested-entry-hidden');
+
+            if (isBoatsServiceActive()) {
+                if (testedWrap) testedWrap.style.display = 'none';
+                if (testedHidden) {
+                    testedHidden.value = '';
+                    testedHidden.dispatchEvent(new Event('change', { bubbles: true }));
+                    document.querySelectorAll('.trailer-tested-entry-nav .option-nav-btn').forEach((btn) => {
+                        btn.classList.remove('selected');
+                        btn.setAttribute('aria-checked', 'false');
+                    });
+                }
+                return;
+            }
+
             const requiresTested = (document.getElementById('trailer-weight-entry-hidden')?.value || '').trim() === 'over-3500';
 
             if (testedWrap) {
@@ -743,7 +763,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     method: 'transport method',
                     weight: 'weight',
                     length: 'length',
-                    roadworthy: 'roadworthy (NCT/DOE)',
+                    roadworthy: (vehicleType === 'trailer' && isBoatsServiceActive()) ? 'seaworthy' : 'roadworthy (NCT/DOE)',
                     insurance: 'insurance',
                     roadtax: 'road tax',
                     tested: 'tested certification status',
@@ -769,7 +789,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
 
-                if (vehicleType === 'trailer' && lookup.weight === 'over-3500' && !String(lookup.tested || '').trim()) {
+                if (vehicleType === 'trailer' && !isBoatsServiceActive() && lookup.weight === 'over-3500' && !String(lookup.tested || '').trim()) {
                     alert('Please select tested certification status for trailers over 3500kg');
                     return;
                 }
