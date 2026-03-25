@@ -475,7 +475,7 @@
                                     <div class="form-group" style="margin-bottom: 16px;">
                                         <label class="form-label">Piano type <span class="required-text">(required)</span></label>
                                         <div class="custom-dropdown-wrapper has-option-nav">
-                                            <div class="option-nav piano-type-entry-nav" role="radiogroup" aria-label="Piano type">
+                                            <div class="option-nav piano-type-entry-nav" data-option-nav-for="piano-type-entry-hidden" role="radiogroup" aria-label="Piano type">
                                                 <button type="button" class="option-nav-btn" data-value="upright-spinet" role="radio" aria-checked="false"><span>Upright - Spinet</span></button>
                                                 <button type="button" class="option-nav-btn" data-value="upright-console" role="radio" aria-checked="false"><span>Upright - Console</span></button>
                                                 <button type="button" class="option-nav-btn" data-value="upright-studio" role="radio" aria-checked="false"><span>Upright - Studio</span></button>
@@ -494,9 +494,9 @@
                                     </div>
 
                                     <div class="form-group" id="piano-size-group" style="margin-bottom: 16px;">
-                                        <label class="form-label">Approximate piano size <span class="required-text">(required)</span></label>
+                                        <label class="form-label">Approximate piano size <span id="piano-size-required" class="required-text">(required)</span></label>
                                         <div class="custom-dropdown-wrapper has-option-nav">
-                                            <div class="option-nav piano-size-entry-nav" role="radiogroup" aria-label="Piano size">
+                                            <div class="option-nav piano-size-entry-nav" data-option-nav-for="piano-size-entry-hidden" role="radiogroup" aria-label="Piano size">
                                                 <button type="button" class="option-nav-btn" data-value="145x60x100cm" role="radio" aria-checked="false"><span>Spinet Upright ~145 x 60 x 100 cm</span></button>
                                                 <button type="button" class="option-nav-btn" data-value="150x65x110cm" role="radio" aria-checked="false"><span>Console Upright ~150 x 65 x 110 cm</span></button>
                                                 <button type="button" class="option-nav-btn" data-value="150x65x120cm" role="radio" aria-checked="false"><span>Studio Upright ~150 x 65 x 120 cm</span></button>
@@ -516,20 +516,20 @@
                                     <div id="piano-custom-section" style="display: none; margin-top: 10px; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #fff;">
                                         <h4 style="margin: 0 0 10px; color: #0f172a; font-size: 1rem;">Custom Piano Details</h4>
                                         <div class="form-group" style="margin-bottom: 12px;">
-                                            <label class="form-label" for="piano-custom-name">Piano name / model <span class="required-text" style="display:none;">(required)</span></label>
+                                            <label class="form-label" for="piano-custom-name">Piano name / model <span id="piano-custom-name-required" class="required-text" style="display:none;">(required)</span></label>
                                             <input type="text" id="piano-custom-name" class="form-input" placeholder="e.g. Yamaha C3X, custom upright">
                                         </div>
                                         <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px;">
                                             <div class="form-group" style="margin-bottom: 0;">
-                                                <label class="form-label" for="piano-custom-length">Length <span class="required-text" style="display:none;">(required)</span></label>
+                                                <label class="form-label" for="piano-custom-length">Length <span id="piano-custom-length-required" class="required-text" style="display:none;">(required)</span></label>
                                                 <input type="number" id="piano-custom-length" class="form-input" min="1" step="0.1" placeholder="Length">
                                             </div>
                                             <div class="form-group" style="margin-bottom: 0;">
-                                                <label class="form-label" for="piano-custom-width">Width <span class="required-text" style="display:none;">(required)</span></label>
+                                                <label class="form-label" for="piano-custom-width">Width <span id="piano-custom-width-required" class="required-text" style="display:none;">(required)</span></label>
                                                 <input type="number" id="piano-custom-width" class="form-input" min="1" step="0.1" placeholder="Width">
                                             </div>
                                             <div class="form-group" style="margin-bottom: 0;">
-                                                <label class="form-label" for="piano-custom-height">Height <span class="required-text" style="display:none;">(required)</span></label>
+                                                <label class="form-label" for="piano-custom-height">Height <span id="piano-custom-height-required" class="required-text" style="display:none;">(required)</span></label>
                                                 <input type="number" id="piano-custom-height" class="form-input" min="1" step="0.1" placeholder="Height">
                                             </div>
                                             <div class="form-group" style="margin-bottom: 0;">
@@ -1920,7 +1920,7 @@
     <script src="js/auth.js?v=20260322-1"></script>
     <script src="js/house-removal.js?v=20260322-1"></script>
     <script src="js/multi-items-handler.js?v=20260325-1"></script>
-    <script src="js/create-job.js?v=20260323-61"></script>
+    <script src="js/create-job.js?v=20260325-2"></script>
 
 <script>
 function updateStep3TitleVisibility() {
