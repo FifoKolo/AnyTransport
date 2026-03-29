@@ -6,7 +6,7 @@
     <title>Request a Quote - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260322-1">
-    <link rel="stylesheet" href="css/create-job.css?v=20260328-5">
+    <link rel="stylesheet" href="css/create-job.css?v=20260328-6">
     <link rel="stylesheet" href="css/house-removal.css?v=20260322-1">
     <link rel="stylesheet" href="css/sticky-next-btn.css?v=20260322-1">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
@@ -1889,7 +1889,7 @@
                                     </div>
                                     <div class="service-requirement-input">
                                         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                                            <input type="number" id="service-pickup-movers" class="service-number-input" name="service-pickup-movers" min="0" max="10" placeholder="0" value="" style="flex:1 1 140px; min-width:140px;">
+                                            <input type="number" id="service-pickup-movers" class="service-number-input" name="service-pickup-movers" min="1" max="10" placeholder="1" value="" style="flex:1 1 140px; min-width:140px;">
                                             <button type="button" class="movers-confirm-btn" data-target-input="service-pickup-movers" data-target-mode="service-pickup-movers-mode" data-target-confirmed="service-pickup-movers-confirmed" style="border:1px solid #16a34a; background:#f0fdf4; color:#166534; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">Confirm Movers</button>
                                             <button type="button" class="movers-unsure-btn" data-target-input="service-pickup-movers" data-target-mode="service-pickup-movers-mode" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">I Don't Know</button>
                                         </div>
@@ -1912,7 +1912,7 @@
                                     </div>
                                     <div class="service-requirement-input">
                                         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                                            <input type="number" id="service-delivery-movers" class="service-number-input" name="service-delivery-movers" min="0" max="10" placeholder="0" value="" style="flex:1 1 140px; min-width:140px;">
+                                            <input type="number" id="service-delivery-movers" class="service-number-input" name="service-delivery-movers" min="1" max="10" placeholder="1" value="" style="flex:1 1 140px; min-width:140px;">
                                             <button type="button" class="movers-confirm-btn" data-target-input="service-delivery-movers" data-target-mode="service-delivery-movers-mode" data-target-confirmed="service-delivery-movers-confirmed" style="border:1px solid #16a34a; background:#f0fdf4; color:#166534; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">Confirm Movers</button>
                                             <button type="button" class="movers-unsure-btn" data-target-input="service-delivery-movers" data-target-mode="service-delivery-movers-mode" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">I Don't Know</button>
                                         </div>
@@ -2074,17 +2074,14 @@
                                     <div class="overview-item">
                                         <div class="overview-item-label">Service</div>
                                         <div class="overview-item-value" id="summary-service">—</div>
-                                        <button type="button" class="overview-edit-btn" data-edit-step="2">Edit</button>
                                     </div>
                                     <div class="overview-item">
                                         <div class="overview-item-label">Property Pickup Type</div>
                                         <div class="overview-item-value" id="summary-pickup-type">—</div>
-                                        <button type="button" class="overview-edit-btn" data-edit-step="2">Edit</button>
                                     </div>
                                     <div class="overview-item">
                                         <div class="overview-item-label">Property Delivery Type</div>
                                         <div class="overview-item-value" id="summary-delivery-type">—</div>
-                                        <button type="button" class="overview-edit-btn" data-edit-step="4">Edit</button>
                                     </div>
                                     <div class="overview-item">
                                         <div class="overview-item-label">Pickup Lift Status</div>
@@ -2105,6 +2102,16 @@
                                         <div class="overview-item-label">Delivery Floors</div>
                                         <div class="overview-item-value" id="summary-delivery-floors">—</div>
                                         <button type="button" class="overview-edit-btn" data-edit-step="5">Edit</button>
+                                    </div>
+                                    <div class="overview-item">
+                                        <div class="overview-item-label">Pickup Movers</div>
+                                        <div class="overview-item-value" id="summary-pickup-movers">—</div>
+                                        <button type="button" class="overview-edit-btn" data-edit-movers="pickup">Edit</button>
+                                    </div>
+                                    <div class="overview-item">
+                                        <div class="overview-item-label">Delivery Movers</div>
+                                        <div class="overview-item-value" id="summary-delivery-movers">—</div>
+                                        <button type="button" class="overview-edit-btn" data-edit-movers="delivery">Edit</button>
                                     </div>
                                     <div class="overview-item">
                                         <div class="overview-item-label">Pickup Address</div>

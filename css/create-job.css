@@ -116,6 +116,63 @@ body.customized-items-active #step3-title-wrapper {
     box-shadow: 0 4px 16px rgba(37,99,235,0.13);
     outline: none;
 }
+
+/* Secondary floor inventory custom-item modal controls */
+.custom-inventory-modal .custom-inventory-input {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 1rem;
+    color: #1f2937;
+    background: #fff;
+}
+
+.custom-inventory-modal .custom-inventory-input:focus {
+    outline: none;
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+.custom-inventory-modal .custom-inventory-cancel,
+.custom-inventory-modal .custom-inventory-add {
+    appearance: none;
+    -webkit-appearance: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.custom-inventory-modal .custom-inventory-cancel {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #334155;
+}
+
+.custom-inventory-modal .custom-inventory-cancel:hover,
+.custom-inventory-modal .custom-inventory-cancel:focus {
+    background: #eef2f7;
+    border-color: #94a3b8;
+    outline: none;
+}
+
+.custom-inventory-modal .custom-inventory-add {
+    border: 1px solid #2563eb;
+    background: #2563eb;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+}
+
+.custom-inventory-modal .custom-inventory-add:hover,
+.custom-inventory-modal .custom-inventory-add:focus {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+    outline: none;
+}
 .inventory-item.selected {
     background: #e6f0ff;
     border-left: 4px solid #2563eb;
@@ -162,52 +219,58 @@ body[data-form-step="3"] .form-stepper, body[data-current-step="3"] .form-steppe
 /* Ensure inventory tab icons are visible and sized */
 .inventory-tab svg {
     width: 32px !important;
-    /* Inventory item controls styled as in screenshot */
-    .inventory-item-controls {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-left: 12px;
-    }
-    .inventory-item-add, .inventory-item-remove {
-        font-size: 1.7rem;
-        color: #2196f3;
-        background: #fff;
-        border: 2px solid #2196f3;
-        border-radius: 50%;
-        cursor: pointer;
-        width: 38px;
-        height: 38px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        transition: color 0.15s, border-color 0.15s, background 0.15s;
-        box-sizing: border-box;
-        outline: none;
-    }
-    .inventory-item-add:hover, .inventory-item-remove:hover {
-        color: #fff;
-        background: #2196f3;
-        border-color: #1976d2;
-    }
-    .inventory-item-count {
-        min-width: 38px;
-        height: 38px;
-        text-align: center;
-        font-size: 1.35rem;
-        font-weight: 700;
-        color: #444;
-        background: #fff;
-        border: 1.5px solid #bdbdbd;
-        border-radius: 4px;
-        padding: 0 10px;
-        box-sizing: border-box;
-        margin: 0 2px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
     margin: 0 2px;
+}
+
+/* Inventory item controls styled as in screenshot */
+.inventory-item-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: 12px;
+}
+
+.inventory-item-add,
+.inventory-item-remove {
+    font-size: 1.7rem;
+    color: #2196f3;
+    background: #fff;
+    border: 2px solid #2196f3;
+    border-radius: 50%;
+    cursor: pointer;
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+    box-sizing: border-box;
+    outline: none;
+}
+
+.inventory-item-add:hover,
+.inventory-item-remove:hover {
+    color: #fff;
+    background: #2196f3;
+    border-color: #1976d2;
+}
+
+.inventory-item-count {
+    min-width: 38px;
+    height: 38px;
+    text-align: center;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #444;
+    background: #fff;
+    border: 1.5px solid #bdbdbd;
+    border-radius: 4px;
+    padding: 0 10px;
+    box-sizing: border-box;
+    margin: 0 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 .inventory-item-remove {
     font-size: 1.6rem;
@@ -242,6 +305,25 @@ body[data-form-step="3"] .form-stepper, body[data-current-step="3"] .form-steppe
     margin-bottom: 18px;
     text-shadow: 0 2px 8px rgba(37,99,235,0.08);
     text-align: center;
+}
+
+/* Multi-floor house-removal header title (e.g. "Ground Floor") */
+#house-removal-inventory-section .inventory-block-header {
+    position: relative;
+    justify-content: flex-end !important;
+    gap: 10px !important;
+}
+
+#house-removal-inventory-section .inventory-block-header > h3 {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+    width: max-content;
+    color: #2563eb !important;
+    text-align: center !important;
+    font-size: 2rem;
+    font-weight: 800;
 }
 /* lift icon grid - match icon style */
 .lift-icon-grid {
@@ -394,6 +476,24 @@ body[data-form-step="3"] .form-stepper, body[data-current-step="3"] .form-steppe
     color: #1f5fbf;
     background: #e3f2fd;
     box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
+}
+
+.property-type-icon-grid.input-error,
+#pickup-lift-option-container.input-error,
+#delivery-lift-option-container.input-error,
+#pickup-floors-selector.input-error,
+#delivery-floors-selector.input-error {
+    border: 2px solid #ef4444;
+    border-radius: 12px;
+    padding: 10px;
+    background: #fff5f5;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14);
+}
+
+#transport-date-trigger.input-error {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+    background: #fff5f5;
 }
 /* Ensure Back button is visible */
 .btn-outline, .btn-primary, .btn-primary.btn-large, .btn-primary.btn-large.v2 {
@@ -3100,6 +3200,71 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     grid-column: 1 / -1;
     grid-row: 2;
 }
+
+/* Office floors: align visual style with other service floor selectors */
+#office-removal-floors-section .location-detail-row.floors-layout,
+#office-delivery-floors-section .location-detail-row.floors-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+}
+
+#office-removal-floors-section .location-detail-row.floors-layout .floor-group,
+#office-delivery-floors-section .location-detail-row.floors-layout .floor-group {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+#office-removal-floors-section .location-detail-row.floors-layout .lift-group,
+#office-delivery-floors-section .location-detail-row.floors-layout .lift-group {
+    grid-column: 1;
+    grid-row: 2;
+    max-width: 260px;
+}
+
+#office-removal-floors-section .floor-nav,
+#office-delivery-floors-section .floor-nav,
+#office-removal-floors-section .lift-nav,
+#office-delivery-floors-section .lift-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0;
+    border: none;
+    background: transparent;
+}
+
+#office-removal-floors-section .floor-nav .location-nav-btn,
+#office-delivery-floors-section .floor-nav .location-nav-btn,
+#office-removal-floors-section .lift-nav .location-nav-btn,
+#office-delivery-floors-section .lift-nav .location-nav-btn {
+    min-height: 0;
+    min-width: 92px;
+    padding: 8px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    color: #4b5563;
+    font-weight: 500;
+    font-size: 0.95rem;
+    gap: 6px;
+    flex-direction: row;
+}
+
+#office-removal-floors-section .floor-nav .location-nav-btn svg,
+#office-delivery-floors-section .floor-nav .location-nav-btn svg,
+#office-removal-floors-section .lift-nav .location-nav-btn svg,
+#office-delivery-floors-section .lift-nav .location-nav-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+#office-removal-floors-section .location-nav-btn.is-active,
+#office-delivery-floors-section .location-nav-btn.is-active {
+    border-color: #3b82f6;
+    background: #dbeafe;
+    color: #1e40af;
+    box-shadow: none;
+}
 .location-room-list {
     display: flex;
     flex-direction: column;
@@ -3112,6 +3277,13 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
 }
 .location-room-entry:has(.option-nav--room-grid) {
     grid-template-columns: 1fr;
+}
+
+/* Fallback for browsers without :has support: use single-column layout to avoid split/broken rows. */
+@supports not selector(:has(*)) {
+    .location-room-entry {
+        grid-template-columns: 1fr;
+    }
 }
 .location-room-actions {
     display: flex;

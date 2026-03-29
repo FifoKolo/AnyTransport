@@ -196,6 +196,124 @@ window.multiItemsManager = {
         });
     },
 
+    syncVehicleCustomFieldVisibility(vehicleType) {
+        const weightHidden = document.getElementById(`${vehicleType}-weight-entry-hidden`);
+        const lengthHidden = document.getElementById(`${vehicleType}-length-entry-hidden`);
+        const customWeightWrap = document.getElementById(`${vehicleType}-custom-weight-wrap`);
+        const customLengthWrap = document.getElementById(`${vehicleType}-custom-length-wrap`);
+        const customWeightInput = document.getElementById(`${vehicleType}-custom-weight`);
+        const customLengthInput = document.getElementById(`${vehicleType}-custom-length`);
+
+        const showCustomWeight = (weightHidden?.value || '').trim() === 'custom';
+        const showCustomLength = (lengthHidden?.value || '').trim() === 'custom';
+
+        if (customWeightWrap) {
+            customWeightWrap.style.display = showCustomWeight ? '' : 'none';
+        }
+        if (!showCustomWeight && customWeightInput) {
+            customWeightInput.value = '';
+        }
+
+        if (customLengthWrap) {
+            customLengthWrap.style.display = showCustomLength ? '' : 'none';
+        }
+        if (!showCustomLength && customLengthInput) {
+            customLengthInput.value = '';
+        }
+    },
+
+    formatVehicleMeasurement(vehicle, kind) {
+        const selected = String(vehicle?.[kind] || '').trim();
+        if (selected !== 'custom') {
+            return selected;
+        }
+
+        const isWeight = kind === 'weight';
+        const valueKey = isWeight ? 'customWeight' : 'customLength';
+        const unitKey = isWeight ? 'customWeightUnit' : 'customLengthUnit';
+        const fallbackUnit = isWeight ? 'kg' : 'mm';
+
+        const customValue = String(vehicle?.[valueKey] || '').trim();
+        const customUnit = String(vehicle?.[unitKey] || fallbackUnit).trim();
+
+        if (!customValue) {
+            return isWeight ? 'Other (approx.)' : 'Other';
+        }
+
+        return isWeight
+            ? `Approx. ${customValue} ${customUnit}`
+            : `${customValue} ${customUnit}`;
+    },
+
+    getVehicleFloorsLabel(vehicle) {
+        if (!vehicle.floors || !Array.isArray(vehicle.floors) || vehicle.floors.length === 0) {
+            return '';
+        }
+        return vehicle.floors.join(', ');
+    },
+
+    renderVehicleFloorSelector(vehicleType) {
+        const selector = document.getElementById(`${vehicleType}-floors-selector`);
+        const hidden = document.getElementById(`${vehicleType}-floors-hidden`);
+        if (!selector || !hidden) return;
+
+        const availableFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+        if (availableFloors.length === 0) return;
+
+        selector.innerHTML = '';
+        const selectedFloors = hidden.value ? hidden.value.split(',').map(f => f.trim()) : [];
+
+        availableFloors.forEach(floor => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = floor;
+            btn.style.cssText = `
+                padding: 8px 12px;
+                border: 2px solid ${selectedFloors.includes(floor) ? '#3b82f6' : '#d1d5db'};
+                background: ${selectedFloors.includes(floor) ? '#dbeafe' : '#ffffff'};
+                color: ${selectedFloors.includes(floor) ? '#1d4ed8' : '#6b7280'};
+                border-radius: 6px;
+                cursor: pointer;
+                font-weight: ${selectedFloors.includes(floor) ? '700' : '500'};
+                font-size: 0.9rem;
+                transition: all 0.2s;
+            `;
+
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (selectedFloors.includes(floor)) {
+                    selectedFloors.splice(selectedFloors.indexOf(floor), 1);
+                } else {
+                    selectedFloors.push(floor);
+                }
+                hidden.value = selectedFloors.join(', ');
+                this.renderVehicleFloorSelector(vehicleType);
+            });
+
+            selector.appendChild(btn);
+        });
+    },
+
+    clearVehicleFormFloors(vehicleType) {
+        const floorsHidden = document.getElementById(`${vehicleType}-floors-hidden`);
+        if (floorsHidden) floorsHidden.value = '';
+        this.renderVehicleFloorSelector(vehicleType);
+    },
+
+    restoreVehicleFormFloors(vehicleType, vehicle) {
+        const floorsHidden = document.getElementById(`${vehicleType}-floors-hidden`);
+        if (floorsHidden && vehicle.floors && Array.isArray(vehicle.floors)) {
+            floorsHidden.value = vehicle.floors.join(', ');
+        }
+        this.renderVehicleFloorSelector(vehicleType);
+    },
+
+    parseFloorsFromHidden(vehicleType) {
+        const floorsHidden = document.getElementById(`${vehicleType}-floors-hidden`);
+        if (!floorsHidden || !floorsHidden.value) return [];
+        return floorsHidden.value.split(',').map(f => f.trim()).filter(f => f);
+    },
+
     clearVehicleForm(vehicleType) {
         const makeInput = document.getElementById(`${vehicleType}-make-model-entry`);
         if (makeInput) {
@@ -216,6 +334,14 @@ window.multiItemsManager = {
             'tested',
             'type'
         ].forEach((suffix) => this.setVehicleFormNavValue(vehicleType, suffix, ''));
+
+        const customWeightInput = document.getElementById(`${vehicleType}-custom-weight`);
+        const customLengthInput = document.getElementById(`${vehicleType}-custom-length`);
+        if (customWeightInput) customWeightInput.value = '';
+        if (customLengthInput) customLengthInput.value = '';
+
+        this.clearVehicleFormFloors(vehicleType);
+        this.syncVehicleCustomFieldVisibility(vehicleType);
 
         if (vehicleType === 'trailer') {
             const testedWrap = document.getElementById('trailer-tested-entry-wrap');
@@ -242,10 +368,28 @@ window.multiItemsManager = {
         this.setVehicleFormNavValue(vehicleType, 'tested', vehicle.tested || '');
         this.setVehicleFormNavValue(vehicleType, 'type', vehicle.type || '');
 
+        const customWeightInput = document.getElementById(`${vehicleType}-custom-weight`);
+        const customWeightUnitInput = document.getElementById(`${vehicleType}-custom-weight-unit`);
+        const customLengthInput = document.getElementById(`${vehicleType}-custom-length`);
+        const customLengthUnitInput = document.getElementById(`${vehicleType}-custom-length-unit`);
+
+        if (customWeightInput) customWeightInput.value = vehicle.customWeight || '';
+        if (customWeightUnitInput) customWeightUnitInput.value = vehicle.customWeightUnit || 'kg';
+        if (customLengthInput) customLengthInput.value = vehicle.customLength || '';
+        if (customLengthUnitInput) customLengthUnitInput.value = vehicle.customLengthUnit || 'mm';
+
+        this.restoreVehicleFormFloors(vehicleType, vehicle);
+        this.syncVehicleCustomFieldVisibility(vehicleType);
+
         if (vehicleType === 'trailer') {
             const testedWrap = document.getElementById('trailer-tested-entry-wrap');
             if (testedWrap) {
-                testedWrap.style.display = vehicle.weight === 'over-3500' ? '' : 'none';
+                const customWeight = parseFloat(String(vehicle.customWeight || '').trim());
+                const customUnit = String(vehicle.customWeightUnit || 'kg').trim().toLowerCase();
+                const customKg = Number.isFinite(customWeight)
+                    ? (customUnit === 'lb' ? customWeight * 0.45359237 : customWeight)
+                    : 0;
+                testedWrap.style.display = (vehicle.weight === 'over-3500' || (vehicle.weight === 'custom' && customKg > 3500)) ? '' : 'none';
             }
         }
     },
@@ -281,9 +425,11 @@ window.multiItemsManager = {
             const makeModel = vehicle.makeModel || 'Unknown';
             const year = vehicle.year || '';
             const value = vehicle.value || '';
+            const weightText = this.formatVehicleMeasurement(vehicle, 'weight');
+            const lengthText = this.formatVehicleMeasurement(vehicle, 'length');
             const summary = [makeModel, year, value].filter(Boolean).join(' - ');
             const typeLabelMap = {
-                car: 'Campervan/Car',
+                car: 'Car/Campervan',
                 motorbike: 'Motorbike',
                 trailer: 'Caravan/Trailer'
             };
@@ -311,13 +457,14 @@ window.multiItemsManager = {
                 ['Type', vehicle.type],
                 ['Condition', vehicle.condition],
                 ['Transport method', vehicle.method],
-                ['Weight', vehicle.weight],
-                ['Length', vehicle.length],
+                ['Weight', weightText],
+                ['Length', lengthText],
                 ['Operational', vehicle.operational],
                 ['Roadworthy (NCT/DOE)', vehicle.roadworthy],
                 ['Insurance', vehicle.insurance],
                 ['Road tax', vehicle.roadtax],
-                ['Tested certification', vehicle.tested]
+                ['Tested certification', vehicle.tested],
+                ['Floors', this.getVehicleFloorsLabel(vehicle)]
             ].filter(([, val]) => String(val || '').trim());
 
             entries.forEach(([label, val]) => {
@@ -594,18 +741,75 @@ document.addEventListener('DOMContentLoaded', function() {
         const typeInput = document.getElementById('piano-type-entry-hidden');
         const sizeInput = document.getElementById('piano-size-entry-hidden');
         const customSection = document.getElementById('piano-custom-section');
+        const photoSection = document.getElementById('piano-photo-section');
+        const measurementsSection = document.getElementById('piano-unknown-measurements');
 
         if (!typeInput || !customSection) return;
 
         const isCustomType = typeInput.value === 'custom';
         const isCustomSize = sizeInput && sizeInput.value === 'custom';
+        const isUnknownType = typeInput.value === 'unknown';
         const isCustom = isCustomType || isCustomSize;
 
         customSection.style.display = isCustom ? 'block' : 'none';
+        
+        // Show photo section and measurements when "I don't know" is selected
+        if (photoSection) {
+            photoSection.style.display = isUnknownType ? 'block' : 'none';
+        }
+        if (measurementsSection) {
+            measurementsSection.style.display = isUnknownType ? 'block' : 'none';
+        }
     }
+
+    // Setup piano photo upload handlers
+    const setupPianoPhotoHandlers = () => {
+        const photoInputs = [
+            document.getElementById('piano-photo-1'),
+            document.getElementById('piano-photo-2'),
+            document.getElementById('piano-photo-3')
+        ].filter(Boolean);
+
+        const photosHidden = document.getElementById('piano-photos-hidden');
+
+        const updatePhotosHidden = () => {
+            if (!photosHidden) return;
+            const uploadedCount = photoInputs.filter(input => input.files && input.files.length > 0).length;
+            photosHidden.value = uploadedCount > 0 ? String(uploadedCount) : '';
+            photosHidden.dispatchEvent(new Event('change', { bubbles: true }));
+            if (window.updateNextButtonState) window.updateNextButtonState();
+        };
+
+        photoInputs.forEach(input => {
+            input.addEventListener('change', updatePhotosHidden);
+
+            // Setup drag and drop
+            const label = input.parentElement;
+            if (label) {
+                label.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    label.style.opacity = '0.7';
+                    label.style.backgroundColor = '#f0f9ff';
+                });
+                label.addEventListener('dragleave', () => {
+                    label.style.opacity = '1';
+                    label.style.backgroundColor = '';
+                });
+                label.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    label.style.opacity = '1';
+                    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                        input.files = e.dataTransfer.files;
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                });
+            }
+        });
+    };
 
     // Initial render
     window.multiItemsManager.renderPianosList();
+    setupPianoPhotoHandlers();
 
     const isBoatsServiceActive = () => {
         const serviceHidden = document.getElementById('item-description-hidden')
@@ -615,6 +819,73 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize vehicle handlers for each type
     ['car', 'motorbike', 'trailer'].forEach(vehicleType => {
+        const continueWithSavedBtn = document.getElementById(`${vehicleType}-continue-with-saved-btn`);
+        const continueWithSavedHidden = document.getElementById(`${vehicleType}-continue-with-saved-hidden`);
+
+        const hasVehicleDraftInProgress = () => {
+            const makeModel = String(document.getElementById(`${vehicleType}-make-model-entry`)?.value || '').trim();
+            if (makeModel) return true;
+
+            const hiddenFieldIds = [
+                `${vehicleType}-year-entry-hidden`,
+                `${vehicleType}-value-entry-hidden`,
+                `${vehicleType}-condition-entry-hidden`,
+                `${vehicleType}-method-entry-hidden`,
+                `${vehicleType}-weight-entry-hidden`,
+                `${vehicleType}-length-entry-hidden`,
+                `${vehicleType}-operational-entry-hidden`,
+                `${vehicleType}-roadworthy-entry-hidden`,
+                `${vehicleType}-insurance-entry-hidden`,
+                `${vehicleType}-roadtax-entry-hidden`,
+                `${vehicleType}-tested-entry-hidden`,
+                `${vehicleType}-type-entry-hidden`
+            ];
+
+            const hasHiddenValue = hiddenFieldIds.some((fieldId) => String(document.getElementById(fieldId)?.value || '').trim());
+            if (hasHiddenValue) return true;
+
+            const customValueIds = [
+                `${vehicleType}-custom-weight`,
+                `${vehicleType}-custom-length`
+            ];
+
+            return customValueIds.some((fieldId) => String(document.getElementById(fieldId)?.value || '').trim());
+        };
+
+        const resetContinueWithSavedChoice = () => {
+            if (!continueWithSavedHidden) return;
+            continueWithSavedHidden.value = '';
+            continueWithSavedHidden.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+
+        const syncContinueWithSavedUi = () => {
+            if (!continueWithSavedBtn || !continueWithSavedHidden) return;
+            const savedCount = window.multiItemsManager.parseVehicles(vehicleType).length;
+            const hasSaved = savedCount > 0;
+            const hasDraft = hasVehicleDraftInProgress();
+            const isEditing = !!window.multiItemsManager.editingVehicleIds[vehicleType];
+            const shouldShow = hasSaved && hasDraft && !isEditing;
+
+            continueWithSavedBtn.style.display = shouldShow ? '' : 'none';
+            if (!shouldShow && continueWithSavedHidden.value) {
+                resetContinueWithSavedChoice();
+            }
+        };
+
+        const isCustomWeightAboveTrailerThreshold = () => {
+            if (vehicleType !== 'trailer') return false;
+            const selectedWeight = (document.getElementById('trailer-weight-entry-hidden')?.value || '').trim();
+            if (selectedWeight !== 'custom') return false;
+
+            const customWeightRaw = String(document.getElementById('trailer-custom-weight')?.value || '').trim();
+            const customWeight = parseFloat(customWeightRaw);
+            if (!Number.isFinite(customWeight)) return false;
+
+            const unitRaw = String(document.getElementById('trailer-custom-weight-unit')?.value || 'kg').trim().toLowerCase();
+            const weightInKg = unitRaw === 'lb' ? (customWeight * 0.45359237) : customWeight;
+            return weightInKg > 3500;
+        };
+
         const syncTrailerTestedRequirement = () => {
             if (vehicleType !== 'trailer') return;
 
@@ -634,7 +905,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            const requiresTested = (document.getElementById('trailer-weight-entry-hidden')?.value || '').trim() === 'over-3500';
+            const selectedWeight = (document.getElementById('trailer-weight-entry-hidden')?.value || '').trim();
+            const requiresTested = selectedWeight === 'over-3500' || isCustomWeightAboveTrailerThreshold();
 
             if (testedWrap) {
                 testedWrap.style.display = requiresTested ? '' : 'none';
@@ -668,6 +940,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 btn.setAttribute('aria-checked', 'true');
                 hiddenInput.value = btn.dataset.value || '';
                 hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+                resetContinueWithSavedChoice();
+                syncContinueWithSavedUi();
+
+                if (hiddenId === `${vehicleType}-weight-entry-hidden` || hiddenId === `${vehicleType}-length-entry-hidden`) {
+                    window.multiItemsManager.syncVehicleCustomFieldVisibility(vehicleType);
+                }
 
                 if (vehicleType === 'trailer' && hiddenId === 'trailer-weight-entry-hidden') {
                     syncTrailerTestedRequirement();
@@ -693,6 +971,65 @@ document.addEventListener('DOMContentLoaded', function() {
         ].forEach((suffix) => {
             wireSingleSelectNav(`.${vehicleType}-${suffix}-entry-nav`, `${vehicleType}-${suffix}-entry-hidden`);
         });
+
+        const customWeightInput = document.getElementById(`${vehicleType}-custom-weight`);
+        const customWeightUnitInput = document.getElementById(`${vehicleType}-custom-weight-unit`);
+        const customLengthInput = document.getElementById(`${vehicleType}-custom-length`);
+        const customLengthUnitInput = document.getElementById(`${vehicleType}-custom-length-unit`);
+
+        [customWeightInput, customWeightUnitInput, customLengthInput, customLengthUnitInput]
+            .filter(Boolean)
+            .forEach((field) => {
+                field.addEventListener('input', () => {
+                    resetContinueWithSavedChoice();
+                    syncContinueWithSavedUi();
+                    if (vehicleType === 'trailer') {
+                        syncTrailerTestedRequirement();
+                    }
+                    if (window.updateNextButtonState) window.updateNextButtonState();
+                });
+                field.addEventListener('change', () => {
+                    resetContinueWithSavedChoice();
+                    syncContinueWithSavedUi();
+                    if (vehicleType === 'trailer') {
+                        syncTrailerTestedRequirement();
+                    }
+                    if (window.updateNextButtonState) window.updateNextButtonState();
+                });
+            });
+
+        const makeModelInput = document.getElementById(`${vehicleType}-make-model-entry`);
+        if (makeModelInput) {
+            makeModelInput.addEventListener('input', () => {
+                resetContinueWithSavedChoice();
+                syncContinueWithSavedUi();
+                if (window.updateNextButtonState) window.updateNextButtonState();
+            });
+            makeModelInput.addEventListener('change', () => {
+                resetContinueWithSavedChoice();
+                syncContinueWithSavedUi();
+                if (window.updateNextButtonState) window.updateNextButtonState();
+            });
+        }
+
+        if (continueWithSavedBtn && continueWithSavedHidden) {
+            continueWithSavedBtn.addEventListener('click', () => {
+                continueWithSavedHidden.value = '1';
+                continueWithSavedHidden.dispatchEvent(new Event('change', { bubbles: true }));
+                continueWithSavedBtn.style.display = 'none';
+                if (window.updateNextButtonState) window.updateNextButtonState();
+                
+                // Automatically advance to next step
+                setTimeout(() => {
+                    const currentStep = parseInt(document.body.getAttribute('data-form-step') || document.body.getAttribute('data-current-step') || '1', 10);
+                    if (typeof window.setFormStep === 'function') {
+                        window.setFormStep(currentStep + 1);
+                    }
+                }, 0);
+            });
+        }
+
+        window.multiItemsManager.syncVehicleCustomFieldVisibility(vehicleType);
 
         const addBtn = document.getElementById(`add-${vehicleType}-btn`);
         if (addBtn) {
@@ -756,7 +1093,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const requiredByType = {
                     car: ['type', 'condition', 'method', 'weight', 'length', 'roadworthy', 'insurance', 'roadtax'],
                     motorbike: ['condition', 'weight', 'roadworthy', 'insurance', 'roadtax'],
-                    trailer: ['type', 'condition', 'method', 'roadworthy']
+                    trailer: ['type', 'condition', 'method', 'weight', 'length', 'roadworthy']
                 };
                 const requiredFieldLabel = {
                     condition: 'condition',
@@ -808,7 +1145,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 if (lookup.length === 'custom' && !customLengthValue) {
-                    alert('Please enter exact length');
+                    alert('Please Enter approx length');
                     if (customLengthInput) customLengthInput.focus();
                     return;
                 }
@@ -832,12 +1169,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     method: lookup.method,
                     weight: lookup.weight,
                     length: lookup.length,
+                    customWeight: lookup.weight === 'custom' ? customWeightValue : '',
+                    customWeightUnit: lookup.weight === 'custom' ? String(customWeightUnitInput?.value || 'kg').trim() : 'kg',
+                    customLength: lookup.length === 'custom' ? customLengthValue : '',
+                    customLengthUnit: lookup.length === 'custom' ? String(customLengthUnitInput?.value || 'mm').trim() : 'mm',
                     operational: lookup.operational,
                     roadworthy: lookup.roadworthy,
                     insurance: lookup.insurance,
                     roadtax: lookup.roadtax,
                     tested: lookup.tested,
-                    type: lookup.type
+                    type: lookup.type,
+                    floors: window.multiItemsManager.parseFloorsFromHidden(vehicleType)
                 };
 
                 const editingVehicleId = window.multiItemsManager.editingVehicleIds[vehicleType];
@@ -850,6 +1192,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     window.multiItemsManager.updateVehicleEditUi(vehicleType);
                     // Clear form
                     window.multiItemsManager.clearVehicleForm(vehicleType);
+                    resetContinueWithSavedChoice();
+                    syncContinueWithSavedUi();
 
                     if (window.updateNextButtonState) window.updateNextButtonState();
                 }
@@ -859,6 +1203,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Initial render
         window.multiItemsManager.renderVehiclesList(vehicleType);
         window.multiItemsManager.updateVehicleEditUi(vehicleType);
+        syncContinueWithSavedUi();
         if (vehicleType === 'trailer') {
             syncTrailerTestedRequirement();
         }
