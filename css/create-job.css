@@ -1251,8 +1251,8 @@ form.form-v2-main {
 }
 
 .stepper-item.is-active .stepper-link {
-    background: #eff6ff;
-    border-color: #bfdbfe;
+    background: transparent;
+    border-color: transparent;
 }
 
 .stepper-item.is-active .stepper-index {
@@ -1260,9 +1260,18 @@ form.form-v2-main {
     color: #ffffff;
 }
 
+.stepper-item.is-complete .stepper-link {
+    background: transparent;
+    border-color: transparent;
+}
+
 .stepper-item.is-complete .stepper-index {
     background: #22c55e;
     color: #ffffff;
+}
+
+.stepper-link.is-locked {
+    opacity: 0.55;
 }
 
 .summary-card {
@@ -3358,6 +3367,58 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
+}
+
+.eircode-label-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+}
+
+.eircode-label-row .form-label {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    margin-bottom: 0;
+    white-space: nowrap;
+}
+
+.eircode-label-row .required-text {
+    white-space: nowrap;
+    margin-left: 0;
+}
+
+.eircode-finder-link {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid #d1d5db;
+    color: #4A90E2;
+    background: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    transition: color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.eircode-finder-link svg {
+    width: 15px;
+    height: 15px;
+}
+
+.eircode-finder-link:hover {
+    color: #2563eb;
+    border-color: #4A90E2;
+    box-shadow: 0 3px 10px rgba(74, 144, 226, 0.22);
+    transform: translateY(-1px);
+}
+
+.eircode-finder-link:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
 }
 
 @media (max-width: 900px) {

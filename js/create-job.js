@@ -90,6 +90,57 @@ if (document.readyState === 'loading') {
     contactBlocker.init();
 }
 
+// === CRITICAL FUNCTIONS DEFINED AT MODULE LEVEL ===
+// These functions are defined here (outside DOMContentLoaded) so they're available
+// immediately when event listeners need them, preventing "function is not defined" errors.
+
+/**
+ * Clear all "next-missing-highlight" CSS classes from the DOM
+ * This function is called before highlighting a new missing field
+ */
+window.clearNextMissingHighlights = function() {
+    document.querySelectorAll('.next-missing-highlight').forEach((node) => {
+        node.classList.remove('next-missing-highlight');
+    });
+};
+
+/**
+ * Validate City Area or Eircode input for a given step
+ * @param {boolean} markWhenInvalid - If true, add visual invalid state to the field
+ * @returns {boolean} True if valid, false otherwise
+ */
+window.validateStep1AreaOrEircode = function(markWhenInvalid) {
+    const pickupCityArea = document.getElementById('pickup-city-area');
+    const pickupPostcode = document.getElementById('pickup-postcode');
+    const pickupValue = pickupCityArea && pickupCityArea.value ? pickupCityArea.value.trim() : '';
+    const pickupPostcodeValue = pickupPostcode && pickupPostcode.value ? pickupPostcode.value.trim() : '';
+    
+    const deliveryCityArea = document.getElementById('delivery-city-area');
+    const deliveryPostcode = document.getElementById('delivery-postcode');
+    const deliveryValue = deliveryCityArea && deliveryCityArea.value ? deliveryCityArea.value.trim() : '';
+    const deliveryPostcodeValue = deliveryPostcode && deliveryPostcode.value ? deliveryPostcode.value.trim() : '';
+
+    const isPickupValueSet = !!(pickupValue || pickupPostcodeValue);
+    const isDeliveryValueSet = !!(deliveryValue || deliveryPostcodeValue);
+
+    if (markWhenInvalid) {
+        [pickupCityArea, pickupPostcode].forEach(field => {
+            if (field) {
+                field.classList.toggle('input-error', !isPickupValueSet);
+            }
+        });
+        [deliveryCityArea, deliveryPostcode].forEach(field => {
+            if (field) {
+                field.classList.toggle('input-error', !isDeliveryValueSet);
+            }
+        });
+    }
+
+    return isPickupValueSet && isDeliveryValueSet;
+};
+
+// === END CRITICAL FUNCTIONS ===
+
 
 // --- Auto-advance to inventory in step 3 when floor and lift are selected ---
 let lastAutoAdvancedFloor = null;
@@ -113,6 +164,12 @@ function initTransportDatePicker() {
     const trigger = document.getElementById('transport-date-trigger');
     const panel = document.getElementById('transport-date-panel');
     const display = document.getElementById('service-transport-date-display');
+    const storageServiceInput = document.getElementById('service-storage');
+    const storageStartInput = document.getElementById('service-storage-start-datetime');
+    const storageEndInput = document.getElementById('service-storage-end-datetime');
+    const step7StorageWrap = document.getElementById('step7-storage-date-controls');
+    const step7StorageStartInput = document.getElementById('step7-storage-start-datetime');
+    const step7StorageEndInput = document.getElementById('step7-storage-end-datetime');
     const preferredPickupTimeInput = document.getElementById('preferred-time-pickup');
     const preferredDeliveryTimeInput = document.getElementById('preferred-time-delivery');
     const timeWindowRow = document.getElementById('transport-time-window-row');
@@ -166,6 +223,103 @@ function initTransportDatePicker() {
 
     function normalizeDate(date) {
         return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    }
+
+    function parseDateInputValue(raw) {
+        const value = String(raw || '').trim();
+        if (!value) return null;
+        const parsed = new Date(value);
+        if (!Number.isFinite(parsed.getTime())) return null;
+        return normalizeDate(parsed);
+    }
+
+    function getStorageDateBounds() {
+        const storageEnabled = String(storageServiceInput?.value || '').trim().toLowerCase() === 'yes';
+        if (!storageEnabled) return null;
+
+        const startDate = parseDateInputValue(storageStartInput?.value || '');
+        const endDate = parseDateInputValue(storageEndInput?.value || '');
+        if (!startDate || !endDate) return null;
+        if (endDate < startDate) return null;
+
+        return { start: startDate, end: endDate };
+    }
+
+    function getAvailableDateOptions() {
+        const storageBounds = getStorageDateBounds();
+        if (!storageBounds) return optionItems;
+        return optionItems.filter((item) => item.id === 'fixed-date' || item.id === 'between-dates');
+    }
+
+    function enforceStorageDateValueIfNeeded() {
+        const storageBounds = getStorageDateBounds();
+        if (!storageBounds) return;
+
+        const fromText = formatDateDisplay(storageBounds.start);
+        const toText = formatDateDisplay(storageBounds.end);
+        const requiredValue = `Between Dates: ${fromText} - ${toText}`;
+        const currentValue = String(hiddenInput.value || '').trim();
+        const isAllowedStorageValue = currentValue.startsWith('Between Dates:') || currentValue.startsWith('On a Fixed Date:');
+
+        if (!isAllowedStorageValue) {
+            updateTransportDate(requiredValue);
+            return;
+        }
+
+        if (currentValue.startsWith('Between Dates:')) {
+            const match = currentValue.match(/^Between Dates:\s*(.+?)\s*-\s*(.+)$/);
+            if (!match) {
+                updateTransportDate(requiredValue);
+                return;
+            }
+            const selectedStart = parseDateInputValue(match[1]);
+            const selectedEnd = parseDateInputValue(match[2]);
+            if (!selectedStart || !selectedEnd || selectedStart < storageBounds.start || selectedEnd > storageBounds.end || selectedEnd < selectedStart) {
+                updateTransportDate(requiredValue);
+            }
+            return;
+        }
+
+        if (currentValue.startsWith('On a Fixed Date:')) {
+            const fixedRaw = currentValue.replace(/^On a Fixed Date:\s*/, '').trim();
+            const fixedDate = parseDateInputValue(fixedRaw);
+            if (!fixedDate || fixedDate < storageBounds.start || fixedDate > storageBounds.end) {
+                updateTransportDate(requiredValue);
+            }
+        }
+    }
+
+    let syncingStep7Storage = false;
+
+    function syncStep7StorageControlsFromService() {
+        if (!step7StorageWrap || !step7StorageStartInput || !step7StorageEndInput) return;
+
+        const storageEnabled = String(storageServiceInput?.value || '').trim().toLowerCase() === 'yes';
+        step7StorageWrap.style.display = storageEnabled ? 'block' : 'none';
+
+        syncingStep7Storage = true;
+        step7StorageStartInput.value = String(storageStartInput?.value || '').trim();
+        step7StorageEndInput.value = String(storageEndInput?.value || '').trim();
+        step7StorageStartInput.disabled = !storageEnabled;
+        step7StorageEndInput.disabled = !storageEnabled;
+        syncingStep7Storage = false;
+    }
+
+    function syncServiceStorageDatesFromStep7() {
+        if (syncingStep7Storage) return;
+        if (!storageStartInput || !storageEndInput || !step7StorageStartInput || !step7StorageEndInput) return;
+
+        storageStartInput.value = String(step7StorageStartInput.value || '').trim();
+        storageEndInput.value = String(step7StorageEndInput.value || '').trim();
+
+        storageStartInput.dispatchEvent(new Event('input', { bubbles: true }));
+        storageStartInput.dispatchEvent(new Event('change', { bubbles: true }));
+        storageEndInput.dispatchEvent(new Event('input', { bubbles: true }));
+        storageEndInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+        if (typeof window.saveCreateJobProgress === 'function') {
+            window.saveCreateJobProgress();
+        }
     }
 
     function sameDate(a, b) {
@@ -380,9 +534,10 @@ function initTransportDatePicker() {
     function renderMainOptions() {
         state.view = 'main';
         panel.classList.remove('between-mode');
+        const availableOptions = getAvailableDateOptions();
         panel.innerHTML = `
             <div class="transport-date-options">
-                ${optionItems.map((item) => `
+                ${availableOptions.map((item) => `
                     <button type="button" class="transport-date-option" data-option-id="${item.id}">
                         <span>${item.label}</span>
                         ${item.type === 'submenu' ? '<span class="transport-date-option-chevron">›</span>' : ''}
@@ -393,7 +548,7 @@ function initTransportDatePicker() {
 
         panel.querySelectorAll('[data-option-id]').forEach((button) => {
             button.addEventListener('click', () => {
-                const item = optionItems.find((entry) => entry.id === button.getAttribute('data-option-id'));
+                const item = availableOptions.find((entry) => entry.id === button.getAttribute('data-option-id'));
                 if (!item) return;
 
                 if (item.type === 'direct') {
@@ -459,6 +614,7 @@ function initTransportDatePicker() {
         const {
             allowPastDates = false,
             disableBeforeDate = null,
+            disableAfterDate = null,
             selectedDate = null,
             dataAttrs = ''
         } = config;
@@ -470,7 +626,8 @@ function initTransportDatePicker() {
             const isOtherMonth = date.getMonth() !== monthStart.getMonth();
             const isPastDate = !allowPastDates && normalizedDate < todayStart;
             const isBeforeLimit = !!disableBeforeDate && normalizedDate < disableBeforeDate;
-            const isDisabled = isPastDate || isBeforeLimit;
+            const isAfterLimit = !!disableAfterDate && normalizedDate > disableAfterDate;
+            const isDisabled = isPastDate || isBeforeLimit || isAfterLimit;
 
             const classes = ['transport-date-day'];
             if (isOtherMonth) classes.push('other-month');
@@ -488,6 +645,7 @@ function initTransportDatePicker() {
     function renderBetweenCalendars() {
         state.view = 'between';
         panel.classList.add('between-mode');
+        const storageBounds = getStorageDateBounds();
 
         panel.innerHTML = `
             <div class="transport-date-header">
@@ -501,7 +659,7 @@ function initTransportDatePicker() {
             </div>
             <div class="transport-date-between-layout">
                 <div class="transport-date-calendar-wrap transport-date-calendar-wrap-between">
-                    <div class="transport-date-calendar-title">Beginning date</div>
+                    <div class="transport-date-calendar-title">Starting date</div>
                     <div class="transport-date-calendar-month-row">
                         <button type="button" class="transport-date-month-nav" data-range-month="start" data-range-dir="prev">‹</button>
                         <div class="transport-date-month-label">${new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(state.rangeStartMonth)}</div>
@@ -513,6 +671,8 @@ function initTransportDatePicker() {
                     <div class="transport-date-days-grid">
                         ${buildCalendarGrid(state.rangeStartMonth, {
                             selectedDate: state.rangeStart,
+                            disableBeforeDate: storageBounds ? storageBounds.start : null,
+                            disableAfterDate: storageBounds ? storageBounds.end : null,
                             dataAttrs: 'data-range-target="start"'
                         })}
                     </div>
@@ -531,7 +691,10 @@ function initTransportDatePicker() {
                     <div class="transport-date-days-grid">
                         ${buildCalendarGrid(state.rangeEndMonth, {
                             selectedDate: state.rangeEnd,
-                            disableBeforeDate: state.rangeStart,
+                            disableBeforeDate: storageBounds
+                                ? (state.rangeStart && state.rangeStart > storageBounds.start ? state.rangeStart : storageBounds.start)
+                                : state.rangeStart,
+                            disableAfterDate: storageBounds ? storageBounds.end : null,
                             dataAttrs: 'data-range-target="end"'
                         })}
                     </div>
@@ -576,6 +739,9 @@ function initTransportDatePicker() {
                 const selectedDate = normalizeDate(new Date(year, month - 1, day));
 
                 if (target === 'start') {
+                    if (storageBounds && (selectedDate < storageBounds.start || selectedDate > storageBounds.end)) {
+                        return;
+                    }
                     state.rangeStart = selectedDate;
                     if (state.rangeEnd && state.rangeEnd < selectedDate) {
                         state.rangeEnd = null;
@@ -590,6 +756,9 @@ function initTransportDatePicker() {
 
                 if (target === 'end') {
                     if (!state.rangeStart || selectedDate < state.rangeStart) {
+                        return;
+                    }
+                    if (storageBounds && selectedDate > storageBounds.end) {
                         return;
                     }
                     state.rangeEnd = selectedDate;
@@ -607,6 +776,7 @@ function initTransportDatePicker() {
     function renderCalendar(viewType) {
         state.view = viewType;
         panel.classList.remove('between-mode');
+        const storageBounds = getStorageDateBounds();
         const isRangeStart = viewType === 'range-start';
         const isRangeEnd = viewType === 'range-end';
         const title = isRangeStart ? 'Select first date' : isRangeEnd ? 'Select second date' : 'Select date';
@@ -633,6 +803,8 @@ function initTransportDatePicker() {
                 </div>
                 <div class="transport-date-days-grid">
                     ${buildCalendarGrid(state.month, {
+                        disableBeforeDate: storageBounds ? storageBounds.start : null,
+                        disableAfterDate: storageBounds ? storageBounds.end : null,
                         selectedDate: null
                     })}
                 </div>
@@ -678,6 +850,12 @@ function initTransportDatePicker() {
                 const selectedDate = new Date(year, month - 1, day);
 
                 if (viewType === 'fixed') {
+                    if (storageBounds) {
+                        const normalizedDate = normalizeDate(selectedDate);
+                        if (normalizedDate < storageBounds.start || normalizedDate > storageBounds.end) {
+                            return;
+                        }
+                    }
                     updateTransportDate(`On a Fixed Date: ${formatDateDisplay(selectedDate)}`);
                     closePanel();
                     return;
@@ -727,7 +905,25 @@ function initTransportDatePicker() {
         });
     });
 
+    [storageServiceInput, storageStartInput, storageEndInput].filter(Boolean).forEach((input) => {
+        input.addEventListener('change', () => {
+            syncStep7StorageControlsFromService();
+            enforceStorageDateValueIfNeeded();
+            if (panel.classList.contains('active')) {
+                renderMainOptions();
+            }
+        });
+    });
+
+    [step7StorageStartInput, step7StorageEndInput].filter(Boolean).forEach((input) => {
+        input.addEventListener('change', () => {
+            syncServiceStorageDatesFromStep7();
+        });
+    });
+
     syncFromHiddenInput();
+    syncStep7StorageControlsFromService();
+    enforceStorageDateValueIfNeeded();
 }
 
 function renderPickupliftIcons() {
@@ -1186,7 +1382,8 @@ document.addEventListener('DOMContentLoaded', function () {
             const isCustomItem = room && customItems[room] && customItems[room].includes(item);
             const hasCustomPhoto = !!customItemPhotos[trackingKey];
             const actionButtons = isCustomItem ? `
-                <button type="button" class="item-photo-btn" data-item="${item}" data-room="${room}" title="${hasCustomPhoto ? 'Change photo' : 'Add photo'}" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:${hasCustomPhoto ? '#16a34a' : '#0ea5e9'};font-weight:700;margin-left:8px;">${hasCustomPhoto ? '📷✓' : '📷'}</button>
+                <button type="button" class="item-photo-btn" data-item="${item}" data-room="${room}" title="${hasCustomPhoto ? 'Change photo/video' : 'Add photo/video'}" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:${hasCustomPhoto ? '#16a34a' : '#0ea5e9'};font-weight:700;margin-left:8px;">${hasCustomPhoto ? '📷✓' : '📷'}</button>
+                ${hasCustomPhoto ? `<button type="button" class="item-photo-view-btn" data-item="${item}" data-room="${room}" title="View photo/video" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#1d4ed8;font-weight:700;margin-left:4px;">👁</button>` : ''}
                 ${hasCustomPhoto ? `<button type="button" class="item-photo-remove-btn" data-item="${item}" data-room="${room}" title="Remove photo" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#f97316;font-weight:700;margin-left:4px;">🗑</button>` : ''}
                 <button type="button" class="item-edit-btn" data-item="${item}" title="Edit item" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#3b82f6;font-weight:600;margin-left:8px;">✎</button>
                 <button type="button" class="item-delete-btn" data-item="${item}" title="Delete item" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:#ef4444;font-weight:600;margin-left:4px;">✕</button>
@@ -1347,6 +1544,12 @@ document.addEventListener('DOMContentLoaded', function () {
                         reader.onload = function(evt) {
                             customItemPhotos[trackingKey] = evt.target.result;
                             renderRoomItems(selectedRoom);
+                            if (typeof window.saveStep3InventorySnapshot === 'function') {
+                                window.saveStep3InventorySnapshot({ silent: true });
+                            }
+                            if (typeof window.saveCreateJobProgress === 'function') {
+                                window.saveCreateJobProgress();
+                            }
                         };
                         reader.readAsDataURL(file);
                     });
@@ -1368,6 +1571,34 @@ document.addEventListener('DOMContentLoaded', function () {
                 const trackingKey = getItemTrackingKey(item, itemRoom);
                 delete customItemPhotos[trackingKey];
                 renderRoomItems(itemRoom);
+                if (typeof window.saveStep3InventorySnapshot === 'function') {
+                    window.saveStep3InventorySnapshot({ silent: true });
+                }
+                if (typeof window.saveCreateJobProgress === 'function') {
+                    window.saveCreateJobProgress();
+                }
+            });
+        });
+
+        container.querySelectorAll('.item-photo-view-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const item = btn.getAttribute('data-item');
+                const itemRoom = btn.getAttribute('data-room') || room;
+                const trackingKey = getItemTrackingKey(item, itemRoom);
+                const previewDataUrl = customItemPhotos[trackingKey];
+                if (!previewDataUrl) {
+                    alert('Preview not available for this item. Please upload the media again.');
+                    return;
+                }
+
+                openFloorMediaPreviewModal({
+                    id: `custom-${trackingKey}`,
+                    itemName: item || 'Custom item',
+                    fileName: 'Custom item media',
+                    mediaType: getMediaTypeFromPreviewDataUrl(previewDataUrl),
+                    previewDataUrl
+                });
             });
         });
         
@@ -1523,6 +1754,9 @@ document.addEventListener('DOMContentLoaded', function () {
             customItems: { ...(customItems || {}) },
             customItemPhotos: { ...(customItemPhotos || {}) },
             selectedPickupFloors: Array.from(window.selectedPickupFloors || []),
+            itemFloorAssignments: window.itemFloorAssignments && typeof window.itemFloorAssignments === 'object'
+                ? { ...window.itemFloorAssignments }
+                : {},
             floorMediaItems: window.floorMediaItems && typeof window.floorMediaItems === 'object'
                 ? { ...window.floorMediaItems }
                 : {},
@@ -2285,14 +2519,18 @@ document.addEventListener('click', function(event) {
         // Address edits should open in-place editor whenever the overview is visible,
         // even if body step data is temporarily stale.
         if (overviewVisible && (valueId === 'summary-pickup-address' || valueId === 'summary-delivery-address')) {
-            openOverviewEditModal(valueId);
+            if (typeof window.openOverviewEditModal === 'function') {
+                window.openOverviewEditModal(valueId);
+            }
             return;
         }
 
         const currentStep = parseInt(document.body.dataset.formStep || '1', 10);
         if (currentStep === 8) {
             if (valueId) {
-                openOverviewEditModal(valueId);
+                if (typeof window.openOverviewEditModal === 'function') {
+                    window.openOverviewEditModal(valueId);
+                }
             }
             return;
         }
@@ -2304,7 +2542,9 @@ document.addEventListener('click', function(event) {
         const currentStep = parseInt(document.body.dataset.formStep || '1', 10);
         if (currentStep === 8) {
             const kind = (manageBtn.getAttribute('data-overview-inventory-kind') || 'pickup').trim().toLowerCase();
-            openOverviewInventoryManageModal(kind === 'delivery' ? 'delivery' : 'pickup');
+            if (typeof window.openOverviewInventoryManageModal === 'function') {
+                window.openOverviewInventoryManageModal(kind === 'delivery' ? 'delivery' : 'pickup');
+            }
         }
         return;
     }
@@ -2317,6 +2557,10 @@ document.addEventListener('click', function(event) {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
+        // Create local references to module-level functions to ensure they're accessible in this scope
+        const clearNextMissingHighlights = window.clearNextMissingHighlights;
+        const validateStep1AreaOrEircode = window.validateStep1AreaOrEircode;
+
         // Sticky Next button logic
         const stickyNextBtn = document.getElementById('sticky-next-btn');
         const stickyResetBtn = document.getElementById('sticky-reset-btn');
@@ -2729,10 +2973,26 @@ document.addEventListener('DOMContentLoaded', function () {
                 const pickupCity = document.getElementById('pickup-city');
                 const deliveryAddress = document.getElementById('delivery-address');
                 const deliveryCity = document.getElementById('delivery-city');
+                const pickupCityArea = document.getElementById('pickup-city-area');
+                const pickupPostcode = document.getElementById('pickup-postcode');
+                const deliveryCityArea = document.getElementById('delivery-city-area');
+                const deliveryPostcode = document.getElementById('delivery-postcode');
+
+                const pickupHasAreaOrEircode = !!(
+                    (pickupCityArea && pickupCityArea.value && pickupCityArea.value.trim())
+                    || (pickupPostcode && pickupPostcode.value && pickupPostcode.value.trim())
+                );
+                const deliveryHasAreaOrEircode = !!(
+                    (deliveryCityArea && deliveryCityArea.value && deliveryCityArea.value.trim())
+                    || (deliveryPostcode && deliveryPostcode.value && deliveryPostcode.value.trim())
+                );
+
                 return pickupAddress && pickupAddress.value.trim() &&
                     pickupCity && pickupCity.value.trim() &&
                     deliveryAddress && deliveryAddress.value.trim() &&
-                    deliveryCity && deliveryCity.value.trim();
+                    deliveryCity && deliveryCity.value.trim() &&
+                    pickupHasAreaOrEircode &&
+                    deliveryHasAreaOrEircode;
             }
             // Step 2: property type required
             if (step === 2) {
@@ -2990,11 +3250,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        function clearNextMissingHighlights() {
-            document.querySelectorAll('.next-missing-highlight').forEach((node) => {
-                node.classList.remove('next-missing-highlight');
-            });
-        }
+        // clearNextMissingHighlights is now defined at module level, no need to redefine
 
         function getVisibleMissingTarget(target) {
             if (!target) return null;
@@ -3053,7 +3309,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         .find((block) => String(block.getAttribute('data-floor') || '').trim().toLowerCase() === firstMissingFloor.toLowerCase());
 
                     if (floorBlock) {
-                        clearNextMissingHighlights();
+                        window.clearNextMissingHighlights();
                         floorBlock.classList.add('next-missing-highlight');
                         floorBlock.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
@@ -3077,7 +3333,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
 
-            clearNextMissingHighlights();
+            window.clearNextMissingHighlights();
 
             const visibleTarget = getVisibleMissingTarget(target) || target;
 
@@ -3316,6 +3572,26 @@ document.addEventListener('DOMContentLoaded', function () {
                     const field = document.getElementById(fieldId);
                     const value = field && typeof field.value === 'string' ? field.value.trim() : '';
                     if (!value) return field;
+                }
+
+                const pickupCityArea = document.getElementById('pickup-city-area');
+                const pickupPostcode = document.getElementById('pickup-postcode');
+                const pickupHasAreaOrEircode = !!(
+                    (pickupCityArea && pickupCityArea.value && pickupCityArea.value.trim())
+                    || (pickupPostcode && pickupPostcode.value && pickupPostcode.value.trim())
+                );
+                if (!pickupHasAreaOrEircode) {
+                    return pickupCityArea || pickupPostcode;
+                }
+
+                const deliveryCityArea = document.getElementById('delivery-city-area');
+                const deliveryPostcode = document.getElementById('delivery-postcode');
+                const deliveryHasAreaOrEircode = !!(
+                    (deliveryCityArea && deliveryCityArea.value && deliveryCityArea.value.trim())
+                    || (deliveryPostcode && deliveryPostcode.value && deliveryPostcode.value.trim())
+                );
+                if (!deliveryHasAreaOrEircode) {
+                    return deliveryCityArea || deliveryPostcode;
                 }
             }
 
@@ -3866,7 +4142,9 @@ document.addEventListener('DOMContentLoaded', function () {
     setTimeout(function() {
         const homeBtnTop = document.getElementById('step-home-btn-top');
         const backBtnTop = document.getElementById('step-back-btn-top');
+        const overviewBtnTop = document.getElementById('step-overview-btn-top');
         const backBtn = document.getElementById('step-back-btn');
+        let overviewStepUnlocked = false;
         const handleBackClick = function () {
             let step = 1;
             if (document.body.dataset && document.body.dataset.formStep) {
@@ -3886,6 +4164,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 window.clearCreateJobProgress();
             }
             window.location.assign('index.html');
+        };
+        const handleOverviewClick = function () {
+            if (!overviewStepUnlocked || typeof window.setFormStep !== 'function') return;
+            window.setFormStep(8);
+            document.body.dataset.formStep = '8';
+            document.body.dataset.currentStep = '8';
         };
         if (homeBtnTop) {
             homeBtnTop.disabled = false;
@@ -3910,13 +4194,22 @@ document.addEventListener('DOMContentLoaded', function () {
             backBtn.disabled = false;
             backBtn.addEventListener('click', handleBackClick);
         }
+        if (overviewBtnTop) {
+            overviewBtnTop.disabled = false;
+            overviewBtnTop.addEventListener('click', handleOverviewClick);
+        }
 
         // Hide Back button in step 1
-        function updateBackBtnTopVisibility() {
+        function updateTopStepActionButtons() {
             let step = 1;
             if (document.body.dataset && document.body.dataset.formStep) {
                 step = parseInt(document.body.dataset.formStep, 10);
             }
+
+            if (Number.isFinite(step) && step >= 8) {
+                overviewStepUnlocked = true;
+            }
+
             if (backBtnTop) {
                 if (step === 1) {
                     backBtnTop.style.display = 'none';
@@ -3924,14 +4217,19 @@ document.addEventListener('DOMContentLoaded', function () {
                     backBtnTop.style.display = 'inline-block';
                 }
             }
+
+            if (overviewBtnTop) {
+                const showOverviewButton = overviewStepUnlocked && step !== 8;
+                overviewBtnTop.style.display = showOverviewButton ? 'inline-block' : 'none';
+            }
         }
         // Initial check
-        document.addEventListener('DOMContentLoaded', updateBackBtnTopVisibility);
-        updateBackBtnTopVisibility();
+        document.addEventListener('DOMContentLoaded', updateTopStepActionButtons);
+        updateTopStepActionButtons();
         // Listen for step changes
-        document.addEventListener('formStepChanged', updateBackBtnTopVisibility);
+        document.addEventListener('formStepChanged', updateTopStepActionButtons);
         // Also update on manual changes
-        setInterval(updateBackBtnTopVisibility, 200);
+        setInterval(updateTopStepActionButtons, 200);
     }, 100);
     
     // Service Requirements - Service Option Buttons handlers
@@ -5678,7 +5976,7 @@ document.addEventListener('DOMContentLoaded', function () {
             assembleSelectAllBtn.style.opacity = '0.6';
             assembleSelectAllBtn.style.cursor = 'not-allowed';
         } else {
-            assembleSelectAllBtn.textContent = allDisassemblyItemsAutoSelected ? 'Undo auto-select' : 'Auto-select disassembly items';
+            assembleSelectAllBtn.textContent = allDisassemblyItemsAutoSelected ? 'Undo auto-select' : 'Auto-select disassembled items';
         }
         assembleList.appendChild(assembleSelectAllBtn);
 
@@ -7129,6 +7427,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             selectedPickupFloors: Array.from(window.selectedPickupFloors || []),
             selectedDeliveryFloors: Array.from(window.selectedDeliveryFloors || []),
             multiFloorInventory: safeClone(window.multiFloorInventory || {}, {}),
+            itemFloorAssignments: safeClone(window.itemFloorAssignments || {}, {}),
             itemQuantities: safeClone(window.itemQuantities || {}, {}),
             customItems: safeClone(window.customItems || {}, {}),
             customItemPhotos: safeClone(window.customItemPhotos || {}, {}),
@@ -7174,6 +7473,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                     customItems: payload.customItems,
                     customItemPhotos: payload.customItemPhotos,
                     selectedPickupFloors: payload.selectedPickupFloors,
+                    itemFloorAssignments: payload.itemFloorAssignments,
                     multiFloorInventory: payload.multiFloorInventory,
                     floorMediaItems: payload.floorMediaItems
                 }));
@@ -7238,6 +7538,21 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             }
             if (payload.multiFloorInventory && typeof payload.multiFloorInventory === 'object') {
                 window.multiFloorInventory = overwriteObjectPreserveReference(window.multiFloorInventory, payload.multiFloorInventory) || payload.multiFloorInventory;
+            }
+            if (payload.itemFloorAssignments && typeof payload.itemFloorAssignments === 'object') {
+                window.itemFloorAssignments = overwriteObjectPreserveReference(window.itemFloorAssignments, payload.itemFloorAssignments) || payload.itemFloorAssignments;
+            } else {
+                try {
+                    const legacyRaw = localStorage.getItem('house_removal_inventory');
+                    if (legacyRaw) {
+                        const legacyParsed = JSON.parse(legacyRaw);
+                        if (legacyParsed && legacyParsed.itemFloorAssignments && typeof legacyParsed.itemFloorAssignments === 'object') {
+                            window.itemFloorAssignments = overwriteObjectPreserveReference(window.itemFloorAssignments, legacyParsed.itemFloorAssignments) || legacyParsed.itemFloorAssignments;
+                        }
+                    }
+                } catch (error) {
+                    // Ignore legacy assignment snapshot parse errors.
+                }
             }
             if (payload.itemQuantities && typeof payload.itemQuantities === 'object') {
                 window.itemQuantities = overwriteObjectPreserveReference(window.itemQuantities, payload.itemQuantities) || payload.itemQuantities;
@@ -8022,6 +8337,7 @@ window.togglePickupFloor = async function(floor) {
             window.renderSelectedPickupFloorsInventory(pickuplift.value);
         }
     }
+
 };
 
 // Toggle delivery floor selection (multi-select for destination floors)
@@ -9096,7 +9412,9 @@ document.addEventListener('DOMContentLoaded', function () {
     };
     
     // Item to floor assignments with quantity splitting (item name -> {floor: qty, floor2: qty2, ...})
-    let itemFloorAssignments = {};
+    let itemFloorAssignments = (window.itemFloorAssignments && typeof window.itemFloorAssignments === 'object')
+        ? window.itemFloorAssignments
+        : {};
     window.itemFloorAssignments = itemFloorAssignments;
     
     // Selected items for bulk assignment (Set of item names)
@@ -9161,14 +9479,16 @@ document.addEventListener('DOMContentLoaded', function () {
     };
     
     // Initialize delivery floor assignments with default floors
-    function initializeFloors(floorsArray) {
+    function initializeFloors(floorsArray, options = {}) {
+        const preserveAssignments = options.preserveAssignments !== false;
         deliveryFloors = floorsArray || deliveryFloors;
-        // Reset item assignments
-        itemFloorAssignments = {};
-        window.itemFloorAssignments = itemFloorAssignments;
+        if (!preserveAssignments) {
+            itemFloorAssignments = {};
+            window.itemFloorAssignments = itemFloorAssignments;
+        }
     }
     
-    initializeFloors();
+    initializeFloors(undefined, { preserveAssignments: true });
     
     // Listen for delivery property type changes
     const deliveryPropertyTypeInput = document.getElementById('delivery-property-type');
@@ -9187,7 +9507,7 @@ document.addEventListener('DOMContentLoaded', function () {
             
             // Reset all assignments and reinitialize with new floors
             const newFloors = propertyFloors[selectedType] || propertyFloors['apartment'];
-            initializeFloors(newFloors);
+            initializeFloors(newFloors, { preserveAssignments: false });
             
             // Re-render
             renderInventoryByRoom();
@@ -9472,23 +9792,54 @@ document.addEventListener('DOMContentLoaded', function () {
 
         return hasOverlap;
     }
+
+    function getAssignmentKeyCandidates(itemKey) {
+        const candidates = [];
+        const pushUnique = (key) => {
+            const normalized = String(key || '').trim();
+            if (!normalized) return;
+            if (!candidates.includes(normalized)) {
+                candidates.push(normalized);
+            }
+        };
+
+        pushUnique(itemKey);
+        pushUnique(getItemNameFromKey(itemKey));
+
+        return candidates;
+    }
+
+    function getAssignedQuantityForFloor(itemKey, floor) {
+        if (!floor) return 0;
+        return getAssignmentKeyCandidates(itemKey).reduce((sum, candidateKey) => {
+            const assignment = itemFloorAssignments[candidateKey];
+            const qty = assignment ? (parseInt(assignment[floor], 10) || 0) : 0;
+            return sum + qty;
+        }, 0);
+    }
+
+    function removeAssignmentFromFloor(itemKey, floor) {
+        if (!floor) return;
+        getAssignmentKeyCandidates(itemKey).forEach((candidateKey) => {
+            const assignment = itemFloorAssignments[candidateKey];
+            if (!assignment || (parseInt(assignment[floor], 10) || 0) <= 0) {
+                return;
+            }
+
+            delete assignment[floor];
+            if (Object.keys(assignment).length === 0) {
+                delete itemFloorAssignments[candidateKey];
+            }
+        });
+    }
     
     // Helper function to get total assigned quantity for an item (using original item name)
     function getAssignedQuantity(itemKey) {
-        const itemName = getItemNameFromKey(itemKey);
-        if (!itemFloorAssignments[itemKey] && !itemFloorAssignments[itemName]) return 0;
-        
-        // First check with the key
-        if (itemFloorAssignments[itemKey]) {
-            return Object.values(itemFloorAssignments[itemKey]).reduce((sum, qty) => sum + qty, 0);
-        }
-        
-        // Fall back to item name for backwards compatibility
-        if (itemFloorAssignments[itemName]) {
-            return Object.values(itemFloorAssignments[itemName]).reduce((sum, qty) => sum + qty, 0);
-        }
-        
-        return 0;
+        return getAssignmentKeyCandidates(itemKey).reduce((sum, candidateKey) => {
+            const assignment = itemFloorAssignments[candidateKey];
+            if (!assignment) return sum;
+            return sum + Object.values(assignment).reduce((innerSum, qty) => innerSum + (parseInt(qty, 10) || 0), 0);
+        }, 0);
     }
     
     // Helper function to get remaining quantity for an item
@@ -10388,11 +10739,11 @@ document.addEventListener('DOMContentLoaded', function () {
             
             // Items for this floor (check if this floor has any assigned quantity)
             const itemsForFloor = allItems.filter(item => {
-                return itemFloorAssignments[item.key] && itemFloorAssignments[item.key][floor] > 0;
+                return getAssignedQuantityForFloor(item.key, floor) > 0;
             }).map(item => {
                 return {
                     ...item,
-                    assignedQty: itemFloorAssignments[item.key][floor]
+                    assignedQty: getAssignedQuantityForFloor(item.key, floor)
                 };
             });
 
@@ -10459,6 +10810,13 @@ document.addEventListener('DOMContentLoaded', function () {
             } else {
                 // House removal rendering (with room grouping)
                 const itemsByRoom = {};
+                itemsForFloor.forEach((item) => {
+                    const roomKey = String(item.room || 'boxes').trim() || 'boxes';
+                    if (!itemsByRoom[roomKey]) {
+                        itemsByRoom[roomKey] = [];
+                    }
+                    itemsByRoom[roomKey].push(item);
+                });
 
                 const roomList = document.createElement('div');
                 roomList.style.cssText = `
@@ -10582,12 +10940,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (!confirmed) return;
 
                         roomItemsForFloor.forEach((item) => {
-                            if (itemFloorAssignments[item.key] && itemFloorAssignments[item.key][floor] > 0) {
-                                delete itemFloorAssignments[item.key][floor];
-                                if (Object.keys(itemFloorAssignments[item.key]).length === 0) {
-                                    delete itemFloorAssignments[item.key];
-                                }
-                            }
+                            removeAssignmentFromFloor(item.key, floor);
                         });
 
                         expandedDeliveryRooms.delete(roomAccordionKey);
@@ -10686,13 +11039,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         removeBtn.addEventListener('click', (event) => {
                             event.stopPropagation();
                             // Remove assignment from this floor only
-                            if (itemFloorAssignments[item.key]) {
-                                delete itemFloorAssignments[item.key][floor];
-                                // If no floors left, remove the item entirely
-                                if (Object.keys(itemFloorAssignments[item.key]).length === 0) {
-                                    delete itemFloorAssignments[item.key];
-                                }
-                            }
+                            removeAssignmentFromFloor(item.key, floor);
                             renderInventoryByRoom();
                             renderDeliveryFloors();
                         });
@@ -11042,6 +11389,13 @@ document.addEventListener('DOMContentLoaded', function () {
             return entry.previewDataUrl;
         }
         return '';
+    }
+
+    function getMediaTypeFromPreviewDataUrl(previewDataUrl) {
+        const value = String(previewDataUrl || '').trim().toLowerCase();
+        if (value.startsWith('data:video/')) return 'video';
+        if (value.startsWith('data:image/')) return 'photo';
+        return 'photo';
     }
 
     function openFloorMediaPreviewModal(entry) {
@@ -11699,6 +12053,57 @@ document.addEventListener('DOMContentLoaded', function () {
             return getCustomFloorItemsForTab(tabName).includes(itemName);
         };
 
+        const getRoomKeyFromTrackingPrefix = (prefix) => {
+            const normalized = String(prefix || '').trim().toLowerCase();
+            if (!normalized) return '';
+            if (normalized === 'utility room') return 'utility';
+            if (normalized === 'boxes & other' || normalized === 'custom items' || normalized === 'boxes') return 'boxes';
+            return ROOM_ITEMS[normalized] ? normalized : '';
+        };
+
+        const parseCustomItemFromTrackingKey = (trackingKey) => {
+            const raw = String(trackingKey || '').trim();
+            if (!raw) return null;
+
+            const prefixed = raw.match(/^([^\-]+)\s-\s(.+)$/);
+            if (prefixed) {
+                const roomKey = getRoomKeyFromTrackingPrefix(prefixed[1]);
+                const itemName = String(prefixed[2] || '').trim();
+                if (!roomKey || !itemName) return null;
+                if (Array.isArray(ROOM_ITEMS[roomKey]) && ROOM_ITEMS[roomKey].includes(itemName)) {
+                    return null;
+                }
+                return { roomKey, itemName };
+            }
+
+            const existsInBaseRooms = Object.keys(ROOM_ITEMS).some((roomKey) => {
+                return Array.isArray(ROOM_ITEMS[roomKey]) && ROOM_ITEMS[roomKey].includes(raw);
+            });
+            if (existsInBaseRooms) {
+                return null;
+            }
+
+            // Legacy fallback: unprefixed custom tracking keys have no room information.
+            return { roomKey: 'boxes', itemName: raw };
+        };
+
+        const hydrateCustomFloorItemsFromInventory = () => {
+            Object.keys(existingFloorItems).forEach((trackingKey) => {
+                const qty = parseInt(existingFloorItems[trackingKey], 10) || 0;
+                if (qty <= 0) return;
+
+                const parsed = parseCustomItemFromTrackingKey(trackingKey);
+                if (!parsed) return;
+
+                const customItemsForRoom = getCustomFloorItemsForTab(parsed.roomKey);
+                if (!customItemsForRoom.includes(parsed.itemName)) {
+                    customItemsForRoom.push(parsed.itemName);
+                }
+            });
+        };
+
+        hydrateCustomFloorItemsFromInventory();
+
         // Show room-specific items plus room-scoped custom items
         function getItemsForTab(tabName) {
             const roomKey = getRoomKey(tabName);
@@ -11809,7 +12214,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     const photoBtn = document.createElement('button');
                     photoBtn.type = 'button';
                     photoBtn.className = 'item-photo-btn';
-                    photoBtn.title = hasCustomPhoto ? 'Change photo' : 'Add photo';
+                    photoBtn.title = hasCustomPhoto ? 'Change photo/video' : 'Add photo/video';
                     photoBtn.textContent = hasCustomPhoto ? '📷✓' : '📷';
                     photoBtn.style.background = 'none';
                     photoBtn.style.border = 'none';
@@ -11842,6 +12247,12 @@ document.addEventListener('DOMContentLoaded', function () {
                                 reader.onload = function(evt) {
                                     photoStore[selectedTrackingKey] = evt.target.result;
                                     renderItems(tabName);
+                                    if (typeof window.saveStep3InventorySnapshot === 'function') {
+                                        window.saveStep3InventorySnapshot({ silent: true });
+                                    }
+                                    if (typeof window.saveCreateJobProgress === 'function') {
+                                        window.saveCreateJobProgress();
+                                    }
                                 };
                                 reader.readAsDataURL(file);
                             });
@@ -11852,6 +12263,38 @@ document.addEventListener('DOMContentLoaded', function () {
                         photoInput.click();
                     });
                     qtyDiv.appendChild(photoBtn);
+
+                    if (hasCustomPhoto) {
+                        const viewPhotoBtn = document.createElement('button');
+                        viewPhotoBtn.type = 'button';
+                        viewPhotoBtn.className = 'item-photo-view-btn';
+                        viewPhotoBtn.title = 'View photo/video';
+                        viewPhotoBtn.textContent = '👁';
+                        viewPhotoBtn.style.background = 'none';
+                        viewPhotoBtn.style.border = 'none';
+                        viewPhotoBtn.style.cursor = 'pointer';
+                        viewPhotoBtn.style.padding = '4px 6px';
+                        viewPhotoBtn.style.color = '#1d4ed8';
+                        viewPhotoBtn.style.fontWeight = '700';
+                        viewPhotoBtn.style.marginLeft = '4px';
+                        viewPhotoBtn.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            const previewDataUrl = photoStore[trackingKey];
+                            if (!previewDataUrl) {
+                                alert('Preview not available for this item. Please upload the media again.');
+                                return;
+                            }
+
+                            openFloorMediaPreviewModal({
+                                id: `custom-${trackingKey}`,
+                                itemName,
+                                fileName: 'Custom item media',
+                                mediaType: getMediaTypeFromPreviewDataUrl(previewDataUrl),
+                                previewDataUrl
+                            });
+                        });
+                        qtyDiv.appendChild(viewPhotoBtn);
+                    }
 
                     if (hasCustomPhoto) {
                         const removePhotoBtn = document.createElement('button');
@@ -11870,6 +12313,12 @@ document.addEventListener('DOMContentLoaded', function () {
                             e.stopPropagation();
                             delete photoStore[trackingKey];
                             renderItems(tabName);
+                            if (typeof window.saveStep3InventorySnapshot === 'function') {
+                                window.saveStep3InventorySnapshot({ silent: true });
+                            }
+                            if (typeof window.saveCreateJobProgress === 'function') {
+                                window.saveCreateJobProgress();
+                            }
                         });
                         qtyDiv.appendChild(removePhotoBtn);
                     }
@@ -12302,6 +12751,28 @@ document.addEventListener('DOMContentLoaded', function () {
                 : false;
             if (didSave) {
                 showFloorSavedState();
+
+                if (!window.__pickupQuickManagePromptedFloors || !(window.__pickupQuickManagePromptedFloors instanceof Set)) {
+                    window.__pickupQuickManagePromptedFloors = new Set();
+                }
+
+                const selectedFloorsCount = (window.selectedPickupFloors instanceof Set)
+                    ? window.selectedPickupFloors.size
+                    : Array.from(window.selectedPickupFloors || []).length;
+                const shouldPromptForThisFloor = !window.__pickupQuickManagePromptedFloors.has(floorRef.name);
+                const isVehicleServiceNow = isVehicleLikeStepFlowService(getActiveServiceValue());
+
+                if (
+                    selectedFloorsCount > 1
+                    && shouldPromptForThisFloor
+                    && !isVehicleServiceNow
+                    && typeof window.openOverviewInventoryManageModal === 'function'
+                ) {
+                    window.__pickupQuickManagePromptedFloors.add(floorRef.name);
+                    setTimeout(() => {
+                        window.openOverviewInventoryManageModal('pickup');
+                    }, 120);
+                }
             }
         };
 
@@ -13685,6 +14156,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const totalSteps = 8;
         window.totalSteps = totalSteps;
         let currentStep = 1;
+        let maxUnlockedStep = 1;
 
         const parseStepList = (el) => {
             if (!el) return [];
@@ -13730,8 +14202,36 @@ document.addEventListener('DOMContentLoaded', function() {
             stepItems.forEach((item) => {
                 const itemStep = parseInt(item.getAttribute('data-step'), 10);
                 item.classList.toggle('is-active', itemStep === step);
-                item.classList.toggle('is-complete', itemStep < step);
+                item.classList.toggle('is-complete', itemStep !== step && itemStep <= maxUnlockedStep);
             });
+        };
+
+        const updateStepLinkAccess = () => {
+            stepLinks.forEach((link) => {
+                const targetStep = parseInt(link.getAttribute('data-step'), 10);
+                if (!Number.isFinite(targetStep)) return;
+
+                const isUnlocked = targetStep <= maxUnlockedStep;
+                link.classList.toggle('is-locked', !isUnlocked);
+                link.setAttribute('aria-disabled', isUnlocked ? 'false' : 'true');
+                link.tabIndex = isUnlocked ? 0 : -1;
+            });
+
+            stepItems.forEach((item) => {
+                const targetStep = parseInt(item.getAttribute('data-step'), 10);
+                if (!Number.isFinite(targetStep)) return;
+                item.classList.toggle('is-locked', targetStep > maxUnlockedStep);
+            });
+        };
+
+        const unlockStep = (step) => {
+            const normalized = parseInt(step, 10);
+            if (!Number.isFinite(normalized)) return;
+            const clamped = Math.max(1, Math.min(totalSteps, normalized));
+            if (clamped > maxUnlockedStep) {
+                maxUnlockedStep = clamped;
+                updateStepLinkAccess();
+            }
         };
 
         const updateStepButtons = () => {
@@ -14160,6 +14660,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         };
 
+        // validateStep1AreaOrEircode is now defined at module level, no need to redefine
+
         const validateRequiredFieldsInStep = (step) => {
             const stepFields = [];
             stepTargets.forEach((el) => {
@@ -14234,6 +14736,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             });
+
+            if (step === 1) {
+                const missingAreaOrEircode = window.validateStep1AreaOrEircode(true);
+                if (missingAreaOrEircode) {
+                    return firstInvalid || missingAreaOrEircode;
+                }
+            }
 
             if (step === 3 && getActiveServiceValue() === 'Piano Transport') {
                 const missingPianoField = getPianoStep3MissingRequiredField();
@@ -14429,6 +14938,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (step < 1 || step > totalSteps) return;
             const previousStep = currentStep;
             currentStep = step;
+            unlockStep(step);
             document.body.dataset.formStep = String(step);
             document.body.dataset.currentStep = String(step);
             setStepVisibility(step);
@@ -14485,21 +14995,33 @@ document.addEventListener('DOMContentLoaded', function() {
                     revealMissingFieldBeforeAlert(firstInvalid);
                     return;
                 }
+                unlockStep(currentStep + 1);
                 setFormStep(currentStep + 1);
             });
         }
 
         stepLinks.forEach((link) => {
-            link.addEventListener('click', () => {
+            link.addEventListener('click', (event) => {
+                if (event) {
+                    event.preventDefault();
+                }
                 const targetStep = parseInt(link.getAttribute('data-step'), 10);
                 if (!Number.isFinite(targetStep)) return;
-                if (targetStep > currentStep) {
+
+                if (targetStep > maxUnlockedStep) {
+                    const isAttemptingImmediateNext = targetStep === currentStep + 1;
+                    if (!isAttemptingImmediateNext) {
+                        return;
+                    }
+
                     applyRequiredRules();
                     const firstInvalid = validateRequiredFieldsInStep(currentStep);
                     if (firstInvalid) {
                         revealMissingFieldBeforeAlert(firstInvalid);
                         return;
                     }
+
+                    unlockStep(targetStep);
                 }
                 setFormStep(targetStep);
             });
@@ -14508,6 +15030,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const initialStep = Number.isFinite(parseInt(window.__createJobRestoreTargetStep, 10))
             ? Math.max(1, Math.min(totalSteps, parseInt(window.__createJobRestoreTargetStep, 10)))
             : 1;
+        maxUnlockedStep = initialStep;
+        updateStepLinkAccess();
         setFormStep(initialStep);
         
         // Add listeners to update submit button visibility when fields change
@@ -17505,6 +18029,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
+        const missingAreaOrEircode = window.validateStep1AreaOrEircode(true);
+        if (missingAreaOrEircode) {
+            return firstInvalid || missingAreaOrEircode;
+        }
+
         // Inline messages handle all required errors.
 
         return firstInvalid;
@@ -17813,9 +18342,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
         quoteForm.addEventListener('input', (e) => {
             const target = e.target;
-            if (target && target.matches('[data-required="true"]')) {
+            if (target) {
                 clearFieldError(target);
                 clearInlineError(target);
+                if (typeof window.clearNextMissingHighlights === 'function') {
+                    window.clearNextMissingHighlights();
+                }
+            }
+            if (target && ['pickup-city-area', 'pickup-postcode', 'delivery-city-area', 'delivery-postcode'].includes(target.id)) {
+                if (typeof window.validateStep1AreaOrEircode === 'function') {
+                    window.validateStep1AreaOrEircode(false);
+                }
             }
             updateProgressiveFlow();
             if (typeof window.updateFormSummary === 'function') {
@@ -17823,7 +18360,20 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        quoteForm.addEventListener('change', () => {
+        quoteForm.addEventListener('change', (e) => {
+            const target = e.target;
+            if (target) {
+                clearFieldError(target);
+                clearInlineError(target);
+                if (typeof window.clearNextMissingHighlights === 'function') {
+                    window.clearNextMissingHighlights();
+                }
+            }
+            if (target && ['pickup-city-area', 'pickup-postcode', 'delivery-city-area', 'delivery-postcode'].includes(target.id)) {
+                if (typeof window.validateStep1AreaOrEircode === 'function') {
+                    window.validateStep1AreaOrEircode(false);
+                }
+            }
             updateProgressiveFlow();
             if (typeof window.updateFormSummary === 'function') {
                 window.updateFormSummary();
@@ -18835,7 +19385,14 @@ function buildMultiStopAddressBlock(stopId) {
                     <input type="text" id="${cityId}" class="form-input multi-stop-city" placeholder="City" autocomplete="address-level2" data-required="true" aria-required="true">
                 </div>
                 <div class="location-field">
-                    <label class="form-label" for="${postcodeId}">Eircode</label>
+                    <div class="eircode-label-row">
+                        <label class="form-label" for="${postcodeId}">Eircode</label>
+                        <a class="eircode-finder-link" href="https://finder.eircode.ie/#/" target="_blank" rel="noopener noreferrer" aria-label="Find your Eircode (opens in a new tab)" title="Find your Eircode">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M12 2C8.134 2 5 5.134 5 9c0 4.912 5.363 11.879 6.039 12.747a1.2 1.2 0 0 0 1.922 0C13.637 20.879 19 13.912 19 9c0-3.866-3.134-7-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z" fill="currentColor"/>
+                            </svg>
+                        </a>
+                    </div>
                     <input type="text" id="${postcodeId}" class="form-input multi-stop-postcode" placeholder="Eircode (e.g. A65 F4E2)" autocomplete="postal-code" data-optional="true">
                 </div>
             </div>
@@ -22705,7 +23262,6 @@ function buildOverviewFloorInventoryMarkup(kind) {
             Object.keys(perFloor).forEach((floorName) => {
                 const qty = parseInt(perFloor[floorName], 10) || 0;
                 if (qty <= 0) return;
-                if (selectedDelivery.length > 0 && !selectedDelivery.includes(floorName)) return;
                 if (!grouped[floorName]) grouped[floorName] = {};
                 grouped[floorName][baseName] = (grouped[floorName][baseName] || 0) + qty;
             });
@@ -22840,35 +23396,18 @@ function getOverviewManageRows(kind) {
     const selectedPickup = getOverviewSelectedPickupFloors();
     const fallbackPickupFloor = selectedPickup[0] || 'Ground';
     const assignments = window.itemFloorAssignments || {};
+    const pickupEntries = getOverviewPickupInventoryEntries();
 
-    Object.keys(assignments).forEach((itemKey) => {
-        const perFloor = assignments[itemKey] || {};
-        const split = String(itemKey || '').split('||');
-        const itemName = normalizeOverviewItemName(split[0] || itemKey);
-        const sourceFloor = (split[1] || fallbackPickupFloor || 'Ground').trim() || 'Ground';
-
-        Object.keys(perFloor).forEach((deliveryFloor) => {
-            const qty = parseInt(perFloor[deliveryFloor], 10) || 0;
-            if (qty <= 0) return;
-            rows.push({
-                itemName,
-                qty,
-                deliveryFloor,
-                sourceFloor
-            });
-        });
+    const pickupQtyByKey = {};
+    pickupEntries.forEach((entry) => {
+        if (!entry || !entry.itemName || entry.qty <= 0) return;
+        const key = `${entry.itemName.toLowerCase()}||${entry.sourceFloor}`;
+        pickupQtyByKey[key] = (pickupQtyByKey[key] || 0) + entry.qty;
     });
 
-    if (rows.length === 0 || kind === 'pickup') {
-        const pickupEntries = getOverviewPickupInventoryEntries();
+    if (kind === 'pickup') {
         pickupEntries.forEach((entry) => {
             if (!entry || !entry.itemName || entry.qty <= 0) return;
-            const hasMatchingAssignment = rows.some((row) => (
-                row.itemName.toLowerCase() === entry.itemName.toLowerCase()
-                && row.sourceFloor === entry.sourceFloor
-            ));
-            if (hasMatchingAssignment && kind !== 'pickup') return;
-
             rows.push({
                 itemName: entry.itemName,
                 qty: entry.qty,
@@ -22876,7 +23415,47 @@ function getOverviewManageRows(kind) {
                 sourceFloor: entry.sourceFloor
             });
         });
+        return rows;
     }
+
+    const assignedQtyByKey = {};
+    Object.keys(assignments).forEach((itemKey) => {
+        const perFloor = assignments[itemKey] || {};
+        const split = String(itemKey || '').split('||');
+        const itemName = normalizeOverviewItemName(split[0] || itemKey);
+        const sourceFloor = (split[1] || fallbackPickupFloor || 'Ground').trim() || 'Ground';
+        const normalizedKey = `${itemName.toLowerCase()}||${sourceFloor}`;
+        const pickupQty = pickupQtyByKey[normalizedKey] || 0;
+
+        Object.keys(perFloor).forEach((deliveryFloor) => {
+            const qty = parseInt(perFloor[deliveryFloor], 10) || 0;
+            if (qty <= 0) return;
+            if (pickupQty > 0 && qty > pickupQty) return;
+
+            rows.push({
+                itemName,
+                qty,
+                deliveryFloor,
+                sourceFloor
+            });
+            assignedQtyByKey[normalizedKey] = (assignedQtyByKey[normalizedKey] || 0) + qty;
+        });
+    });
+
+    pickupEntries.forEach((entry) => {
+        if (!entry || !entry.itemName || entry.qty <= 0) return;
+        const key = `${entry.itemName.toLowerCase()}||${entry.sourceFloor}`;
+        const alreadyAssigned = assignedQtyByKey[key] || 0;
+        const unassignedQty = Math.max(0, entry.qty - alreadyAssigned);
+        if (unassignedQty <= 0) return;
+
+        rows.push({
+            itemName: entry.itemName,
+            qty: unassignedQty,
+            deliveryFloor: firstDeliveryFloor,
+            sourceFloor: entry.sourceFloor
+        });
+    });
 
     return rows;
 }
@@ -22942,10 +23521,6 @@ function openOverviewInventoryManageModal(kind) {
     }
 
     const selectedDeliveryFloors = getOverviewSelectedDeliveryFloors();
-    if (selectedDeliveryFloors.length === 0) {
-        alert('Select at least one delivery floor in Step 5 before managing delivery assignments.');
-        return;
-    }
 
     const selectedPickupFloors = getOverviewSelectedPickupFloors();
     const defaultPickupFloor = selectedPickupFloors[0] || 'Ground';
@@ -22967,34 +23542,58 @@ function openOverviewInventoryManageModal(kind) {
             : 'Quick Manage Pickup / Delivery Inventory';
     }
 
+    if (saveBtn) saveBtn.style.display = '';
+
     const rows = getOverviewManageRows(kind);
-    const deliveryFloorOptions = selectedDeliveryFloors
-        .map((floor) => `<option value="${escapeOverviewHtml(floor)}">${escapeOverviewHtml(floor)}</option>`)
-        .join('');
-    const pickupFloorOptions = (selectedPickupFloors.length ? selectedPickupFloors : [defaultPickupFloor])
-        .map((floor) => `<option value="${escapeOverviewHtml(floor)}">${escapeOverviewHtml(floor)}</option>`)
-        .join('');
+
+    const getResolvedDeliveryFloors = () => {
+        const selected = getOverviewSelectedDeliveryFloors();
+        if (selected.length > 0) return selected;
+        const allFloors = typeof getOverviewAllFloors === 'function' ? getOverviewAllFloors() : [];
+        return allFloors.length > 0 ? allFloors : ['Ground'];
+    };
+
+    const getDeliveryFloorOptions = () => {
+        const floors = getResolvedDeliveryFloors();
+        return floors
+            .map((floor) => `<option value="${escapeOverviewHtml(floor)}">${escapeOverviewHtml(floor)}</option>`)
+            .join('');
+    };
+
+    const getPickupFloorOptions = () => {
+        const floors = getOverviewSelectedPickupFloors();
+        const fallback = floors[0] || defaultPickupFloor;
+        return (floors.length ? floors : [fallback])
+            .map((floor) => `<option value="${escapeOverviewHtml(floor)}">${escapeOverviewHtml(floor)}</option>`)
+            .join('');
+    };
 
     const renderRows = () => {
+        const currentPickupFloors = getOverviewSelectedPickupFloors();
+        const currentDeliveryFloors = getResolvedDeliveryFloors();
+        const currentDefaultPickupFloor = currentPickupFloors[0] || defaultPickupFloor;
+
         const rowsHtml = rows.length === 0
             ? '<div style="padding:10px 12px; border:1px dashed #bfdbfe; border-radius:8px; color:#475569;">No items yet. Add an item below.</div>'
             : rows.map((row, index) => {
                 const safeName = escapeOverviewHtml(row.itemName || '');
-                const selectedDelivery = escapeOverviewHtml(row.deliveryFloor || selectedDeliveryFloors[0] || '');
-                const selectedPickup = escapeOverviewHtml(row.sourceFloor || defaultPickupFloor);
-                const optionsDelivery = selectedDeliveryFloors.map((floor) => {
-                    const selected = floor === row.deliveryFloor ? 'selected' : '';
+                const selectedDelivery = String(row.deliveryFloor || currentDeliveryFloors[0] || '').trim();
+                const selectedPickup = String(row.sourceFloor || currentDefaultPickupFloor).trim() || currentDefaultPickupFloor;
+
+                const optionsDelivery = currentDeliveryFloors.map((floor) => {
+                    const selected = floor === selectedDelivery ? 'selected' : '';
                     return `<option value="${escapeOverviewHtml(floor)}" ${selected}>${escapeOverviewHtml(floor)}</option>`;
                 }).join('');
-                const optionsPickup = (selectedPickupFloors.length ? selectedPickupFloors : [defaultPickupFloor]).map((floor) => {
-                    const selected = floor === row.sourceFloor ? 'selected' : '';
+
+                const optionsPickup = (currentPickupFloors.length ? currentPickupFloors : [currentDefaultPickupFloor]).map((floor) => {
+                    const selected = floor === selectedPickup ? 'selected' : '';
                     return `<option value="${escapeOverviewHtml(floor)}" ${selected}>${escapeOverviewHtml(floor)}</option>`;
                 }).join('');
 
                 return `
                     <div class="overview-inventory-manage-row" data-row-index="${index}" style="display:grid; grid-template-columns: minmax(220px, 1.4fr) 90px 170px 170px auto; gap:8px; align-items:center; padding:8px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:8px; background:#fff;">
                         <input type="text" class="overview-manage-item-name" value="${safeName}" placeholder="Item name" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">
-                        <input type="number" min="1" class="overview-manage-item-qty" value="${Number(row.qty || 1)}" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; width:100%;">
+                        <input type="number" min="1" class="overview-manage-item-qty" value="${Math.max(1, Number(row.qty || 1))}" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; width:100%;">
                         <select class="overview-manage-item-delivery-floor" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">${optionsDelivery}</select>
                         <select class="overview-manage-item-source-floor" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">${optionsPickup}</select>
                         <button type="button" class="overview-manage-remove-row" style="border:1px solid #fecaca; background:#fff1f2; color:#b91c1c; border-radius:7px; padding:7px 10px; font-weight:700; cursor:pointer;">Remove</button>
@@ -23004,7 +23603,7 @@ function openOverviewInventoryManageModal(kind) {
 
         body.innerHTML = `
             <div style="margin-bottom:10px; color:#334155; font-size:0.93rem;">
-                Edit item quantity, remove rows, or add a custom item and assign it to a delivery floor selected in Step 5.
+                Edit item quantity, remove rows, or add a custom item with pickup and delivery floor assignments.
             </div>
             <div style="display:grid; grid-template-columns: minmax(220px, 1.4fr) 90px 170px 170px auto; gap:8px; margin-bottom:8px; font-size:0.78rem; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.02em;">
                 <div>Item</div>
@@ -23019,8 +23618,8 @@ function openOverviewInventoryManageModal(kind) {
                 <div style="display:grid; grid-template-columns:minmax(220px, 1.4fr) 90px 170px 170px auto; gap:8px;">
                     <input type="text" id="overview-manage-new-item-name" placeholder="Type item name" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">
                     <input type="number" id="overview-manage-new-item-qty" min="1" value="1" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; width:100%;">
-                    <select id="overview-manage-new-item-delivery-floor" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">${deliveryFloorOptions}</select>
-                    <select id="overview-manage-new-item-source-floor" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">${pickupFloorOptions}</select>
+                    <select id="overview-manage-new-item-delivery-floor" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">${getDeliveryFloorOptions()}</select>
+                    <select id="overview-manage-new-item-source-floor" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">${getPickupFloorOptions()}</select>
                     <button type="button" id="overview-manage-add-row" style="border:none; background:#1d4ed8; color:#fff; border-radius:7px; padding:7px 10px; font-weight:700; cursor:pointer;">Add</button>
                 </div>
             </div>
@@ -23047,7 +23646,7 @@ function openOverviewInventoryManageModal(kind) {
             const itemName = String(nameInput?.value || '').trim();
             const qty = Math.max(1, parseInt(qtyInput?.value, 10) || 1);
             const deliveryFloor = String(deliveryInput?.value || '').trim();
-            const sourceFloor = String(sourceInput?.value || defaultPickupFloor).trim() || defaultPickupFloor;
+            const pickupFloor = String(sourceInput?.value || currentDefaultPickupFloor).trim() || currentDefaultPickupFloor;
 
             if (!itemName) {
                 alert('Enter an item name first.');
@@ -23058,7 +23657,7 @@ function openOverviewInventoryManageModal(kind) {
                 return;
             }
 
-            rows.push({ itemName, qty, deliveryFloor, sourceFloor });
+            rows.push({ itemName, qty, deliveryFloor, sourceFloor: pickupFloor });
             if (nameInput) nameInput.value = '';
             if (qtyInput) qtyInput.value = '1';
             renderRows();
@@ -23071,43 +23670,89 @@ function openOverviewInventoryManageModal(kind) {
         saveBtn.onclick = () => {
             const rowNodes = Array.from(body.querySelectorAll('.overview-inventory-manage-row'));
             const nextRows = [];
+            const currentPickupFloors = getOverviewSelectedPickupFloors();
+            const currentDefaultFloor = currentPickupFloors[0] || defaultPickupFloor;
+            const currentDeliveryFloors = getResolvedDeliveryFloors();
 
             for (const rowNode of rowNodes) {
                 const name = String(rowNode.querySelector('.overview-manage-item-name')?.value || '').trim();
                 const qty = Math.max(1, parseInt(rowNode.querySelector('.overview-manage-item-qty')?.value, 10) || 1);
                 const deliveryFloor = String(rowNode.querySelector('.overview-manage-item-delivery-floor')?.value || '').trim();
-                const sourceFloor = String(rowNode.querySelector('.overview-manage-item-source-floor')?.value || defaultPickupFloor).trim() || defaultPickupFloor;
+                const sourceFloor = String(rowNode.querySelector('.overview-manage-item-source-floor')?.value || currentDefaultFloor).trim() || currentDefaultFloor;
 
                 if (!name) {
                     alert('Each row must include an item name.');
                     return;
                 }
-                if (!deliveryFloor || !selectedDeliveryFloors.includes(deliveryFloor)) {
+                if (!deliveryFloor || !currentDeliveryFloors.includes(deliveryFloor)) {
                     alert('Each row must target a delivery floor selected in Step 5.');
                     return;
                 }
                 nextRows.push({ itemName: name, qty, deliveryFloor, sourceFloor });
             }
 
-            const assignments = window.itemFloorAssignments || (window.itemFloorAssignments = {});
-            Object.keys(assignments).forEach((key) => {
-                delete assignments[key];
-            });
+            // Also commit any pending values from the "Add Item" row so users can
+            // type and press Save without clicking Add first.
+            const pendingName = String(body.querySelector('#overview-manage-new-item-name')?.value || '').trim();
+            if (pendingName) {
+                const pendingQty = Math.max(1, parseInt(body.querySelector('#overview-manage-new-item-qty')?.value, 10) || 1);
+                const pendingDeliveryFloor = String(body.querySelector('#overview-manage-new-item-delivery-floor')?.value || '').trim();
+                const pendingSourceFloor = String(body.querySelector('#overview-manage-new-item-source-floor')?.value || currentDefaultFloor).trim() || currentDefaultFloor;
+
+                if (!pendingDeliveryFloor || !currentDeliveryFloors.includes(pendingDeliveryFloor)) {
+                    alert('Pending Add Item row must target a valid delivery floor.');
+                    return;
+                }
+
+                nextRows.push({
+                    itemName: pendingName,
+                    qty: pendingQty,
+                    deliveryFloor: pendingDeliveryFloor,
+                    sourceFloor: pendingSourceFloor
+                });
+            }
+
+            const multi = {};
 
             nextRows.forEach((row) => {
-                const sourceFloor = row.sourceFloor || defaultPickupFloor;
+                const sourceFloor = row.sourceFloor || currentDefaultFloor;
+                if (!multi[sourceFloor]) multi[sourceFloor] = {};
+                multi[sourceFloor][row.itemName] = (parseInt(multi[sourceFloor][row.itemName], 10) || 0) + row.qty;
+            });
+
+            const liveMulti = (window.multiFloorInventory && typeof window.multiFloorInventory === 'object')
+                ? window.multiFloorInventory
+                : (window.multiFloorInventory = {});
+            Object.keys(liveMulti).forEach((key) => {
+                delete liveMulti[key];
+            });
+            Object.keys(multi).forEach((key) => {
+                liveMulti[key] = multi[key];
+            });
+            const assignments = {};
+            nextRows.forEach((row) => {
+                const sourceFloor = row.sourceFloor || currentDefaultFloor;
                 const itemKey = `${row.itemName}||${sourceFloor}`;
                 if (!assignments[itemKey]) assignments[itemKey] = {};
                 assignments[itemKey][row.deliveryFloor] = (assignments[itemKey][row.deliveryFloor] || 0) + row.qty;
             });
+            const liveAssignments = (window.itemFloorAssignments && typeof window.itemFloorAssignments === 'object')
+                ? window.itemFloorAssignments
+                : (window.itemFloorAssignments = {});
+            Object.keys(liveAssignments).forEach((key) => {
+                delete liveAssignments[key];
+            });
+            Object.keys(assignments).forEach((key) => {
+                liveAssignments[key] = assignments[key];
+            });
 
-            const multi = window.multiFloorInventory || (window.multiFloorInventory = {});
+            if (!(window.selectedDeliveryFloors instanceof Set)) {
+                window.selectedDeliveryFloors = new Set(Array.from(window.selectedDeliveryFloors || []));
+            }
             nextRows.forEach((row) => {
-                const sourceFloor = row.sourceFloor || defaultPickupFloor;
-                if (!multi[sourceFloor]) multi[sourceFloor] = {};
-                const existingQty = parseInt(multi[sourceFloor][row.itemName], 10) || 0;
-                if (existingQty < row.qty) {
-                    multi[sourceFloor][row.itemName] = row.qty;
+                const floorName = String(row.deliveryFloor || '').trim();
+                if (floorName) {
+                    window.selectedDeliveryFloors.add(floorName);
                 }
             });
 
@@ -23131,6 +23776,9 @@ function openOverviewInventoryManageModal(kind) {
     modal.setAttribute('data-kind', kind);
     modal.style.display = 'block';
 }
+
+// Make globally accessible
+window.openOverviewInventoryManageModal = openOverviewInventoryManageModal;
 
 function getOverviewFloorSummaryText(kind) {
     const isPickup = kind === 'pickup';
@@ -23770,6 +24418,7 @@ function openOverviewEditModal(valueId) {
     } else if (valueId === 'summary-pickup-floors' || valueId === 'summary-delivery-floors') {
         const isPickup = valueId === 'summary-pickup-floors';
         const selectedSet = isPickup ? new Set(Array.from(window.selectedPickupFloors || [])) : new Set(Array.from(window.selectedDeliveryFloors || []));
+        const previousSelectedCount = selectedSet.size;
         if (selectedSet.size === 0) {
             const fallbackSummary = getOverviewFloorSummaryText(isPickup ? 'pickup' : 'delivery');
             fallbackSummary
@@ -23835,6 +24484,10 @@ function openOverviewEditModal(valueId) {
                     const fallback = getOverviewFloorSummaryText(isPickup ? 'pickup' : 'delivery') || 'Ground';
                     selected = [fallback.split(',')[0].trim() || 'Ground'];
                 }
+                const nextSelectedCount = selected.length;
+                const shouldOpenManageFromOverviewSave = isPickup
+                    && nextSelectedCount > previousSelectedCount
+                    && nextSelectedCount > 1;
                 if (isPickup) {
                     window.selectedPickupFloors = new Set(selected);
                     if (selected.length > 0) {
@@ -23851,6 +24504,12 @@ function openOverviewEditModal(valueId) {
                 }
                 refreshOverviewAfterEdit();
                 modal.classList.remove('active');
+
+                if (shouldOpenManageFromOverviewSave && typeof window.openOverviewInventoryManageModal === 'function') {
+                    setTimeout(() => {
+                        window.openOverviewInventoryManageModal('pickup');
+                    }, 120);
+                }
             };
         }
     } else if (valueId === 'summary-addresses') {
@@ -23995,6 +24654,9 @@ function openOverviewEditModal(valueId) {
     saveBtn.onclick = onSave;
     modal.classList.add('active');
 }
+
+// Make globally accessible
+window.openOverviewEditModal = openOverviewEditModal;
 
 document.addEventListener('DOMContentLoaded', function() {
     const urlParams = new URLSearchParams(window.location.search);
