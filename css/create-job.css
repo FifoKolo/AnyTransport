@@ -3052,7 +3052,7 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     padding: 10px;
 }
 .option-nav--compact {
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
 }
 .option-nav--year {
     max-height: 240px;

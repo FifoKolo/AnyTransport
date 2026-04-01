@@ -194,6 +194,12 @@ body[data-current-step="3"] .form-stepper {
     overflow-x: visible !important;
 }
 
+/* Reserve viewport-safe space for fixed Manage/Next buttons so bottom content
+   (media list and actions) can scroll above them instead of being covered. */
+#house-removal-inventory-section .floors-inventory-container {
+    padding-bottom: 170px;
+}
+
 @media (max-width: 900px) {
     #house-removal-inventory-section .floor-inventory-block > .inventory-block-header {
         top: 70px !important;
@@ -202,6 +208,10 @@ body[data-current-step="3"] .form-stepper {
     #house-removal-inventory-section .floor-inventory-block > .inventory-tabs,
     #house-removal-inventory-section .floor-inventory-block > .inventory-tabs-sticky {
         top: 118px !important;
+    }
+
+    #house-removal-inventory-section .floors-inventory-container {
+        padding-bottom: 220px;
     }
 }
 

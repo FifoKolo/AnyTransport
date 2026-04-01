@@ -55,6 +55,15 @@
     background: #dc2626;
 }
 
+.sticky-manage-btn {
+    bottom: 98px;
+    background: #0f766e;
+}
+
+.sticky-manage-btn:hover {
+    background: #0b5f58;
+}
+
 .sticky-reset-btn:hover {
     background: #b91c1c;
 }
@@ -81,6 +90,10 @@
     .sticky-reset-btn {
         top: 78px;
         bottom: auto;
+    }
+
+    .sticky-manage-btn {
+        bottom: calc(70px + env(safe-area-inset-bottom));
     }
 
     .sticky-action-btn {

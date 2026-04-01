@@ -576,36 +576,11 @@
                                         </div>
                                         <p style="margin: 8px 0 12px; color: #64748b; font-size: 0.9rem;">Upload photos or videos to help us determine the exact piano model and size.</p>
 
-                                        <div class="photo-upload-grid">
-                                            <label class="photo-upload-area" for="piano-photo-1">
-                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-                                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                                    <polyline points="21 15 16 10 5 21"></polyline>
-                                                </svg>
-                                                <span>Drag photo or video here <strong>upload</strong></span>
-                                                <input type="file" class="photo-input" id="piano-photo-1" accept="image/*,video/*">
-                                            </label>
-                                            <label class="photo-upload-area" for="piano-photo-2">
-                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-                                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                                    <polyline points="21 15 16 10 5 21"></polyline>
-                                                </svg>
-                                                <span>Drag photo or video here <strong>upload</strong></span>
-                                                <input type="file" class="photo-input" id="piano-photo-2" accept="image/*,video/*">
-                                            </label>
-                                            <label class="photo-upload-area" for="piano-photo-3">
-                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-                                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                                    <polyline points="21 15 16 10 5 21"></polyline>
-                                                </svg>
-                                                <span>Drag photo or video here <strong>upload</strong></span>
-                                                <input type="file" class="photo-input" id="piano-photo-3" accept="image/*,video/*">
-                                            </label>
+                                        <div style="margin-bottom: 12px;">
+                                            <input type="file" id="piano-media-input" class="form-input" accept="image/*,video/*" multiple>
+                                            <input type="hidden" id="piano-media-hidden" value="">
+                                            <div id="piano-media-preview" style="margin-top: 8px; display: none;"></div>
                                         </div>
-                                        <input type="hidden" id="piano-photos-hidden" value="">
                                     </div>
 
                                     <div id="piano-custom-section" style="display: none; margin-top: 10px; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #fff;">
@@ -1503,9 +1478,10 @@
                                         </div>
                                     </div>
                                     <div class="form-group" style="margin-bottom: 16px;">
-                                        <label class="form-label">Floors <span style="color:#9ca3af; font-weight:400;">(optional)</span></label>
-                                        <div id="car-floors-selector" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px;"></div>
-                                        <input type="hidden" id="car-floors-hidden" value="">
+                                        <label class="form-label" for="car-media-input">Photos / Videos <span style="color:#9ca3af; font-weight:400;">(optional)</span></label>
+                                        <input type="file" id="car-media-input" class="form-input" accept="image/*,video/*" multiple>
+                                        <input type="hidden" id="car-media-hidden" value="">
+                                        <div id="car-media-preview" style="margin-top: 8px; display: none;"></div>
                                     </div>
                                     <button type="button" id="add-car-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Add Campervan / Car</button>
                                     <button type="button" id="car-continue-with-saved-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">Continue with saved vehicles</button>
@@ -1649,9 +1625,10 @@
                                         </div>
                                     </div>
                                     <div class="form-group" style="margin-bottom: 16px;">
-                                        <label class="form-label">Floors <span style="color:#9ca3af; font-weight:400;">(optional)</span></label>
-                                        <div id="motorbike-floors-selector" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px;"></div>
-                                        <input type="hidden" id="motorbike-floors-hidden" value="">
+                                        <label class="form-label" for="motorbike-media-input">Photos / Videos <span style="color:#9ca3af; font-weight:400;">(optional)</span></label>
+                                        <input type="file" id="motorbike-media-input" class="form-input" accept="image/*,video/*" multiple>
+                                        <input type="hidden" id="motorbike-media-hidden" value="">
+                                        <div id="motorbike-media-preview" style="margin-top: 8px; display: none;"></div>
                                     </div>
                                     <button type="button" id="add-motorbike-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Add Motorbike</button>
                                     <button type="button" id="motorbike-continue-with-saved-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">Continue with saved vehicles</button>
@@ -1804,9 +1781,10 @@
                                         </div>
                                     </div>
                                     <div class="form-group" style="margin-bottom: 16px;">
-                                        <label class="form-label">Floors <span style="color:#9ca3af; font-weight:400;">(optional)</span></label>
-                                        <div id="trailer-floors-selector" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px;"></div>
-                                        <input type="hidden" id="trailer-floors-hidden" value="">
+                                        <label class="form-label" for="trailer-media-input">Photos / Videos <span style="color:#9ca3af; font-weight:400;">(optional)</span></label>
+                                        <input type="file" id="trailer-media-input" class="form-input" accept="image/*,video/*" multiple>
+                                        <input type="hidden" id="trailer-media-hidden" value="">
+                                        <div id="trailer-media-preview" style="margin-top: 8px; display: none;"></div>
                                     </div>
                                     <button type="button" id="add-trailer-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Add Caravan / Trailer</button>
                                     <button type="button" id="trailer-continue-with-saved-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">Continue with saved vehicles</button>
@@ -2227,6 +2205,7 @@
                         <!-- Old Next button removed; only sticky Next button remains -->
                     </div>
                     <button type="button" class="sticky-next-btn sticky-reset-btn" id="sticky-reset-btn">Reset</button>
+                    <button type="button" class="sticky-next-btn sticky-manage-btn" id="sticky-manage-btn" style="display: none;">Manage</button>
                     <button type="button" class="sticky-next-btn" id="sticky-next-btn">Next</button>
                 </form>
                 <!-- Removed duplicate lift-option-container. Only one instance should exist inside the form. -->

@@ -2,6 +2,47 @@
 const contactBlocker = {
     // Spelled-out number words
     numberWords: ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'],
+    maxDigitsPerField: 5,
+    blockedInputTypes: new Set(['hidden', 'checkbox', 'radio', 'submit', 'button', 'reset', 'file', 'image', 'color', 'range', 'date', 'datetime-local', 'month', 'week', 'time']),
+
+    isEligibleTarget(target) {
+        if (!target || target.disabled || target.readOnly) return false;
+        if (target.tagName === 'TEXTAREA') return true;
+        if (target.tagName !== 'INPUT') return false;
+        const inputType = (target.type || 'text').toLowerCase();
+        return !this.blockedInputTypes.has(inputType);
+    },
+
+    // Keep only the first 5 digits while preserving other characters.
+    trimToMaxDigits(value) {
+        if (!value) return '';
+
+        let digitCount = 0;
+        let trimmed = '';
+        for (const ch of String(value)) {
+            if (/\d/.test(ch)) {
+                if (digitCount < this.maxDigitsPerField) {
+                    digitCount += 1;
+                    trimmed += ch;
+                }
+                continue;
+            }
+            trimmed += ch;
+        }
+        return trimmed;
+    },
+
+    enforceMaxDigitCount(target) {
+        if (!this.isEligibleTarget(target)) return false;
+        const value = String(target.value || '');
+        const digits = value.match(/\d/g) || [];
+        if (digits.length <= this.maxDigitsPerField) return false;
+
+        target.value = this.trimToMaxDigits(value);
+        alert(`You can enter a maximum of ${this.maxDigitsPerField} numbers in this field.`);
+        target.focus();
+        return true;
+    },
     
     // Detect patterns that suggest contact information
     isContactInfo(text) {
@@ -18,9 +59,9 @@ const contactBlocker = {
         }
         
         // Phone number detection patterns
-        // Pattern 1: Count total digits in string - if 5+ digits with mostly separators, it's a phone
+        // Pattern 1: Count total digits in string - if more than 5 digits with mostly separators, it's a phone
         const digits = clean.replace(/\D/g, ''); // Remove all non-digits
-        if (digits.length >= 5) {
+        if (digits.length > this.maxDigitsPerField) {
             // If we have 5+ digits, check if they're separated by spaces/dashes/dots only
             // (not embedded in words like "test123item")
             const digitPattern = /[\d\s\-\.\(\)]+/;
@@ -64,7 +105,11 @@ const contactBlocker = {
         // Attach to document for dynamic elements
         document.addEventListener('input', (e) => {
             const target = e.target;
-            if (target.tagName === 'INPUT' && (target.type === 'text' || target.type === '')) {
+            if (this.enforceMaxDigitCount(target)) {
+                return;
+            }
+
+            if (target.tagName === 'INPUT' && this.isEligibleTarget(target)) {
                 if (this.isContactInfo(target.value)) {
                     target.value = '';
                     alert('❌ You cannot enter contact information (phone numbers or emails) in form fields. Please enter only item descriptions.');
@@ -248,7 +293,7 @@ function initTransportDatePicker() {
     function getAvailableDateOptions() {
         const storageBounds = getStorageDateBounds();
         if (!storageBounds) return optionItems;
-        return optionItems.filter((item) => item.id === 'fixed-date' || item.id === 'between-dates');
+        return optionItems.filter((item) => item.id === 'between-dates');
     }
 
     function enforceStorageDateValueIfNeeded() {
@@ -259,7 +304,7 @@ function initTransportDatePicker() {
         const toText = formatDateDisplay(storageBounds.end);
         const requiredValue = `Between Dates: ${fromText} - ${toText}`;
         const currentValue = String(hiddenInput.value || '').trim();
-        const isAllowedStorageValue = currentValue.startsWith('Between Dates:') || currentValue.startsWith('On a Fixed Date:');
+        const isAllowedStorageValue = currentValue.startsWith('Between Dates:');
 
         if (!isAllowedStorageValue) {
             updateTransportDate(requiredValue);
@@ -278,14 +323,6 @@ function initTransportDatePicker() {
                 updateTransportDate(requiredValue);
             }
             return;
-        }
-
-        if (currentValue.startsWith('On a Fixed Date:')) {
-            const fixedRaw = currentValue.replace(/^On a Fixed Date:\s*/, '').trim();
-            const fixedDate = parseDateInputValue(fixedRaw);
-            if (!fixedDate || fixedDate < storageBounds.start || fixedDate > storageBounds.end) {
-                updateTransportDate(requiredValue);
-            }
         }
     }
 
@@ -616,6 +653,7 @@ function initTransportDatePicker() {
             disableBeforeDate = null,
             disableAfterDate = null,
             selectedDate = null,
+            allowedDatesOnly = null,
             dataAttrs = ''
         } = config;
 
@@ -627,7 +665,8 @@ function initTransportDatePicker() {
             const isPastDate = !allowPastDates && normalizedDate < todayStart;
             const isBeforeLimit = !!disableBeforeDate && normalizedDate < disableBeforeDate;
             const isAfterLimit = !!disableAfterDate && normalizedDate > disableAfterDate;
-            const isDisabled = isPastDate || isBeforeLimit || isAfterLimit;
+            const isNotInAllowedSet = allowedDatesOnly && !allowedDatesOnly.some((allowedDate) => sameDate(normalizedDate, allowedDate));
+            const isDisabled = isPastDate || isBeforeLimit || isAfterLimit || isNotInAllowedSet;
 
             const classes = ['transport-date-day'];
             if (isOtherMonth) classes.push('other-month');
@@ -673,6 +712,7 @@ function initTransportDatePicker() {
                             selectedDate: state.rangeStart,
                             disableBeforeDate: storageBounds ? storageBounds.start : null,
                             disableAfterDate: storageBounds ? storageBounds.end : null,
+                            allowedDatesOnly: storageBounds ? [storageBounds.start, storageBounds.end] : null,
                             dataAttrs: 'data-range-target="start"'
                         })}
                     </div>
@@ -695,6 +735,7 @@ function initTransportDatePicker() {
                                 ? (state.rangeStart && state.rangeStart > storageBounds.start ? state.rangeStart : storageBounds.start)
                                 : state.rangeStart,
                             disableAfterDate: storageBounds ? storageBounds.end : null,
+                            allowedDatesOnly: storageBounds ? [storageBounds.start, storageBounds.end] : null,
                             dataAttrs: 'data-range-target="end"'
                         })}
                     </div>
@@ -2099,6 +2140,11 @@ function isPetsService(serviceValue) {
     return String(normalizeServiceValue(serviceValue) || '').trim().toLowerCase() === 'pets';
 }
 
+function isInventoryManageService(serviceValue) {
+    const normalized = normalizeServiceValue(serviceValue);
+    return normalized === 'House Removals' || normalized === 'Office Removals';
+}
+
 function getPetsStep3MissingRequiredField(forAddAction = false) {
     if (!isPetsService(getActiveServiceValue())) {
         return null;
@@ -2539,11 +2585,15 @@ document.addEventListener('click', function(event) {
     const manageBtn = event.target.closest('.overview-inventory-manage-btn');
     if (manageBtn) {
         event.preventDefault();
+        if (!isInventoryManageService(getActiveServiceValue())) {
+            return;
+        }
         const currentStep = parseInt(document.body.dataset.formStep || '1', 10);
         if (currentStep === 8) {
             const kind = (manageBtn.getAttribute('data-overview-inventory-kind') || 'pickup').trim().toLowerCase();
-            if (typeof window.openOverviewInventoryManageModal === 'function') {
-                window.openOverviewInventoryManageModal(kind === 'delivery' ? 'delivery' : 'pickup');
+            const targetStep = kind === 'delivery' ? 5 : 3;
+            if (typeof window.setFormStep === 'function') {
+                window.setFormStep(targetStep);
             }
         }
         return;
@@ -2564,6 +2614,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Sticky Next button logic
         const stickyNextBtn = document.getElementById('sticky-next-btn');
         const stickyResetBtn = document.getElementById('sticky-reset-btn');
+        const stickyManageBtn = document.getElementById('sticky-manage-btn');
         const stepNextBtn = document.getElementById('step-next-btn');
         function showStickyNextBtn() {
             if (stickyNextBtn) {
@@ -2573,6 +2624,35 @@ document.addEventListener('DOMContentLoaded', function () {
             if (stickyResetBtn) {
                 stickyResetBtn.classList.add('show');
                 stickyResetBtn.classList.remove('hide');
+            }
+        }
+
+        function updateStickyManageBtnVisibility() {
+            const activeService = getActiveServiceValue();
+            const canManageInventory = isInventoryManageService(activeService);
+
+            document.querySelectorAll('.overview-inventory-manage-btn').forEach((btn) => {
+                btn.style.display = canManageInventory ? '' : 'none';
+                btn.disabled = !canManageInventory;
+            });
+
+            if (!stickyManageBtn) return;
+
+            const step = getEffectiveCurrentStep();
+            const hasVisitedOverview = window.__overviewStepVisited === true;
+            const shouldShow = canManageInventory
+                && step === 3
+                && hasVisitedOverview
+                && typeof window.openOverviewInventoryManageModal === 'function';
+
+            if (shouldShow) {
+                stickyManageBtn.style.display = '';
+                stickyManageBtn.classList.add('show');
+                stickyManageBtn.classList.remove('hide');
+            } else {
+                stickyManageBtn.style.display = 'none';
+                stickyManageBtn.classList.remove('show');
+                stickyManageBtn.classList.add('hide');
             }
         }
 
@@ -2719,10 +2799,29 @@ document.addEventListener('DOMContentLoaded', function () {
                     ? field.value.trim()
                     : String(field.value || '').trim();
                 if (!value) {
-                    if (hasSavedVehicles && hasDraftInProgress && !continueWithSavedChosen) {
-                        return continueWithSavedBtn || field;
-                    }
                     return field;
+                }
+            }
+
+            const selectedWeightValue = (document.getElementById(`${vehiclePrefix}-weight-entry-hidden`)?.value || '').trim();
+            if (selectedWeightValue === 'custom') {
+                const customWeightField = document.getElementById(`${vehiclePrefix}-custom-weight`);
+                const customWeightValue = (customWeightField && typeof customWeightField.value === 'string')
+                    ? customWeightField.value.trim()
+                    : '';
+                if (customWeightField && !customWeightValue) {
+                    return customWeightField;
+                }
+            }
+
+            const selectedLengthValue = (document.getElementById(`${vehiclePrefix}-length-entry-hidden`)?.value || '').trim();
+            if (selectedLengthValue === 'custom') {
+                const customLengthField = document.getElementById(`${vehiclePrefix}-custom-length`);
+                const customLengthValue = (customLengthField && typeof customLengthField.value === 'string')
+                    ? customLengthField.value.trim()
+                    : '';
+                if (customLengthField && !customLengthValue) {
+                    return customLengthField;
                 }
             }
 
@@ -2743,13 +2842,40 @@ document.addEventListener('DOMContentLoaded', function () {
                     const testedField = document.getElementById('trailer-tested-entry-hidden');
                     const testedValue = (testedField && typeof testedField.value === 'string') ? testedField.value.trim() : '';
                     if (testedField && !testedValue) {
-                        if (hasSavedVehicles && hasDraftInProgress && !continueWithSavedChosen) {
-                            return continueWithSavedBtn || testedField;
-                        }
                         if (hasSavedVehicles && hasDraftInProgress && continueWithSavedChosen) {
                             return null;
                         }
                         return testedField;
+                    }
+                }
+            }
+
+            if (hasDraftInProgress && !continueWithSavedChosen && addVehicleBtn && typeof addVehicleBtn.click === 'function') {
+                const getDraftFilledState = () => {
+                    const requiredHasValue = orderedRequiredFieldIds.some((fieldId) => isFormFieldFilled(fieldId));
+                    return requiredHasValue
+                        || isFormFieldFilled(`${vehiclePrefix}-custom-weight`)
+                        || isFormFieldFilled(`${vehiclePrefix}-custom-length`);
+                };
+
+                addVehicleBtn.click();
+
+                const draftStillFilled = getDraftFilledState();
+                const postClickRaw = (jsonField.value || '').trim();
+                if (draftStillFilled) {
+                    return addVehicleBtn || continueWithSavedBtn || section;
+                }
+                if (!draftStillFilled) {
+                    if (!postClickRaw) {
+                        return addVehicleBtn || jsonField;
+                    }
+                    try {
+                        const postClickParsed = JSON.parse(postClickRaw);
+                        if (Array.isArray(postClickParsed) && postClickParsed.length > 0) {
+                            return null;
+                        }
+                    } catch (_error) {
+                        return addVehicleBtn || jsonField;
                     }
                 }
             }
@@ -2884,14 +3010,39 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!pianoJsonInput) return pianoJsonInput;
 
             const pianoData = pianoJsonInput.value.trim();
+
+            // Helper to check if form fields have any values
+            const isFormFieldFilled = (fieldId) => {
+                const field = document.getElementById(fieldId);
+                if (!field || field.disabled) return false;
+                const value = typeof field.value === 'string' ? field.value.trim() : String(field.value || '').trim();
+                return !!value;
+            };
+
+            const typeInput = document.getElementById('piano-type-entry-hidden');
+            const sizeInput = document.getElementById('piano-size-entry-hidden');
+            const typeValue = (typeInput?.value || '').trim();
+            const sizeValue = (sizeInput?.value || '').trim();
+
+            // Consider draft-in-progress only when a real piano draft is started from type/size,
+            // so stale hidden values do not block progressing when pianos are already saved.
+            const hasCoreDraft = !!typeValue || !!sizeValue;
+            const hasUnknownDraftExtras = typeValue === 'unknown' && (
+                isFormFieldFilled('piano-length-measurement')
+                || isFormFieldFilled('piano-width-measurement')
+                || isFormFieldFilled('piano-height-measurement')
+                || isFormFieldFilled('piano-media-hidden')
+            );
+            const hasCustomDraftExtras = (typeValue === 'custom' || sizeValue === 'custom') && (
+                isFormFieldFilled('piano-custom-name')
+                || isFormFieldFilled('piano-custom-length')
+                || isFormFieldFilled('piano-custom-width')
+                || isFormFieldFilled('piano-custom-height')
+            );
+            const hasDraftInProgress = hasCoreDraft || hasUnknownDraftExtras || hasCustomDraftExtras;
+
             if (!pianoData) {
                 // No pianos added yet - check if there's at least one in the form being entered
-                const typeInput = document.getElementById('piano-type-entry-hidden');
-                const sizeInput = document.getElementById('piano-size-entry-hidden');
-                
-                const typeValue = (typeInput?.value || '').trim();
-                const sizeValue = (sizeInput?.value || '').trim();
-                
                 // If neither is filled, return the section to prompt user
                 if (!typeValue && !sizeValue) {
                     return pianoJsonInput;
@@ -2903,7 +3054,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     const lengthInput = document.getElementById('piano-length-measurement');
                     const widthInput = document.getElementById('piano-width-measurement');
                     const heightInput = document.getElementById('piano-height-measurement');
-                    const photosHidden = document.getElementById('piano-photos-hidden');
+                    const photosHidden = document.getElementById('piano-media-hidden');
                     
                     const lengthValue = (lengthInput?.value || '').trim();
                     const widthValue = (widthInput?.value || '').trim();
@@ -2955,7 +3106,42 @@ document.addEventListener('DOMContentLoaded', function () {
                 return null;
             }
 
-            // At least one piano has been added
+            // At least one piano has been saved
+            if (!hasDraftInProgress) {
+                return null;
+            }
+
+            // If there's a draft in progress, attempt to auto-save it
+            if (hasDraftInProgress) {
+                const addPianoBtn = document.getElementById('add-piano-btn');
+                if (addPianoBtn && typeof addPianoBtn.click === 'function') {
+                    // Auto-save the draft
+                    addPianoBtn.click();
+                    
+                    // Check if it was successfully added
+                    const updatedPianoData = pianoJsonInput.value.trim();
+                    if (updatedPianoData !== pianoData) {
+                        // Successfully saved, allow progression
+                        return null;
+                    }
+                    
+                    // If save failed, return the first incomplete field to alert user
+                    if (!typeValue) return typeInput;
+                    if (!sizeValue) return sizeInput;
+                    
+                    // If basic fields are filled, check custom details if needed
+                    const customSection = document.getElementById('piano-custom-section');
+                    if (customSection && customSection.style.display !== 'none') {
+                        const customNameInput = document.getElementById('piano-custom-name');
+                        const customNameValue = (customNameInput?.value || '').trim();
+                        if (!customNameValue) return customNameInput;
+                    }
+                    
+                    return null;
+                }
+            }
+
+            // Piano(s) saved, no incomplete draft
             return null;
         };
 
@@ -3456,7 +3642,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 'piano-length-measurement': 'Piano length',
                 'piano-width-measurement': 'Piano width',
                 'piano-height-measurement': 'Piano height',
-                'piano-photos-hidden': 'Piano photos/videos',
+                'piano-media-hidden': 'Piano photos/videos',
                 'piano-custom-name': 'Piano name/model',
                 'piano-custom-length': 'Piano custom length',
                 'piano-custom-width': 'Piano custom width',
@@ -3813,6 +3999,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const step = getEffectiveCurrentStep();
             // Always show sticky button
             showStickyNextBtn();
+            updateStickyManageBtnVisibility();
         }
         
         // Global function to update next button state (can be called from renderRoomItems)
@@ -3825,6 +4012,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 stickyNextBtn.classList.add('disabled');
                 stickyNextBtn.style.opacity = '0.45';
                 stickyNextBtn.style.display = 'none';
+                updateStickyManageBtnVisibility();
                 return;
             }
             stickyNextBtn.style.display = '';
@@ -3833,6 +4021,7 @@ document.addEventListener('DOMContentLoaded', function () {
             stickyNextBtn.style.opacity = '1';
             ensureMultiFloorInventoryVisible();
             updateStep3InventoryWarning();
+            updateStickyManageBtnVisibility();
         };
 
         function getStep5EmptySelectedDeliveryFloors() {
@@ -4079,6 +4268,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 window.location.assign(currentUrl.toString());
             };
         }
+
+        if (stickyManageBtn) {
+            stickyManageBtn.onclick = function() {
+                if (typeof window.openOverviewInventoryManageModal === 'function') {
+                    window.openOverviewInventoryManageModal('pickup');
+                }
+            };
+        }
         // Listen for input changes to update sticky button
         document.querySelectorAll('input, select').forEach(el => {
             el.addEventListener('input', function() {
@@ -4129,12 +4326,20 @@ document.addEventListener('DOMContentLoaded', function () {
                     stickyResetBtn.style.opacity = '0';
                     stickyResetBtn.style.pointerEvents = 'none';
                 }
+                if (stickyManageBtn) {
+                    stickyManageBtn.style.opacity = '0';
+                    stickyManageBtn.style.pointerEvents = 'none';
+                }
             } else {
                 stickyNextBtn.style.opacity = '1';
                 stickyNextBtn.style.pointerEvents = 'auto';
                 if (stickyResetBtn) {
                     stickyResetBtn.style.opacity = '1';
                     stickyResetBtn.style.pointerEvents = 'auto';
+                }
+                if (stickyManageBtn && stickyManageBtn.style.display !== 'none') {
+                    stickyManageBtn.style.opacity = '1';
+                    stickyManageBtn.style.pointerEvents = 'auto';
                 }
             }
         });
@@ -4538,7 +4743,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function renderPackingItemsConfig() {
         const isNarrowPackingViewport = window.innerWidth <= 768;
-        const isPianoService = getActiveServiceValue() === 'Piano Transport';
         const packingInput = document.getElementById('service-packing');
         const packingModeInput = document.getElementById('service-packing-mode');
         const packingBoxProviderInput = document.getElementById('service-packing-box-provider');
@@ -4550,18 +4754,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const hiddenInput = document.getElementById('service-packing-items');
 
         if (!packingInput || !packingModeInput || !packingBoxProviderInput || !packingModeConfig || !packingBoxProviderConfig || !container || !list || !empty || !hiddenInput) return;
-
-        if (isPianoService) {
-            packingModeConfig.style.display = 'none';
-            packingBoxProviderConfig.style.display = 'none';
-            container.style.display = 'none';
-            list.innerHTML = '';
-            empty.style.display = 'none';
-            packingModeInput.value = '';
-            packingBoxProviderInput.value = '';
-            hiddenInput.value = '';
-            return;
-        }
 
         const isPackingYes = packingInput.value === 'yes';
         packingModeConfig.style.display = isPackingYes ? 'block' : 'none';
@@ -5180,7 +5372,6 @@ document.addEventListener('DOMContentLoaded', function () {
     function renderStorageConfig() {
         const isNarrowServiceViewport = window.innerWidth <= 540;
         const isVehicleService = isVehicleLikeStepFlowService(getActiveServiceValue());
-        const isPianoService = getActiveServiceValue() === 'Piano Transport';
         const storageInput = document.getElementById('service-storage');
         const storageModeInput = document.getElementById('service-storage-mode');
         const storageItemsInput = document.getElementById('service-storage-items');
@@ -5193,44 +5384,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const storageDurationPreview = document.getElementById('storage-duration-preview');
 
         if (!storageInput || !storageModeInput || !storageItemsInput || !storageItemsConfig || !storageItemsList || !storageItemsEmpty || !storageDurationConfig || !storageStartInput || !storageEndInput || !storageDurationPreview) {
-            return;
-        }
-
-        if (isPianoService) {
-            const isStorageYes = storageInput.value === 'yes';
-            storageItemsConfig.style.display = 'none';
-            storageItemsList.innerHTML = '';
-            storageItemsEmpty.style.display = 'none';
-            storageModeInput.value = '';
-            storageItemsInput.value = '';
-
-            storageDurationConfig.style.display = isStorageYes ? 'block' : 'none';
-            if (!isStorageYes) {
-                storageDurationPreview.textContent = '';
-                return;
-            }
-
-            if (!storageStartInput.value) {
-                const start = getTodayDate();
-                storageStartInput.value = toDateInputValue(start);
-            }
-            if (!storageEndInput.value) {
-                const defaultEnd = new Date(storageStartInput.value);
-                if (Number.isFinite(defaultEnd.getTime())) {
-                    defaultEnd.setDate(defaultEnd.getDate() + 7);
-                    storageEndInput.value = toDateInputValue(defaultEnd);
-                }
-            }
-
-            const startDate = new Date(storageStartInput.value);
-            const endDate = new Date(storageEndInput.value);
-            if (Number.isFinite(startDate.getTime()) && Number.isFinite(endDate.getTime()) && endDate > startDate) {
-                storageDurationPreview.textContent = getStorageDurationText(startDate, endDate);
-                storageDurationPreview.style.color = '#1e40af';
-            } else {
-                storageDurationPreview.textContent = 'Please choose a valid storage start and end date.';
-                storageDurationPreview.style.color = '#b91c1c';
-            }
             return;
         }
 
@@ -5346,9 +5499,67 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         });
 
+        const eligibleStorageMap = new Map(
+            eligibleStorageItems.map(({ itemKey, availableForStorage }) => [itemKey, availableForStorage])
+        );
+
+        // Keep persisted storage selections aligned with currently eligible inventory.
+        let storageStateAdjusted = false;
+        Object.keys(currentState).forEach((itemKey) => {
+            const availableForStorage = eligibleStorageMap.get(itemKey);
+            if (!availableForStorage) {
+                delete currentState[itemKey];
+                storageStateAdjusted = true;
+                return;
+            }
+
+            const selectedQty = parseInt(currentState[itemKey], 10) || 0;
+            if (selectedQty > availableForStorage) {
+                currentState[itemKey] = availableForStorage;
+                storageStateAdjusted = true;
+            }
+        });
+        if (storageStateAdjusted) {
+            storageItemsInput.value = Object.keys(currentState).length > 0 ? JSON.stringify(currentState) : '';
+        }
+
+        if (eligibleStorageItems.length === 0) {
+            storageItemsInput.value = '';
+            storageItemsEmpty.style.display = 'block';
+            return;
+        }
+        storageItemsEmpty.style.display = 'none';
+
         if (storageModeInput.value !== 'selected') {
             storageModeInput.value = 'selected';
         }
+
+        const allStorageSelected = eligibleStorageItems.every(({ itemKey, availableForStorage }) => {
+            return (parseInt(currentState[itemKey], 10) || 0) === availableForStorage;
+        });
+
+        const selectAllStorageBtn = document.createElement('button');
+        selectAllStorageBtn.type = 'button';
+        selectAllStorageBtn.textContent = allStorageSelected ? 'Undo all items' : 'Select all items';
+        selectAllStorageBtn.style.cssText = 'align-self:flex-start;border:1px solid #16a34a;background:#dcfce7;color:#166534;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;margin:0 0 8px 0;';
+        selectAllStorageBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            if (allStorageSelected) {
+                eligibleStorageItems.forEach(({ itemKey }) => {
+                    delete currentState[itemKey];
+                });
+            } else {
+                eligibleStorageItems.forEach(({ itemKey, availableForStorage }) => {
+                    currentState[itemKey] = availableForStorage;
+                });
+            }
+
+            storageItemsInput.value = Object.keys(currentState).length > 0 ? JSON.stringify(currentState) : '';
+            storageItemsInput.dispatchEvent(new Event('change', { bubbles: true }));
+            renderStorageConfig();
+            if (window.updateNextButtonState) window.updateNextButtonState();
+        });
+        storageItemsList.appendChild(selectAllStorageBtn);
 
         sortedFloors.forEach(floor => {
             const roomsInFloor = byFloor[floor] || {};
@@ -5653,7 +5864,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function renderDisassemblyConfig() {
         const isNarrowServiceViewport = window.innerWidth <= 540;
-        const isPianoService = getActiveServiceValue() === 'Piano Transport';
         const disassemblyInput = document.getElementById('service-disassembly');
         const disassemblyItemsInput = document.getElementById('service-disassembly-items');
         const assembleChoiceInput = document.getElementById('service-assemble-at-arrival');
@@ -5667,20 +5877,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const assembleEmpty = document.getElementById('assemble-items-empty');
 
         if (!disassemblyInput || !disassemblyItemsInput || !assembleChoiceInput || !assembleItemsInput || !disassemblyConfig || !disassemblyList || !disassemblyEmpty || !assembleChoiceConfig || !assembleItemsConfig || !assembleList || !assembleEmpty) {
-            return;
-        }
-
-        if (isPianoService) {
-            disassemblyConfig.style.display = 'none';
-            assembleChoiceConfig.style.display = 'none';
-            assembleItemsConfig.style.display = 'none';
-            disassemblyList.innerHTML = '';
-            assembleList.innerHTML = '';
-            disassemblyEmpty.style.display = 'none';
-            assembleEmpty.style.display = 'none';
-            disassemblyItemsInput.value = '';
-            assembleChoiceInput.value = '';
-            assembleItemsInput.value = '';
             return;
         }
 
@@ -5971,7 +6167,7 @@ document.addEventListener('DOMContentLoaded', function () {
         assembleSelectAllBtn.setAttribute('data-assemble-select-all', '1');
         assembleSelectAllBtn.style.cssText = 'align-self:flex-start;border:1px solid #16a34a;background:#dcfce7;color:#166534;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;margin-bottom:6px;';
         if (disassemblyEligibleEntries.length === 0) {
-            assembleSelectAllBtn.textContent = 'Select disassembly items first';
+            assembleSelectAllBtn.textContent = 'Select disassembled items first';
             assembleSelectAllBtn.disabled = true;
             assembleSelectAllBtn.style.opacity = '0.6';
             assembleSelectAllBtn.style.cursor = 'not-allowed';
@@ -6192,8 +6388,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!storageItemsInput || !storageStartInput || !storageEndInput) return false;
 
         const isVehicleService = isVehicleLikeStepFlowService(getActiveServiceValue());
-        const isPianoService = getActiveServiceValue() === 'Piano Transport';
-        if (isVehicleService || isPianoService) {
+        if (isVehicleService) {
             const vehicleStart = new Date(storageStartInput.value);
             const vehicleEnd = new Date(storageEndInput.value);
             if (!Number.isFinite(vehicleStart.getTime()) || !Number.isFinite(vehicleEnd.getTime())) {
@@ -6394,7 +6589,6 @@ document.addEventListener('DOMContentLoaded', function () {
         e.preventDefault();
         const service = btn.getAttribute('data-service');
         const value = btn.getAttribute('data-value');
-        const isPianoService = getActiveServiceValue() === 'Piano Transport';
         const hiddenInput = document.getElementById(`service-${service}`);
         
         if (!hiddenInput) return;
@@ -6418,7 +6612,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (boxProviderInput) boxProviderInput.value = '';
                 if (itemsInput) itemsInput.value = '';
             } else {
-                if (!isPianoService && modeInput && !modeInput.value) {
+                if (modeInput && !modeInput.value) {
                     modeInput.value = 'all';
                 }
             }
@@ -6435,7 +6629,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (storageStartInput) storageStartInput.value = '';
                 if (storageEndInput) storageEndInput.value = '';
             } else {
-                if (!isPianoService && storageModeInput && !storageModeInput.value) {
+                if (storageModeInput && !storageModeInput.value) {
                     storageModeInput.value = 'selected';
                 }
             }
@@ -6971,6 +7165,16 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         }
     };
 
+    const isSameCreateJobReferrer = () => {
+        try {
+            if (!document.referrer) return false;
+            const ref = new URL(document.referrer, window.location.origin);
+            return ref.origin === window.location.origin && ref.pathname === window.location.pathname;
+        } catch (error) {
+            return false;
+        }
+    };
+
     const shouldResetDraftOnEntry = () => {
         const navigationType = getNavigationType();
         if (navigationType === 'reload') return false;
@@ -7236,18 +7440,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
     const maybePurgeDraftAfterExit = () => {
         if (!hasExitPurgePending()) return;
-
-        const navigationType = getNavigationType();
-        // Preserve draft on page reload and on browser back/forward navigation —
-        // in both cases the user intends to return to exactly where they were.
-        if (navigationType === 'reload' || navigationType === 'back_forward') {
-            clearExitPurgePending();
-            return;
-        }
-
-        if (typeof window.clearCreateJobProgress === 'function') {
-            window.clearCreateJobProgress();
-        }
+        // Keep drafts unless the user explicitly clears via Reset/Home/fresh-start.
+        // Implicit purge on next navigation is brittle across browsers and can
+        // misfire on refresh, causing accidental progress loss.
         clearExitPurgePending();
     };
 
@@ -7264,6 +7459,10 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
     if (bootDraft && Number.isFinite(parseInt(bootDraft.step, 10))) {
         bootLockedStep = parseInt(bootDraft.step, 10);
         window.__createJobRestoreTargetStep = bootLockedStep;
+        const bootUnlockedStep = Number.isFinite(parseInt(bootDraft.maxReachedStep, 10))
+            ? parseInt(bootDraft.maxReachedStep, 10)
+            : bootLockedStep;
+        window.__createJobRestoreUnlockedStep = Math.max(bootLockedStep, bootUnlockedStep);
     }
 
     const getStep = () => {
@@ -7423,6 +7622,8 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         const commonState = {
             savedAt: Date.now(),
             step: getStep(),
+            maxReachedStep: Math.max(parseInt(window.__createJobMaxReachedStep, 10) || 1, getStep()),
+            overviewVisited: !!window.__overviewStepVisited,
             serviceScope: getActiveServiceScope(),
             selectedPickupFloors: Array.from(window.selectedPickupFloors || []),
             selectedDeliveryFloors: Array.from(window.selectedDeliveryFloors || []),
@@ -7623,8 +7824,13 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             });
 
             const targetStep = Number.isFinite(parseInt(payload.step, 10)) ? parseInt(payload.step, 10) : 1;
+            const unlockedStep = Number.isFinite(parseInt(payload.maxReachedStep, 10))
+                ? parseInt(payload.maxReachedStep, 10)
+                : targetStep;
+            window.__overviewStepVisited = payload.overviewVisited === true || unlockedStep >= 8;
             bootLockedStep = targetStep;
             window.__createJobRestoreTargetStep = targetStep;
+            window.__createJobRestoreUnlockedStep = Math.max(targetStep, unlockedStep);
             if (typeof window.setFormStep === 'function') {
                 window.setFormStep(targetStep);
             } else {
@@ -7633,6 +7839,20 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             }
 
             applyUiState();
+
+            // Step 7 custom date picker UI uses a separate visible label and does not
+            // listen directly to hidden input value restores.
+            const restoredTransportDate = String(document.getElementById('service-transport-date')?.value || '').trim();
+            const transportDateDisplay = document.getElementById('service-transport-date-display');
+            if (transportDateDisplay) {
+                if (restoredTransportDate) {
+                    transportDateDisplay.textContent = restoredTransportDate;
+                    transportDateDisplay.classList.remove('is-placeholder');
+                } else {
+                    transportDateDisplay.textContent = 'Select a Date Option';
+                    transportDateDisplay.classList.add('is-placeholder');
+                }
+            }
 
             controls.forEach((el) => {
                 el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -7691,6 +7911,21 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             // Step 3 inventory render functions before restore-dependent rendering runs.
             setTimeout(() => {
                 applyUiState();
+                if (
+                    window.selectedDeliveryFloors instanceof Set
+                    && window.selectedDeliveryFloors.size === 0
+                ) {
+                    const hiddenDeliveryFloor = String(document.getElementById('delivery-floor-select')?.value || '').trim();
+                    if (hiddenDeliveryFloor) {
+                        window.selectedDeliveryFloors = new Set([hiddenDeliveryFloor]);
+                    }
+                }
+                if (typeof window.renderDeliveryFloorSelector === 'function') {
+                    window.renderDeliveryFloorSelector();
+                }
+                if (typeof window.renderDeliveryFloors === 'function') {
+                    window.renderDeliveryFloors();
+                }
                 // If floors were restored, force-show the inventory container even if
                 // updateInventoryAndliftVisibility ran earlier with isRestoring=false.
                 if (window.selectedPickupFloors && window.selectedPickupFloors.size > 0) {
@@ -7744,11 +7979,6 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
     const initPersistenceLifecycle = () => {
         applyFreshStartIfRequested();
-
-        if (shouldResetDraftOnEntry() && typeof window.clearCreateJobProgress === 'function') {
-            window.clearCreateJobProgress();
-            clearExitPurgePending();
-        }
 
         maybePurgeDraftAfterExit();
 
@@ -9665,8 +9895,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        // For Piano Transport, create a single organization item from the Step 3 piano details
-        // so Step 5 behaves like House Removals assignment flow.
+        // For Piano Transport, create organization items from saved pianos (or current draft)
+        // so Step 5 behaves like House Removals assignment flow with specific labels.
         if (serviceValue === 'Piano Transport') {
             const typeValue = (document.getElementById('piano-type-entry-hidden')?.value || '').trim();
             const sizeValue = (document.getElementById('piano-size-entry-hidden')?.value || '').trim();
@@ -9675,6 +9905,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const customWidth = (document.getElementById('piano-custom-width')?.value || '').trim();
             const customHeight = (document.getElementById('piano-custom-height')?.value || '').trim();
             const customUnit = (document.getElementById('piano-custom-size-unit')?.value || 'cm').trim();
+            const savedPianosRaw = (document.getElementById('pianos-json-hidden')?.value || '').trim();
 
             const pianoTypeLabels = {
                 'upright-spinet': 'Upright - Spinet',
@@ -9703,29 +9934,72 @@ document.addEventListener('DOMContentLoaded', function () {
                 '130x35x15cm': '130 x 35 x 15 cm'
             };
 
-            if (typeValue) {
-                const baseName = typeValue === 'custom'
-                    ? (customName || 'Custom Piano')
-                    : (pianoTypeLabels[typeValue] || 'Piano');
+            const toSpecificPianoLabel = (piano, index) => {
+                const pianoTypeValue = String(piano?.type || '').trim();
+                const pianoSizeValue = String(piano?.size || '').trim();
+                const baseType = pianoTypeLabels[pianoTypeValue] || 'Piano';
 
-                const customSize = (customLength && customWidth && customHeight)
-                    ? `${customLength} x ${customWidth} x ${customHeight} ${customUnit}`
-                    : '';
-                const sizeText = sizeValue && sizeValue !== 'custom'
-                    ? (pianoSizeLabels[sizeValue] || '')
-                    : customSize;
+                let sizeText = '';
+                if (piano?.isCustomType || piano?.isCustomSize) {
+                    const dims = [piano?.customLength, piano?.customWidth, piano?.customHeight]
+                        .map((v) => String(v || '').trim())
+                        .filter(Boolean)
+                        .join(' x ');
+                    const unit = String(piano?.customUnit || '').trim();
+                    const modelName = String(piano?.customName || '').trim();
+                    const dimsLabel = dims ? `${dims}${unit ? ` ${unit}` : ''}` : '';
+                    sizeText = modelName && dimsLabel
+                        ? `${modelName}, ${dimsLabel}`
+                        : modelName || dimsLabel;
+                } else {
+                    sizeText = pianoSizeLabels[pianoSizeValue] || '';
+                }
 
-                const itemName = sizeText ? `${baseName} (${sizeText})` : baseName;
+                return `Piano ${index + 1}: ${baseType}${sizeText ? ` (${sizeText})` : ''}`;
+            };
+
+            let pianoItems = [];
+            if (savedPianosRaw) {
+                try {
+                    const parsed = JSON.parse(savedPianosRaw);
+                    if (Array.isArray(parsed)) {
+                        pianoItems = parsed;
+                    }
+                } catch (_error) {
+                    pianoItems = [];
+                }
+            }
+
+            // Fallback to current draft when there are no saved pianos yet.
+            if (pianoItems.length === 0 && typeValue) {
+                pianoItems = [{
+                    type: typeValue,
+                    size: sizeValue,
+                    isCustomType: typeValue === 'custom',
+                    isCustomSize: sizeValue === 'custom',
+                    customName,
+                    customLength,
+                    customWidth,
+                    customHeight,
+                    customUnit
+                }];
+            }
+
+            if (pianoItems.length > 0) {
                 const selectedPickupFloors = getOrderedFloorList(Array.from(window.selectedPickupFloors || []));
                 const pickupFloor = selectedPickupFloors[0]
                     || (document.getElementById('pickup-floor-select')?.value || '').trim()
                     || 'Ground';
-                const itemKey = `${itemName}||${pickupFloor}`;
                 const floorRoomKey = `${pickupFloor} Floor`;
                 if (!roomItems[floorRoomKey]) {
                     roomItems[floorRoomKey] = {};
                 }
-                roomItems[floorRoomKey][itemKey] = 1;
+
+                pianoItems.forEach((piano, index) => {
+                    const itemName = toSpecificPianoLabel(piano, index);
+                    const itemKey = `${itemName}||${pickupFloor}`;
+                    roomItems[floorRoomKey][itemKey] = 1;
+                });
             }
         }
         
@@ -11999,10 +12273,20 @@ document.addEventListener('DOMContentLoaded', function () {
         const existingFloorItems = multiFloorInventory[floorRef.name] || {};
         Object.keys(existingFloorItems).forEach((itemKey) => {
             const qty = parseInt(existingFloorItems[itemKey], 10) || 0;
-            if (qty > 0) {
-                floorQuantities[itemKey] = qty;
-                floorSelectedItems[itemKey] = true;
-            }
+            if (qty <= 0) return;
+
+            const rawKey = String(itemKey || '').trim();
+            const hasRoomPrefix = /^([^-]+)\s-\s(.+)$/.test(rawKey);
+            const existsInBaseRooms = Object.keys(ROOM_ITEMS).some((roomKey) => {
+                return Array.isArray(ROOM_ITEMS[roomKey]) && ROOM_ITEMS[roomKey].includes(rawKey);
+            });
+
+            // Keep unprefixed custom names as-is so quantity controls and renderer
+            // use the same tracking key after Manage save.
+            const normalizedKey = rawKey;
+
+            floorQuantities[normalizedKey] = (parseInt(floorQuantities[normalizedKey], 10) || 0) + qty;
+            floorSelectedItems[normalizedKey] = true;
         });
         
         const getRoomKey = (tabName) => {
@@ -12039,6 +12323,39 @@ document.addEventListener('DOMContentLoaded', function () {
             const trackingKey = getMultiFloorTrackingKey(itemName, tabName);
             const boxPrefixMatch = trackingKey.match(/^([^\-]+)\s-\s(Small Boxes|Medium Boxes|Large Boxes|XL Boxes|Extra Large Boxes)$/i);
             return boxPrefixMatch && boxPrefixMatch[2] ? boxPrefixMatch[2] : trackingKey;
+        };
+
+        const resolveTrackingKeyForTabItem = (itemName, tabName) => {
+            const defaultKey = getMultiFloorTrackingKey(itemName, tabName);
+            if (Object.prototype.hasOwnProperty.call(floorQuantities, defaultKey)) {
+                return defaultKey;
+            }
+
+            const roomKey = getRoomKey(tabName);
+            const roomPrefix = getRoomPrefixForTab(tabName);
+            if (roomPrefix) {
+                const prefixedKey = `${roomPrefix} - ${itemName}`;
+                if (Object.prototype.hasOwnProperty.call(floorQuantities, prefixedKey)) {
+                    return prefixedKey;
+                }
+            }
+
+            const normalizedItem = String(itemName || '').trim().toLowerCase();
+            const fallbackKey = Object.keys(floorQuantities).find((key) => {
+                const parsed = parseCustomItemFromTrackingKey(key);
+                if (parsed && parsed.itemName && parsed.roomKey) {
+                    return parsed.roomKey === roomKey
+                        && String(parsed.itemName).trim().toLowerCase() === normalizedItem;
+                }
+
+                return String(key || '').trim().toLowerCase() === normalizedItem;
+            });
+
+            if (fallbackKey) {
+                return fallbackKey;
+            }
+
+            return defaultKey;
         };
 
         const getCustomFloorItemsForTab = (tabName) => {
@@ -12084,7 +12401,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             // Legacy fallback: unprefixed custom tracking keys have no room information.
-            return { roomKey: 'boxes', itemName: raw };
+            // Use Hallway so the item appears in a visible tab in this UI.
+            return { roomKey: 'hallway', itemName: raw };
         };
 
         const hydrateCustomFloorItemsFromInventory = () => {
@@ -12108,12 +12426,28 @@ document.addEventListener('DOMContentLoaded', function () {
         function getItemsForTab(tabName) {
             const roomKey = getRoomKey(tabName);
             const baseItems = ROOM_ITEMS[roomKey] ? ROOM_ITEMS[roomKey] : inventoryItems;
-            return baseItems.concat(getCustomFloorItemsForTab(tabName));
+            const customItemsForRoom = getCustomFloorItemsForTab(tabName);
+
+            // Recover custom names directly from tracked floor quantities so items
+            // added in Manage Inventory always appear on the designated floor/tab.
+            const recoveredCustomItems = [];
+            Object.keys(floorQuantities).forEach((trackingKey) => {
+                const qty = parseInt(floorQuantities[trackingKey], 10) || 0;
+                if (qty <= 0) return;
+
+                const parsed = parseCustomItemFromTrackingKey(trackingKey);
+                if (!parsed || !parsed.itemName) return;
+                if (parsed.roomKey !== roomKey) return;
+                recoveredCustomItems.push(parsed.itemName);
+            });
+
+            const mergedCustomItems = Array.from(new Set([...customItemsForRoom, ...recoveredCustomItems]));
+            return baseItems.concat(mergedCustomItems);
         }
 
         function getRoomInventoryTotal(tabName) {
             return getItemsForTab(tabName).reduce((sum, itemName) => {
-                const trackingKey = getMultiFloorTrackingKey(itemName, tabName);
+                const trackingKey = resolveTrackingKeyForTabItem(itemName, tabName);
                 return sum + (parseInt(floorQuantities[trackingKey], 10) || 0);
             }, 0);
         }
@@ -12163,7 +12497,7 @@ document.addEventListener('DOMContentLoaded', function () {
             updateMobileFloorTabsState(tabName);
             getItemsForTab(tabName).forEach(itemName => {
                 const li = document.createElement('li');
-                const trackingKey = getMultiFloorTrackingKey(itemName, tabName);
+                const trackingKey = resolveTrackingKeyForTabItem(itemName, tabName);
                 const qty = floorQuantities[trackingKey] || 0;
                 const selected = qty > 0;
                 const isCustomItem = isCustomFloorItemForTab(itemName, tabName);
@@ -12238,6 +12572,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             photoInput.addEventListener('change', function() {
                                 const file = photoInput.files && photoInput.files[0];
                                 const selectedTrackingKey = photoInput.getAttribute('data-tracking-key');
+                                const selectedItemName = photoInput.getAttribute('data-item-name') || selectedTrackingKey;
                                 if (!file || !selectedTrackingKey) return;
                                 if (!file.type || (!file.type.startsWith('image/') && !file.type.startsWith('video/'))) {
                                     alert('Please select a valid image or video file.');
@@ -12246,6 +12581,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 const reader = new FileReader();
                                 reader.onload = function(evt) {
                                     photoStore[selectedTrackingKey] = evt.target.result;
+                                    upsertCustomItemFloorMedia(selectedTrackingKey, selectedItemName, evt.target.result);
                                     renderItems(tabName);
                                     if (typeof window.saveStep3InventorySnapshot === 'function') {
                                         window.saveStep3InventorySnapshot({ silent: true });
@@ -12259,6 +12595,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         }
 
                         photoInput.setAttribute('data-tracking-key', trackingKey);
+                        photoInput.setAttribute('data-item-name', itemName);
                         photoInput.value = '';
                         photoInput.click();
                     });
@@ -12312,6 +12649,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         removePhotoBtn.addEventListener('click', function(e) {
                             e.stopPropagation();
                             delete photoStore[trackingKey];
+                            removeCustomItemFloorMedia(trackingKey);
                             renderItems(tabName);
                             if (typeof window.saveStep3InventorySnapshot === 'function') {
                                 window.saveStep3InventorySnapshot({ silent: true });
@@ -12355,6 +12693,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                     photoStore[newTrackingKey] = photoStore[oldTrackingKey];
                                     delete photoStore[oldTrackingKey];
                                 }
+                                renameCustomItemFloorMedia(oldTrackingKey, newTrackingKey, trimmedName);
                                 // Move quantities
                                 if (oldTrackingKey in floorQuantities) {
                                     floorQuantities[newTrackingKey] = floorQuantities[oldTrackingKey];
@@ -12395,6 +12734,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 customItemsForTab.splice(index, 1);
                             }
                             delete photoStore[trackingKey];
+                            removeCustomItemFloorMedia(trackingKey);
                             delete floorQuantities[trackingKey];
                             delete floorSelectedItems[trackingKey];
                             renderItems(tabName);
@@ -12515,6 +12855,23 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
         
+        if (!isMobileInventoryAccordion()) {
+            const tabButtons = Array.from(tabs.querySelectorAll('.inventory-tab'));
+            const firstTabWithItems = tabButtons
+                .map((btn) => btn.getAttribute('data-room-name') || '')
+                .find((tabName) => tabName && getRoomInventoryTotal(tabName) > 0);
+
+            if (firstTabWithItems) {
+                currentTab = firstTabWithItems;
+            }
+
+            tabButtons.forEach((btn) => btn.classList.remove('active'));
+            const activeBtn = tabButtons.find((btn) => (btn.getAttribute('data-room-name') || '') === currentTab);
+            if (activeBtn) {
+                activeBtn.classList.add('active');
+            }
+        }
+
         renderItems(currentTab);
         block.appendChild(listWrap);
 
@@ -12544,6 +12901,76 @@ document.addEventListener('DOMContentLoaded', function () {
         const mediaListWrap = document.createElement('div');
         mediaListWrap.style.cssText = 'margin-top:12px;padding:10px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;';
         block.appendChild(mediaListWrap);
+
+        function upsertCustomItemFloorMedia(trackingKey, itemName, previewDataUrl) {
+            const key = String(trackingKey || '').trim();
+            if (!key) return;
+            const entries = ensureFloorMediaStore(floorRef.name);
+            const nextPreview = String(previewDataUrl || '').trim();
+            if (!nextPreview) {
+                return;
+            }
+
+            let entry = entries.find((row) => String(row?.customTrackingKey || '') === key);
+            if (!entry) {
+                entry = {
+                    id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                    customTrackingKey: key
+                };
+                entries.push(entry);
+            }
+
+            entry.customTrackingKey = key;
+            entry.itemName = String(itemName || '').trim() || getItemDisplayName(key) || key;
+            entry.fileName = 'Custom item media';
+            entry.mediaType = getMediaTypeFromPreviewDataUrl(nextPreview) === 'video' ? 'video' : 'photo';
+            entry.fileSize = Number(entry.fileSize || 0);
+            entry.mimeType = entry.mediaType === 'video' ? 'video/*' : 'image/*';
+            entry.previewDataUrl = nextPreview;
+
+            syncStep3MediaHiddenInput();
+            if (typeof renderFloorMediaList === 'function') {
+                renderFloorMediaList();
+            }
+        }
+
+        function removeCustomItemFloorMedia(trackingKey) {
+            const key = String(trackingKey || '').trim();
+            if (!key) return;
+            const entries = ensureFloorMediaStore(floorRef.name);
+            const index = entries.findIndex((row) => String(row?.customTrackingKey || '') === key);
+            if (index === -1) return;
+
+            const removedEntry = entries[index];
+            entries.splice(index, 1);
+            clearFloorMediaObjectUrl(removedEntry && removedEntry.id);
+            if (!entries.length) {
+                delete window.floorMediaItems[floorRef.name];
+            }
+
+            syncStep3MediaHiddenInput();
+            if (typeof renderFloorMediaList === 'function') {
+                renderFloorMediaList();
+            }
+        }
+
+        function renameCustomItemFloorMedia(oldTrackingKey, newTrackingKey, nextItemName) {
+            const oldKey = String(oldTrackingKey || '').trim();
+            const newKey = String(newTrackingKey || '').trim();
+            if (!oldKey || !newKey) return;
+
+            const entries = ensureFloorMediaStore(floorRef.name);
+            const entry = entries.find((row) => String(row?.customTrackingKey || '') === oldKey);
+            if (!entry) return;
+
+            entry.customTrackingKey = newKey;
+            entry.itemName = String(nextItemName || '').trim() || entry.itemName || getItemDisplayName(newKey) || newKey;
+
+            syncStep3MediaHiddenInput();
+            if (typeof renderFloorMediaList === 'function') {
+                renderFloorMediaList();
+            }
+        }
 
         const renderFloorMediaList = () => {
             const escapeMediaText = (value) => String(value ?? '')
@@ -12599,10 +13026,19 @@ document.addEventListener('DOMContentLoaded', function () {
                     const removedEntry = floorEntries[index];
                     floorEntries.splice(index, 1);
                     clearFloorMediaObjectUrl(removedEntry && removedEntry.id);
+                    if (removedEntry && removedEntry.customTrackingKey) {
+                        const photoStore = window.customItemPhotos || (window.customItemPhotos = {});
+                        delete photoStore[removedEntry.customTrackingKey];
+                    }
                     if (floorEntries.length === 0) {
                         delete window.floorMediaItems[floorRef.name];
                     }
                     syncStep3MediaHiddenInput();
+                    if (removedEntry && removedEntry.customTrackingKey) {
+                        try {
+                            renderItems(currentTab);
+                        } catch (_) {}
+                    }
                     renderFloorMediaList();
                 });
 
@@ -12674,6 +13110,18 @@ document.addEventListener('DOMContentLoaded', function () {
             entry.fileSize = Number(replacement.size || 0);
             entry.mimeType = lowerType;
             entry.previewDataUrl = await buildPersistablePreviewData(replacement);
+
+            if (entry.customTrackingKey) {
+                const photoStore = window.customItemPhotos || (window.customItemPhotos = {});
+                if (entry.previewDataUrl) {
+                    photoStore[entry.customTrackingKey] = entry.previewDataUrl;
+                } else {
+                    delete photoStore[entry.customTrackingKey];
+                }
+                try {
+                    renderItems(currentTab);
+                } catch (_) {}
+            }
 
             const previewObjectUrl = URL.createObjectURL(replacement);
             setFloorMediaObjectUrl(entry.id, previewObjectUrl);
@@ -12751,28 +13199,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 : false;
             if (didSave) {
                 showFloorSavedState();
-
-                if (!window.__pickupQuickManagePromptedFloors || !(window.__pickupQuickManagePromptedFloors instanceof Set)) {
-                    window.__pickupQuickManagePromptedFloors = new Set();
-                }
-
-                const selectedFloorsCount = (window.selectedPickupFloors instanceof Set)
-                    ? window.selectedPickupFloors.size
-                    : Array.from(window.selectedPickupFloors || []).length;
-                const shouldPromptForThisFloor = !window.__pickupQuickManagePromptedFloors.has(floorRef.name);
-                const isVehicleServiceNow = isVehicleLikeStepFlowService(getActiveServiceValue());
-
-                if (
-                    selectedFloorsCount > 1
-                    && shouldPromptForThisFloor
-                    && !isVehicleServiceNow
-                    && typeof window.openOverviewInventoryManageModal === 'function'
-                ) {
-                    window.__pickupQuickManagePromptedFloors.add(floorRef.name);
-                    setTimeout(() => {
-                        window.openOverviewInventoryManageModal('pickup');
-                    }, 120);
-                }
             }
         };
 
@@ -14938,6 +15364,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (step < 1 || step > totalSteps) return;
             const previousStep = currentStep;
             currentStep = step;
+            window.__createJobMaxReachedStep = Math.max(parseInt(window.__createJobMaxReachedStep, 10) || 1, step);
+            if (step === 8) {
+                window.__overviewStepVisited = true;
+            }
             unlockStep(step);
             document.body.dataset.formStep = String(step);
             document.body.dataset.currentStep = String(step);
@@ -15030,7 +15460,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const initialStep = Number.isFinite(parseInt(window.__createJobRestoreTargetStep, 10))
             ? Math.max(1, Math.min(totalSteps, parseInt(window.__createJobRestoreTargetStep, 10)))
             : 1;
-        maxUnlockedStep = initialStep;
+        const restoredUnlockedStep = Number.isFinite(parseInt(window.__createJobRestoreUnlockedStep, 10))
+            ? Math.max(1, Math.min(totalSteps, parseInt(window.__createJobRestoreUnlockedStep, 10)))
+            : initialStep;
+        maxUnlockedStep = Math.max(initialStep, restoredUnlockedStep);
+        window.__createJobMaxReachedStep = maxUnlockedStep;
         updateStepLinkAccess();
         setFormStep(initialStep);
         
@@ -17706,13 +18140,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const serviceValue = getActiveServiceValue();
         const isVehicleService = isVehicleLikeStepFlowService(serviceValue);
         const isClearance = isClearanceService(serviceValue);
-        const isPianoService = serviceValue === 'Piano Transport';
         const isPetsTransportService = isPetsService(serviceValue);
         const isPackagedService = isPackagedParcelsService(serviceValue);
         const isVehiclePartsService = serviceValue === 'Vehicle Parts';
-        const shouldHidePacking = isVehicleService || isPianoService || isPackagedService || isVehiclePartsService || isPetsTransportService;
-        const shouldHideDisassembly = isVehicleService || isPianoService || isPackagedService || isVehiclePartsService || isPetsTransportService;
-        const shouldHideStorage = isVehicleService || isPianoService || isPackagedService || isVehiclePartsService;
+        const shouldHidePacking = isVehicleService || isPackagedService || isVehiclePartsService || isPetsTransportService;
+        const shouldHideDisassembly = isVehicleService || isPackagedService || isVehiclePartsService || isPetsTransportService;
+        const shouldHideStorage = isVehicleService || isPackagedService || isVehiclePartsService;
 
         const pickupPropertySection = document.getElementById('property-type-selection-section');
         const pickupLiftSection = document.getElementById('pickup-lift-section');
@@ -17830,33 +18263,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (storageEndInput) storageEndInput.value = '';
             if (storageItemsConfig) storageItemsConfig.style.display = 'none';
             if (storageDurationConfig) storageDurationConfig.style.display = 'none';
-        }
-
-        if (isPianoService) {
-            const packingModeInput = document.getElementById('service-packing-mode');
-            const packingBoxProviderInput = document.getElementById('service-packing-box-provider');
-            const packingItemsInput = document.getElementById('service-packing-items');
-            const packingModeConfig = document.getElementById('packing-mode-config');
-            const packingBoxProviderConfig = document.getElementById('packing-box-provider-config');
-            const packingItemsConfig = document.getElementById('packing-items-config');
-
-            if (packingModeInput) packingModeInput.value = '';
-            if (packingBoxProviderInput) packingBoxProviderInput.value = '';
-            if (packingItemsInput) packingItemsInput.value = '';
-            if (packingModeConfig) packingModeConfig.style.display = 'none';
-            if (packingBoxProviderConfig) packingBoxProviderConfig.style.display = 'none';
-            if (packingItemsConfig) packingItemsConfig.style.display = 'none';
-
-            if (disassemblyItemsInput) disassemblyItemsInput.value = '';
-            if (assembleChoiceInput) assembleChoiceInput.value = '';
-            if (assembleItemsInput) assembleItemsInput.value = '';
-            if (disassemblyItemsConfig) disassemblyItemsConfig.style.display = 'none';
-            if (assembleChoiceConfig) assembleChoiceConfig.style.display = 'none';
-            if (assembleItemsConfig) assembleItemsConfig.style.display = 'none';
-
-            if (storageModeInput) storageModeInput.value = '';
-            if (storageItemsInput) storageItemsInput.value = '';
-            if (storageItemsConfig) storageItemsConfig.style.display = 'none';
         }
 
         if (typeof window.renderPackingItemsConfig === 'function') {
@@ -22812,27 +23218,6 @@ function getVehicleOverviewDetailRows(serviceValue) {
         if (!text) return;
         rows.push(`<li><strong>${escapeOverviewHtml(label)}:</strong> ${escapeOverviewHtml(text)}</li>`);
     };
-    const getMeasurementText = (vehicle, measurement) => {
-        const selected = String(vehicle?.[measurement] || '').trim();
-        if (selected !== 'custom') {
-            return selected;
-        }
-
-        const isWeight = measurement === 'weight';
-        const valueKey = isWeight ? 'customWeight' : 'customLength';
-        const unitKey = isWeight ? 'customWeightUnit' : 'customLengthUnit';
-        const fallbackUnit = isWeight ? 'kg' : 'mm';
-        const customValue = String(vehicle?.[valueKey] || '').trim();
-        const customUnit = String(vehicle?.[unitKey] || fallbackUnit).trim();
-
-        if (!customValue) {
-            return isWeight ? 'Other (approx.)' : 'Other';
-        }
-
-        return isWeight
-            ? `Approx. ${customValue} ${customUnit}`
-            : `${customValue} ${customUnit}`;
-    };
 
     const jsonFieldId = isCarCamperTransportService(serviceValue)
         ? 'car-json-hidden'
@@ -22865,19 +23250,24 @@ function getVehicleOverviewDetailRows(serviceValue) {
 
         vehicles.forEach((vehicle, index) => {
             const itemLabel = `${baseLabel} ${index + 1}`;
-            addRow(itemLabel, vehicle?.makeModel || '');
-            addRow(`${itemLabel} Year`, vehicle?.year || '');
-            addRow(`${itemLabel} Estimated Value`, vehicle?.value || '');
-            addRow(`${itemLabel} Type`, vehicle?.type || '');
-            addRow(`${itemLabel} Condition`, vehicle?.condition || '');
-            addRow(`${itemLabel} Method`, vehicle?.method || '');
-            addRow(`${itemLabel} Weight`, getMeasurementText(vehicle, 'weight'));
-            addRow(`${itemLabel} Length`, getMeasurementText(vehicle, 'length'));
-            addRow(`${itemLabel} Operational`, vehicle?.operational || '');
-            addRow(`${itemLabel} Roadworthy (NCT/DOE)`, vehicle?.roadworthy || '');
-            addRow(`${itemLabel} Insurance`, vehicle?.insurance || '');
-            addRow(`${itemLabel} Road Tax`, vehicle?.roadtax || '');
-            addRow(`${itemLabel} Tested Certification`, vehicle?.tested || '');
+            const makeModel = String(vehicle?.makeModel || '').trim();
+            const year = String(vehicle?.year || '').trim();
+            const value = String(vehicle?.value || '').trim();
+            const summaryParts = [];
+
+            if (makeModel && year) {
+                summaryParts.push(`${makeModel} (${year})`);
+            } else if (makeModel) {
+                summaryParts.push(makeModel);
+            } else if (year) {
+                summaryParts.push(`Year: ${year}`);
+            }
+
+            if (value) {
+                summaryParts.push(`Worth: ${value}`);
+            }
+
+            addRow(itemLabel, summaryParts.join(' | '));
         });
     } catch (error) {
         return rows;
@@ -22946,15 +23336,26 @@ function getOrderedFloorList(values) {
 }
 
 function getPianoOverviewInventoryLabel() {
+    const labels = getPianoOverviewInventoryLabels();
+    if (labels.length === 0) {
+        return '';
+    }
+    if (labels.length === 1) {
+        return labels[0];
+    }
+    return `${labels.length} pianos: ${labels.join(', ')}`;
+}
+
+function getPianoOverviewInventoryLabels() {
     const pianoJsonInput = document.getElementById('pianos-json-hidden');
     if (!pianoJsonInput || !pianoJsonInput.value) {
-        return '';
+        return [];
     }
 
     try {
         const pianos = JSON.parse(pianoJsonInput.value);
         if (!Array.isArray(pianos) || pianos.length === 0) {
-            return '';
+            return [];
         }
 
         const pianoTypeLabels = {
@@ -22985,30 +23386,49 @@ function getPianoOverviewInventoryLabel() {
             '130x35x15cm': '130 x 35 x 15 cm'
         };
 
-        // Format each piano for display
-        const descriptions = pianos.map((piano) => {
+        // Format each piano for display with specific type/model/size detail.
+        const descriptions = pianos.map((piano, index) => {
             const baseType = pianoTypeLabels[piano.type] || 'Piano';
-            let sizeText = '';
+            let detailText = '';
 
             if (piano.isCustomSize || piano.isCustomType) {
-                sizeText = piano.customName
-                    ? `${piano.customName} (${piano.customLength}x${piano.customWidth}x${piano.customHeight}${piano.customUnit})`
-                    : `${piano.customLength}x${piano.customWidth}x${piano.customHeight}${piano.customUnit}`;
+                const customDims = [piano.customLength, piano.customWidth, piano.customHeight]
+                    .map((v) => String(v || '').trim())
+                    .filter(Boolean)
+                    .join(' x ');
+                const customUnit = String(piano.customUnit || '').trim();
+                const customDimsText = customDims ? `${customDims}${customUnit ? ` ${customUnit}` : ''}` : '';
+                const customName = String(piano.customName || '').trim();
+
+                if (customName && customDimsText) {
+                    detailText = `Model: ${customName}, Size: ${customDimsText}`;
+                } else if (customName) {
+                    detailText = `Model: ${customName}`;
+                } else if (customDimsText) {
+                    detailText = `Custom size: ${customDimsText}`;
+                } else {
+                    detailText = 'Custom size';
+                }
+            } else if (piano.type === 'unknown') {
+                const approxDims = [piano.lengthMeasurement, piano.widthMeasurement, piano.heightMeasurement]
+                    .map((v) => String(v || '').trim())
+                    .filter(Boolean)
+                    .join(' x ');
+                detailText = approxDims ? `Approx size: ${approxDims} cm` : 'Details from uploaded media';
             } else {
-                sizeText = pianoSizeLabels[piano.size] || '';
+                const sizeLabel = pianoSizeLabels[piano.size] || '';
+                if (sizeLabel) {
+                    detailText = `Size: ${sizeLabel}`;
+                }
             }
 
-            return sizeText ? `${baseType} (${sizeText})` : baseType;
+            const specificLabel = detailText ? `${baseType} (${detailText})` : baseType;
+            return `Piano ${index + 1}: ${specificLabel}`;
         });
 
-        // Return as comma-separated list or with count
-        if (pianos.length === 1) {
-            return descriptions[0];
-        } else {
-            return `${pianos.length} pianos: ${descriptions.join(', ')}`;
-        }
+        return descriptions;
     } catch (e) {
-        return '';
+        return [];
     }
 }
 
@@ -23081,8 +23501,29 @@ function buildOverviewFloorInventoryMarkup(kind) {
             const targetFloor = selectedPickup[0]
                 || (document.getElementById('pickup-floor-select')?.value || '').trim()
                 || 'Ground';
-            const pianoLabel = getPianoOverviewInventoryLabel() || 'Piano';
-            grouped[targetFloor] = { [pianoLabel]: 1 };
+            const pianoLabels = getPianoOverviewInventoryLabels();
+            if (pianoLabels.length > 0) {
+                grouped[targetFloor] = grouped[targetFloor] || {};
+                pianoLabels.forEach((label) => {
+                    grouped[targetFloor][label] = (grouped[targetFloor][label] || 0) + 1;
+                });
+            } else {
+                // Fallback: reconstruct pickup piano inventory from Step 5 assignments.
+                const assignments = window.itemFloorAssignments || {};
+                Object.keys(assignments).forEach((itemKey) => {
+                    const perFloor = assignments[itemKey] || {};
+                    const split = String(itemKey || '').split('||');
+                    const itemName = normalizeOverviewItemName(split[0] || itemKey);
+                    const sourceFloor = (split[1] || targetFloor || 'Ground').trim() || 'Ground';
+                    const assignedQty = Object.values(perFloor).reduce((sum, qty) => {
+                        return sum + (parseInt(qty, 10) || 0);
+                    }, 0);
+
+                    if (!itemName || assignedQty <= 0) return;
+                    grouped[sourceFloor] = grouped[sourceFloor] || {};
+                    grouped[sourceFloor][itemName] = (grouped[sourceFloor][itemName] || 0) + assignedQty;
+                });
+            }
         }
 
         if (isPetsService(serviceValue)) {
@@ -23191,13 +23632,16 @@ function buildOverviewFloorInventoryMarkup(kind) {
         }
     } else {
         if (serviceValue === 'Piano Transport') {
-            const pianoLabel = getPianoOverviewInventoryLabel() || 'Piano';
+            const pianoLabels = getPianoOverviewInventoryLabels();
             const targetFloor = selectedDelivery[0]
                 || (document.getElementById('delivery-floor-select')?.value || '').trim()
                 || '';
 
-            if (targetFloor) {
-                grouped[targetFloor] = { [pianoLabel]: 1 };
+            if (targetFloor && pianoLabels.length > 0) {
+                grouped[targetFloor] = grouped[targetFloor] || {};
+                pianoLabels.forEach((label) => {
+                    grouped[targetFloor][label] = (grouped[targetFloor][label] || 0) + 1;
+                });
             }
         }
 
@@ -23514,9 +23958,9 @@ function ensureOverviewInventoryManageModal() {
 }
 
 function openOverviewInventoryManageModal(kind) {
-    const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
-    if (isVehicleTransportService(serviceValue) || isPetsService(serviceValue) || serviceValue === 'Piano Transport') {
-        alert('Quick Manage popup is currently available for standard inventory flows. Please use earlier steps for this service.');
+    const serviceValue = getActiveServiceValue();
+    if (!isInventoryManageService(serviceValue)) {
+        alert('Quick Manage is currently available only for House Removals and Office Removals.');
         return;
     }
 
@@ -23594,8 +24038,8 @@ function openOverviewInventoryManageModal(kind) {
                     <div class="overview-inventory-manage-row" data-row-index="${index}" style="display:grid; grid-template-columns: minmax(220px, 1.4fr) 90px 170px 170px auto; gap:8px; align-items:center; padding:8px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:8px; background:#fff;">
                         <input type="text" class="overview-manage-item-name" value="${safeName}" placeholder="Item name" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">
                         <input type="number" min="1" class="overview-manage-item-qty" value="${Math.max(1, Number(row.qty || 1))}" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; width:100%;">
-                        <select class="overview-manage-item-delivery-floor" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">${optionsDelivery}</select>
                         <select class="overview-manage-item-source-floor" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">${optionsPickup}</select>
+                        <select class="overview-manage-item-delivery-floor" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">${optionsDelivery}</select>
                         <button type="button" class="overview-manage-remove-row" style="border:1px solid #fecaca; background:#fff1f2; color:#b91c1c; border-radius:7px; padding:7px 10px; font-weight:700; cursor:pointer;">Remove</button>
                     </div>
                 `;
@@ -23608,8 +24052,8 @@ function openOverviewInventoryManageModal(kind) {
             <div style="display:grid; grid-template-columns: minmax(220px, 1.4fr) 90px 170px 170px auto; gap:8px; margin-bottom:8px; font-size:0.78rem; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.02em;">
                 <div>Item</div>
                 <div>Qty</div>
-                <div>Delivery Floor</div>
                 <div>Pickup Floor</div>
+                <div>Delivery Floor</div>
                 <div>Action</div>
             </div>
             <div id="overview-manage-rows-wrap">${rowsHtml}</div>
@@ -23618,8 +24062,8 @@ function openOverviewInventoryManageModal(kind) {
                 <div style="display:grid; grid-template-columns:minmax(220px, 1.4fr) 90px 170px 170px auto; gap:8px;">
                     <input type="text" id="overview-manage-new-item-name" placeholder="Type item name" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">
                     <input type="number" id="overview-manage-new-item-qty" min="1" value="1" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; width:100%;">
-                    <select id="overview-manage-new-item-delivery-floor" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">${getDeliveryFloorOptions()}</select>
                     <select id="overview-manage-new-item-source-floor" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">${getPickupFloorOptions()}</select>
+                    <select id="overview-manage-new-item-delivery-floor" style="padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">${getDeliveryFloorOptions()}</select>
                     <button type="button" id="overview-manage-add-row" style="border:none; background:#1d4ed8; color:#fff; border-radius:7px; padding:7px 10px; font-weight:700; cursor:pointer;">Add</button>
                 </div>
             </div>
@@ -23755,6 +24199,33 @@ function openOverviewInventoryManageModal(kind) {
                     window.selectedDeliveryFloors.add(floorName);
                 }
             });
+
+            // Keep pickup floor selection aligned with managed source floors so edited
+            // items (including custom names) render under the correct Step 3 floor block.
+            const nextPickupFloors = new Set();
+            Object.keys(liveMulti).forEach((floorName) => {
+                const floorItems = liveMulti[floorName] || {};
+                const hasItems = Object.values(floorItems).some((qty) => (parseInt(qty, 10) || 0) > 0);
+                if (hasItems) {
+                    nextPickupFloors.add(floorName);
+                }
+            });
+
+            window.selectedPickupFloors = nextPickupFloors;
+
+            if (typeof syncPickupFloorHiddenFromSelection === 'function') {
+                syncPickupFloorHiddenFromSelection();
+            }
+            if (typeof window.renderPickupFloorSelector === 'function') {
+                window.renderPickupFloorSelector();
+            }
+
+            // Rebuild floor inventory blocks immediately so moved items show on their
+            // designated source floor when users return to Step 3.
+            const pickupLiftValue = String(document.getElementById('pickup-lift-available')?.value || '').trim();
+            if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
+                window.renderSelectedPickupFloorsInventory(pickupLiftValue);
+            }
 
             if (typeof refreshOverviewAfterEdit === 'function') {
                 refreshOverviewAfterEdit();

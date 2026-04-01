@@ -65,8 +65,35 @@ window.multiItemsManager = {
 
             const detailEl = document.createElement('div');
             const typeLabel = this.getPianoTypeLabel(piano.type);
-            const sizeLabel = piano.isCustomSize ? `Custom: ${piano.customName || 'Custom'}` : this.getPianoSizeLabel(piano.size);
-            detailEl.innerHTML = `<strong>Piano ${index + 1}:</strong> ${typeLabel}${sizeLabel ? ' - ' + sizeLabel : ''}`;
+            const typeGroupLabel = this.getPianoTypeGroupLabel(piano.type);
+            let sizeLabel = '';
+
+            if (piano.isCustomType || piano.isCustomSize) {
+                const customDims = [piano.customLength, piano.customWidth, piano.customHeight]
+                    .map((v) => String(v || '').trim())
+                    .filter(Boolean)
+                    .join(' x ');
+                const customUnit = String(piano.customUnit || '').trim();
+                const customDimsLabel = customDims ? `${customDims}${customUnit ? ` ${customUnit}` : ''}` : '';
+                const customName = String(piano.customName || '').trim();
+                sizeLabel = customName && customDimsLabel
+                    ? `Model: ${customName} (${customDimsLabel})`
+                    : customName
+                        ? `Model: ${customName}`
+                        : customDimsLabel
+                            ? `Custom size: ${customDimsLabel}`
+                            : 'Custom size';
+            } else if (piano.type === 'unknown') {
+                const approxDims = [piano.lengthMeasurement, piano.widthMeasurement, piano.heightMeasurement]
+                    .map((v) => String(v || '').trim())
+                    .filter(Boolean)
+                    .join(' x ');
+                sizeLabel = approxDims ? `Approx: ${approxDims} cm` : 'Details from uploaded media';
+            } else {
+                sizeLabel = this.getPianoSizeLabel(piano.size);
+            }
+
+            detailEl.innerHTML = `<strong>Piano ${index + 1}:</strong> ${typeLabel}${typeGroupLabel ? ` (${typeGroupLabel})` : ''}${sizeLabel ? ' - ' + sizeLabel : ''}`;
             detailEl.style.flex = '1';
 
             const deleteBtn = document.createElement('button');
@@ -100,6 +127,17 @@ window.multiItemsManager = {
             'unknown': "I don't know"
         };
         return labels[typeValue] || typeValue;
+    },
+
+    getPianoTypeGroupLabel(typeValue) {
+        const key = String(typeValue || '').trim();
+        if (!key) return '';
+        if (key.startsWith('upright-')) return 'Upright';
+        if (key.includes('grand')) return 'Grand';
+        if (key === 'digital' || key === 'keyboard') return 'Electronic';
+        if (key === 'custom') return 'Custom';
+        if (key === 'unknown') return 'Unknown type';
+        return '';
     },
 
     getPianoSizeLabel(sizeValue) {
@@ -252,6 +290,284 @@ window.multiItemsManager = {
         return vehicle.floors.join(', ');
     },
 
+    parseVehicleMediaFromHidden(vehicleType) {
+        const hidden = document.getElementById(`${vehicleType}-media-hidden`);
+        if (!hidden || !hidden.value) return [];
+        try {
+            const parsed = JSON.parse(hidden.value);
+            if (!Array.isArray(parsed)) return [];
+            return parsed
+                .map((item) => ({
+                    name: String(item?.name || '').trim(),
+                    type: String(item?.type || '').trim(),
+                    size: Number(item?.size || 0) || 0,
+                    dataUrl: String(item?.dataUrl || '').trim()
+                }))
+                .filter((item) => item.name);
+        } catch (_error) {
+            return [];
+        }
+    },
+
+    saveVehicleMediaToHidden(vehicleType, mediaItems) {
+        const hidden = document.getElementById(`${vehicleType}-media-hidden`);
+        if (!hidden) return;
+        hidden.value = Array.isArray(mediaItems) && mediaItems.length > 0
+            ? JSON.stringify(mediaItems)
+            : '';
+        hidden.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+
+    formatVehicleMediaLabel(vehicle) {
+        const mediaItems = Array.isArray(vehicle?.media) ? vehicle.media : [];
+        if (mediaItems.length === 0) return '';
+
+        const imageCount = mediaItems.filter((item) => String(item?.type || '').startsWith('image/')).length;
+        const videoCount = mediaItems.filter((item) => String(item?.type || '').startsWith('video/')).length;
+
+        const parts = [];
+        if (imageCount > 0) parts.push(`${imageCount} photo${imageCount === 1 ? '' : 's'}`);
+        if (videoCount > 0) parts.push(`${videoCount} video${videoCount === 1 ? '' : 's'}`);
+        if (parts.length === 0) parts.push(`${mediaItems.length} file${mediaItems.length === 1 ? '' : 's'}`);
+        return parts.join(', ');
+    },
+
+    renderVehicleMediaPreview(vehicleType, mediaItems) {
+        const preview = document.getElementById(`${vehicleType}-media-preview`);
+        if (!preview) return;
+
+        const files = Array.isArray(mediaItems) ? mediaItems : [];
+        if (files.length === 0) {
+            preview.innerHTML = '';
+            preview.style.display = 'none';
+            return;
+        }
+
+        const chips = files.map((item, index) => {
+            const type = String(item?.type || '').toLowerCase();
+            const icon = type.startsWith('video/') ? '🎥' : '📷';
+            const name = String(item?.name || 'File').replace(/[<>]/g, '');
+            const size = item?.size ? this.formatFileSize(item.size) : 'Unknown';
+            return `
+                <div style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #dbeafe; border-radius:6px; background:#eff6ff; color:#1e3a8a; font-size:0.8rem; font-weight:600; position:relative; cursor:pointer;" 
+                     title="Click to view details" 
+                     data-vehicle-type="${vehicleType}" 
+                     data-media-index="${index}">
+                    <span>${icon} ${name}</span>
+                    <span style="font-size:0.7rem; color:#3b82f6;">(${size})</span>
+                    <button type="button" 
+                            style="background:none; border:none; padding:0; cursor:pointer; color:#ef4444; font-size:1rem; line-height:1; margin-left:4px;" 
+                            title="Delete this file"
+                            data-delete-media
+                            data-vehicle-type="${vehicleType}"
+                            data-media-index="${index}">
+                        ✕
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        preview.innerHTML = `<div style="display:flex; flex-wrap:wrap; gap:6px;">${chips}</div>`;
+        preview.style.display = 'block';
+
+        // Add event listeners for delete buttons
+        preview.querySelectorAll('[data-delete-media]').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const vType = btn.getAttribute('data-vehicle-type');
+                const idx = parseInt(btn.getAttribute('data-media-index'), 10);
+                this.deleteVehicleMedia(vType, idx);
+            });
+        });
+
+        // Add event listeners for detail inspection
+        preview.querySelectorAll('[data-media-index]').forEach((chip) => {
+            chip.addEventListener('click', (e) => {
+                if (e.target.closest('[data-delete-media]')) return;
+                const vType = chip.getAttribute('data-vehicle-type');
+                const idx = parseInt(chip.getAttribute('data-media-index'), 10);
+                this.showMediaDetails(vType, idx);
+            });
+        });
+    },
+
+    deleteVehicleMedia(vehicleType, index) {
+        const mediaItems = this.parseVehicleMediaFromHidden(vehicleType);
+        if (index >= 0 && index < mediaItems.length) {
+            mediaItems.splice(index, 1);
+            this.saveVehicleMediaToHidden(vehicleType, mediaItems);
+            this.renderVehicleMediaPreview(vehicleType, mediaItems);
+            const input = document.getElementById(`${vehicleType}-media-input`);
+            if (input) input.value = '';
+            if (window.updateNextButtonState) window.updateNextButtonState();
+        }
+    },
+
+    showMediaDetails(vehicleType, index) {
+        const mediaItems = this.parseVehicleMediaFromHidden(vehicleType);
+        if (index < 0 || index >= mediaItems.length) return;
+
+        const item = mediaItems[index];
+        const type = String(item?.type || '').toLowerCase();
+        const isVideo = type.startsWith('video/');
+        const icon = isVideo ? '🎥' : '📷';
+
+        // Create modal backdrop
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            padding: 20px;
+        `;
+
+        // Create modal content
+        const content = document.createElement('div');
+        content.style.cssText = `
+            background: white;
+            border-radius: 8px;
+            max-width: 90%;
+            max-height: 90vh;
+            width: auto;
+            overflow: auto;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        `;
+
+        // Build content HTML
+        let contentHTML = `
+            <div style="margin-bottom: 20px;">
+                <h2 style="margin: 0 0 15px 0; color: #1e3a8a; display: flex; align-items: center; gap: 10px;">
+                    ${icon} File Preview
+                </h2>
+                <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 15px;">
+                    <p style="margin: 5px 0; font-size: 0.9rem; color: #666;">
+                        <strong>Name:</strong> ${item.name}
+                    </p>
+                    <p style="margin: 5px 0; font-size: 0.9rem; color: #666;">
+                        <strong>Type:</strong> ${item.type || 'Unknown'}
+                    </p>
+                    <p style="margin: 5px 0; font-size: 0.9rem; color: #666;">
+                        <strong>Size:</strong> ${this.formatFileSize(item.size || 0)}
+                    </p>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+        `;
+
+        // Add preview based on file type
+        if (isVideo && item.dataUrl) {
+            contentHTML += `
+                <video controls style="max-width: 100%; max-height: 500px; border-radius: 4px;">
+                    <source src="${item.dataUrl}" type="${item.type}">
+                    Your browser does not support the video tag.
+                </video>
+            `;
+        } else if (!isVideo && item.dataUrl) {
+            contentHTML += `
+                <img src="${item.dataUrl}" style="max-width: 100%; max-height: 500px; border-radius: 4px; object-fit: contain;">
+            `;
+        } else {
+            contentHTML += `
+                <p style="color: #666;">Preview not available for this file.</p>
+            `;
+        }
+
+        contentHTML += `
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" id="media-close-btn" style="
+                    padding: 10px 20px;
+                    background: #3b82f6;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-weight: 600;
+                ">Close</button>
+            </div>
+        `;
+
+        content.innerHTML = contentHTML;
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+
+        // Close button handler
+        document.getElementById('media-close-btn').addEventListener('click', () => {
+            modal.remove();
+        });
+
+        // Close on backdrop click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+
+        // Close on Escape key
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                modal.remove();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
+    },
+
+    formatFileSize(bytes) {
+        if (typeof bytes !== 'number' || bytes < 0) return '0 B';
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+    },
+
+    syncVehicleMediaFromInput(vehicleType) {
+        const input = document.getElementById(`${vehicleType}-media-input`);
+        if (!input) return;
+
+        const newFiles = Array.from(input.files || []);
+        const existingMedia = this.parseVehicleMediaFromHidden(vehicleType);
+
+        // Process each new file and convert to data URL for preview
+        Promise.all(newFiles.map((file) => this.fileToDataUrl(file))).then((dataUrls) => {
+            const newMediaItems = newFiles.map((file, idx) => ({
+                name: String(file?.name || '').trim(),
+                type: String(file?.type || '').trim(),
+                size: Number(file?.size || 0) || 0,
+                dataUrl: dataUrls[idx] || ''
+            })).filter((item) => item.name);
+
+            const mergedMedia = [...existingMedia, ...newMediaItems];
+
+            // Remove duplicates by name
+            const uniqueMedia = Array.from(new Map(
+                mergedMedia.map(item => [item.name, item])
+            ).values());
+
+            this.saveVehicleMediaToHidden(vehicleType, uniqueMedia);
+            this.renderVehicleMediaPreview(vehicleType, uniqueMedia);
+        });
+    },
+
+    fileToDataUrl(file) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => resolve('');
+            reader.readAsDataURL(file);
+        });
+    },
+
     renderVehicleFloorSelector(vehicleType) {
         const selector = document.getElementById(`${vehicleType}-floors-selector`);
         const hidden = document.getElementById(`${vehicleType}-floors-hidden`);
@@ -340,6 +656,11 @@ window.multiItemsManager = {
         if (customWeightInput) customWeightInput.value = '';
         if (customLengthInput) customLengthInput.value = '';
 
+        const mediaInput = document.getElementById(`${vehicleType}-media-input`);
+        if (mediaInput) mediaInput.value = '';
+        this.saveVehicleMediaToHidden(vehicleType, []);
+        this.renderVehicleMediaPreview(vehicleType, []);
+
         this.clearVehicleFormFloors(vehicleType);
         this.syncVehicleCustomFieldVisibility(vehicleType);
 
@@ -377,6 +698,11 @@ window.multiItemsManager = {
         if (customWeightUnitInput) customWeightUnitInput.value = vehicle.customWeightUnit || 'kg';
         if (customLengthInput) customLengthInput.value = vehicle.customLength || '';
         if (customLengthUnitInput) customLengthUnitInput.value = vehicle.customLengthUnit || 'mm';
+
+        this.saveVehicleMediaToHidden(vehicleType, Array.isArray(vehicle.media) ? vehicle.media : []);
+        this.renderVehicleMediaPreview(vehicleType, Array.isArray(vehicle.media) ? vehicle.media : []);
+        const mediaInput = document.getElementById(`${vehicleType}-media-input`);
+        if (mediaInput) mediaInput.value = '';
 
         this.restoreVehicleFormFloors(vehicleType, vehicle);
         this.syncVehicleCustomFieldVisibility(vehicleType);
@@ -464,6 +790,7 @@ window.multiItemsManager = {
                 ['Insurance', vehicle.insurance],
                 ['Road tax', vehicle.roadtax],
                 ['Tested certification', vehicle.tested],
+                ['Media', this.formatVehicleMediaLabel(vehicle)],
                 ['Floors', this.getVehicleFloorsLabel(vehicle)]
             ].filter(([, val]) => String(val || '').trim());
 
@@ -762,54 +1089,21 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Setup piano photo upload handlers
-    const setupPianoPhotoHandlers = () => {
-        const photoInputs = [
-            document.getElementById('piano-photo-1'),
-            document.getElementById('piano-photo-2'),
-            document.getElementById('piano-photo-3')
-        ].filter(Boolean);
-
-        const photosHidden = document.getElementById('piano-photos-hidden');
-
-        const updatePhotosHidden = () => {
-            if (!photosHidden) return;
-            const uploadedCount = photoInputs.filter(input => input.files && input.files.length > 0).length;
-            photosHidden.value = uploadedCount > 0 ? String(uploadedCount) : '';
-            photosHidden.dispatchEvent(new Event('change', { bubbles: true }));
-            if (window.updateNextButtonState) window.updateNextButtonState();
-        };
-
-        photoInputs.forEach(input => {
-            input.addEventListener('change', updatePhotosHidden);
-
-            // Setup drag and drop
-            const label = input.parentElement;
-            if (label) {
-                label.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    label.style.opacity = '0.7';
-                    label.style.backgroundColor = '#f0f9ff';
-                });
-                label.addEventListener('dragleave', () => {
-                    label.style.opacity = '1';
-                    label.style.backgroundColor = '';
-                });
-                label.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    label.style.opacity = '1';
-                    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                        input.files = e.dataTransfer.files;
-                        input.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-                });
-            }
-        });
-    };
-
-    // Initial render
+    // Initial render + hydration-safe re-render for refreshed pages
     window.multiItemsManager.renderPianosList();
-    setupPianoPhotoHandlers();
+
+    const pianosJsonHidden = document.getElementById('pianos-json-hidden');
+    if (pianosJsonHidden) {
+        pianosJsonHidden.addEventListener('change', () => {
+            window.multiItemsManager.renderPianosList();
+            if (window.updateNextButtonState) window.updateNextButtonState();
+        });
+    }
+
+    // Some restore flows repopulate hidden inputs shortly after DOMContentLoaded.
+    setTimeout(() => {
+        window.multiItemsManager.renderPianosList();
+    }, 250);
 
     const isBoatsServiceActive = () => {
         const serviceHidden = document.getElementById('item-description-hidden')
@@ -838,7 +1132,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 `${vehicleType}-insurance-entry-hidden`,
                 `${vehicleType}-roadtax-entry-hidden`,
                 `${vehicleType}-tested-entry-hidden`,
-                `${vehicleType}-type-entry-hidden`
+                `${vehicleType}-type-entry-hidden`,
+                `${vehicleType}-media-hidden`
             ];
 
             const hasHiddenValue = hiddenFieldIds.some((fieldId) => String(document.getElementById(fieldId)?.value || '').trim());
@@ -870,6 +1165,55 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!shouldShow && continueWithSavedHidden.value) {
                 resetContinueWithSavedChoice();
             }
+        };
+
+        const showVehicleSavedIndicator = (wasEdit) => {
+            const sectionIdByType = {
+                car: 'car-transport-section',
+                motorbike: 'motorbike-transport-section',
+                trailer: 'trailer-campervan-section'
+            };
+
+            const section = document.getElementById(sectionIdByType[vehicleType] || '');
+            if (!section) return;
+
+            let banner = section.querySelector('.vehicle-save-success-banner');
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.className = 'vehicle-save-success-banner';
+                banner.setAttribute('role', 'status');
+                banner.setAttribute('aria-live', 'polite');
+                banner.style.cssText = 'margin: 0 0 12px; padding: 10px 12px; border: 1px solid #86efac; border-radius: 8px; background: #f0fdf4; color: #166534; font-weight: 700; font-size: 0.92rem;';
+
+                const card = section.querySelector('.card-section');
+                if (card) {
+                    const firstHeading = card.querySelector('h3, h2, p');
+                    if (firstHeading && firstHeading.parentElement === card) {
+                        firstHeading.insertAdjacentElement('afterend', banner);
+                    } else {
+                        card.prepend(banner);
+                    }
+                } else {
+                    section.prepend(banner);
+                }
+            }
+
+            banner.textContent = wasEdit
+                ? 'Vehicle details updated and form reset. You can add another vehicle now.'
+                : 'Vehicle saved and form reset. You can add another vehicle now.';
+            banner.style.display = 'block';
+
+            const topOffset = 110;
+            const targetTop = Math.max(0, window.scrollY + section.getBoundingClientRect().top - topOffset);
+            window.scrollTo({ top: targetTop, behavior: 'smooth' });
+
+            if (banner._hideTimer) {
+                clearTimeout(banner._hideTimer);
+            }
+            banner._hideTimer = setTimeout(() => {
+                banner.style.display = 'none';
+                banner._hideTimer = null;
+            }, 4500);
         };
 
         const isCustomWeightAboveTrailerThreshold = () => {
@@ -997,6 +1341,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (window.updateNextButtonState) window.updateNextButtonState();
                 });
             });
+
+        const mediaInput = document.getElementById(`${vehicleType}-media-input`);
+        if (mediaInput) {
+            mediaInput.addEventListener('change', () => {
+                window.multiItemsManager.syncVehicleMediaFromInput(vehicleType);
+                resetContinueWithSavedChoice();
+                syncContinueWithSavedUi();
+                if (window.updateNextButtonState) window.updateNextButtonState();
+            });
+        }
 
         const makeModelInput = document.getElementById(`${vehicleType}-make-model-entry`);
         if (makeModelInput) {
@@ -1179,6 +1533,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     roadtax: lookup.roadtax,
                     tested: lookup.tested,
                     type: lookup.type,
+                    media: window.multiItemsManager.parseVehicleMediaFromHidden(vehicleType),
                     floors: window.multiItemsManager.parseFloorsFromHidden(vehicleType)
                 };
 
@@ -1188,12 +1543,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     : window.multiItemsManager.addVehicle(vehicleType, vehicleData);
 
                 if (saved) {
+                    const wasEdit = !!editingVehicleId;
                     window.multiItemsManager.editingVehicleIds[vehicleType] = null;
                     window.multiItemsManager.updateVehicleEditUi(vehicleType);
                     // Clear form
                     window.multiItemsManager.clearVehicleForm(vehicleType);
                     resetContinueWithSavedChoice();
                     syncContinueWithSavedUi();
+                    showVehicleSavedIndicator(wasEdit);
 
                     if (window.updateNextButtonState) window.updateNextButtonState();
                 }
@@ -1208,4 +1565,14 @@ document.addEventListener('DOMContentLoaded', function() {
             syncTrailerTestedRequirement();
         }
     });
+
+    // Initialize piano media input
+    const pianoMediaInput = document.getElementById('piano-media-input');
+    if (pianoMediaInput) {
+        pianoMediaInput.addEventListener('change', () => {
+            window.multiItemsManager.syncVehicleMediaFromInput('piano');
+            if (window.updateNextButtonState) window.updateNextButtonState();
+        });
+    }
 });
+
