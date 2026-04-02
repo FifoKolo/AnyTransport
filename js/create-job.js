@@ -7548,7 +7548,13 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         }
 
         const hasSelectedPickupFloors = !!(window.selectedPickupFloors && window.selectedPickupFloors.size > 0);
-        if ((pickupLiftValue || hasSelectedPickupFloors) && typeof window.renderSelectedPickupFloorsInventory === 'function') {
+        const activeServiceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
+        const isHouseRemovalService = activeServiceValue === 'House Removals';
+        const confirmationSatisfied = typeof isPickupFloorConfirmationSatisfied === 'function'
+            ? isPickupFloorConfirmationSatisfied()
+            : false;
+        const canHydratePickupInventory = !isHouseRemovalService || confirmationSatisfied;
+        if ((pickupLiftValue || hasSelectedPickupFloors) && canHydratePickupInventory && typeof window.renderSelectedPickupFloorsInventory === 'function') {
             window.renderSelectedPickupFloorsInventory(pickupLiftValue || '');
         }
 
@@ -7930,7 +7936,13 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 // updateInventoryAndliftVisibility ran earlier with isRestoring=false.
                 if (window.selectedPickupFloors && window.selectedPickupFloors.size > 0) {
                     const ic = document.getElementById('inventory-card-container');
-                    if (ic && ic.style.display === 'none') {
+                    const activeServiceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
+                    const isHouseRemovalService = activeServiceValue === 'House Removals';
+                    const confirmationSatisfied = typeof isPickupFloorConfirmationSatisfied === 'function'
+                        ? isPickupFloorConfirmationSatisfied()
+                        : false;
+                    const allowForceShow = !isHouseRemovalService || confirmationSatisfied;
+                    if (ic && ic.style.display === 'none' && allowForceShow) {
                         ic.style.display = '';
                     }
                     if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
@@ -8103,6 +8115,24 @@ const propertyFloors = {
     bungalow: ['Basement', 'Ground','Attic'],
     'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
 };
+
+if (typeof window.step3PickupFloorsConfirmed !== 'boolean') {
+    window.step3PickupFloorsConfirmed = false;
+}
+
+function hasSavedHouseRemovalInventoryData() {
+    const inventory = window.multiFloorInventory;
+    if (!inventory || typeof inventory !== 'object') return false;
+
+    return Object.values(inventory).some((floorItems) => {
+        if (!floorItems || typeof floorItems !== 'object') return false;
+        return Object.values(floorItems).some((qty) => (parseInt(qty, 10) || 0) > 0);
+    });
+}
+
+function isPickupFloorConfirmationSatisfied() {
+    return window.step3PickupFloorsConfirmed === true || hasSavedHouseRemovalInventoryData();
+}
 
 function syncPickupFloorHiddenFromSelection() {
     const hidden = document.getElementById('pickup-floor-select');
@@ -8547,6 +8577,10 @@ window.togglePickupFloor = async function(floor) {
     } else {
         selectedPickupFloors.add(floor);
     }
+
+    // Changing selected floors requires pressing Confirm again.
+    window.step3PickupFloorsConfirmed = false;
+
     syncPickupFloorHiddenFromSelection();
     renderPickupFloorSelector();
     if (window.renderInventoryByRoom) {
@@ -8626,6 +8660,7 @@ window.toggleDeliveryFloor = function(floor) {
         ).trim();
         const isVehicleService = isNoLiftService(serviceValue);
         const isCustomizedItems = isCustomizedInventoryService(serviceValue);
+        const isHouseRemovalService = serviceValue === 'House Removals';
         const customInventorySection = document.getElementById('customized-items-inventory-section');
         const houseInventorySection = document.getElementById('house-removal-inventory-section');
 
@@ -8665,7 +8700,12 @@ window.toggleDeliveryFloor = function(floor) {
             // In multi-floor flow, selected floors are the source of truth.
             const floorReady = hasSelectedPickupFloors || !!(floorHiddenInput && floorHiddenInput.value);
             const _isRestoring = typeof window.__cjIsRestoring === 'function' ? window.__cjIsRestoring() : false;
+            const confirmationSatisfied = isPickupFloorConfirmationSatisfied();
             let canShowInventory = !propertyPrompt && floorReady && isStep3 && (!liftRequired || liftSelected || (_isRestoring && hasSelectedPickupFloors));
+
+            if (isHouseRemovalService) {
+                canShowInventory = canShowInventory && confirmationSatisfied;
+            }
 
             if (isCustomizedItems && isStep3) {
                 canShowInventory = true;
@@ -9013,12 +9053,14 @@ window.toggleDeliveryFloor = function(floor) {
             const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
             const isVehicleService = isNoLiftService(serviceValue);
             const isCustomizedItems = isCustomizedInventoryService(serviceValue);
+            const isHouseRemovalService = serviceValue === 'House Removals';
             const liftValue = (liftInput && liftInput.value) ? liftInput.value.trim() : '';
             const selectedPickupFloorCount = (window.selectedPickupFloors instanceof Set)
                 ? window.selectedPickupFloors.size
                 : 0;
 
             if (selectedPickupFloorCount === 0) {
+                window.step3PickupFloorsConfirmed = false;
                 if (typeof window.renderPickupFloorSelector === 'function') {
                     window.renderPickupFloorSelector();
                 }
@@ -9026,6 +9068,10 @@ window.toggleDeliveryFloor = function(floor) {
                     setTimeout(() => window.updateNextButtonState(), 0);
                 }
                 return;
+            }
+
+            if (isHouseRemovalService) {
+                window.step3PickupFloorsConfirmed = true;
             }
 
             if (isCustomizedItems) {
@@ -9092,50 +9138,44 @@ window.toggleDeliveryFloor = function(floor) {
                 return;
             }
 
-            // Check if lift question was answered
-            if (!liftValue) {
-                if (typeof window.setFormStep === 'function') {
-                    window.setFormStep(2);
-                }
+            // Always reveal Step 3 inventory after floor confirmation so users can
+            // immediately start adding/editing items at the bottom of the page.
+            if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
+                window.renderSelectedPickupFloorsInventory(liftValue || '');
+            } else {
+                restoreOriginalInventoryUI();
+            }
 
+            const inventoryCardContainer = document.getElementById('inventory-card-container');
+            const houseInventorySection = document.getElementById('house-removal-inventory-section');
+            if (inventoryCardContainer) {
+                inventoryCardContainer.style.display = '';
+            }
+            if (houseInventorySection) {
+                houseInventorySection.style.display = '';
+                houseInventorySection.classList.remove('step-hidden');
+            }
+
+            // Keep lift as validation for progression, but don't block inventory reveal.
+            if (!liftValue) {
                 const pickupLiftSection = document.getElementById('pickup-lift-section');
                 if (pickupLiftSection) {
                     pickupLiftSection.style.display = 'flex';
                     pickupLiftSection.style.flexDirection = 'column';
                     pickupLiftSection.classList.remove('step-hidden');
-                    setTimeout(() => {
-                        pickupLiftSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        const firstLiftButton = pickupLiftSection.querySelector('.lift-icon-btn');
-                        if (firstLiftButton && typeof firstLiftButton.focus === 'function') {
-                            firstLiftButton.focus({ preventScroll: true });
-                        }
-                    }, 140);
                 }
-                return;
             }
-            // If floors selected, verify lift is answered and proceed
-            if (liftValue) {
-                // Render one old-style inventory block per selected pickup floor
-                if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
-                    window.renderSelectedPickupFloorsInventory(liftValue);
-                } else {
-                    restoreOriginalInventoryUI();
-                }
-                
-                // Show inventory section
-                if (document.getElementById('inventory-card-container')) {
-                    document.getElementById('inventory-card-container').style.display = '';
-                }
-                // Scroll to inventory
-                setTimeout(() => {
-                    if (document.getElementById('inventory-card-container')) {
-                        document.getElementById('inventory-card-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                }, 100);
 
-                if (typeof window.updateNextButtonState === 'function') {
-                    setTimeout(() => window.updateNextButtonState(), 0);
+            setTimeout(() => {
+                const target = document.getElementById('house-removal-inventory-section')
+                    || document.getElementById('inventory-card-container');
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
+            }, 100);
+
+            if (typeof window.updateNextButtonState === 'function') {
+                setTimeout(() => window.updateNextButtonState(), 0);
             }
         });
     }
@@ -23989,12 +24029,124 @@ function openOverviewInventoryManageModal(kind) {
     if (saveBtn) saveBtn.style.display = '';
 
     const rows = getOverviewManageRows(kind);
+    let sortMode = modal.getAttribute('data-sort-mode') || 'floor-alpha';
+
+    const sortLabels = {
+        'floor': 'Floor',
+        'az': 'A-Z',
+        'za': 'Z-A',
+        'floor-alpha': 'Floor + A-Z',
+        'qty-desc': 'Qty (High-Low)',
+        'qty-asc': 'Qty (Low-High)'
+    };
+
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
     const getResolvedDeliveryFloors = () => {
         const selected = getOverviewSelectedDeliveryFloors();
         if (selected.length > 0) return selected;
         const allFloors = typeof getOverviewAllFloors === 'function' ? getOverviewAllFloors() : [];
         return allFloors.length > 0 ? allFloors : ['Ground'];
+    };
+
+    const getCanonicalFloorRankMap = () => {
+        const sourceFloors = rows.map((row) => String(row.sourceFloor || '').trim()).filter(Boolean);
+        const deliveryFloors = rows.map((row) => String(row.deliveryFloor || '').trim()).filter(Boolean);
+        const mergedFloors = [
+            ...getOverviewSelectedPickupFloors(),
+            ...getResolvedDeliveryFloors(),
+            ...sourceFloors,
+            ...deliveryFloors
+        ];
+        const ordered = getOrderedFloorList(Array.from(new Set(mergedFloors)));
+        const rank = new Map();
+        ordered.forEach((floor, index) => {
+            rank.set(String(floor || '').trim(), index);
+        });
+        return rank;
+    };
+
+    const getFloorRankValue = (floorLabel, rankMap) => {
+        const key = String(floorLabel || '').trim();
+        if (!key) return Number.MAX_SAFE_INTEGER;
+        if (rankMap.has(key)) return rankMap.get(key);
+        return Number.MAX_SAFE_INTEGER - 1;
+    };
+
+    const applyRowSorting = () => {
+        if (!Array.isArray(rows) || rows.length <= 1) return;
+
+        const rankMap = getCanonicalFloorRankMap();
+        const decoratedRows = rows.map((row, index) => ({ row, index }));
+
+        decoratedRows.sort((left, right) => {
+            const leftName = String(left.row?.itemName || '').trim();
+            const rightName = String(right.row?.itemName || '').trim();
+            const leftQty = Math.max(1, parseInt(left.row?.qty, 10) || 1);
+            const rightQty = Math.max(1, parseInt(right.row?.qty, 10) || 1);
+            const leftSourceRank = getFloorRankValue(left.row?.sourceFloor, rankMap);
+            const rightSourceRank = getFloorRankValue(right.row?.sourceFloor, rankMap);
+            const leftDeliveryRank = getFloorRankValue(left.row?.deliveryFloor, rankMap);
+            const rightDeliveryRank = getFloorRankValue(right.row?.deliveryFloor, rankMap);
+
+            if (sortMode === 'az') {
+                const byName = collator.compare(leftName, rightName);
+                if (byName !== 0) return byName;
+                return left.index - right.index;
+            }
+
+            if (sortMode === 'za') {
+                const byName = collator.compare(rightName, leftName);
+                if (byName !== 0) return byName;
+                return left.index - right.index;
+            }
+
+            if (sortMode === 'qty-desc') {
+                if (rightQty !== leftQty) return rightQty - leftQty;
+                const byName = collator.compare(leftName, rightName);
+                if (byName !== 0) return byName;
+                return left.index - right.index;
+            }
+
+            if (sortMode === 'qty-asc') {
+                if (leftQty !== rightQty) return leftQty - rightQty;
+                const byName = collator.compare(leftName, rightName);
+                if (byName !== 0) return byName;
+                return left.index - right.index;
+            }
+
+            if (leftSourceRank !== rightSourceRank) {
+                return leftSourceRank - rightSourceRank;
+            }
+
+            if (leftDeliveryRank !== rightDeliveryRank) {
+                return leftDeliveryRank - rightDeliveryRank;
+            }
+
+            if (sortMode === 'floor-alpha') {
+                const byName = collator.compare(leftName, rightName);
+                if (byName !== 0) return byName;
+            }
+
+            return left.index - right.index;
+        });
+
+        rows.splice(0, rows.length, ...decoratedRows.map((entry) => entry.row));
+    };
+
+    const syncRowsFromDom = () => {
+        const rowNodes = Array.from(body.querySelectorAll('.overview-inventory-manage-row'));
+        if (!rowNodes.length) return;
+
+        const hydratedRows = rowNodes.map((rowNode) => {
+            const name = String(rowNode.querySelector('.overview-manage-item-name')?.value || '').trim();
+            const qty = Math.max(1, parseInt(rowNode.querySelector('.overview-manage-item-qty')?.value, 10) || 1);
+            const sourceFloor = String(rowNode.querySelector('.overview-manage-item-source-floor')?.value || '').trim();
+            const deliveryFloor = String(rowNode.querySelector('.overview-manage-item-delivery-floor')?.value || '').trim();
+            return { itemName: name, qty, sourceFloor, deliveryFloor };
+        });
+
+        rows.splice(0, rows.length, ...hydratedRows);
     };
 
     const getDeliveryFloorOptions = () => {
@@ -24013,6 +24165,8 @@ function openOverviewInventoryManageModal(kind) {
     };
 
     const renderRows = () => {
+        applyRowSorting();
+
         const currentPickupFloors = getOverviewSelectedPickupFloors();
         const currentDeliveryFloors = getResolvedDeliveryFloors();
         const currentDefaultPickupFloor = currentPickupFloors[0] || defaultPickupFloor;
@@ -24048,6 +24202,17 @@ function openOverviewInventoryManageModal(kind) {
         body.innerHTML = `
             <div style="margin-bottom:10px; color:#334155; font-size:0.93rem;">
                 Edit item quantity, remove rows, or add a custom item with pickup and delivery floor assignments.
+            </div>
+            <div style="display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-bottom:10px;">
+                <label for="overview-manage-sort-mode" style="font-size:0.86rem; color:#475569; font-weight:700; text-transform:uppercase; letter-spacing:0.02em;">Sort by</label>
+                <select id="overview-manage-sort-mode" style="min-width:180px; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">
+                    <option value="floor" ${sortMode === 'floor' ? 'selected' : ''}>Floor</option>
+                    <option value="az" ${sortMode === 'az' ? 'selected' : ''}>A-Z</option>
+                    <option value="za" ${sortMode === 'za' ? 'selected' : ''}>Z-A</option>
+                    <option value="floor-alpha" ${sortMode === 'floor-alpha' ? 'selected' : ''}>Floor + A-Z</option>
+                    <option value="qty-desc" ${sortMode === 'qty-desc' ? 'selected' : ''}>Qty (High-Low)</option>
+                    <option value="qty-asc" ${sortMode === 'qty-asc' ? 'selected' : ''}>Qty (Low-High)</option>
+                </select>
             </div>
             <div style="display:grid; grid-template-columns: minmax(220px, 1.4fr) 90px 170px 170px auto; gap:8px; margin-bottom:8px; font-size:0.78rem; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.02em;">
                 <div>Item</div>
@@ -24104,6 +24269,15 @@ function openOverviewInventoryManageModal(kind) {
             rows.push({ itemName, qty, deliveryFloor, sourceFloor: pickupFloor });
             if (nameInput) nameInput.value = '';
             if (qtyInput) qtyInput.value = '1';
+            renderRows();
+        });
+
+        const sortSelect = body.querySelector('#overview-manage-sort-mode');
+        sortSelect?.addEventListener('change', () => {
+            syncRowsFromDom();
+            const nextMode = String(sortSelect.value || '').trim();
+            sortMode = sortLabels[nextMode] ? nextMode : 'floor-alpha';
+            modal.setAttribute('data-sort-mode', sortMode);
             renderRows();
         });
     };
