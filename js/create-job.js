@@ -58,6 +58,17 @@ const contactBlocker = {
     }
 };
 
+let lastAutoAdvancedFloor = '';
+let lastAutoAdvancedlift = '';
+
+function clearNextMissingHighlights() {
+    document.querySelectorAll('.next-missing-highlight').forEach((node) => {
+        node.classList.remove('next-missing-highlight');
+    });
+}
+
+window.clearNextMissingHighlights = clearNextMissingHighlights;
+
 /**
  * Validate City Area or Eircode input for Step 1 pickup and delivery.
  */
@@ -2348,6 +2359,34 @@ function getSelectedPickupFloorsMissingInventory() {
     });
 }
 
+function getHouseRemovalMissingInventoryTarget() {
+    const serviceValue = getActiveServiceValue();
+    if (serviceValue !== 'House Removals') {
+        return null;
+    }
+
+    const selectedFloors = getPickupFloorsRequiringInventory();
+    if (selectedFloors.length === 0) {
+        return null;
+    }
+
+    const missingFloors = selectedFloors.filter((floorName) => {
+        const floorItems = window.multiFloorInventory && window.multiFloorInventory[floorName];
+        if (!floorItems || typeof floorItems !== 'object') {
+            return true;
+        }
+        return !Object.values(floorItems).some((qty) => (parseInt(qty, 10) || 0) > 0);
+    });
+
+    if (missingFloors.length > 0 || !hasAnyInventorySelection()) {
+        return document.getElementById('inventory-card-container')
+            || document.getElementById('house-removal-inventory-section')
+            || document.getElementById('pickup-floor-select');
+    }
+
+    return null;
+}
+
 function updateStep3InventoryWarning() {
     const inventoryCardContainer = document.getElementById('inventory-card-container');
     if (!inventoryCardContainer) return;
@@ -3737,6 +3776,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     const pickupLift = document.getElementById('pickup-lift-available');
                     if (hasNonGroundFloor && !(pickupLift && pickupLift.value && pickupLift.value.trim())) {
                         return pickupLift || document.getElementById('pickup-lift-option-container');
+                    }
+
+                    const houseRemovalMissingInventoryTarget = getHouseRemovalMissingInventoryTarget();
+                    if (houseRemovalMissingInventoryTarget) {
+                        return houseRemovalMissingInventoryTarget;
                     }
 
                     if (isInventoryInputRequiredForStep3()) {
@@ -15284,6 +15328,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     return firstInvalid
                         || document.getElementById('pickup-lift-option-container')
                         || document.getElementById('pickup-lift-available');
+                }
+
+                const houseRemovalMissingInventoryTarget = getHouseRemovalMissingInventoryTarget();
+                if (houseRemovalMissingInventoryTarget) {
+                    return firstInvalid
+                        || houseRemovalMissingInventoryTarget;
                 }
 
                 if (
