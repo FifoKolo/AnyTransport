@@ -2359,10 +2359,26 @@ function getSelectedPickupFloorsMissingInventory() {
     });
 }
 
+function hasCurrentHouseRemovalInventorySelection() {
+    const inventoryRoot = document.getElementById('inventory-card-container');
+    if (!inventoryRoot || inventoryRoot.style.display === 'none') {
+        return false;
+    }
+
+    const qtyDisplays = Array.from(inventoryRoot.querySelectorAll('.room-item-quantity-display'));
+    return qtyDisplays.some((input) => (parseInt(input.value, 10) || 0) > 0);
+}
+
 function getHouseRemovalMissingInventoryTarget() {
     const serviceValue = getActiveServiceValue();
     if (serviceValue !== 'House Removals') {
         return null;
+    }
+
+    if (!hasCurrentHouseRemovalInventorySelection()) {
+        return document.getElementById('inventory-card-container')
+            || document.getElementById('house-removal-inventory-section')
+            || document.getElementById('pickup-floor-select');
     }
 
     const selectedFloors = getPickupFloorsRequiringInventory();
@@ -3293,7 +3309,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             // Step 6: all service requirements must be answered
             if (step === 6) {
-                const services = [];
+                const services = ['service-packing', 'service-storage', 'service-disassembly'];
                 
                 // Check Yes/No services
                 for (const serviceId of services) {
@@ -3835,7 +3851,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             if (step === 6) {
-                const services = [];
+                const services = ['service-packing', 'service-storage', 'service-disassembly'];
 
                 const serviceCardByInput = {
                     'service-packing': 'service-card-packing',
