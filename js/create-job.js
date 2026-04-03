@@ -3211,6 +3211,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     return false;
                 }
 
+                if (serviceValue === 'House Removals' && !isPickupFloorConfirmationSatisfied()) {
+                    return false;
+                }
+
                 const hasNonGroundFloor = effectiveFloors.some((floor) => {
                     const normalized = String(floor || '').trim().toLowerCase();
                     return normalized && normalized !== 'ground' && normalized !== 'ground floor' && !normalized.includes('ground');
@@ -3602,7 +3606,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 'pet-tank-height': 'Tank height',
                 'pet-weight-hidden': 'Pet / tank weight range',
                 'pet-weight-custom': 'Exact or approximate pet/tank weight',
-                'pet-owner-lift-hidden': 'Owner lift to delivery location'
+                'pet-owner-lift-hidden': 'Owner lift to delivery location',
+                'confirm-pickup-floors-btn': 'Pickup floor confirmation'
             };
 
             if (fieldId && explicitFieldLabels[fieldId]) {
@@ -3779,6 +3784,12 @@ document.addEventListener('DOMContentLoaded', function () {
                         return document.getElementById('pickup-floors-selector') || document.getElementById('pickup-floor-select');
                     }
                 } else {
+                    if (serviceValue === 'House Removals' && !isPickupFloorConfirmationSatisfied()) {
+                        return document.getElementById('confirm-pickup-floors-btn')
+                            || document.getElementById('pickup-floors-selector')
+                            || document.getElementById('pickup-floor-select');
+                    }
+
                     const effectiveFloors = getPickupFloorsRequiringInventory();
 
                     if (effectiveFloors.length === 0) {
@@ -6890,7 +6901,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 packingItemsInput.value = '';
                 packingItemsInput.dispatchEvent(new Event('change', { bubbles: true }));
             }
-
             syncMoversUnsureUi();
             syncMoversConfirmUi();
             
@@ -12573,14 +12583,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     photoBtn.addEventListener('click', function(e) {
                         e.stopPropagation();
 
-                        let photoInput = document.getElementById('custom-item-photo-input-multifloor');
+                        let photoInput = block.querySelector('.custom-item-photo-input-multifloor');
                         if (!photoInput) {
                             photoInput = document.createElement('input');
                             photoInput.type = 'file';
                             photoInput.accept = 'image/*,video/*';
-                            photoInput.id = 'custom-item-photo-input-multifloor';
+                            photoInput.className = 'custom-item-photo-input-multifloor';
                             photoInput.style.display = 'none';
-                            document.body.appendChild(photoInput);
+                            block.appendChild(photoInput);
 
                             photoInput.addEventListener('change', function() {
                                 const file = photoInput.files && photoInput.files[0];
@@ -15232,7 +15242,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             hasValue = true;
                         }
                     }
-
                     if (field.id === 'lift-available') {
                         const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
                         const hasNonGroundFloor = selectedFloors.some((floor) => {
