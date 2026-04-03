@@ -2308,6 +2308,63 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     position: relative;
 }
 
+.transport-date-label-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.transport-date-info-btn {
+    width: 22px;
+    height: 22px;
+    margin-top: -8px;
+    border: 1px solid #93c5fd;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.84rem;
+    font-weight: 700;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: help;
+    position: relative;
+}
+
+.transport-date-info-btn:focus-visible {
+    outline: 3px solid rgba(59, 130, 246, 0.35);
+    outline-offset: 2px;
+}
+
+.transport-date-info-btn::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 0;
+    top: calc(100% + 8px);
+    width: min(360px, 75vw);
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #0f172a;
+    color: #f8fafc;
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1.45;
+    text-align: left;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.35);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-2px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+    z-index: 1220;
+}
+
+.transport-date-info-btn:hover::after,
+.transport-date-info-btn:focus-visible::after {
+    opacity: 1;
+    transform: translateY(0);
+}
+
 .transport-date-trigger {
     width: 100%;
     min-height: 58px;

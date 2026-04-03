@@ -134,12 +134,8 @@
                                         <input type="hidden" id="pickup-city" value="" data-required="true" aria-required="true">
                                         <div class="location-inline">
                                             <div class="location-field">
-                                                <label class="form-label" for="pickup-city-area">City Area <span class="required-text" data-required-for="pickup-city-area">(one required)</span></label>
-                                                <input type="text" id="pickup-city-area" class="form-input" placeholder="City Area" autocomplete="address-level3" data-optional="true">
-                                            </div>
-                                            <div class="location-field">
                                                 <div class="eircode-label-row">
-                                                    <label class="form-label" for="pickup-postcode">Eircode <span class="required-text" data-required-for="pickup-postcode">(one required)</span></label>
+                                                    <label class="form-label" for="pickup-area-eircode">City Area or Eircode <span class="required-text" data-required-for="pickup-area-eircode">(required)</span></label>
                                                     <a
                                                         class="eircode-finder-link"
                                                         href="https://finder.eircode.ie/#/"
@@ -153,7 +149,9 @@
                                                         </svg>
                                                     </a>
                                                 </div>
-                                                <input type="text" id="pickup-postcode" class="form-input" placeholder="Eircode (e.g. A65 F4E2)" autocomplete="postal-code" data-optional="true">
+                                                <input type="text" id="pickup-area-eircode" class="form-input" placeholder="City Area or Eircode (e.g. A65 F4E2)" autocomplete="postal-code" data-required="true" aria-required="true">
+                                                <input type="hidden" id="pickup-city-area" data-optional="true">
+                                                <input type="hidden" id="pickup-postcode" data-optional="true">
                                             </div>
                                         </div>
                                     </div>
@@ -163,12 +161,8 @@
                                         <input type="hidden" id="delivery-city" value="" data-required="true" aria-required="true">
                                         <div class="location-inline">
                                             <div class="location-field">
-                                                <label class="form-label" for="delivery-city-area">City Area <span class="required-text" data-required-for="delivery-city-area">(one required)</span></label>
-                                                <input type="text" id="delivery-city-area" class="form-input" placeholder="City Area" autocomplete="address-level3" data-optional="true">
-                                            </div>
-                                            <div class="location-field">
                                                 <div class="eircode-label-row">
-                                                    <label class="form-label" for="delivery-postcode">Eircode <span class="required-text" data-required-for="delivery-postcode">(one required)</span></label>
+                                                    <label class="form-label" for="delivery-area-eircode">City Area or Eircode <span class="required-text" data-required-for="delivery-area-eircode">(required)</span></label>
                                                     <a
                                                         class="eircode-finder-link"
                                                         href="https://finder.eircode.ie/#/"
@@ -182,7 +176,9 @@
                                                         </svg>
                                                     </a>
                                                 </div>
-                                                <input type="text" id="delivery-postcode" class="form-input" placeholder="Eircode (e.g. A65 F4E2)" autocomplete="postal-code" data-optional="true">
+                                                <input type="text" id="delivery-area-eircode" class="form-input" placeholder="City Area or Eircode (e.g. A65 F4E2)" autocomplete="postal-code" data-required="true" aria-required="true">
+                                                <input type="hidden" id="delivery-city-area" data-optional="true">
+                                                <input type="hidden" id="delivery-postcode" data-optional="true">
                                             </div>
                                         </div>
                                     </div>
@@ -2011,7 +2007,16 @@
                                     </div>
                                 </div>
 
-                                <label class="form-label" for="service-transport-date" style="display:block; margin-bottom:8px; font-weight:700; color:#1f2937;">Date of Transport</label>
+                                <div class="transport-date-label-row">
+                                    <label class="form-label" for="service-transport-date" style="display:block; margin-bottom:8px; font-weight:700; color:#1f2937;">Date of Transport</label>
+                                    <button
+                                        type="button"
+                                        class="transport-date-info-btn"
+                                        aria-label="Why are only storage date window options available?"
+                                        data-tooltip="For storage jobs, transport dates are limited to your storage service window. This helps us combine pickups and deliveries more efficiently, reduce delays, and keep pricing accurate.">
+                                        i
+                                    </button>
+                                </div>
                                 <input type="hidden" id="service-transport-date" name="service-transport-date">
                                 <div class="transport-date-picker" id="transport-date-picker">
                                     <button type="button" class="transport-date-trigger" id="transport-date-trigger" aria-haspopup="dialog" aria-expanded="false">
@@ -2027,7 +2032,7 @@
                                     </button>
                                     <div class="transport-date-panel" id="transport-date-panel" role="dialog" aria-modal="false" aria-label="Transport date options"></div>
                                 </div>
-                                <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Choose your preferred moving date. For storage jobs, selectable dates are limited to the storage start/end dates.</div>
+                                <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Choose your preferred moving date. For storage jobs, selectable dates are limited to the storage start/end dates to keep transport planning efficient.</div>
 
                                 <div id="transport-time-window-row" style="margin-top:12px;">
                                     <label class="form-label" for="preferred-time-pickup" style="display:block; margin-bottom:8px; font-weight:700; color:#1f2937;">Preferred Times <span style="color:#64748b; font-size:0.9em; font-weight:600;">(optional)</span></label>
