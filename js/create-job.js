@@ -12429,6 +12429,55 @@ document.addEventListener('DOMContentLoaded', function () {
             return { roomKey: 'hallway', itemName: raw };
         };
 
+        const getScopedPhotoTrackingKey = (trackingKey) => {
+            const key = String(trackingKey || '').trim();
+            if (!key) return '';
+            return `${floorRef.name}::${key}`;
+        };
+
+        const getFloorCustomMediaEntry = (trackingKey) => {
+            const key = String(trackingKey || '').trim();
+            if (!key) return null;
+            const entries = ensureFloorMediaStore(floorRef.name);
+            return entries.find((row) => String(row?.customTrackingKey || '') === key) || null;
+        };
+
+        const getFloorCustomPhotoPreview = (trackingKey) => {
+            const key = String(trackingKey || '').trim();
+            if (!key) return '';
+
+            const mediaEntry = getFloorCustomMediaEntry(key);
+            if (mediaEntry) {
+                const mediaPreview = String(resolveFloorMediaPreviewSrc(mediaEntry) || '').trim();
+                if (mediaPreview) return mediaPreview;
+                const fallbackPreview = String(mediaEntry.previewDataUrl || '').trim();
+                if (fallbackPreview) return fallbackPreview;
+            }
+
+            const photoStore = window.customItemPhotos || (window.customItemPhotos = {});
+            return String(photoStore[getScopedPhotoTrackingKey(key)] || '').trim();
+        };
+
+        const setFloorCustomPhotoPreview = (trackingKey, previewDataUrl) => {
+            const key = String(trackingKey || '').trim();
+            if (!key) return;
+            const photoStore = window.customItemPhotos || (window.customItemPhotos = {});
+            const scopedKey = getScopedPhotoTrackingKey(key);
+            const nextPreview = String(previewDataUrl || '').trim();
+            if (nextPreview) {
+                photoStore[scopedKey] = nextPreview;
+            } else {
+                delete photoStore[scopedKey];
+            }
+        };
+
+        const removeFloorCustomPhotoPreview = (trackingKey) => {
+            const key = String(trackingKey || '').trim();
+            if (!key) return;
+            const photoStore = window.customItemPhotos || (window.customItemPhotos = {});
+            delete photoStore[getScopedPhotoTrackingKey(key)];
+        };
+
         const hydrateCustomFloorItemsFromInventory = () => {
             Object.keys(existingFloorItems).forEach((trackingKey) => {
                 const qty = parseInt(existingFloorItems[trackingKey], 10) || 0;
@@ -12525,8 +12574,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const qty = floorQuantities[trackingKey] || 0;
                 const selected = qty > 0;
                 const isCustomItem = isCustomFloorItemForTab(itemName, tabName);
-                const photoStore = window.customItemPhotos || (window.customItemPhotos = {});
-                const hasCustomPhoto = !!photoStore[trackingKey];
+                const hasCustomPhoto = !!getFloorCustomPhotoPreview(trackingKey);
                 li.className = 'inventory-item' + (selected ? ' selected' : '');
                 li.setAttribute('data-item', itemName);
                 
@@ -12602,12 +12650,9 @@ document.addEventListener('DOMContentLoaded', function () {
                                     alert('Please select a valid image or video file.');
                                     return;
                                 }
-                                const livePhotoStore = (window.customItemPhotos && typeof window.customItemPhotos === 'object')
-                                    ? window.customItemPhotos
-                                    : (window.customItemPhotos = {});
                                 const reader = new FileReader();
                                 reader.onload = function(evt) {
-                                    livePhotoStore[selectedTrackingKey] = evt.target.result;
+                                    setFloorCustomPhotoPreview(selectedTrackingKey, evt.target.result);
                                     upsertCustomItemFloorMedia(selectedTrackingKey, selectedItemName, evt.target.result);
                                     renderItems(selectedTabName);
                                     if (typeof window.saveStep3InventorySnapshot === 'function') {
@@ -12644,7 +12689,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         viewPhotoBtn.style.marginLeft = '4px';
                         viewPhotoBtn.addEventListener('click', function(e) {
                             e.stopPropagation();
-                            const previewDataUrl = photoStore[trackingKey];
+                            const previewDataUrl = getFloorCustomPhotoPreview(trackingKey);
                             if (!previewDataUrl) {
                                 alert('Preview not available for this item. Please upload the media again.');
                                 return;
@@ -12680,7 +12725,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             if (!confirmed) {
                                 return;
                             }
-                            delete photoStore[trackingKey];
+                            removeFloorCustomPhotoPreview(trackingKey);
                             removeCustomItemFloorMedia(trackingKey);
                             renderItems(tabName);
                             if (typeof window.saveStep3InventorySnapshot === 'function') {
@@ -12722,9 +12767,10 @@ document.addEventListener('DOMContentLoaded', function () {
                                 // Preserve photo mapping when custom item is renamed
                                 const oldTrackingKey = trackingKey;
                                 const newTrackingKey = getMultiFloorTrackingKey(trimmedName, tabName);
-                                if (photoStore[oldTrackingKey]) {
-                                    photoStore[newTrackingKey] = photoStore[oldTrackingKey];
-                                    delete photoStore[oldTrackingKey];
+                                const oldPreviewData = getFloorCustomPhotoPreview(oldTrackingKey);
+                                if (oldPreviewData) {
+                                    setFloorCustomPhotoPreview(newTrackingKey, oldPreviewData);
+                                    removeFloorCustomPhotoPreview(oldTrackingKey);
                                 }
                                 renameCustomItemFloorMedia(oldTrackingKey, newTrackingKey, trimmedName);
                                 // Move quantities
@@ -13064,8 +13110,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     floorEntries.splice(index, 1);
                     clearFloorMediaObjectUrl(removedEntry && removedEntry.id);
                     if (removedEntry && removedEntry.customTrackingKey) {
-                        const photoStore = window.customItemPhotos || (window.customItemPhotos = {});
-                        delete photoStore[removedEntry.customTrackingKey];
+                        removeFloorCustomPhotoPreview(removedEntry.customTrackingKey);
                     }
                     if (floorEntries.length === 0) {
                         delete window.floorMediaItems[floorRef.name];
@@ -13149,11 +13194,10 @@ document.addEventListener('DOMContentLoaded', function () {
             entry.previewDataUrl = await buildPersistablePreviewData(replacement);
 
             if (entry.customTrackingKey) {
-                const photoStore = window.customItemPhotos || (window.customItemPhotos = {});
                 if (entry.previewDataUrl) {
-                    photoStore[entry.customTrackingKey] = entry.previewDataUrl;
+                    setFloorCustomPhotoPreview(entry.customTrackingKey, entry.previewDataUrl);
                 } else {
-                    delete photoStore[entry.customTrackingKey];
+                    removeFloorCustomPhotoPreview(entry.customTrackingKey);
                 }
                 try {
                     renderItems(currentTab);
