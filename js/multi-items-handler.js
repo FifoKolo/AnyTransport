@@ -242,8 +242,35 @@ window.multiItemsManager = {
         const customWeightInput = document.getElementById(`${vehicleType}-custom-weight`);
         const customLengthInput = document.getElementById(`${vehicleType}-custom-length`);
 
-        const showCustomWeight = (weightHidden?.value || '').trim() === 'custom';
-        const showCustomLength = (lengthHidden?.value || '').trim() === 'custom';
+        const getResolvedNavValue = (hiddenInput, navSelector) => {
+            const hiddenValue = String(hiddenInput?.value || '').trim();
+            if (hiddenValue) return hiddenValue;
+
+            const nav = document.querySelector(navSelector);
+            if (!nav) return '';
+
+            const selectedBtn = nav.querySelector('.option-nav-btn.selected')
+                || nav.querySelector('.option-nav-btn.is-active')
+                || nav.querySelector('.option-nav-btn[aria-checked="true"]')
+                || nav.querySelector('.option-nav-btn[aria-pressed="true"]');
+
+            const selectedValue = selectedBtn ? String(selectedBtn.getAttribute('data-value') || '').trim() : '';
+            if (selectedValue && hiddenInput) {
+                hiddenInput.value = selectedValue;
+            }
+            return selectedValue;
+        };
+
+        const isCustomLike = (value) => {
+            const normalized = String(value || '').trim().toLowerCase();
+            return normalized === 'custom' || normalized === 'other' || normalized === 'other-approx';
+        };
+
+        const resolvedWeightValue = getResolvedNavValue(weightHidden, `.${vehicleType}-weight-entry-nav`);
+        const resolvedLengthValue = getResolvedNavValue(lengthHidden, `.${vehicleType}-length-entry-nav`);
+
+        const showCustomWeight = isCustomLike(resolvedWeightValue);
+        const showCustomLength = isCustomLike(resolvedLengthValue);
 
         if (customWeightWrap) {
             customWeightWrap.style.display = showCustomWeight ? '' : 'none';
@@ -726,9 +753,9 @@ window.multiItemsManager = {
 
         const isEditing = !!this.editingVehicleIds[vehicleType];
         const addLabelMap = {
-            car: '+ Add Campervan / Car',
-            motorbike: '+ Add Motorbike',
-            trailer: '+ Add Caravan / Trailer'
+            car: 'Save Campervan/Car',
+            motorbike: 'Save Motorbike',
+            trailer: 'Save Caravan / Trailer'
         };
         addBtn.textContent = isEditing ? 'Save Changes' : (addLabelMap[vehicleType] || '+ Add Vehicle');
     },
@@ -925,6 +952,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const isCustomSize = sizeInput && sizeInput.value === 'custom';
             if (isCustomType || isCustomSize) {
+                // Require photos for custom pianos too
+                const pianoMediaHidden = document.getElementById('piano-media-hidden');
+                if (pianoMediaHidden) {
+                    let hasMedia = false;
+                    try {
+                        const parsed = JSON.parse((pianoMediaHidden.value || '').trim() || '[]');
+                        hasMedia = Array.isArray(parsed) && parsed.length > 0;
+                    } catch (_error) {
+                        hasMedia = false;
+                    }
+
+                    if (!hasMedia) {
+                        alert('Please upload at least one photo or video for custom pianos.');
+                        return;
+                    }
+                }
+                
                 if (!customName || !customName.value.trim()) {
                     alert('Please enter piano name/model');
                     return;
@@ -1069,6 +1113,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const sizeInput = document.getElementById('piano-size-entry-hidden');
         const customSection = document.getElementById('piano-custom-section');
         const photoSection = document.getElementById('piano-photo-section');
+        const photoRequiredLabel = document.getElementById('piano-media-required');
         const measurementsSection = document.getElementById('piano-unknown-measurements');
 
         if (!typeInput || !customSection) return;
@@ -1080,10 +1125,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
         customSection.style.display = isCustom ? 'block' : 'none';
         
-        // Show photo section and measurements when "I don't know" is selected
+        // Show photo section for all types, but make it required only for custom or unknown
         if (photoSection) {
-            photoSection.style.display = isUnknownType ? 'block' : 'none';
+            photoSection.style.display = 'block';
         }
+        // Toggle "(required)" label based on conditions
+        if (photoRequiredLabel) {
+            photoRequiredLabel.style.display = (isUnknownType || isCustom) ? 'inline' : 'none';
+        }
+        // Show measurements only when "I don't know" is selected
         if (measurementsSection) {
             measurementsSection.style.display = isUnknownType ? 'block' : 'none';
         }
@@ -1383,7 +1433,29 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        window.multiItemsManager.syncVehicleCustomFieldVisibility(vehicleType);
+        const syncVehicleCustomVisibilityAfterHydration = () => {
+            window.multiItemsManager.syncVehicleCustomFieldVisibility(vehicleType);
+            if (vehicleType === 'trailer') {
+                syncTrailerTestedRequirement();
+            }
+        };
+
+        const weightHiddenInput = document.getElementById(`${vehicleType}-weight-entry-hidden`);
+        const lengthHiddenInput = document.getElementById(`${vehicleType}-length-entry-hidden`);
+        [weightHiddenInput, lengthHiddenInput].filter(Boolean).forEach((hiddenInput) => {
+            hiddenInput.addEventListener('change', syncVehicleCustomVisibilityAfterHydration);
+            hiddenInput.addEventListener('input', syncVehicleCustomVisibilityAfterHydration);
+        });
+
+        // Run immediate + deferred syncs because draft hydration can happen asynchronously.
+        syncVehicleCustomVisibilityAfterHydration();
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(syncVehicleCustomVisibilityAfterHydration);
+            });
+        }
+        setTimeout(syncVehicleCustomVisibilityAfterHydration, 0);
+        setTimeout(syncVehicleCustomVisibilityAfterHydration, 120);
 
         const addBtn = document.getElementById(`add-${vehicleType}-btn`);
         if (addBtn) {
@@ -1427,19 +1499,46 @@ document.addEventListener('DOMContentLoaded', function() {
                 const testedInput = document.getElementById(`${vehicleType}-tested-entry-hidden`);
                 const typeInput = document.getElementById(`${vehicleType}-type-entry-hidden`);
 
+                const focusVehicleField = (suffixOrField) => {
+                    let target = null;
+
+                    if (typeof suffixOrField === 'string') {
+                        const navByClass = document.querySelector(`.${vehicleType}-${suffixOrField}-entry-nav`);
+                        const navByData = document.querySelector(`.option-nav[data-option-nav-for="${vehicleType}-${suffixOrField}-entry-hidden"]`);
+                        target = navByClass || navByData || document.getElementById(`${vehicleType}-${suffixOrField}-entry-hidden`);
+                    } else if (suffixOrField) {
+                        target = suffixOrField;
+                    }
+
+                    if (!target) return;
+
+                    if (typeof target.scrollIntoView === 'function') {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+
+                    if (typeof target.focus === 'function') {
+                        setTimeout(() => {
+                            target.focus({ preventScroll: true });
+                        }, 0);
+                    }
+                };
+
                 if (!makeInput || !makeInput.value.trim()) {
+                    focusVehicleField(makeInput);
                     alert('Please enter make & model');
                     return;
                 }
 
                 const yearValue = getEntryValue('year');
                 if (!yearValue) {
+                    focusVehicleField('year');
                     alert('Please select a year');
                     return;
                 }
 
                 const valueEntryValue = getEntryValue('value');
                 if (!valueEntryValue) {
+                    focusVehicleField('value');
                     alert('Please select estimated value');
                     return;
                 }
@@ -1476,6 +1575,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     return !String(lookup[fieldName] || '').trim();
                 });
                 if (missingExtra) {
+                    focusVehicleField(missingExtra);
                     alert(`Please select ${requiredFieldLabel[missingExtra] || missingExtra}`);
                     return;
                 }
@@ -1493,12 +1593,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     : '';
 
                 if (lookup.weight === 'custom' && !customWeightValue) {
+                    focusVehicleField(customWeightInput);
                     alert('Please enter approximate weight');
                     if (customWeightInput) customWeightInput.focus();
                     return;
                 }
 
                 if (lookup.length === 'custom' && !customLengthValue) {
+                    focusVehicleField(customLengthInput);
                     alert('Please Enter approx length');
                     if (customLengthInput) customLengthInput.focus();
                     return;
@@ -1510,6 +1612,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 );
 
                 if (trailerNeedsTested && !String(lookup.tested || '').trim()) {
+                    focusVehicleField('tested');
                     alert('Please select tested certification status for trailers over 3500kg');
                     return;
                 }
@@ -1571,6 +1674,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (pianoMediaInput) {
         pianoMediaInput.addEventListener('change', () => {
             window.multiItemsManager.syncVehicleMediaFromInput('piano');
+            if (window.updateNextButtonState) window.updateNextButtonState();
+        });
+    }
+
+    const petMediaInput = document.getElementById('pet-media-input');
+    if (petMediaInput) {
+        petMediaInput.addEventListener('change', () => {
+            window.multiItemsManager.syncVehicleMediaFromInput('pet');
             if (window.updateNextButtonState) window.updateNextButtonState();
         });
     }

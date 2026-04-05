@@ -64,6 +64,8 @@ let lastAutoAdvancedlift = '';
 function clearNextMissingHighlights() {
     document.querySelectorAll('.next-missing-highlight').forEach((node) => {
         node.classList.remove('next-missing-highlight');
+        node.classList.remove('input-error');
+        node.removeAttribute('aria-invalid');
     });
 }
 
@@ -2029,6 +2031,22 @@ function getPetsStep3MissingRequiredField(forAddAction = false) {
         return null;
     }
 
+    const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+    const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+        .map((btn) => (btn.getAttribute('data-floor') || '').trim())
+        .filter(Boolean);
+    const effectiveFloors = selectedFloors.length > 0 ? selectedFloors : domSelectedFloors;
+
+    if (effectiveFloors.length === 0) {
+        return document.getElementById('pickup-floors-selector') || document.getElementById('pickup-floor-select');
+    }
+
+    if (window.step3PickupFloorsConfirmed !== true) {
+        return document.getElementById('confirm-pickup-floors-btn')
+            || document.getElementById('pickup-floors-selector')
+            || document.getElementById('pickup-floor-select');
+    }
+
     const section = document.getElementById('pets-transport-section');
     const sectionVisible = !!(
         section
@@ -2709,17 +2727,51 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             const hasSavedVehicles = savedVehicles.length > 0;
-            const isFormFieldFilled = (fieldId) => {
+            const isCustomLikeValue = (value) => {
+                const normalized = String(value || '').trim().toLowerCase();
+                return normalized === 'custom' || normalized === 'other' || normalized === 'other-approx';
+            };
+
+            const getResolvedVehicleFieldValue = (fieldId) => {
                 const field = document.getElementById(fieldId);
-                if (!field || field.disabled) return false;
-                const value = typeof field.value === 'string'
+                if (!field || field.disabled) return '';
+
+                const directValue = typeof field.value === 'string'
                     ? field.value.trim()
                     : String(field.value || '').trim();
-                return !!value;
+                if (directValue) return directValue;
+
+                if (field.type === 'hidden') {
+                    const optionNav = document.querySelector(`.option-nav[data-option-nav-for="${fieldId}"]`);
+                    if (optionNav) {
+                        const selectedBtn = optionNav.querySelector('.option-nav-btn.selected')
+                            || optionNav.querySelector('.option-nav-btn[aria-checked="true"]');
+                        const fallbackActiveBtn = selectedBtn
+                            || optionNav.querySelector('.option-nav-btn.is-active')
+                            || optionNav.querySelector('.option-nav-btn[aria-pressed="true"]');
+                        const selectedValue = fallbackActiveBtn
+                            ? String(fallbackActiveBtn.getAttribute('data-value') || '').trim()
+                            : '';
+                        if (selectedValue) {
+                            field.value = selectedValue;
+                            return selectedValue;
+                        }
+                    }
+                }
+
+                return '';
             };
-            const hasDraftInProgress = orderedRequiredFieldIds.some((fieldId) => isFormFieldFilled(fieldId))
-                || isFormFieldFilled(`${vehiclePrefix}-custom-weight`)
+
+            const isFormFieldFilled = (fieldId) => {
+                return !!getResolvedVehicleFieldValue(fieldId);
+            };
+            const makeModelFieldId = `${vehiclePrefix}-make-model-entry`;
+            const hasCoreVehicleDraft = isFormFieldFilled(makeModelFieldId);
+            const hasCustomDraftInProgress = isFormFieldFilled(`${vehiclePrefix}-custom-weight`)
                 || isFormFieldFilled(`${vehiclePrefix}-custom-length`);
+            // Hidden option selections can persist after saving; treat draft as active only when
+            // core vehicle identity (make/model) or custom numeric inputs are being edited.
+            const hasDraftInProgress = hasCoreVehicleDraft || hasCustomDraftInProgress;
             const continueWithSavedChosen = String(continueWithSavedHidden?.value || '').trim() === '1';
 
             if (hasSavedVehicles && !hasDraftInProgress) {
@@ -2739,16 +2791,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     continue;
                 }
 
-                const value = typeof field.value === 'string'
-                    ? field.value.trim()
-                    : String(field.value || '').trim();
+                const value = getResolvedVehicleFieldValue(fieldId);
                 if (!value) {
                     return field;
                 }
             }
 
-            const selectedWeightValue = (document.getElementById(`${vehiclePrefix}-weight-entry-hidden`)?.value || '').trim();
-            if (selectedWeightValue === 'custom') {
+            const selectedWeightValue = getResolvedVehicleFieldValue(`${vehiclePrefix}-weight-entry-hidden`);
+            if (isCustomLikeValue(selectedWeightValue)) {
                 const customWeightField = document.getElementById(`${vehiclePrefix}-custom-weight`);
                 const customWeightValue = (customWeightField && typeof customWeightField.value === 'string')
                     ? customWeightField.value.trim()
@@ -2758,8 +2808,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
 
-            const selectedLengthValue = (document.getElementById(`${vehiclePrefix}-length-entry-hidden`)?.value || '').trim();
-            if (selectedLengthValue === 'custom') {
+            const selectedLengthValue = getResolvedVehicleFieldValue(`${vehiclePrefix}-length-entry-hidden`);
+            if (isCustomLikeValue(selectedLengthValue)) {
                 const customLengthField = document.getElementById(`${vehiclePrefix}-custom-length`);
                 const customLengthValue = (customLengthField && typeof customLengthField.value === 'string')
                     ? customLengthField.value.trim()
@@ -2770,10 +2820,10 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             if (vehiclePrefix === 'trailer' && getActiveServiceValue() !== 'Boats') {
-                const selectedWeight = (document.getElementById('trailer-weight-entry-hidden')?.value || '').trim();
+                const selectedWeight = getResolvedVehicleFieldValue('trailer-weight-entry-hidden');
                 let requiresTested = selectedWeight === 'over-3500';
 
-                if (!requiresTested && selectedWeight === 'custom') {
+                if (!requiresTested && isCustomLikeValue(selectedWeight)) {
                     const customWeightValue = parseFloat((document.getElementById('trailer-custom-weight')?.value || '').trim());
                     const customWeightUnit = (document.getElementById('trailer-custom-weight-unit')?.value || 'kg').trim().toLowerCase();
                     if (Number.isFinite(customWeightValue)) {
@@ -2784,7 +2834,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 if (requiresTested) {
                     const testedField = document.getElementById('trailer-tested-entry-hidden');
-                    const testedValue = (testedField && typeof testedField.value === 'string') ? testedField.value.trim() : '';
+                    const testedValue = getResolvedVehicleFieldValue('trailer-tested-entry-hidden');
                     if (testedField && !testedValue) {
                         if (hasSavedVehicles && hasDraftInProgress && continueWithSavedChosen) {
                             return null;
@@ -2796,8 +2846,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (hasDraftInProgress && !continueWithSavedChosen && addVehicleBtn && typeof addVehicleBtn.click === 'function') {
                 const getDraftFilledState = () => {
-                    const requiredHasValue = orderedRequiredFieldIds.some((fieldId) => isFormFieldFilled(fieldId));
-                    return requiredHasValue
+                    return isFormFieldFilled(makeModelFieldId)
                         || isFormFieldFilled(`${vehiclePrefix}-custom-weight`)
                         || isFormFieldFilled(`${vehiclePrefix}-custom-length`);
                 };
@@ -2945,6 +2994,23 @@ document.addEventListener('DOMContentLoaded', function () {
                 return null;
             }
 
+            const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+            const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+                .map((btn) => (btn.getAttribute('data-floor') || '').trim())
+                .filter(Boolean);
+            const effectiveFloors = selectedFloors.length > 0 ? selectedFloors : domSelectedFloors;
+
+            if (effectiveFloors.length === 0) {
+                return document.getElementById('pickup-floors-selector')
+                    || document.getElementById('pickup-floor-select');
+            }
+
+            if (window.step3PickupFloorsConfirmed !== true) {
+                return document.getElementById('confirm-pickup-floors-btn')
+                    || document.getElementById('pickup-floors-selector')
+                    || document.getElementById('pickup-floor-select');
+            }
+
             const section = document.getElementById('piano-delivery-section');
             if (!isOverviewElementVisible(section)) {
                 return null;
@@ -3024,16 +3090,21 @@ document.addEventListener('DOMContentLoaded', function () {
                     const customLengthInput = document.getElementById('piano-custom-length');
                     const customWidthInput = document.getElementById('piano-custom-width');
                     const customHeightInput = document.getElementById('piano-custom-height');
+                    const photosHidden = document.getElementById('piano-media-hidden');
                     
                     const customNameValue = (customNameInput?.value || '').trim();
                     const customLengthValue = (customLengthInput?.value || '').trim();
                     const customWidthValue = (customWidthInput?.value || '').trim();
                     const customHeightValue = (customHeightInput?.value || '').trim();
+                    const photosValue = (photosHidden?.value || '').trim();
                     
                     if (!customNameValue) return customNameInput || pianoJsonInput;
                     if (!customLengthValue) return customLengthInput || pianoJsonInput;
                     if (!customWidthValue) return customWidthInput || pianoJsonInput;
                     if (!customHeightValue) return customHeightInput || pianoJsonInput;
+                    
+                    // Photos required for custom pianos
+                    if (!photosValue) return photosHidden || pianoJsonInput;
                 }
                 
                 // If type is filled but size is missing, return size field
@@ -3168,6 +3239,20 @@ document.addEventListener('DOMContentLoaded', function () {
                     return allOfficesHaveItems;
                 }
                 if (isCustomizedInventoryService(serviceValue)) {
+                    const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                    const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+                        .map((btn) => (btn.getAttribute('data-floor') || '').trim())
+                        .filter(Boolean);
+                    const effectiveFloors = selectedFloors.length > 0 ? selectedFloors : domSelectedFloors;
+
+                    if (effectiveFloors.length === 0) {
+                        return false;
+                    }
+
+                    if (window.step3PickupFloorsConfirmed !== true) {
+                        return false;
+                    }
+
                     const customizedItemsField = document.getElementById('customized-items-hidden');
                     if (!customizedItemsField || !customizedItemsField.value.trim()) {
                         return false;
@@ -3199,12 +3284,27 @@ document.addEventListener('DOMContentLoaded', function () {
                         }
                     }
 
+                    // Boats Step 3 does not use pickup floor confirmation.
+                    if (normalizeServiceValue(serviceValue) === 'Boats') {
+                        return true;
+                    }
+
                     const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
                     const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
                         .map((btn) => (btn.getAttribute('data-floor') || '').trim())
                         .filter(Boolean);
                     const effectiveFloors = selectedFloors.length > 0 ? selectedFloors : domSelectedFloors;
-                    return effectiveFloors.length > 0;
+
+                    if (effectiveFloors.length === 0) {
+                        return false;
+                    }
+
+                    // Vehicle transport services must explicitly confirm selected parking/floor level.
+                    if (isVehicleTransportService(serviceValue) && window.step3PickupFloorsConfirmed !== true) {
+                        return false;
+                    }
+
+                    return true;
                 }
                 const effectiveFloors = getPickupFloorsRequiringInventory();
                 if (effectiveFloors.length === 0) {
@@ -3418,8 +3518,144 @@ document.addEventListener('DOMContentLoaded', function () {
             return target;
         }
 
+        let removeMissingTargetClearHandlers = null;
+
+        function bindClearMissingHighlightOnResolution(target, visibleTarget, container) {
+            if (typeof removeMissingTargetClearHandlers === 'function') {
+                removeMissingTargetClearHandlers();
+                removeMissingTargetClearHandlers = null;
+            }
+
+            if (!target || !visibleTarget || !container) {
+                return;
+            }
+
+            const listeners = [];
+            const addListener = (el, eventName, handler) => {
+                if (!el || typeof el.addEventListener !== 'function') return;
+                el.addEventListener(eventName, handler);
+                listeners.push(() => el.removeEventListener(eventName, handler));
+            };
+
+            const clearHighlightState = () => {
+                container.classList.remove('next-missing-highlight');
+                visibleTarget.classList.remove('input-error');
+                visibleTarget.removeAttribute('aria-invalid');
+                target.classList.remove('input-error');
+                target.removeAttribute('aria-invalid');
+                if (typeof window.clearNextMissingHighlights === 'function') {
+                    window.clearNextMissingHighlights();
+                }
+                if (typeof removeMissingTargetClearHandlers === 'function') {
+                    removeMissingTargetClearHandlers();
+                    removeMissingTargetClearHandlers = null;
+                }
+            };
+
+            const hasResolvedSelection = () => {
+                const targetId = target.id || '';
+
+                if (targetId === 'pickup-floors-selector') {
+                    return document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected').length > 0;
+                }
+
+                if (targetId === 'delivery-floors-selector') {
+                    return document.querySelectorAll('#delivery-floors-selector .delivery-floor-selector-btn.selected').length > 0;
+                }
+
+                if (targetId === 'confirm-pickup-floors-btn') {
+                    return window.step3PickupFloorsConfirmed === true;
+                }
+
+                if (target.type === 'hidden') {
+                    const hiddenValue = String(target.value || '').trim();
+                    if (hiddenValue) return true;
+
+                    if (targetId) {
+                        const optionNav = document.querySelector(`.option-nav[data-option-nav-for="${targetId}"]`);
+                        if (optionNav) {
+                            const selectedBtn = optionNav.querySelector('.option-nav-btn.selected')
+                                || optionNav.querySelector('.option-nav-btn[aria-checked="true"]');
+                            if (selectedBtn) {
+                                return true;
+                            }
+                        }
+                    }
+
+                    return false;
+                }
+
+                if ('value' in target) {
+                    return !!String(target.value || '').trim();
+                }
+
+                return false;
+            };
+
+            const maybeClear = () => {
+                if (hasResolvedSelection()) {
+                    clearHighlightState();
+                }
+            };
+
+            addListener(target, 'input', maybeClear);
+            addListener(target, 'change', maybeClear);
+            addListener(visibleTarget, 'input', maybeClear);
+            addListener(visibleTarget, 'change', maybeClear);
+
+            if (target.type === 'hidden' && target.id) {
+                const optionNav = document.querySelector(`.option-nav[data-option-nav-for="${target.id}"]`);
+                if (optionNav) {
+                    addListener(optionNav, 'click', () => {
+                        setTimeout(maybeClear, 0);
+                    });
+                    addListener(optionNav, 'keydown', () => {
+                        setTimeout(maybeClear, 0);
+                    });
+                }
+            }
+
+            if ((target.id || '') === 'pickup-floors-selector' || (target.id || '') === 'delivery-floors-selector') {
+                addListener(target, 'click', () => {
+                    setTimeout(maybeClear, 0);
+                });
+            }
+
+            removeMissingTargetClearHandlers = () => {
+                listeners.forEach((unbind) => {
+                    try {
+                        unbind();
+                    } catch (_error) {
+                        // Ignore unbind errors.
+                    }
+                });
+            };
+        }
+
         function highlightAndFocusMissingTarget(target) {
             if (!target) return false;
+
+            const scrollElementToTop = (element) => {
+                if (!element || typeof element.getBoundingClientRect !== 'function') return;
+                const stickyOffset = 120;
+                const absoluteTop = window.pageYOffset + element.getBoundingClientRect().top;
+                const targetTop = Math.max(0, absoluteTop - stickyOffset);
+                window.scrollTo({ top: targetTop, behavior: 'smooth' });
+            };
+
+            const isVehicleFieldTarget = (() => {
+                const id = String(target.id || '').trim();
+                if (!id) return false;
+                return id.startsWith('car-') || id.startsWith('motorbike-') || id.startsWith('trailer-');
+            })();
+
+            const shouldAnchorVehicleTop = (() => {
+                const id = String(target.id || '').trim();
+                if (!id) return false;
+                return id.endsWith('make-model-entry')
+                    || id.endsWith('json-hidden')
+                    || id.endsWith('continue-with-saved-btn');
+            })();
 
             const targetId = target.id || '';
             if ((targetId === 'inventory-card-container' || targetId === 'house-removal-inventory-section')
@@ -3458,10 +3694,6 @@ document.addEventListener('DOMContentLoaded', function () {
                             }, 140);
                         }
 
-                        setTimeout(() => {
-                            floorBlock.classList.remove('next-missing-highlight');
-                        }, 3000);
-
                         return true;
                     }
                 }
@@ -3481,7 +3713,21 @@ document.addEventListener('DOMContentLoaded', function () {
             target.classList.add('input-error');
             target.setAttribute('aria-invalid', 'true');
 
-            container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            bindClearMissingHighlightOnResolution(target, visibleTarget, container);
+
+            if (isVehicleFieldTarget && shouldAnchorVehicleTop && typeof getVisibleVehicleStep3Section === 'function') {
+                const activeVehicleSection = getVisibleVehicleStep3Section();
+                if (activeVehicleSection) {
+                    scrollElementToTop(activeVehicleSection);
+                } else {
+                    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            } else if (isVehicleFieldTarget) {
+                const vehicleFieldGroup = visibleTarget.closest('.form-group') || target.closest?.('.form-group') || container;
+                scrollElementToTop(vehicleFieldGroup);
+            } else {
+                container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
 
             if (typeof visibleTarget.focus === 'function') {
                 setTimeout(() => {
@@ -3492,10 +3738,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 }, 140);
             }
-
-            setTimeout(() => {
-                container.classList.remove('next-missing-highlight');
-            }, 3000);
 
             return true;
         }
@@ -3580,9 +3822,39 @@ document.addEventListener('DOMContentLoaded', function () {
                 'packing-box-provider-config': 'Packing box provider',
                 'packing-items-config': 'Packing item selection',
                 'service-transport-date': 'Moving date',
-                'car-json-hidden': 'Car/Campervan details (click + Add Campervan / Car)',
-                'motorbike-json-hidden': 'Motorbike details (click + Add Motorbike)',
-                'trailer-json-hidden': 'Trailer/Caravan details (click + Add Caravan / Trailer)',
+                'car-make-model-entry': 'Car/Campervan make & model',
+                'car-year-entry-hidden': 'Car/Campervan year',
+                'car-value-entry-hidden': 'Car/Campervan estimated value',
+                'car-type-entry-hidden': 'Car/Campervan type',
+                'car-condition-entry-hidden': 'Car/Campervan condition',
+                'car-method-entry-hidden': 'Car/Campervan transport method',
+                'car-weight-entry-hidden': 'Car/Campervan weight',
+                'car-length-entry-hidden': 'Car/Campervan length',
+                'car-roadworthy-entry-hidden': 'Car/Campervan roadworthy status',
+                'car-insurance-entry-hidden': 'Car/Campervan insurance status',
+                'car-roadtax-entry-hidden': 'Car/Campervan road tax status',
+                'motorbike-make-model-entry': 'Motorbike make & model',
+                'motorbike-year-entry-hidden': 'Motorbike year',
+                'motorbike-value-entry-hidden': 'Motorbike estimated value',
+                'motorbike-condition-entry-hidden': 'Motorbike condition',
+                'motorbike-weight-entry-hidden': 'Motorbike weight',
+                'motorbike-length-entry-hidden': 'Motorbike length',
+                'motorbike-roadworthy-entry-hidden': 'Motorbike roadworthy status',
+                'motorbike-insurance-entry-hidden': 'Motorbike insurance status',
+                'motorbike-roadtax-entry-hidden': 'Motorbike road tax status',
+                'trailer-make-model-entry': 'Trailer/Caravan make & model',
+                'trailer-year-entry-hidden': 'Trailer/Caravan year',
+                'trailer-value-entry-hidden': 'Trailer/Caravan estimated value',
+                'trailer-type-entry-hidden': 'Trailer/Caravan type',
+                'trailer-condition-entry-hidden': 'Trailer/Caravan condition',
+                'trailer-method-entry-hidden': 'Trailer/Caravan transport method',
+                'trailer-weight-entry-hidden': 'Trailer/Caravan weight',
+                'trailer-length-entry-hidden': 'Trailer/Caravan length',
+                'trailer-roadworthy-entry-hidden': 'Trailer/Caravan roadworthy status',
+                'trailer-tested-entry-hidden': 'Trailer/Caravan tested certification status',
+                'car-json-hidden': 'Car/Campervan details (click + Save Campervan / Car)',
+                'motorbike-json-hidden': 'Motorbike details (click + Save Motorbike)',
+                'trailer-json-hidden': 'Trailer/Caravan details (click + Save Caravan / Trailer)',
                 'car-continue-with-saved-btn': 'Continue with saved vehicles',
                 'motorbike-continue-with-saved-btn': 'Continue with saved vehicles',
                 'trailer-continue-with-saved-btn': 'Continue with saved vehicles',
@@ -3609,6 +3881,25 @@ document.addEventListener('DOMContentLoaded', function () {
                 'pet-owner-lift-hidden': 'Owner lift to delivery location',
                 'confirm-pickup-floors-btn': 'Pickup floor confirmation'
             };
+
+            const boatFieldLabels = {
+                'trailer-make-model-entry': 'Boat make & model',
+                'trailer-year-entry-hidden': 'Boat year',
+                'trailer-value-entry-hidden': 'Boat estimated value',
+                'trailer-type-entry-hidden': 'Boat type',
+                'trailer-condition-entry-hidden': 'Boat condition',
+                'trailer-method-entry-hidden': 'Boat transport method',
+                'trailer-weight-entry-hidden': 'Weight of boat',
+                'trailer-length-entry-hidden': 'Boat length',
+                'trailer-roadworthy-entry-hidden': 'Boat seaworthy status',
+                'trailer-tested-entry-hidden': 'Boat tested certification status',
+                'trailer-json-hidden': 'Boat details (click + Save Boat)'
+            };
+
+            const isBoatsServiceActive = normalizeServiceValue(getActiveServiceValue()) === 'Boats';
+            if (isBoatsServiceActive && fieldId && boatFieldLabels[fieldId]) {
+                return boatFieldLabels[fieldId];
+            }
 
             if (fieldId && explicitFieldLabels[fieldId]) {
                 if (fieldId === 'inventory-card-container' || fieldId === 'house-removal-inventory-section') {
@@ -3758,14 +4049,79 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 if (isPetsService(serviceValue)) {
+                    const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                    const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+                        .map((btn) => (btn.getAttribute('data-floor') || '').trim())
+                        .filter(Boolean);
+                    const effectiveFloors = selectedFloors.length > 0 ? selectedFloors : domSelectedFloors;
+
+                    if (effectiveFloors.length === 0) {
+                        return document.getElementById('pickup-floors-selector') || document.getElementById('pickup-floor-select');
+                    }
+
+                    if (window.step3PickupFloorsConfirmed !== true) {
+                        return document.getElementById('confirm-pickup-floors-btn')
+                            || document.getElementById('pickup-floors-selector')
+                            || document.getElementById('pickup-floor-select');
+                    }
+
                     return getPetsStep3MissingRequiredField() || document.getElementById('pets-transport-section');
                 }
 
                 if (isCustomizedInventoryService(serviceValue)) {
+                    const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                    const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+                        .map((btn) => (btn.getAttribute('data-floor') || '').trim())
+                        .filter(Boolean);
+                    const effectiveFloors = selectedFloors.length > 0 ? selectedFloors : domSelectedFloors;
+
+                    if (effectiveFloors.length === 0) {
+                        return document.getElementById('pickup-floors-selector') || document.getElementById('pickup-floor-select');
+                    }
+
+                    if (window.step3PickupFloorsConfirmed !== true) {
+                        return document.getElementById('confirm-pickup-floors-btn')
+                            || document.getElementById('pickup-floors-selector')
+                            || document.getElementById('pickup-floor-select');
+                    }
+
                     const missingCustomizedField = getFirstIncompleteCustomizedItemField();
                     if (missingCustomizedField) {
                         return missingCustomizedField;
                     }
+                }
+
+                if (serviceValue === 'Office Removals') {
+                    const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                    const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+                        .map((btn) => (btn.getAttribute('data-floor') || '').trim())
+                        .filter(Boolean);
+                    const effectiveFloors = selectedFloors.length > 0 ? selectedFloors : domSelectedFloors;
+
+                    if (effectiveFloors.length === 0) {
+                        return document.getElementById('pickup-floors-selector') || document.getElementById('pickup-floor-select');
+                    }
+
+                    if (window.step3PickupFloorsConfirmed !== true) {
+                        return document.getElementById('confirm-pickup-floors-btn')
+                            || document.getElementById('pickup-floors-selector')
+                            || document.getElementById('pickup-floor-select');
+                    }
+
+                    const officeState = ensureOfficeInventoryState();
+                    const officeCount = normalizeOfficeCount(officeState.officeCount);
+                    const missingOfficeIndex = Array.from({ length: officeCount }, (_, index) => index + 1).find((officeIndex) => {
+                        const officeInventory = officeState.offices[officeIndex] || createEmptyOfficeInventoryState('workstations');
+                        const hasPresetItems = Object.values(officeInventory.quantities || {}).some((qty) => (Number(qty) || 0) > 0);
+                        const hasCustomItems = !!String(officeInventory.customItems || '').trim();
+                        return !(hasPresetItems || hasCustomItems);
+                    });
+
+                    if (missingOfficeIndex) {
+                        return document.getElementById('office-removal-inventory-section') || document.getElementById('confirm-pickup-floors-btn');
+                    }
+
+                    return null;
                 }
 
                 if (isVehicleService) {
@@ -3776,13 +4132,20 @@ document.addEventListener('DOMContentLoaded', function () {
                         return getClearanceStep3MissingRequiredField() || document.getElementById('clearance-step3-form');
                     }
 
+                    if (isVehicleTransportService(serviceValue) && normalizeServiceValue(serviceValue) !== 'Boats') {
+                        const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
+                        if (selectedFloors.length === 0) {
+                            return document.getElementById('pickup-floors-selector') || document.getElementById('pickup-floor-select');
+                        }
+                        if (window.step3PickupFloorsConfirmed !== true) {
+                            return document.getElementById('confirm-pickup-floors-btn')
+                                || document.getElementById('pickup-floors-selector')
+                                || document.getElementById('pickup-floor-select');
+                        }
+                    }
+
                     const missingVehicleField = getVehicleStep3MissingRequiredField();
                     if (missingVehicleField) return missingVehicleField;
-
-                    const selectedFloors = window.selectedPickupFloors ? Array.from(window.selectedPickupFloors) : [];
-                    if (selectedFloors.length === 0) {
-                        return document.getElementById('pickup-floors-selector') || document.getElementById('pickup-floor-select');
-                    }
                 } else {
                     if (serviceValue === 'House Removals' && !isPickupFloorConfirmationSatisfied()) {
                         return document.getElementById('confirm-pickup-floors-btn')
@@ -7481,6 +7844,107 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         }
     };
 
+    const collectCustomizedDraftRows = () => {
+        const rows = Array.from(document.querySelectorAll('#dimensions-list .dimension-item'));
+        if (!rows.length) return [];
+
+        return rows.map((row) => {
+            const name = String(row.querySelector('.dimension-description')?.value || '').trim();
+            const width = String(row.querySelector('.dimension-width')?.value || '').trim();
+            const depth = String(row.querySelector('.dimension-depth')?.value || '').trim();
+            const height = String(row.querySelector('.dimension-height')?.value || '').trim();
+            const weight = String(row.querySelector('.dimension-weight')?.value || '').trim();
+            const sourceFloor = String(row.querySelector('.dimension-source-floor')?.value || '').trim();
+            const sizeUnit = String(row.querySelector('.dimension-size-unit')?.value || 'cm').trim() || 'cm';
+            const weightUnit = String(row.querySelector('.dimension-weight-unit')?.value || 'kg').trim() || 'kg';
+            const photos = Array.from(row.querySelectorAll('.photo-input')).map((input) => {
+                const hasRealFile = !!(input.files && input.files.length > 0);
+                const savedName = String(input.dataset.savedName || '').trim();
+                const savedType = String(input.dataset.savedType || '').trim();
+                const savedPreviewDataUrl = String(input.dataset.savedPreview || '').trim();
+
+                if (hasRealFile) {
+                    const file = input.files[0];
+                    return {
+                        name: String(file?.name || '').trim(),
+                        type: String(file?.type || '').trim(),
+                        previewDataUrl: savedPreviewDataUrl
+                    };
+                }
+
+                if (savedName || savedType || savedPreviewDataUrl) {
+                    return {
+                        name: savedName,
+                        type: savedType,
+                        previewDataUrl: savedPreviewDataUrl
+                    };
+                }
+
+                return null;
+            }).filter(Boolean);
+
+            return {
+                name,
+                width,
+                depth,
+                height,
+                weight,
+                sourceFloor,
+                sizeUnit,
+                weightUnit,
+                photos
+            };
+        }).filter((item) => {
+            return !!(item.name || item.width || item.depth || item.height || item.weight || item.sourceFloor || (Array.isArray(item.photos) && item.photos.length > 0));
+        });
+    };
+
+    const restoreCustomizedDraftRows = (items) => {
+        if (!Array.isArray(items) || items.length === 0) return;
+        const dimensionsList = document.getElementById('dimensions-list');
+        if (!dimensionsList || typeof window.addDimensionItem !== 'function') return;
+
+        dimensionsList.innerHTML = '';
+        items.forEach(() => window.addDimensionItem());
+
+        const rowNodes = Array.from(dimensionsList.querySelectorAll('.dimension-item'));
+        rowNodes.forEach((row, index) => {
+            const data = items[index] || {};
+            const setFieldValue = (selector, value) => {
+                const field = row.querySelector(selector);
+                if (!field) return;
+                field.value = String(value || '');
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+            };
+
+            setFieldValue('.dimension-description', data.name);
+            setFieldValue('.dimension-width', data.width);
+            setFieldValue('.dimension-depth', data.depth);
+            setFieldValue('.dimension-height', data.height);
+            setFieldValue('.dimension-weight', data.weight);
+            setFieldValue('.dimension-size-unit', data.sizeUnit || 'cm');
+            setFieldValue('.dimension-weight-unit', data.weightUnit || 'kg');
+            setFieldValue('.dimension-source-floor', data.sourceFloor);
+
+            const photoInputs = Array.from(row.querySelectorAll('.photo-input'));
+            const photoDrafts = Array.isArray(data.photos) ? data.photos : [];
+            photoInputs.forEach((input, inputIndex) => {
+                const photo = photoDrafts[inputIndex] || null;
+                if (photo) {
+                    input.dataset.savedName = String(photo.name || '').trim();
+                    input.dataset.savedType = String(photo.type || '').trim();
+                    input.dataset.savedPreview = String(photo.previewDataUrl || '').trim();
+                } else {
+                    delete input.dataset.savedName;
+                    delete input.dataset.savedType;
+                    delete input.dataset.savedPreview;
+                }
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        });
+    };
+
     const applyUiState = () => {
         const pickupPropertyValue = document.getElementById('pickup-property-type')?.value || '';
         const deliveryPropertyValue = document.getElementById('delivery-property-type')?.value || '';
@@ -7608,12 +8072,14 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             step: getStep(),
             maxReachedStep: Math.max(parseInt(window.__createJobMaxReachedStep, 10) || 1, getStep()),
             overviewVisited: !!window.__overviewStepVisited,
+            step3PickupFloorsConfirmed: window.step3PickupFloorsConfirmed === true,
             serviceScope: getActiveServiceScope(),
             selectedPickupFloors: Array.from(window.selectedPickupFloors || []),
             selectedDeliveryFloors: Array.from(window.selectedDeliveryFloors || []),
             multiFloorInventory: safeClone(window.multiFloorInventory || {}, {}),
             itemFloorAssignments: safeClone(window.itemFloorAssignments || {}, {}),
             itemQuantities: safeClone(window.itemQuantities || {}, {}),
+            customizedDraftItems: safeClone(collectCustomizedDraftRows(), []),
             customItems: safeClone(window.customItems || {}, {}),
             customItemPhotos: safeClone(window.customItemPhotos || {}, {}),
             floorMediaItems: safeClone(window.floorMediaItems || {}, {}),
@@ -7718,6 +8184,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                     syncPickupFloorHiddenFromSelection();
                 }
             }
+            window.step3PickupFloorsConfirmed = payload.step3PickupFloorsConfirmed === true;
             if (Array.isArray(payload.selectedDeliveryFloors)) {
                 window.selectedDeliveryFloors = new Set(payload.selectedDeliveryFloors);
             }
@@ -7823,6 +8290,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             }
 
             applyUiState();
+            restoreCustomizedDraftRows(payload.customizedDraftItems);
 
             // Step 7 custom date picker UI uses a separate visible label and does not
             // listen directly to hidden input value restores.
@@ -7895,6 +8363,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             // Step 3 inventory render functions before restore-dependent rendering runs.
             setTimeout(() => {
                 applyUiState();
+                restoreCustomizedDraftRows(payload.customizedDraftItems);
                 if (
                     window.selectedDeliveryFloors instanceof Set
                     && window.selectedDeliveryFloors.size === 0
@@ -8179,11 +8648,7 @@ function renderPickupFloorSelector() {
     const confirmBtn = document.getElementById('confirm-pickup-floors-btn');
     
     if (confirmBtn) {
-        if (isVehicleParkingService) {
-            confirmBtn.style.display = 'none';
-        } else {
-            confirmBtn.style.display = window.selectedPickupFloors.size > 0 ? 'block' : 'none';
-        }
+        confirmBtn.style.display = window.selectedPickupFloors.size > 0 ? 'block' : 'none';
     }
 
     syncPickupFloorHiddenFromSelection();
@@ -8602,6 +9067,81 @@ window.toggleDeliveryFloor = function(floor) {
     }
 };
 
+// Fallback: if Confirm Selected Floors fails to reveal motorbike form due timing/state drift,
+// recover immediately after click without affecting other services.
+if (!window.__motorbikeConfirmFloorFallbackBound) {
+    document.addEventListener('click', (event) => {
+        const confirmBtn = event.target.closest('#confirm-pickup-floors-btn');
+        if (!confirmBtn) return;
+
+        setTimeout(() => {
+            const serviceValue = normalizeServiceValue(getActiveServiceValue());
+            if (serviceValue !== 'Motorbike Transport') return;
+
+            const motorbikeSection = document.getElementById('motorbike-transport-section');
+            const alreadyVisible = !!(
+                motorbikeSection
+                && motorbikeSection.style.display !== 'none'
+                && !motorbikeSection.classList.contains('step-hidden')
+                && motorbikeSection.offsetParent !== null
+            );
+            if (alreadyVisible) return;
+
+            if (!(window.selectedPickupFloors instanceof Set)) {
+                window.selectedPickupFloors = new Set();
+            }
+
+            const domSelectedFloors = Array.from(document.querySelectorAll('.pickup-floor-selector-btn.selected, .pickup-floor-selector-btn[aria-pressed="true"], .pickup-floor-selector-btn[aria-checked="true"]'))
+                .map((btn) => String(btn.getAttribute('data-floor') || '').trim())
+                .filter(Boolean);
+
+            if (domSelectedFloors.length > 0) {
+                window.selectedPickupFloors = new Set(domSelectedFloors);
+            }
+
+            const hiddenPickupFloor = (document.getElementById('pickup-floor-select')?.value || '').trim();
+            if (window.selectedPickupFloors.size === 0 && hiddenPickupFloor) {
+                window.selectedPickupFloors.add(hiddenPickupFloor);
+            }
+
+            if (window.selectedPickupFloors.size === 0) {
+                return;
+            }
+
+            window.step3PickupFloorsConfirmed = true;
+
+            if (typeof syncPickupFloorHiddenFromSelection === 'function') {
+                syncPickupFloorHiddenFromSelection();
+            }
+
+            if (typeof window.syncPianoStep3Visibility === 'function') {
+                window.syncPianoStep3Visibility();
+            }
+
+            if (motorbikeSection) {
+                motorbikeSection.style.display = 'block';
+                motorbikeSection.classList.remove('step-hidden');
+                motorbikeSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                const firstInteractive = motorbikeSection.querySelector('input, select, textarea, button');
+                if (firstInteractive && typeof firstInteractive.focus === 'function') {
+                    try {
+                        firstInteractive.focus({ preventScroll: true });
+                    } catch (_error) {
+                        firstInteractive.focus();
+                    }
+                }
+            }
+
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
+        }, 0);
+    });
+
+    window.__motorbikeConfirmFloorFallbackBound = true;
+}
+
 
     // Property type icon selection step
     const propertyTypeBtns = document.querySelectorAll('#property-type-selection-section .property-type-icon-btn');
@@ -8667,6 +9207,7 @@ window.toggleDeliveryFloor = function(floor) {
         if (propertyTypeHidden && inventoryCardContainer) {
             const propertyPrompt = propertyTypeHidden.value === '';
             const hasSelectedPickupFloors = (window.selectedPickupFloors && window.selectedPickupFloors.size > 0);
+            const customizedConfirmed = isCustomizedItems && window.step3PickupFloorsConfirmed === true && hasSelectedPickupFloors;
 
             const legacyLiftHidden = liftOptionContainer ? liftOptionContainer.querySelector('#lift-available') : null;
             const pickupLiftInput = document.getElementById('pickup-lift-available');
@@ -8686,7 +9227,7 @@ window.toggleDeliveryFloor = function(floor) {
             }
 
             if (isCustomizedItems && isStep3) {
-                canShowInventory = true;
+                canShowInventory = customizedConfirmed;
             }
 
             inventoryCardContainer.style.display = canShowInventory ? '' : 'none';
@@ -8698,9 +9239,11 @@ window.toggleDeliveryFloor = function(floor) {
 
         if (inventoryCardContainer) {
             if (isCustomizedItems && isStep3) {
+                const hasSelectedPickupFloors = !!(window.selectedPickupFloors && window.selectedPickupFloors.size > 0);
+                const customizedConfirmed = window.step3PickupFloorsConfirmed === true && hasSelectedPickupFloors;
                 if (customInventorySection) {
-                    customInventorySection.style.display = 'block';
-                    customInventorySection.classList.remove('step-hidden');
+                    customInventorySection.style.display = customizedConfirmed ? 'block' : 'none';
+                    customInventorySection.classList.toggle('step-hidden', !customizedConfirmed);
                 }
                 if (houseInventorySection) {
                     houseInventorySection.style.display = 'none';
@@ -9028,34 +9571,78 @@ window.toggleDeliveryFloor = function(floor) {
     
     if (confirmBtn) {
         confirmBtn.addEventListener('click', async function() {
-            const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
+            // Ensure Step 3 context is in sync before visibility gates run.
+            if (document.body.getAttribute('data-form-step') !== '3') {
+                document.body.setAttribute('data-form-step', '3');
+            }
+            if (document.body.getAttribute('data-current-step') !== '3') {
+                document.body.setAttribute('data-current-step', '3');
+            }
+
+            const serviceValue = getActiveServiceValue();
             const isVehicleService = isNoLiftService(serviceValue);
+            const isVehicleTransport = isVehicleTransportService(serviceValue);
+            const isPianoService = serviceValue === 'Piano Transport';
+            const isOfficeService = serviceValue === 'Office Removals';
             const isCustomizedItems = isCustomizedInventoryService(serviceValue);
-            const isHouseRemovalService = serviceValue === 'House Removals';
             const liftValue = (liftInput && liftInput.value) ? liftInput.value.trim() : '';
-            const selectedPickupFloorCount = (window.selectedPickupFloors instanceof Set)
-                ? window.selectedPickupFloors.size
-                : 0;
+
+            // Keep selectedPickupFloors in sync with visible selector state.
+            if (!(window.selectedPickupFloors instanceof Set)) {
+                window.selectedPickupFloors = new Set();
+            }
+
+            const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+                .map((btn) => String(btn.getAttribute('data-floor') || '').trim())
+                .filter(Boolean);
+
+            if (domSelectedFloors.length > 0) {
+                window.selectedPickupFloors = new Set(domSelectedFloors);
+            }
+
+            const hiddenPickupFloor = (document.getElementById('pickup-floor-select')?.value || '').trim();
+            if (window.selectedPickupFloors.size === 0 && hiddenPickupFloor) {
+                window.selectedPickupFloors.add(hiddenPickupFloor);
+            }
+
+            const selectedPickupFloorCount = window.selectedPickupFloors.size;
 
             if (selectedPickupFloorCount === 0) {
                 window.step3PickupFloorsConfirmed = false;
                 if (typeof window.renderPickupFloorSelector === 'function') {
                     window.renderPickupFloorSelector();
                 }
+                const floorSelector = document.getElementById('pickup-floors-selector');
+                if (floorSelector) {
+                    floorSelector.classList.add('next-missing-highlight', 'input-error');
+                    floorSelector.setAttribute('aria-invalid', 'true');
+                    floorSelector.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
                 if (typeof window.updateNextButtonState === 'function') {
                     setTimeout(() => window.updateNextButtonState(), 0);
                 }
+                setTimeout(() => {
+                    alert('Please select at least one pickup floor before confirming.');
+                }, 220);
                 return;
             }
 
-            if (isHouseRemovalService) {
-                window.step3PickupFloorsConfirmed = true;
+            window.step3PickupFloorsConfirmed = true;
+
+            if (typeof window.clearNextMissingHighlights === 'function') {
+                window.clearNextMissingHighlights();
+            }
+            const floorSelector = document.getElementById('pickup-floors-selector');
+            if (floorSelector) {
+                floorSelector.classList.remove('input-error');
+                floorSelector.removeAttribute('aria-invalid');
             }
 
             if (isCustomizedItems) {
                 const inventoryCardContainer = document.getElementById('inventory-card-container');
                 const customSection = document.getElementById('customized-items-inventory-section');
                 const houseSection = document.getElementById('house-removal-inventory-section');
+                const customDimensionsList = document.getElementById('dimensions-list');
 
                 if (inventoryCardContainer) inventoryCardContainer.style.display = '';
                 if (customSection) {
@@ -9065,6 +9652,10 @@ window.toggleDeliveryFloor = function(floor) {
                 if (houseSection) {
                     houseSection.style.display = 'none';
                     houseSection.classList.add('step-hidden');
+                }
+
+                if (customDimensionsList && customDimensionsList.querySelectorAll('.dimension-item').length === 0 && typeof window.addDimensionItem === 'function') {
+                    window.addDimensionItem();
                 }
 
                 // Scroll to inventory section
@@ -9080,10 +9671,104 @@ window.toggleDeliveryFloor = function(floor) {
                 return;
             }
 
-            // Vehicle services use floor selectors directly and do not require this inventory/lift confirm flow.
-            if (isVehicleService) {
+            // Piano service keeps floor selection visible and scrolls to piano details after confirmation.
+            if (isPianoService) {
                 if (typeof syncPickupFloorHiddenFromSelection === 'function') {
                     syncPickupFloorHiddenFromSelection();
+                }
+                if (typeof window.syncPianoStep3Visibility === 'function') {
+                    window.syncPianoStep3Visibility();
+                }
+                // Re-sync once more after microtasks/styles settle.
+                setTimeout(() => {
+                    if (typeof window.syncPianoStep3Visibility === 'function') {
+                        window.syncPianoStep3Visibility();
+                    }
+                }, 0);
+
+                const pianoTarget = document.getElementById('piano-delivery-section');
+                if (pianoTarget) {
+                    setTimeout(() => {
+                        pianoTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        const firstInteractive = pianoTarget.querySelector('input, select, textarea, button');
+                        if (firstInteractive && typeof firstInteractive.focus === 'function') {
+                            firstInteractive.focus({ preventScroll: true });
+                        }
+                    }, 100);
+                }
+
+                if (typeof window.updateNextButtonState === 'function') {
+                    setTimeout(() => window.updateNextButtonState(), 0);
+                }
+                return;
+            }
+
+            if (isPetsService(serviceValue)) {
+                if (typeof syncPickupFloorHiddenFromSelection === 'function') {
+                    syncPickupFloorHiddenFromSelection();
+                }
+                if (typeof window.syncPetsStep3Fields === 'function') {
+                    window.syncPetsStep3Fields();
+                }
+
+                const petsTarget = document.getElementById('pets-transport-section');
+                if (petsTarget) {
+                    setTimeout(() => {
+                        petsTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        const firstInteractive = petsTarget.querySelector('input, select, textarea, button');
+                        if (firstInteractive && typeof firstInteractive.focus === 'function') {
+                            firstInteractive.focus({ preventScroll: true });
+                        }
+                    }, 100);
+                }
+
+                if (typeof window.updateNextButtonState === 'function') {
+                    setTimeout(() => window.updateNextButtonState(), 0);
+                }
+                return;
+            }
+
+            // Office service reveals inventory only after pickup floor confirmation.
+            if (isOfficeService) {
+                if (typeof syncPickupFloorHiddenFromSelection === 'function') {
+                    syncPickupFloorHiddenFromSelection();
+                }
+                if (typeof window.syncPianoStep3Visibility === 'function') {
+                    window.syncPianoStep3Visibility();
+                }
+
+                const officeTarget = document.getElementById('office-removal-inventory-section');
+                const houseInventorySection = document.getElementById('house-removal-inventory-section');
+                if (houseInventorySection) {
+                    houseInventorySection.style.display = 'none';
+                    houseInventorySection.classList.add('step-hidden');
+                }
+
+                if (officeTarget) {
+                    officeTarget.style.display = 'block';
+                    officeTarget.classList.remove('step-hidden');
+                    setTimeout(() => {
+                        officeTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        const firstInteractive = officeTarget.querySelector('input, select, textarea, button');
+                        if (firstInteractive && typeof firstInteractive.focus === 'function') {
+                            firstInteractive.focus({ preventScroll: true });
+                        }
+                    }, 100);
+                }
+
+                if (typeof window.updateNextButtonState === 'function') {
+                    setTimeout(() => window.updateNextButtonState(), 0);
+                }
+                return;
+            }
+
+            // Vehicle services reveal their detail form only after pickup parking level confirmation.
+            if (isVehicleTransport || isFreightService(serviceValue) || isClearanceService(serviceValue)) {
+                if (typeof syncPickupFloorHiddenFromSelection === 'function') {
+                    syncPickupFloorHiddenFromSelection();
+                }
+                if (typeof window.syncPianoStep3Visibility === 'function') {
+                    window.syncPianoStep3Visibility();
                 }
 
                 const getVehicleStep3TargetSection = () => {
@@ -14255,10 +14940,19 @@ document.addEventListener('DOMContentLoaded', function() {
     const dimensionsList = document.getElementById('dimensions-list');
     const customizedItemsHiddenInput = document.getElementById('customized-items-hidden');
 
-    const showPhotoPreview = (file) => {
-        if (!file) return;
-        const isVideo = file.type.startsWith('video/');
-        const url = URL.createObjectURL(file);
+    const showPhotoPreview = (fileOrDataUrl, explicitType = '', explicitName = '') => {
+        if (!fileOrDataUrl) return;
+
+        const isDataUrl = typeof fileOrDataUrl === 'string';
+        const file = isDataUrl ? null : fileOrDataUrl;
+        const mediaType = isDataUrl
+            ? String(explicitType || '').toLowerCase()
+            : String(file?.type || '').toLowerCase();
+        const isVideo = mediaType.startsWith('video/');
+        const url = isDataUrl ? String(fileOrDataUrl) : URL.createObjectURL(file);
+        const mediaName = isDataUrl
+            ? (String(explicitName || '').trim() || 'Uploaded media')
+            : (file?.name || 'Uploaded media');
         
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:10100;cursor:pointer;';
@@ -14280,7 +14974,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         const fileName = document.createElement('div');
-        fileName.textContent = file.name;
+        fileName.textContent = mediaName;
         fileName.style.cssText = 'color:#fff;margin-top:10px;font-size:0.9rem;text-align:center;max-width:90vw;word-break:break-word;';
         container.appendChild(fileName);
         
@@ -14288,7 +14982,9 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const closePreview = () => {
             overlay.remove();
-            URL.revokeObjectURL(url);
+            if (!isDataUrl) {
+                URL.revokeObjectURL(url);
+            }
         };
         
         overlay.addEventListener('click', (e) => {
@@ -14315,14 +15011,50 @@ document.addEventListener('DOMContentLoaded', function() {
                 area.style.position = 'relative';
             }
 
-            const updateAreaVisual = () => {
+            const getPhotoState = () => {
                 const hasFiles = input.files && input.files.length > 0;
+                if (hasFiles) {
+                    const file = input.files[0];
+                    return {
+                        hasMedia: true,
+                        file,
+                        fileName: String(file?.name || '').trim() || 'Uploaded media',
+                        fileType: String(file?.type || '').trim(),
+                        savedPreview: String(input.dataset.savedPreview || '').trim()
+                    };
+                }
+
+                const savedName = String(input.dataset.savedName || '').trim();
+                const savedType = String(input.dataset.savedType || '').trim();
+                const savedPreview = String(input.dataset.savedPreview || '').trim();
+                if (savedName || savedType || savedPreview) {
+                    return {
+                        hasMedia: true,
+                        file: null,
+                        fileName: savedName || 'Uploaded media',
+                        fileType: savedType,
+                        savedPreview
+                    };
+                }
+
+                return {
+                    hasMedia: false,
+                    file: null,
+                    fileName: '',
+                    fileType: '',
+                    savedPreview: ''
+                };
+            };
+
+            const updateAreaVisual = () => {
+                const mediaState = getPhotoState();
                 const span = area.querySelector('span');
+                if (!span) return;
                 let clearBtn = area.querySelector('.photo-clear-btn');
                 
-                if (hasFiles) {
-                    const fileName = input.files[0].name;
-                    const fileType = input.files[0].type.startsWith('video/') ? 'Video' : 'Photo';
+                if (mediaState.hasMedia) {
+                    const fileName = mediaState.fileName;
+                    const fileType = String(mediaState.fileType || '').startsWith('video/') ? 'Video' : 'Photo';
                     const truncatedName = fileName.length > 30 ? fileName.substring(0, 27) + '...' : fileName;
                     span.innerHTML = `✓ <strong>${fileType}</strong><br><span style="font-size:0.85rem;word-break:break-word;cursor:pointer;">${truncatedName}</span>`;
                     area.style.borderColor = '#10b981';
@@ -14339,6 +15071,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             event.preventDefault();
                             event.stopPropagation();
                             input.value = '';
+                            delete input.dataset.savedName;
+                            delete input.dataset.savedType;
+                            delete input.dataset.savedPreview;
                             input.dispatchEvent(new Event('change', { bubbles: true }));
                         });
                         area.appendChild(clearBtn);
@@ -14355,9 +15090,15 @@ document.addEventListener('DOMContentLoaded', function() {
             };
 
             area.addEventListener('click', () => {
-                const hasFiles = input.files && input.files.length > 0;
-                if (hasFiles) {
-                    showPhotoPreview(input.files[0]);
+                const mediaState = getPhotoState();
+                if (mediaState.hasMedia) {
+                    if (mediaState.file) {
+                        showPhotoPreview(mediaState.file);
+                    } else if (mediaState.savedPreview) {
+                        showPhotoPreview(mediaState.savedPreview, mediaState.fileType, mediaState.fileName);
+                    } else {
+                        alert('Preview is unavailable after refresh for this file. Please re-upload if needed.');
+                    }
                 } else {
                     input.click();
                 }
@@ -14377,9 +15118,9 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             area.addEventListener('dragleave', () => {
-                const hasFiles = input.files && input.files.length > 0;
-                area.style.borderColor = hasFiles ? '#10b981' : '#ddd';
-                area.style.background = hasFiles ? '#f0fdf4' : '#f9f9f9';
+                const mediaState = getPhotoState();
+                area.style.borderColor = mediaState.hasMedia ? '#10b981' : '#ddd';
+                area.style.background = mediaState.hasMedia ? '#f0fdf4' : '#f9f9f9';
             });
 
             area.addEventListener('drop', (e) => {
@@ -16094,6 +16835,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const body = document.body;
         const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
         const isCustomizedService = isCustomizedInventoryService(serviceValue);
+        const hasSelectedPickupFloors = !!(window.selectedPickupFloors && window.selectedPickupFloors.size > 0);
+        const customizedConfirmed = window.step3PickupFloorsConfirmed === true && hasSelectedPickupFloors;
+        const shouldShowCustomizedInventory = isCustomizedService && isStep3 && customizedConfirmed;
 
         const inventoryCardContainer = document.getElementById('inventory-card-container');
         const houseInventorySection = document.getElementById('house-removal-inventory-section');
@@ -16108,11 +16852,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         document.body.classList.toggle('customized-items-active', isCustomizedService);
 
-        if (isCustomizedService && isStep3) {
-            if (pickupFloorsImage) pickupFloorsImage.style.display = 'none';
-            if (pickupRoomList) pickupRoomList.style.display = 'none';
-            if (step3Title) step3Title.style.display = 'none';
+        if (pickupFloorsImage) pickupFloorsImage.style.display = '';
+        if (pickupRoomList) pickupRoomList.style.display = '';
+        if (step3Title) step3Title.style.display = '';
 
+        if (shouldShowCustomizedInventory) {
             inventoryCardContainer.style.display = '';
             customSection.style.display = 'block';
             customSection.classList.add('customized-revealed');
@@ -16127,14 +16871,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             syncCustomizedItemFloorFields();
         } else {
-            if (pickupFloorsImage) pickupFloorsImage.style.display = '';
-            if (pickupRoomList) pickupRoomList.style.display = '';
-            if (step3Title) step3Title.style.display = '';
-
             customSection.style.display = 'none';
             customSection.classList.add('step-hidden');
 
-            if (serviceValue !== 'House Removals' && !isCustomizedInventoryService(serviceValue)) {
+            if (serviceValue !== 'House Removals') {
                 inventoryCardContainer.style.display = 'none';
             }
 
@@ -16146,11 +16886,7 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     const syncPianoStep3Visibility = () => {
-        const serviceValue = (
-            cjHidden?.value
-            || decodeURIComponent(new URLSearchParams(window.location.search).get('service') || '')
-            || ''
-        ).trim();
+        const serviceValue = getActiveServiceValue();
         const body = document.body;
         const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
         const isPianoService = serviceValue === 'Piano Transport';
@@ -16159,8 +16895,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const isOfficeService = serviceValue === 'Office Removals';
         const isCustomizedService = isCustomizedInventoryService(serviceValue);
         const isVehicleParkingService = isParkingLevelService(serviceValue);
+        const isVehicleTransport = isVehicleTransportService(serviceValue);
 
         const pianoSection = document.getElementById('piano-delivery-section');
+        const carTransportSection = document.getElementById('car-transport-section');
+        const motorbikeTransportSection = document.getElementById('motorbike-transport-section');
+        const trailerCampervanSection = document.getElementById('trailer-campervan-section');
+        const officeInventorySection = document.getElementById('office-removal-inventory-section');
+        const houseInventorySection = document.getElementById('house-removal-inventory-section');
         const pickupWrapper = document.getElementById('pickup-room-list-wrapper');
         const inventoryCardContainer = document.getElementById('inventory-card-container');
         const step3Title = document.getElementById('step3-title-wrapper');
@@ -16168,13 +16910,25 @@ document.addEventListener('DOMContentLoaded', function() {
         const pickupFloorsImage = document.getElementById('pickup-floors-image');
         const step3PickupLabel = document.getElementById('step3-pickup-label');
         const step3PickupHelp = document.getElementById('step3-pickup-help');
+        const pickupFloorsConfirmed = window.step3PickupFloorsConfirmed === true;
+        const domSelectedPickupFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+            .map((btn) => String(btn.getAttribute('data-floor') || '').trim())
+            .filter(Boolean);
+        const hiddenPickupFloor = (document.getElementById('pickup-floor-select')?.value || '').trim();
+        const hasSelectedPickupFloor = !!(
+            (window.selectedPickupFloors && window.selectedPickupFloors.size > 0)
+            || domSelectedPickupFloors.length > 0
+            || hiddenPickupFloor
+        );
+        const shouldShowVehicleDetails = isVehicleTransport && isStep3 && pickupFloorsConfirmed && hasSelectedPickupFloor;
+        const shouldShowOfficeInventory = isOfficeService && isStep3 && pickupFloorsConfirmed && hasSelectedPickupFloor;
 
         if (!pianoSection) return;
 
-        const shouldShowPiano = isPianoService && isStep3;
+        const shouldShowPiano = isPianoService && isStep3 && pickupFloorsConfirmed && hasSelectedPickupFloor;
         pianoSection.style.display = shouldShowPiano ? 'block' : 'none';
 
-        const shouldHideGenericStep3Pickup = (isPianoService || isBoatsService) && isStep3;
+        const shouldHideGenericStep3Pickup = isBoatsService && isStep3;
         if (pickupWrapper && !isCustomizedService) {
             pickupWrapper.style.display = shouldHideGenericStep3Pickup ? 'none' : '';
         }
@@ -16183,9 +16937,21 @@ document.addEventListener('DOMContentLoaded', function() {
             inventoryCardContainer.style.display = 'none';
         }
 
+        if (officeInventorySection) {
+            officeInventorySection.style.display = shouldShowOfficeInventory ? 'block' : 'none';
+            officeInventorySection.classList.toggle('step-hidden', !shouldShowOfficeInventory);
+        }
+
+        if (houseInventorySection && isOfficeService && isStep3) {
+            houseInventorySection.style.display = 'none';
+            houseInventorySection.classList.add('step-hidden');
+        }
+
         if (step3TitleHeading) {
-            if (shouldShowPiano) {
-                step3TitleHeading.textContent = 'Step 3: Select Your Piano Type and Size';
+            if (isPianoService && isStep3) {
+                step3TitleHeading.textContent = shouldShowPiano
+                    ? 'Step 3: Select Your Piano Type and Size'
+                    : 'Step 3: Select Pickup Floors';
             } else if (isPetsTransportService && isStep3) {
                 step3TitleHeading.textContent = 'Step 3: Pickup Floors and Pet Details';
             } else if (isOfficeService && isStep3) {
@@ -16218,7 +16984,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 ? 'Select the pickup parking level for your vehicle'
                 : 'Select which floors have items you need to move';
         }
+
+        if (carTransportSection) {
+            carTransportSection.style.display = shouldShowVehicleDetails && isCarCamperTransportService(serviceValue)
+                ? 'block'
+                : 'none';
+        }
+        if (motorbikeTransportSection) {
+            motorbikeTransportSection.style.display = shouldShowVehicleDetails && normalizeServiceValue(serviceValue) === 'Motorbike Transport'
+                ? 'block'
+                : 'none';
+        }
+        if (trailerCampervanSection) {
+            const shouldShowTrailerSection = (isBoatsService && isStep3)
+                || (shouldShowVehicleDetails && isCaravanTrailerTransportService(serviceValue));
+            trailerCampervanSection.style.display = shouldShowTrailerSection
+                ? 'block'
+                : 'none';
+        }
     };
+
+    window.syncPianoStep3Visibility = syncPianoStep3Visibility;
 
     const syncPianoCustomFields = () => {
         const pianoType = document.getElementById('piano-type-entry-hidden');
@@ -16285,7 +17071,17 @@ document.addEventListener('DOMContentLoaded', function() {
         ).trim();
         const body = document.body;
         const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
-        const shouldShow = isPetsService(serviceValue) && isStep3;
+        const pickupFloorsConfirmed = window.step3PickupFloorsConfirmed === true;
+        const domSelectedPickupFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+            .map((btn) => String(btn.getAttribute('data-floor') || '').trim())
+            .filter(Boolean);
+        const hiddenPickupFloor = (document.getElementById('pickup-floor-select')?.value || '').trim();
+        const hasSelectedPickupFloor = !!(
+            (window.selectedPickupFloors && window.selectedPickupFloors.size > 0)
+            || domSelectedPickupFloors.length > 0
+            || hiddenPickupFloor
+        );
+        const shouldShow = isPetsService(serviceValue) && isStep3 && pickupFloorsConfirmed && hasSelectedPickupFloor;
 
         const section = document.getElementById('pets-transport-section');
         const typeField = document.getElementById('pet-animal-type');
@@ -16354,6 +17150,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    window.syncPetsStep3Fields = syncPetsStep3Fields;
+
     const parsePetsList = () => {
         const petsJsonInput = document.getElementById('pets-json-hidden');
         const raw = (petsJsonInput?.value || '').trim();
@@ -16364,6 +17162,92 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             return [];
         }
+    };
+
+    let editingPetIndex = null;
+
+    const setPetAddButtonLabel = () => {
+        const addPetBtn = document.getElementById('add-pet-btn');
+        if (!addPetBtn) return;
+        addPetBtn.textContent = editingPetIndex === null ? '+ Add Pet' : 'Update Pet';
+    };
+
+    const setPetMediaState = (mediaItems) => {
+        const media = Array.isArray(mediaItems)
+            ? mediaItems.map((item) => ({
+                name: String(item?.name || '').trim(),
+                type: String(item?.type || '').trim(),
+                size: Number(item?.size || 0) || 0,
+                dataUrl: String(item?.dataUrl || '').trim()
+            })).filter((item) => item.name)
+            : [];
+
+        const hidden = document.getElementById('pet-media-hidden');
+        const input = document.getElementById('pet-media-input');
+        if (hidden) {
+            hidden.value = media.length > 0 ? JSON.stringify(media) : '';
+            hidden.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (input) {
+            input.value = '';
+        }
+        if (window.multiItemsManager?.renderVehicleMediaPreview) {
+            window.multiItemsManager.renderVehicleMediaPreview('pet', media);
+        }
+    };
+
+    const populatePetEntryIntoForm = (pet) => {
+        if (!pet || typeof pet !== 'object') return;
+
+        const typeField = document.getElementById('pet-animal-type');
+        const otherNameField = document.getElementById('pet-other-name');
+        const tankLengthField = document.getElementById('pet-tank-length');
+        const tankWidthField = document.getElementById('pet-tank-width');
+        const tankHeightField = document.getElementById('pet-tank-height');
+        const tankUnitField = document.getElementById('pet-tank-size-unit');
+        const weightField = document.getElementById('pet-weight-hidden');
+        const weightCustomField = document.getElementById('pet-weight-custom');
+        const ownerLiftField = document.getElementById('pet-owner-lift-hidden');
+
+        if (typeField) {
+            typeField.value = String(pet.typeValue || '').trim();
+            typeField.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (otherNameField) otherNameField.value = String(pet.otherName || '');
+        if (tankLengthField) tankLengthField.value = String(pet.tankLength || '');
+        if (tankWidthField) tankWidthField.value = String(pet.tankWidth || '');
+        if (tankHeightField) tankHeightField.value = String(pet.tankHeight || '');
+        if (tankUnitField) tankUnitField.value = String(pet.tankUnit || 'cm');
+        if (weightField) {
+            weightField.value = String(pet.weightValue || '').trim();
+            weightField.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (weightCustomField) weightCustomField.value = String(pet.weightCustom || '');
+        if (ownerLiftField) ownerLiftField.value = String(pet.ownerLiftValue || '');
+
+        setPetMediaState(Array.isArray(pet.media) ? pet.media : []);
+        syncPetsStep3Fields();
+
+        const target = document.getElementById('pets-transport-section') || document.getElementById('pet-animal-type');
+        if (target?.scrollIntoView) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        document.getElementById('pet-animal-type')?.focus();
+    };
+
+    const clearPetEditState = () => {
+        editingPetIndex = null;
+        setPetAddButtonLabel();
+    };
+
+    const startEditingPetEntry = (index) => {
+        const pets = parsePetsList();
+        const pet = pets[index];
+        if (!pet) return;
+
+        editingPetIndex = index;
+        setPetAddButtonLabel();
+        populatePetEntryIntoForm(pet);
     };
 
     const setPetsList = (pets) => {
@@ -16392,11 +17276,22 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             if (pet.weightLabel) parts.push(`Weight: ${pet.weightLabel}`);
             if (pet.weightCustom) parts.push(`Approx: ${pet.weightCustom}`);
+            if (Array.isArray(pet.media) && pet.media.length > 0) {
+                const imageCount = pet.media.filter((item) => String(item?.type || '').startsWith('image/')).length;
+                const videoCount = pet.media.filter((item) => String(item?.type || '').startsWith('video/')).length;
+                const mediaParts = [];
+                if (imageCount > 0) mediaParts.push(`${imageCount} photo${imageCount === 1 ? '' : 's'}`);
+                if (videoCount > 0) mediaParts.push(`${videoCount} video${videoCount === 1 ? '' : 's'}`);
+                if (mediaParts.length > 0) parts.push(`Media: ${mediaParts.join(', ')}`);
+            }
 
             return `
                 <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff; margin-bottom:8px;">
                     <div style="color:#1f2937; font-size:0.92rem;"><strong>Pet ${index + 1}</strong><br>${parts.join(' | ')}</div>
-                    <button type="button" data-remove-pet-index="${index}" style="border:1px solid #fecaca; background:#fff1f2; color:#b91c1c; border-radius:8px; padding:6px 10px; font-weight:700; cursor:pointer;">Remove</button>
+                    <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+                        <button type="button" data-edit-pet-index="${index}" style="border:1px solid #bfdbfe; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:6px 10px; font-weight:700; cursor:pointer;">Edit</button>
+                        <button type="button" data-remove-pet-index="${index}" style="border:1px solid #fecaca; background:#fff1f2; color:#b91c1c; border-radius:8px; padding:6px 10px; font-weight:700; cursor:pointer;">Remove</button>
+                    </div>
                 </div>
             `;
         }).join('');
@@ -16423,12 +17318,21 @@ document.addEventListener('DOMContentLoaded', function() {
         const tankHeight = document.getElementById('pet-tank-height');
         const tankUnit = document.getElementById('pet-tank-size-unit');
         const weightCustom = document.getElementById('pet-weight-custom');
+        const petMediaInput = document.getElementById('pet-media-input');
+        const petMediaHidden = document.getElementById('pet-media-hidden');
+        const petMediaPreview = document.getElementById('pet-media-preview');
         if (petOtherName) petOtherName.value = '';
         if (tankLength) tankLength.value = '';
         if (tankWidth) tankWidth.value = '';
         if (tankHeight) tankHeight.value = '';
         if (tankUnit) tankUnit.value = 'cm';
         if (weightCustom) weightCustom.value = '';
+        if (petMediaInput) petMediaInput.value = '';
+        if (petMediaHidden) petMediaHidden.value = '';
+        if (petMediaPreview) {
+            petMediaPreview.innerHTML = '';
+            petMediaPreview.style.display = 'none';
+        }
         syncPetsStep3Fields();
     };
 
@@ -16443,6 +17347,26 @@ document.addEventListener('DOMContentLoaded', function() {
         const weightValue = (document.getElementById('pet-weight-hidden')?.value || '').trim();
         const weightLabel = getOptionNavLabel('pet-weight-hidden');
         const weightCustom = (document.getElementById('pet-weight-custom')?.value || '').trim();
+        const petMediaHidden = document.getElementById('pet-media-hidden');
+        let media = [];
+
+        if (petMediaHidden && petMediaHidden.value.trim()) {
+            try {
+                const parsedMedia = JSON.parse(petMediaHidden.value);
+                if (Array.isArray(parsedMedia)) {
+                    media = parsedMedia
+                        .map((item) => ({
+                            name: String(item?.name || '').trim(),
+                            type: String(item?.type || '').trim(),
+                            size: Number(item?.size || 0) || 0,
+                            dataUrl: String(item?.dataUrl || '').trim()
+                        }))
+                        .filter((item) => item.name);
+                }
+            } catch (_error) {
+                media = [];
+            }
+        }
 
         return {
             typeValue,
@@ -16454,7 +17378,8 @@ document.addEventListener('DOMContentLoaded', function() {
             tankUnit,
             weightValue,
             weightLabel,
-            weightCustom
+            weightCustom,
+            media
         };
     };
 
@@ -16470,9 +17395,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const petEntry = buildPetEntryFromForm();
         const pets = parsePetsList();
-        pets.push(petEntry);
+        if (editingPetIndex !== null && editingPetIndex >= 0 && editingPetIndex < pets.length) {
+            pets[editingPetIndex] = petEntry;
+        } else {
+            pets.push(petEntry);
+        }
         setPetsList(pets);
         renderPetsList();
+        clearPetEditState();
         resetPetEntryFields();
         return true;
     };
@@ -16602,6 +17532,68 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    const initVehicleTextfieldDigitRestriction = () => {
+        const maxDigitsPerField = 5;
+        const vehicleSectionSelectors = [
+            '#car-transport-section',
+            '#motorbike-transport-section',
+            '#trailer-campervan-section'
+        ];
+
+        const trimToMaxDigits = (value, maxDigits) => {
+            const raw = String(value || '');
+            let digitsUsed = 0;
+            let next = '';
+
+            for (const ch of raw) {
+                if (/\d/.test(ch)) {
+                    if (digitsUsed >= maxDigits) continue;
+                    digitsUsed += 1;
+                }
+                next += ch;
+            }
+
+            return next;
+        };
+
+        const bindRestriction = (field) => {
+            if (!field || field.dataset.vehicleDigitsRestricted === 'true') return;
+            field.dataset.vehicleDigitsRestricted = 'true';
+
+            const enforceLimit = () => {
+                const current = String(field.value || '');
+                const trimmed = trimToMaxDigits(current, maxDigitsPerField);
+                if (trimmed === current) return;
+
+                const cursorStart = typeof field.selectionStart === 'number' ? field.selectionStart : null;
+                field.value = trimmed;
+
+                if (cursorStart !== null && typeof field.setSelectionRange === 'function') {
+                    const safePos = Math.min(trimmed.length, cursorStart);
+                    try {
+                        field.setSelectionRange(safePos, safePos);
+                    } catch (error) {
+                        // Ignore cursor reposition issues for unsupported input types/browsers.
+                    }
+                }
+            };
+
+            field.addEventListener('input', enforceLimit);
+            field.addEventListener('change', enforceLimit);
+            field.addEventListener('paste', () => setTimeout(enforceLimit, 0));
+
+            enforceLimit();
+        };
+
+        vehicleSectionSelectors.forEach((sectionSelector) => {
+            const section = document.querySelector(sectionSelector);
+            if (!section) return;
+
+            const fields = section.querySelectorAll('input[type="text"], input[type="number"], input[type="tel"]');
+            fields.forEach((field) => bindRestriction(field));
+        });
+    };
+
     function addDimensionItem() {
         if (!dimensionsList) return;
         const itemIndex = dimensionsList.querySelectorAll('.dimension-item').length + 1;
@@ -16705,7 +17697,33 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!photoList) return;
             
             const photoInputs = Array.from(item.querySelectorAll('.photo-input'));
-            const uploadedPhotos = photoInputs.filter(input => input.files && input.files.length > 0);
+            const uploadedPhotos = photoInputs.map((input) => {
+                if (input.files && input.files.length > 0) {
+                    const file = input.files[0];
+                    return {
+                        input,
+                        file,
+                        name: String(file?.name || '').trim(),
+                        type: String(file?.type || '').trim(),
+                        previewDataUrl: String(input.dataset.savedPreview || '').trim()
+                    };
+                }
+
+                const savedName = String(input.dataset.savedName || '').trim();
+                const savedType = String(input.dataset.savedType || '').trim();
+                const savedPreviewDataUrl = String(input.dataset.savedPreview || '').trim();
+                if (savedName || savedType || savedPreviewDataUrl) {
+                    return {
+                        input,
+                        file: null,
+                        name: savedName,
+                        type: savedType,
+                        previewDataUrl: savedPreviewDataUrl
+                    };
+                }
+
+                return null;
+            }).filter(Boolean);
             
             if (uploadedPhotos.length === 0) {
                 photoList.style.display = 'none';
@@ -16715,10 +17733,9 @@ document.addEventListener('DOMContentLoaded', function() {
             photoList.innerHTML = '<div style="font-weight:700;color:#1f2937;margin-bottom:8px;">Uploaded Files</div>';
             photoList.style.display = 'block';
             
-            uploadedPhotos.forEach((input) => {
-                if (!input.files || input.files.length === 0) return;
-                const file = input.files[0];
-                const fileType = file.type.startsWith('video/') ? 'Video' : 'Photo';
+            uploadedPhotos.forEach((entry) => {
+                const fileType = String(entry.type || '').startsWith('video/') ? 'Video' : 'Photo';
+                const fileName = String(entry.name || '').trim() || 'Uploaded media';
                 
                 const row = document.createElement('div');
                 row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;margin-bottom:6px;';
@@ -16727,11 +17744,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 info.style.cssText = 'display:flex;flex-direction:column;min-width:0;flex:1;cursor:pointer;';
                 info.innerHTML = `
                     <span style="font-weight:600;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:0.9rem;">${fileType}</span>
-                    <span style="font-size:0.8rem;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${file.name.substring(0,40)}</span>
+                    <span style="font-size:0.8rem;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${fileName.substring(0,40)}</span>
                 `;
                 info.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    showPhotoPreview(file);
+                    if (entry.file) {
+                        showPhotoPreview(entry.file);
+                    } else if (entry.previewDataUrl) {
+                        showPhotoPreview(entry.previewDataUrl, entry.type, fileName);
+                    } else {
+                        alert('Preview is unavailable after refresh for this file. Please re-upload if needed.');
+                    }
                 });
                 row.appendChild(info);
                 
@@ -16741,11 +17764,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 removeBtn.style.cssText = 'border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:5px;padding:4px 8px;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;';
                 removeBtn.addEventListener('click', (e) => {
                     e.preventDefault();
-                    input.value = '';
-                    input.files = new DataTransfer().files;
+                    entry.input.value = '';
+                    delete entry.input.dataset.savedName;
+                    delete entry.input.dataset.savedType;
+                    delete entry.input.dataset.savedPreview;
                     renderPhotosForItem();
                     updateCustomizedItemsHiddenValue();
-                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    entry.input.dispatchEvent(new Event('change', { bubbles: true }));
                 });
                 row.appendChild(removeBtn);
                 
@@ -16760,13 +17785,80 @@ document.addEventListener('DOMContentLoaded', function() {
         const clearAllPhotosForItem = () => {
             itemPhotoInputs.forEach((input) => {
                 input.value = '';
+                delete input.dataset.savedName;
+                delete input.dataset.savedType;
+                delete input.dataset.savedPreview;
                 input.dispatchEvent(new Event('change', { bubbles: true }));
             });
         };
 
+        const setCompressedImagePreview = (input, file) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const img = new Image();
+                img.onload = () => {
+                    const maxEdge = 720;
+                    const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.max(1, Math.round(img.width * scale));
+                    canvas.height = Math.max(1, Math.round(img.height * scale));
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        input.dataset.savedPreview = '';
+                        renderPhotosForItem();
+                        updateCustomizedItemsHiddenValue();
+                        return;
+                    }
+
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    let preview = canvas.toDataURL('image/jpeg', 0.72);
+                    if (preview.length > 280000) {
+                        preview = canvas.toDataURL('image/jpeg', 0.55);
+                    }
+                    input.dataset.savedPreview = preview;
+                    renderPhotosForItem();
+                    updateCustomizedItemsHiddenValue();
+                };
+                img.onerror = () => {
+                    input.dataset.savedPreview = '';
+                    renderPhotosForItem();
+                    updateCustomizedItemsHiddenValue();
+                };
+                img.src = String(reader.result || '');
+            };
+            reader.onerror = () => {
+                input.dataset.savedPreview = '';
+                renderPhotosForItem();
+                updateCustomizedItemsHiddenValue();
+            };
+            reader.readAsDataURL(file);
+        };
+
         itemPhotoInputs.forEach(input => {
             input.addEventListener('change', () => {
+                const file = input.files && input.files[0];
+
+                if (!file) {
+                    if (!input.dataset.savedName && !input.dataset.savedType && !input.dataset.savedPreview) {
+                        delete input.dataset.savedPreview;
+                    }
+                    renderPhotosForItem();
+                    updateCustomizedItemsHiddenValue();
+                    return;
+                }
+
+                input.dataset.savedName = String(file.name || '');
+                input.dataset.savedType = String(file.type || '');
+
+                if (String(file.type || '').startsWith('image/')) {
+                    setCompressedImagePreview(input, file);
+                    return;
+                }
+
+                // Keep video draft metadata lightweight; no embedded preview data URL.
+                input.dataset.savedPreview = '';
                 renderPhotosForItem();
+                updateCustomizedItemsHiddenValue();
             });
         });
 
@@ -16784,6 +17876,8 @@ document.addEventListener('DOMContentLoaded', function() {
         renumberCustomizedItemTitles();
         updateCustomizedItemsHiddenValue();
     }
+
+    window.addDimensionItem = addDimensionItem;
 
     if (cjHidden) {
         cjHidden.addEventListener('change', syncCustomizedItemsStep3Visibility);
@@ -16804,6 +17898,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const addPetBtn = document.getElementById('add-pet-btn');
     if (addPetBtn) {
+        setPetAddButtonLabel();
         addPetBtn.addEventListener('click', () => {
             addCurrentPetEntry();
             if (typeof window.updateFormSummary === 'function') {
@@ -16819,6 +17914,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const petsListEl = document.getElementById('pets-list');
     if (petsListEl) {
         petsListEl.addEventListener('click', (event) => {
+            const editBtn = event.target.closest('button[data-edit-pet-index]');
+            if (editBtn) {
+                const index = parseInt(editBtn.getAttribute('data-edit-pet-index'), 10);
+                if (!Number.isFinite(index)) return;
+                startEditingPetEntry(index);
+                return;
+            }
+
             const removeBtn = event.target.closest('button[data-remove-pet-index]');
             if (!removeBtn) return;
             const index = parseInt(removeBtn.getAttribute('data-remove-pet-index'), 10);
@@ -16827,6 +17930,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const nextPets = pets.filter((_, idx) => idx !== index);
             setPetsList(nextPets);
             renderPetsList();
+            if (editingPetIndex !== null) {
+                editingPetIndex = null;
+                setPetAddButtonLabel();
+            }
             if (typeof window.updateFormSummary === 'function') {
                 window.updateFormSummary();
             }
@@ -16871,6 +17978,7 @@ document.addEventListener('DOMContentLoaded', function() {
     syncPetsStep3Fields();
     renderPetsList();
     syncBoatsTransportLabels();
+    initVehicleTextfieldDigitRestriction();
 
     const quoteForm = document.getElementById('create-job-form');
     window.globalServiceMediaFiles = Array.isArray(window.globalServiceMediaFiles)
@@ -19590,7 +20698,8 @@ function showOfficeRemovalSection() {
     setOfficeDescriptionMode(false);
     if (officeInventorySection) {
         officeInventorySection.setAttribute('data-form-step', '3');
-        officeInventorySection.style.display = 'block';
+        officeInventorySection.style.display = 'none';
+        officeInventorySection.classList.add('step-hidden');
     }
     if (officeMoveDateSection) {
         officeMoveDateSection.style.display = 'none';
@@ -23692,7 +24801,7 @@ function buildOverviewFloorInventoryMarkup(kind) {
     const grouped = {};
     const selectedPickup = getOrderedFloorList(Array.from(window.selectedPickupFloors || []));
     const selectedDelivery = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || []));
-    const serviceValue = (document.getElementById('item-description-hidden')?.value || '').trim();
+    const serviceValue = getActiveServiceValue();
 
     if (isVehicleTransportService(serviceValue)) {
         const detailRows = getVehicleOverviewDetailRows(serviceValue);
@@ -23712,6 +24821,45 @@ function buildOverviewFloorInventoryMarkup(kind) {
     }
 
     if (kind === 'pickup') {
+        if (serviceValue === 'Office Removals') {
+            const officeEntries = getOverviewPickupInventoryEntries();
+            if (officeEntries.length === 0) {
+                return 'No pickup inventory selected yet.';
+            }
+
+            const groupedByOffice = {};
+            officeEntries.forEach((entry) => {
+                const officeLabel = String(entry.sourceFloor || 'Office 1').trim() || 'Office 1';
+                if (!groupedByOffice[officeLabel]) groupedByOffice[officeLabel] = {};
+                groupedByOffice[officeLabel][entry.itemName] = (groupedByOffice[officeLabel][entry.itemName] || 0) + (parseInt(entry.qty, 10) || 0);
+            });
+
+            const officeLabels = Object.keys(groupedByOffice).sort((left, right) => {
+                const leftMatch = String(left || '').match(/^Office\s+(\d+)$/i);
+                const rightMatch = String(right || '').match(/^Office\s+(\d+)$/i);
+                const leftNum = leftMatch ? parseInt(leftMatch[1], 10) : Number.MAX_SAFE_INTEGER;
+                const rightNum = rightMatch ? parseInt(rightMatch[1], 10) : Number.MAX_SAFE_INTEGER;
+                if (leftNum !== rightNum) return leftNum - rightNum;
+                return String(left || '').localeCompare(String(right || ''));
+            });
+
+            return officeLabels.map((officeLabel) => {
+                const items = Object.entries(groupedByOffice[officeLabel] || {});
+                const itemRows = items.length === 0
+                    ? '<li>No items</li>'
+                    : items
+                        .sort((a, b) => a[0].localeCompare(b[0]))
+                        .map(([name, qty]) => `<li>${escapeOverviewHtml(name)} x${qty}</li>`)
+                        .join('');
+                return `
+                    <div class="overview-floor-block">
+                        <div class="overview-floor-title">${escapeOverviewHtml(officeLabel)}</div>
+                        <ul class="overview-floor-items">${itemRows}</ul>
+                    </div>
+                `;
+            }).join('');
+        }
+
         if (serviceValue === 'Piano Transport') {
             const targetFloor = selectedPickup[0]
                 || (document.getElementById('pickup-floor-select')?.value || '').trim()
@@ -23846,18 +24994,178 @@ function buildOverviewFloorInventoryMarkup(kind) {
             }
         }
     } else {
+        if (serviceValue === 'Office Removals') {
+            const assignments = window.itemFloorAssignments || {};
+            const groupedByDeliveryFloor = {};
+            const defaultDeliveryFloor = selectedDelivery[0]
+                || (document.getElementById('delivery-floor-select')?.value || '').trim()
+                || 'Ground';
+
+            Object.keys(assignments).forEach((itemKey) => {
+                const perFloor = assignments[itemKey] || {};
+                const split = String(itemKey || '').split('||');
+                const itemName = normalizeOverviewItemName(split[0] || itemKey);
+                const officeLabel = String(split[1] || 'Office 1').trim() || 'Office 1';
+
+                Object.keys(perFloor).forEach((deliveryFloor) => {
+                    const qty = parseInt(perFloor[deliveryFloor], 10) || 0;
+                    if (qty <= 0) return;
+                    if (!groupedByDeliveryFloor[deliveryFloor]) groupedByDeliveryFloor[deliveryFloor] = {};
+                    if (!groupedByDeliveryFloor[deliveryFloor][officeLabel]) groupedByDeliveryFloor[deliveryFloor][officeLabel] = {};
+                    groupedByDeliveryFloor[deliveryFloor][officeLabel][itemName] = (groupedByDeliveryFloor[deliveryFloor][officeLabel][itemName] || 0) + qty;
+                });
+            });
+
+            if (Object.keys(groupedByDeliveryFloor).length === 0) {
+                // Fallback: if delivery assignments are not created yet, mirror pickup office inventory.
+                const pickupEntries = getOverviewPickupInventoryEntries();
+                pickupEntries.forEach((entry) => {
+                    const officeLabel = String(entry.sourceFloor || 'Office 1').trim() || 'Office 1';
+                    if (!groupedByDeliveryFloor[defaultDeliveryFloor]) groupedByDeliveryFloor[defaultDeliveryFloor] = {};
+                    if (!groupedByDeliveryFloor[defaultDeliveryFloor][officeLabel]) groupedByDeliveryFloor[defaultDeliveryFloor][officeLabel] = {};
+                    groupedByDeliveryFloor[defaultDeliveryFloor][officeLabel][entry.itemName] = (groupedByDeliveryFloor[defaultDeliveryFloor][officeLabel][entry.itemName] || 0) + (parseInt(entry.qty, 10) || 0);
+                });
+            }
+
+            const deliveryFloors = getOrderedFloorList(Object.keys(groupedByDeliveryFloor));
+
+            if (deliveryFloors.length === 0) {
+                return 'No delivery office assignments yet.';
+            }
+
+            return deliveryFloors.map((deliveryFloor) => {
+                const offices = groupedByDeliveryFloor[deliveryFloor] || {};
+                const officeLabels = Object.keys(offices).sort((left, right) => {
+                    const leftMatch = String(left || '').match(/^Office\s+(\d+)$/i);
+                    const rightMatch = String(right || '').match(/^Office\s+(\d+)$/i);
+                    const leftNum = leftMatch ? parseInt(leftMatch[1], 10) : Number.MAX_SAFE_INTEGER;
+                    const rightNum = rightMatch ? parseInt(rightMatch[1], 10) : Number.MAX_SAFE_INTEGER;
+                    if (leftNum !== rightNum) return leftNum - rightNum;
+                    return String(left || '').localeCompare(String(right || ''));
+                });
+
+                const officeRows = officeLabels.length === 0
+                    ? '<li>No offices assigned</li>'
+                    : officeLabels.map((officeLabel) => {
+                        const officeItems = Object.entries(offices[officeLabel] || {})
+                            .sort((a, b) => a[0].localeCompare(b[0]))
+                            .map(([itemName, qty]) => `${itemName} x${qty}`)
+                            .join(', ');
+                        return `<li><strong>${escapeOverviewHtml(officeLabel)}:</strong> ${escapeOverviewHtml(officeItems || 'No items')}</li>`;
+                    }).join('');
+
+                return `
+                    <div class="overview-floor-block">
+                        <div class="overview-floor-title">${escapeOverviewHtml(deliveryFloor)} Floor</div>
+                        <ul class="overview-floor-items">${officeRows}</ul>
+                    </div>
+                `;
+            }).join('');
+        }
+
         if (serviceValue === 'Piano Transport') {
             const pianoLabels = getPianoOverviewInventoryLabels();
             const targetFloor = selectedDelivery[0]
                 || (document.getElementById('delivery-floor-select')?.value || '').trim()
-                || '';
+                || 'Ground';
 
-            if (targetFloor && pianoLabels.length > 0) {
+            if (pianoLabels.length > 0) {
                 grouped[targetFloor] = grouped[targetFloor] || {};
                 pianoLabels.forEach((label) => {
                     grouped[targetFloor][label] = (grouped[targetFloor][label] || 0) + 1;
                 });
+            } else {
+                // Fallback: show draft piano from form fields
+                const typeInput = document.getElementById('piano-type-entry-hidden');
+                const sizeInput = document.getElementById('piano-size-entry-hidden');
+                const typeValue = (typeInput?.value || '').trim();
+
+                if (typeValue) {
+                    const pianoTypeLabels = {
+                        'upright-spinet': 'Upright - Spinet',
+                        'upright-console': 'Upright - Console',
+                        'upright-studio': 'Upright - Studio',
+                        'upright-full': 'Upright - Full',
+                        'baby-grand': 'Baby Grand',
+                        'medium-grand': 'Medium Grand',
+                        'parlor-grand': 'Parlor / Living Grand',
+                        'concert-grand': 'Concert Grand',
+                        'digital': 'Digital Piano',
+                        'keyboard': 'Keyboard',
+                        'custom': 'Custom Piano',
+                        'unknown': "I don't know"
+                    };
+
+                    const pianoSizeLabels = {
+                        '145x60x100cm': '145 x 60 x 100 cm',
+                        '150x65x110cm': '150 x 65 x 110 cm',
+                        '150x65x120cm': '150 x 65 x 120 cm',
+                        '155x65x130cm': '155 x 65 x 130 cm',
+                        '155x150x102cm': '155 x 150 x 102 cm',
+                        '170x152x102cm': '170 x 152 x 102 cm',
+                        '190x152x102cm': '190 x 152 x 102 cm',
+                        '275x158x102cm': '275 x 158 x 102 cm',
+                        '140x40x90cm': '140 x 40 x 90 cm',
+                        '130x35x15cm': '130 x 35 x 15 cm'
+                    };
+
+                    const baseType = pianoTypeLabels[typeValue] || 'Piano';
+                    const sizeValue = (sizeInput?.value || '').trim();
+                    let sizeText = '';
+
+                    if (typeValue === 'custom') {
+                        const customName = (document.getElementById('piano-custom-name')?.value || '').trim();
+                        const customLength = (document.getElementById('piano-custom-length')?.value || '').trim();
+                        const customWidth = (document.getElementById('piano-custom-width')?.value || '').trim();
+                        const customHeight = (document.getElementById('piano-custom-height')?.value || '').trim();
+                        const customUnit = (document.getElementById('piano-custom-size-unit')?.value || 'cm').trim();
+                        
+                        const dims = [customLength, customWidth, customHeight]
+                            .filter(Boolean)
+                            .join(' x ');
+                        const dimsLabel = dims ? `${dims}${customUnit ? ` ${customUnit}` : ''}` : '';
+                        sizeText = (customName && dimsLabel)
+                            ? ` (${customName}, ${dimsLabel})`
+                            : (customName ? ` (${customName})` : (dimsLabel ? ` (${dimsLabel})` : ''));
+                    } else if (typeValue === 'unknown') {
+                        const lengthVal = (document.getElementById('piano-length-measurement')?.value || '').trim();
+                        const widthVal = (document.getElementById('piano-width-measurement')?.value || '').trim();
+                        const heightVal = (document.getElementById('piano-height-measurement')?.value || '').trim();
+                        const dims = [lengthVal, widthVal, heightVal]
+                            .filter(Boolean)
+                            .join(' x ');
+                        sizeText = dims ? ` (Approx: ${dims} cm)` : '';
+                    } else if (sizeValue) {
+                        const sizeLabelText = pianoSizeLabels[sizeValue] || '';
+                        sizeText = sizeLabelText ? ` (${sizeLabelText})` : '';
+                    }
+
+                    const draftLabel = `Piano 1: ${baseType}${sizeText}`;
+                    grouped[targetFloor] = grouped[targetFloor] || {};
+                    grouped[targetFloor][draftLabel] = (grouped[targetFloor][draftLabel] || 0) + 1;
+                }
             }
+
+            const floors = getOrderedFloorList(Object.keys(grouped));
+            if (floors.length === 0) {
+                return 'Select a delivery floor to place your piano.';
+            }
+
+            return floors.map((floor) => {
+                const items = Object.entries(grouped[floor] || {});
+                const itemRows = items.length === 0
+                    ? '<li>No items</li>'
+                    : items
+                        .sort((a, b) => a[0].localeCompare(b[0]))
+                        .map(([name, qty]) => `<li>${escapeOverviewHtml(name)} x${qty}</li>`)
+                        .join('');
+                return `
+                    <div class="overview-floor-block">
+                        <div class="overview-floor-title">${escapeOverviewHtml(floor)} Floor</div>
+                        <ul class="overview-floor-items">${itemRows}</ul>
+                    </div>
+                `;
+            }).join('');
         }
 
         if (isPetsService(serviceValue)) {
@@ -24007,19 +25315,89 @@ function getOverviewSelectedDeliveryFloors() {
 function getOverviewPickupInventoryEntries() {
     const entriesByKey = {};
     const selectedPickup = getOverviewSelectedPickupFloors();
-    const fallbackFloor = selectedPickup[0] || 'Ground';
+    const serviceValue = getActiveServiceValue();
+    const isOfficeService = serviceValue === 'Office Removals';
+    const officeSourceLabels = isOfficeService ? getOverviewOfficeSourceLabels() : [];
+    const fallbackFloor = isOfficeService
+        ? (officeSourceLabels[0] || 'Office 1')
+        : (selectedPickup[0] || 'Ground');
+
+    const addEntry = (itemName, sourceFloor, qty) => {
+        const cleanName = normalizeOverviewItemName(itemName || '').trim();
+        const floorName = String(sourceFloor || fallbackFloor || 'Ground').trim() || 'Ground';
+        const safeQty = Math.max(1, parseInt(qty, 10) || 1);
+        if (!cleanName) return;
+        const key = `${floorName}||${cleanName}`;
+        if (!entriesByKey[key]) {
+            entriesByKey[key] = { sourceFloor: floorName, itemName: cleanName, qty: 0 };
+        }
+        entriesByKey[key].qty += safeQty;
+    };
+
+    const hasCoreEntries = () => Object.keys(entriesByKey).length > 0;
+
+    if (isOfficeService) {
+        if (Array.isArray(window.officeStep5Items) && window.officeStep5Items.length > 0) {
+            window.officeStep5Items.forEach((entry) => {
+                if (!entry) return;
+                const itemName = String(entry.itemName || '').trim();
+                const qty = Math.max(1, parseInt(entry.qty, 10) || 1);
+                const officeLabel = String(entry.officeLabel || '').trim() || fallbackFloor;
+                if (!itemName) return;
+                addEntry(itemName, officeLabel, qty);
+            });
+        }
+
+        if (!hasCoreEntries()) {
+            const officeState = window.officeInventoryState;
+            const officeCount = Math.max(1, parseInt(officeState?.officeCount, 10) || 1);
+            for (let officeIndex = 1; officeIndex <= officeCount; officeIndex += 1) {
+                const officeLabel = `Office ${officeIndex}`;
+                const officeInventory = officeState?.offices?.[officeIndex] || null;
+                Object.entries(officeInventory?.quantities || {}).forEach(([itemName, qtyValue]) => {
+                    const qty = Number(qtyValue) || 0;
+                    if (qty <= 0) return;
+                    addEntry(itemName, officeLabel, qty);
+                });
+
+                const customItemsText = String(officeInventory?.customItems || '').trim();
+                if (customItemsText) {
+                    addEntry(customItemsText, officeLabel, 1);
+                }
+            }
+        }
+
+        if (!hasCoreEntries()) {
+            const officeSummary = typeof buildOfficeInventorySummary === 'function'
+                ? String(buildOfficeInventorySummary() || '').trim()
+                : '';
+            if (officeSummary) {
+                officeSummary
+                    .split(/\s*\|\s*/)
+                    .map((entry) => String(entry || '').trim())
+                    .filter(Boolean)
+                    .forEach((entry) => addEntry(entry, fallbackFloor, 1));
+            }
+        }
+
+        return Object.values(entriesByKey)
+            .filter((entry) => entry.qty > 0)
+            .sort((a, b) => {
+                const officeMatchA = String(a.sourceFloor || '').match(/^Office\s+(\d+)$/i);
+                const officeMatchB = String(b.sourceFloor || '').match(/^Office\s+(\d+)$/i);
+                const officeIndexA = officeMatchA ? parseInt(officeMatchA[1], 10) : Number.MAX_SAFE_INTEGER;
+                const officeIndexB = officeMatchB ? parseInt(officeMatchB[1], 10) : Number.MAX_SAFE_INTEGER;
+                if (officeIndexA !== officeIndexB) return officeIndexA - officeIndexB;
+                return a.itemName.localeCompare(b.itemName);
+            });
+    }
 
     const singleFloor = (document.getElementById('pickup-floor-select')?.value || fallbackFloor).trim() || 'Ground';
     const singleItems = window.itemQuantities || {};
     Object.keys(singleItems).forEach((itemName) => {
         const qty = parseInt(singleItems[itemName], 10) || 0;
         if (qty <= 0) return;
-        const cleanName = normalizeOverviewItemName(itemName);
-        const key = `${singleFloor}||${cleanName}`;
-        if (!entriesByKey[key]) {
-            entriesByKey[key] = { sourceFloor: singleFloor, itemName: cleanName, qty: 0 };
-        }
-        entriesByKey[key].qty += qty;
+        addEntry(itemName, singleFloor, qty);
     });
 
     const multi = window.multiFloorInventory || {};
@@ -24028,14 +25406,189 @@ function getOverviewPickupInventoryEntries() {
         Object.keys(items).forEach((itemName) => {
             const qty = parseInt(items[itemName], 10) || 0;
             if (qty <= 0) return;
-            const cleanName = normalizeOverviewItemName(itemName);
-            const key = `${floorName}||${cleanName}`;
-            if (!entriesByKey[key]) {
-                entriesByKey[key] = { sourceFloor: floorName, itemName: cleanName, qty: 0 };
-            }
-            entriesByKey[key].qty += qty;
+            addEntry(itemName, floorName, qty);
         });
     });
+
+    if (!hasCoreEntries() && isVehicleTransportService(serviceValue)) {
+        const vehicleJsonFieldId = isCarCamperTransportService(serviceValue)
+            ? 'car-json-hidden'
+            : serviceValue === 'Motorbike Transport'
+                ? 'motorbike-json-hidden'
+                : (isCaravanTrailerTransportService(serviceValue) || serviceValue === 'Boats')
+                    ? 'trailer-json-hidden'
+                    : '';
+
+        const vehicleBaseLabel = isCarCamperTransportService(serviceValue)
+            ? 'Car/Campervan'
+            : serviceValue === 'Motorbike Transport'
+                ? 'Motorbike'
+                : (serviceValue === 'Boats' ? 'Boat' : 'Caravan/Trailer');
+
+        if (vehicleJsonFieldId) {
+            const rawVehicles = String(document.getElementById(vehicleJsonFieldId)?.value || '').trim();
+            if (rawVehicles) {
+                try {
+                    const vehicles = JSON.parse(rawVehicles);
+                    if (Array.isArray(vehicles) && vehicles.length > 0) {
+                        vehicles.forEach((vehicle, index) => {
+                            const makeModel = String(vehicle?.makeModel || '').trim();
+                            const year = String(vehicle?.year || '').trim();
+                            const vehicleLabel = makeModel
+                                ? (year ? `${makeModel} (${year})` : makeModel)
+                                : `${vehicleBaseLabel} ${index + 1}`;
+                            addEntry(vehicleLabel, fallbackFloor, 1);
+                        });
+                    }
+                } catch (_) {
+                    // Ignore malformed vehicle JSON.
+                }
+            }
+        }
+    }
+
+    if (serviceValue === 'Piano Transport') {
+        const pianoLabels = typeof getPianoOverviewInventoryLabels === 'function'
+            ? getPianoOverviewInventoryLabels()
+            : [];
+        pianoLabels.forEach((label) => addEntry(label, fallbackFloor, 1));
+
+        // Fallback: If no saved pianos yet, show draft piano from form fields
+        if (pianoLabels.length === 0) {
+            const typeInput = document.getElementById('piano-type-entry-hidden');
+            const sizeInput = document.getElementById('piano-size-entry-hidden');
+            const typeValue = (typeInput?.value || '').trim();
+            const sizeValue = (sizeInput?.value || '').trim();
+
+            if (typeValue) {
+                const pianoTypeLabels = {
+                    'upright-spinet': 'Upright - Spinet',
+                    'upright-console': 'Upright - Console',
+                    'upright-studio': 'Upright - Studio',
+                    'upright-full': 'Upright - Full',
+                    'baby-grand': 'Baby Grand',
+                    'medium-grand': 'Medium Grand',
+                    'parlor-grand': 'Parlor / Living Grand',
+                    'concert-grand': 'Concert Grand',
+                    'digital': 'Digital Piano',
+                    'keyboard': 'Keyboard',
+                    'custom': 'Custom Piano',
+                    'unknown': "I don't know"
+                };
+
+                const pianoSizeLabels = {
+                    '145x60x100cm': '145 x 60 x 100 cm',
+                    '150x65x110cm': '150 x 65 x 110 cm',
+                    '150x65x120cm': '150 x 65 x 120 cm',
+                    '155x65x130cm': '155 x 65 x 130 cm',
+                    '155x150x102cm': '155 x 150 x 102 cm',
+                    '170x152x102cm': '170 x 152 x 102 cm',
+                    '190x152x102cm': '190 x 152 x 102 cm',
+                    '275x158x102cm': '275 x 158 x 102 cm',
+                    '140x40x90cm': '140 x 40 x 90 cm',
+                    '130x35x15cm': '130 x 35 x 15 cm'
+                };
+
+                const baseType = pianoTypeLabels[typeValue] || 'Piano';
+                let sizeText = '';
+
+                if (typeValue === 'custom') {
+                    const customName = (document.getElementById('piano-custom-name')?.value || '').trim();
+                    const customLength = (document.getElementById('piano-custom-length')?.value || '').trim();
+                    const customWidth = (document.getElementById('piano-custom-width')?.value || '').trim();
+                    const customHeight = (document.getElementById('piano-custom-height')?.value || '').trim();
+                    const customUnit = (document.getElementById('piano-custom-size-unit')?.value || 'cm').trim();
+                    
+                    const dims = [customLength, customWidth, customHeight]
+                        .filter(Boolean)
+                        .join(' x ');
+                    const dimsLabel = dims ? `${dims}${customUnit ? ` ${customUnit}` : ''}` : '';
+                    sizeText = (customName && dimsLabel)
+                        ? ` (${customName}, ${dimsLabel})`
+                        : (customName ? ` (${customName})` : (dimsLabel ? ` (${dimsLabel})` : ''));
+                } else if (typeValue === 'unknown') {
+                    const lengthVal = (document.getElementById('piano-length-measurement')?.value || '').trim();
+                    const widthVal = (document.getElementById('piano-width-measurement')?.value || '').trim();
+                    const heightVal = (document.getElementById('piano-height-measurement')?.value || '').trim();
+                    const dims = [lengthVal, widthVal, heightVal]
+                        .filter(Boolean)
+                        .join(' x ');
+                    sizeText = dims ? ` (Approx: ${dims} cm)` : '';
+                } else if (sizeValue) {
+                    const sizeLabelText = pianoSizeLabels[sizeValue] || '';
+                    sizeText = sizeLabelText ? ` (${sizeLabelText})` : '';
+                }
+
+                const draftLabel = `Piano 1: ${baseType}${sizeText}${!sizeValue && typeValue !== 'custom' && typeValue !== 'unknown' ? ' (Draft)' : ''}`;
+                addEntry(draftLabel, fallbackFloor, 1);
+            }
+        }
+    }
+
+    if (!hasCoreEntries() && isPetsService(serviceValue)) {
+        const petLabels = typeof getPetsOverviewInventoryLabels === 'function'
+            ? getPetsOverviewInventoryLabels()
+            : [];
+        petLabels.forEach((label) => addEntry(label, fallbackFloor, 1));
+    }
+
+    if (!hasCoreEntries() && isFreightService(serviceValue)) {
+        const freightLabel = typeof buildFreightDescriptionSummary === 'function'
+            ? String(buildFreightDescriptionSummary() || '').trim()
+            : '';
+        if (freightLabel) addEntry(freightLabel, fallbackFloor, 1);
+    }
+
+    if (!hasCoreEntries() && isClearanceService(serviceValue)) {
+        const clearanceLabel = typeof buildClearanceDescriptionSummary === 'function'
+            ? String(buildClearanceDescriptionSummary() || '').trim()
+            : '';
+        if (clearanceLabel) addEntry(clearanceLabel, fallbackFloor, 1);
+    }
+
+    if (!hasCoreEntries() && serviceValue === 'Office Removals') {
+        const officeSummary = typeof buildOfficeInventorySummary === 'function'
+            ? String(buildOfficeInventorySummary() || '').trim()
+            : '';
+        if (officeSummary) {
+            officeSummary
+                .split(/\s*\|\s*/)
+                .map((entry) => String(entry || '').trim())
+                .filter(Boolean)
+                .forEach((entry) => addEntry(entry, fallbackFloor, 1));
+        }
+    }
+
+    if (isCustomizedInventoryService(serviceValue)) {
+        let hasSerializedItems = false;
+        const serializedItems = document.getElementById('customized-items-hidden')?.value || '';
+        if (serializedItems) {
+            try {
+                const parsedItems = JSON.parse(serializedItems);
+                if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+                    parsedItems.forEach((item, index) => {
+                        const name = String(item?.name || '').trim() || `Custom item ${index + 1}`;
+                        const sourceFloor = String(item?.sourceFloor || '').trim() || fallbackFloor;
+                        addEntry(name, sourceFloor, 1);
+                    });
+                    hasSerializedItems = true;
+                }
+            } catch (_) {
+                // Ignore malformed serialized customized items and fallback to visible rows.
+            }
+        }
+
+        if (!hasSerializedItems) {
+            const customRows = Array.from(document.querySelectorAll('#dimensions-list .dimension-item'));
+            customRows.forEach((row, index) => {
+                const typedName = String(row.querySelector('.dimension-description')?.value || '').trim();
+                const titleName = String(row.querySelector('.custom-item-title')?.textContent || '').trim();
+                const rowName = typedName || titleName || `Custom item ${index + 1}`;
+                const rowFloor = String(row.querySelector('.dimension-source-floor')?.value || '').trim() || fallbackFloor;
+                addEntry(rowName, rowFloor, 1);
+            });
+        }
+    }
 
     return Object.values(entriesByKey)
         .filter((entry) => entry.qty > 0)
@@ -24046,6 +25599,34 @@ function getOverviewPickupInventoryEntries() {
             if (floorA !== floorB) return floorA - floorB;
             return a.itemName.localeCompare(b.itemName);
         });
+}
+
+function getOverviewOfficeSourceLabels() {
+    const labels = [];
+
+    const officeCount = Math.max(0, parseInt(window.officeInventoryState?.officeCount, 10) || 0);
+    for (let officeIndex = 1; officeIndex <= officeCount; officeIndex += 1) {
+        labels.push(`Office ${officeIndex}`);
+    }
+
+    if (Array.isArray(window.officeStep5Items)) {
+        window.officeStep5Items.forEach((entry) => {
+            const label = String(entry?.officeLabel || '').trim();
+            if (label) labels.push(label);
+        });
+    }
+
+    const deduped = Array.from(new Set(labels));
+    deduped.sort((left, right) => {
+        const leftMatch = String(left || '').match(/^Office\s+(\d+)$/i);
+        const rightMatch = String(right || '').match(/^Office\s+(\d+)$/i);
+        const leftNum = leftMatch ? parseInt(leftMatch[1], 10) : Number.MAX_SAFE_INTEGER;
+        const rightNum = rightMatch ? parseInt(rightMatch[1], 10) : Number.MAX_SAFE_INTEGER;
+        if (leftNum !== rightNum) return leftNum - rightNum;
+        return String(left || '').localeCompare(String(right || ''));
+    });
+
+    return deduped;
 }
 
 function getOverviewManageRows(kind) {
@@ -24174,6 +25755,7 @@ function ensureOverviewInventoryManageModal() {
 
 function openOverviewInventoryManageModal(kind) {
     const serviceValue = getActiveServiceValue();
+    const isOfficeService = serviceValue === 'Office Removals';
     if (!isInventoryManageService(serviceValue)) {
         alert('Quick Manage is not available for this service yet.');
         return;
@@ -24207,10 +25789,10 @@ function openOverviewInventoryManageModal(kind) {
     let sortMode = modal.getAttribute('data-sort-mode') || 'floor-alpha';
 
     const sortLabels = {
-        'floor': 'Floor',
+        'floor': isOfficeService ? 'Office' : 'Floor',
         'az': 'Alphabetically A-Z',
         'za': 'Z-A',
-        'floor-alpha': 'Floor + Alphabetically A-Z',
+        'floor-alpha': isOfficeService ? 'Office + Alphabetically A-Z' : 'Floor + Alphabetically A-Z',
         'qty-desc': 'Qty (High-Low)',
         'qty-asc': 'Qty (Low-High)'
     };
@@ -24241,6 +25823,12 @@ function openOverviewInventoryManageModal(kind) {
         return rank;
     };
 
+    const getOfficeLabelRank = (label) => {
+        const match = String(label || '').match(/^Office\s+(\d+)$/i);
+        if (!match) return Number.MAX_SAFE_INTEGER;
+        return parseInt(match[1], 10);
+    };
+
     const getFloorRankValue = (floorLabel, rankMap) => {
         const key = String(floorLabel || '').trim();
         if (!key) return Number.MAX_SAFE_INTEGER;
@@ -24263,6 +25851,8 @@ function openOverviewInventoryManageModal(kind) {
             const rightSourceRank = getFloorRankValue(right.row?.sourceFloor, rankMap);
             const leftDeliveryRank = getFloorRankValue(left.row?.deliveryFloor, rankMap);
             const rightDeliveryRank = getFloorRankValue(right.row?.deliveryFloor, rankMap);
+            const leftOfficeRank = getOfficeLabelRank(left.row?.sourceFloor);
+            const rightOfficeRank = getOfficeLabelRank(right.row?.sourceFloor);
 
             if (sortMode === 'az') {
                 const byName = collator.compare(leftName, rightName);
@@ -24288,6 +25878,10 @@ function openOverviewInventoryManageModal(kind) {
                 const byName = collator.compare(leftName, rightName);
                 if (byName !== 0) return byName;
                 return left.index - right.index;
+            }
+
+            if (isOfficeService && leftOfficeRank !== rightOfficeRank) {
+                return leftOfficeRank - rightOfficeRank;
             }
 
             if (leftSourceRank !== rightSourceRank) {
@@ -24332,7 +25926,9 @@ function openOverviewInventoryManageModal(kind) {
     };
 
     const getPickupFloorOptions = () => {
-        const floors = getOverviewSelectedPickupFloors();
+        const floors = isOfficeService
+            ? getOverviewOfficeSourceLabels()
+            : getOverviewSelectedPickupFloors();
         const fallback = floors[0] || defaultPickupFloor;
         return (floors.length ? floors : [fallback])
             .map((floor) => `<option value="${escapeOverviewHtml(floor)}">${escapeOverviewHtml(floor)}</option>`)
@@ -24342,9 +25938,12 @@ function openOverviewInventoryManageModal(kind) {
     const renderRows = () => {
         applyRowSorting();
 
-        const currentPickupFloors = getOverviewSelectedPickupFloors();
+        const currentPickupFloors = isOfficeService
+            ? getOverviewOfficeSourceLabels()
+            : getOverviewSelectedPickupFloors();
         const currentDeliveryFloors = getResolvedDeliveryFloors();
         const currentDefaultPickupFloor = currentPickupFloors[0] || defaultPickupFloor;
+        const pickupColumnLabel = isOfficeService ? 'Source Office' : 'Pickup Floor';
 
         const rowsHtml = rows.length === 0
             ? '<div style="padding:10px 12px; border:1px dashed #bfdbfe; border-radius:8px; color:#475569;">No items yet. Add an item below.</div>'
@@ -24374,17 +25973,21 @@ function openOverviewInventoryManageModal(kind) {
                 `;
             }).join('');
 
+        const assignmentHelpText = isOfficeService
+            ? 'Edit item quantity, remove rows, or add a custom item with source office and delivery floor assignments.'
+            : 'Edit item quantity, remove rows, or add a custom item with pickup and delivery floor assignments.';
+
         body.innerHTML = `
             <div style="margin-bottom:10px; color:#334155; font-size:0.93rem;">
-                Edit item quantity, remove rows, or add a custom item with pickup and delivery floor assignments.
+                ${assignmentHelpText}
             </div>
             <div style="display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-bottom:10px;">
                 <label for="overview-manage-sort-mode" style="font-size:0.86rem; color:#475569; font-weight:700; text-transform:uppercase; letter-spacing:0.02em;">Sort by</label>
                 <select id="overview-manage-sort-mode" style="min-width:180px; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px;">
-                    <option value="floor" ${sortMode === 'floor' ? 'selected' : ''}>Floor</option>
+                    <option value="floor" ${sortMode === 'floor' ? 'selected' : ''}>${isOfficeService ? 'Office' : 'Floor'}</option>
                     <option value="az" ${sortMode === 'az' ? 'selected' : ''}>Alphabetically A-Z</option>
                     <option value="za" ${sortMode === 'za' ? 'selected' : ''}>Alphabetically Z-A</option>
-                    <option value="floor-alpha" ${sortMode === 'floor-alpha' ? 'selected' : ''}>Floor + Alphabetically A-Z</option>
+                    <option value="floor-alpha" ${sortMode === 'floor-alpha' ? 'selected' : ''}>${isOfficeService ? 'Office + Alphabetically A-Z' : 'Floor + Alphabetically A-Z'}</option>
                     <option value="qty-desc" ${sortMode === 'qty-desc' ? 'selected' : ''}>Qty (High-Low)</option>
                     <option value="qty-asc" ${sortMode === 'qty-asc' ? 'selected' : ''}>Qty (Low-High)</option>
                 </select>
@@ -24392,7 +25995,7 @@ function openOverviewInventoryManageModal(kind) {
             <div style="display:grid; grid-template-columns: minmax(220px, 1.4fr) 90px 170px 170px auto; gap:8px; margin-bottom:8px; font-size:0.78rem; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.02em;">
                 <div>Item</div>
                 <div>Qty</div>
-                <div>Pickup Floor</div>
+                <div>${pickupColumnLabel}</div>
                 <div>Delivery Floor</div>
                 <div>Action</div>
             </div>
@@ -24463,7 +26066,9 @@ function openOverviewInventoryManageModal(kind) {
         saveBtn.onclick = () => {
             const rowNodes = Array.from(body.querySelectorAll('.overview-inventory-manage-row'));
             const nextRows = [];
-            const currentPickupFloors = getOverviewSelectedPickupFloors();
+            const currentPickupFloors = isOfficeService
+                ? getOverviewOfficeSourceLabels()
+                : getOverviewSelectedPickupFloors();
             const currentDefaultFloor = currentPickupFloors[0] || defaultPickupFloor;
             const currentDeliveryFloors = getResolvedDeliveryFloors();
 

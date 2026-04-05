@@ -568,20 +568,6 @@
                                         </div>
                                     </div>
 
-                                    <!-- Photo/Video Upload Section -->
-                                    <div id="piano-photo-section" style="display: none; margin-bottom: 16px; padding: 14px; border: 1px solid #fecaca; border-radius: 10px; background: #fef2f2;">
-                                        <div class="clearance-section-label-wrap">
-                                            <label class="form-label" style="margin:0;">Add piano photos or videos <span class="required-text">(required)</span></label>
-                                        </div>
-                                        <p style="margin: 8px 0 12px; color: #64748b; font-size: 0.9rem;">Upload photos or videos to help us determine the exact piano model and size.</p>
-
-                                        <div style="margin-bottom: 12px;">
-                                            <input type="file" id="piano-media-input" class="form-input" accept="image/*,video/*" multiple>
-                                            <input type="hidden" id="piano-media-hidden" value="">
-                                            <div id="piano-media-preview" style="margin-top: 8px; display: none;"></div>
-                                        </div>
-                                    </div>
-
                                     <div id="piano-custom-section" style="display: none; margin-top: 10px; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #fff;">
                                         <h4 style="margin: 0 0 10px; color: #0f172a; font-size: 1rem;">Custom Piano Details</h4>
                                         <div class="form-group" style="margin-bottom: 12px;">
@@ -613,7 +599,21 @@
                                         </div>
                                     </div>
 
-                                    <button type="button" id="add-piano-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Add Piano</button>
+                                    <!-- Photo/Video Upload Section -->
+                                    <div id="piano-photo-section" style="margin-bottom: 16px; margin-top: 16px; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #f8fbff;">
+                                        <div class="clearance-section-label-wrap">
+                                            <label class="form-label" style="margin:0;">Add piano photos or videos <span id="piano-media-required" class="required-text" style="display:none;">(required)</span></label>
+                                        </div>
+                                        <p style="margin: 8px 0 12px; color: #64748b; font-size: 0.9rem;">Upload photos or videos to help us determine the exact piano model and size.</p>
+
+                                        <div style="margin-bottom: 12px;">
+                                            <input type="file" id="piano-media-input" class="form-input" accept="image/*,video/*" multiple>
+                                            <input type="hidden" id="piano-media-hidden" value="">
+                                            <div id="piano-media-preview" style="margin-top: 8px; display: none;"></div>
+                                        </div>
+                                    </div>
+
+                                    <button type="button" id="add-piano-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Save Piano</button>
                                 </div>
                             </div>
                         </div>
@@ -724,6 +724,15 @@
                                         </div>
                                         <input type="hidden" id="pet-owner-lift-hidden" name="pet-owner-lift-needed" value="">
                                     </div>
+                                </div>
+
+                                <!-- Photo/Video Upload Section (for Pets) -->
+                                <div id="pet-photo-section" style="margin-top: 16px; margin-bottom: 0; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #f8fbff;">
+                                    <label class="form-label" style="margin:0;">Add pet photos or videos</label>
+                                    <p style="margin: 6px 0 12px; color: #64748b; font-size: 0.9rem;">Photos or videos help providers understand the animal and any handling needs.</p>
+                                    <input type="file" id="pet-media-input" class="form-input" accept="image/*,video/*" multiple>
+                                    <input type="hidden" id="pet-media-hidden" value="">
+                                    <div id="pet-media-preview" style="margin-top: 8px; display: none;"></div>
                                 </div>
 
                                 <button type="button" id="add-pet-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Add Pet</button>
@@ -1482,7 +1491,7 @@
                                         <input type="hidden" id="car-media-hidden" value="">
                                         <div id="car-media-preview" style="margin-top: 8px; display: none;"></div>
                                     </div>
-                                    <button type="button" id="add-car-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Add Campervan / Car</button>
+                                    <button type="button" id="add-car-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">Save Campervan/Car</button>
                                     <button type="button" id="car-continue-with-saved-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">Continue with saved vehicles</button>
                                     <input type="hidden" id="car-continue-with-saved-hidden" value="">
                                 </div>
@@ -1629,7 +1638,7 @@
                                         <input type="hidden" id="motorbike-media-hidden" value="">
                                         <div id="motorbike-media-preview" style="margin-top: 8px; display: none;"></div>
                                     </div>
-                                    <button type="button" id="add-motorbike-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Add Motorbike</button>
+                                    <button type="button" id="add-motorbike-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Save Motorbike</button>
                                     <button type="button" id="motorbike-continue-with-saved-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">Continue with saved vehicles</button>
                                     <input type="hidden" id="motorbike-continue-with-saved-hidden" value="">
                                 </div>
@@ -1785,7 +1794,7 @@
                                         <input type="hidden" id="trailer-media-hidden" value="">
                                         <div id="trailer-media-preview" style="margin-top: 8px; display: none;"></div>
                                     </div>
-                                    <button type="button" id="add-trailer-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Add Caravan / Trailer</button>
+                                    <button type="button" id="add-trailer-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Save Caravan / Trailer</button>
                                     <button type="button" id="trailer-continue-with-saved-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">Continue with saved vehicles</button>
                                     <input type="hidden" id="trailer-continue-with-saved-hidden" value="">
                                 </div>
