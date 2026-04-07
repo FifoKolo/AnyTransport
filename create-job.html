@@ -362,7 +362,6 @@
     </div>
   
     <button class="add-floor-btn" type="button" style="margin: 24px auto 0; display: block;">+ Add Floor</button>
-    <button id="step3-save-inventory-btn" class="step3-save-inventory-btn" type="button" aria-live="polite">Save Inventory</button>
     <input type="hidden" id="step3-media-items" name="step3-media-items" value="">
     <!-- Floor selection modal -->
 <!-- Floor selection modal moved to end of body for proper overlay -->
@@ -743,7 +742,7 @@
                         <div class="card-section" id="office-move-date-section" data-form-step="2" style="display: none;">
                             <h2 class="section-title">Step 7: Move Date</h2>
                             <label for="office-move-date" class="form-label">Estimated move date</label>
-                            <input type="date" id="office-move-date" class="form-input" placeholder="Select a Date Option" required>
+                            <input type="date" id="office-move-date" class="form-input" placeholder="Select a Date Option" data-required="true" aria-required="true">
                         </div>
 
                         <!-- Floors Section (for Office Removals) -->
@@ -2223,6 +2222,7 @@
                     </div>
                     <button type="button" class="sticky-next-btn sticky-reset-btn" id="sticky-reset-btn">Reset</button>
                     <button type="button" class="sticky-next-btn sticky-manage-btn" id="sticky-manage-btn" style="display: none;">Manage</button>
+                    <button type="button" class="sticky-next-btn sticky-assign-new-items-btn" id="sticky-assign-new-items-btn" style="display: none;">Assign New Items</button>
                     <button type="button" class="sticky-next-btn" id="sticky-next-btn">Next</button>
                 </form>
                 <!-- Removed duplicate lift-option-container. Only one instance should exist inside the form. -->

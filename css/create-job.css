@@ -45,58 +45,6 @@ body.customized-items-active #step3-title-wrapper {
     outline: none;
 }
 
-.step3-save-inventory-btn {
-    display: none;
-    margin: 12px auto 0;
-    width: min(100%, 260px);
-    padding: 12px 18px;
-    border: 1px solid #2563eb;
-    border-radius: 8px;
-    background: #fff;
-    color: #1e40af;
-    font-size: 1rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-}
-
-.step3-save-inventory-btn:hover,
-.step3-save-inventory-btn:focus {
-    background: #eff6ff;
-    border-color: #1d4ed8;
-    color: #1d4ed8;
-    outline: none;
-}
-
-.step3-floor-save-btn {
-    display: block;
-    margin: 12px auto 0;
-    width: min(100%, 260px);
-    padding: 10px 16px;
-    border: 1px solid #16a34a;
-    border-radius: 8px;
-    background: #f0fdf4;
-    color: #166534;
-    font-size: 0.95rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-}
-
-.step3-floor-save-btn:hover,
-.step3-floor-save-btn:focus {
-    background: #dcfce7;
-    border-color: #15803d;
-    color: #14532d;
-    outline: none;
-}
-
-@media (max-width: 768px) {
-    .step3-save-inventory-btn {
-        display: block;
-    }
-}
-
 .add-custom-inventory-btn {
     display: block;
     margin: 32px auto 0 auto;

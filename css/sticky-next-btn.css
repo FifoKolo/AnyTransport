@@ -64,6 +64,15 @@
     background: #0b5f58;
 }
 
+.sticky-assign-new-items-btn {
+    bottom: 164px;
+    background: #1d4ed8;
+}
+
+.sticky-assign-new-items-btn:hover {
+    background: #1e40af;
+}
+
 .sticky-reset-btn:hover {
     background: #b91c1c;
 }
@@ -94,6 +103,10 @@
 
     .sticky-manage-btn {
         bottom: calc(70px + env(safe-area-inset-bottom));
+    }
+
+    .sticky-assign-new-items-btn {
+        bottom: calc(126px + env(safe-area-inset-bottom));
     }
 
     .sticky-action-btn {

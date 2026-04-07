@@ -252,31 +252,34 @@ function initTransportDatePicker() {
     function getAvailableDateOptions() {
         const storageBounds = getStorageDateBounds();
         if (!storageBounds) return optionItems;
-        return optionItems.filter((item) => item.id === 'fixed-date');
+        return optionItems.filter((item) => item.id === 'between-dates');
     }
 
     function enforceStorageDateValueIfNeeded() {
         const storageBounds = getStorageDateBounds();
         if (!storageBounds) return;
 
-        const requiredDate = storageBounds.start;
-        const requiredValue = `On a Fixed Date: ${formatDateDisplay(requiredDate)}`;
+        const requiredStart = formatDateDisplay(storageBounds.start);
+        const requiredEnd = formatDateDisplay(storageBounds.end);
+        const requiredValue = `Between Dates: ${requiredStart} - ${requiredEnd}`;
         const currentValue = String(hiddenInput.value || '').trim();
-        const isAllowedStorageValue = currentValue.startsWith('On a Fixed Date:');
+        const isAllowedStorageValue = currentValue.startsWith('Between Dates:');
 
         if (!isAllowedStorageValue) {
             updateTransportDate(requiredValue);
             return;
         }
 
-        if (currentValue.startsWith('On a Fixed Date:')) {
-            const match = currentValue.match(/^On a Fixed Date:\s*(.+)$/);
+        if (currentValue.startsWith('Between Dates:')) {
+            const match = currentValue.match(/^Between Dates:\s*(.+?)\s*-\s*(.+)$/);
             if (!match) {
                 updateTransportDate(requiredValue);
                 return;
             }
-            const selectedDate = parseDateInputValue(match[1]);
-            if (!selectedDate || !sameDate(selectedDate, requiredDate)) {
+            const startDate = parseDateInputValue(match[1]);
+            const endDate = parseDateInputValue(match[2]);
+            const isValidRange = startDate && endDate && sameDate(startDate, storageBounds.start) && sameDate(endDate, storageBounds.end);
+            if (!isValidRange) {
                 updateTransportDate(requiredValue);
             }
             return;
@@ -563,8 +566,14 @@ function initTransportDatePicker() {
                 }
 
                 if (item.target === 'between') {
-                    state.rangeStart = null;
-                    state.rangeEnd = null;
+                    const storageBounds = getStorageDateBounds();
+                    if (storageBounds) {
+                        state.rangeStart = storageBounds.start;
+                        state.rangeEnd = storageBounds.end;
+                    } else {
+                        state.rangeStart = null;
+                        state.rangeEnd = null;
+                    }
                     state.rangeStartMonth = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
                     state.rangeEndMonth = new Date(todayStart.getFullYear(), todayStart.getMonth() + 1, 1);
                     renderBetweenCalendars();
@@ -642,6 +651,13 @@ function initTransportDatePicker() {
         state.view = 'between';
         panel.classList.add('between-mode');
         const storageBounds = getStorageDateBounds();
+
+        if (storageBounds) {
+            state.rangeStart = storageBounds.start;
+            state.rangeEnd = storageBounds.end;
+            state.rangeStartMonth = new Date(storageBounds.start.getFullYear(), storageBounds.start.getMonth(), 1);
+            state.rangeEndMonth = new Date(storageBounds.end.getFullYear(), storageBounds.end.getMonth(), 1);
+        }
 
         panel.innerHTML = `
             <div class="transport-date-header">
@@ -741,6 +757,9 @@ function initTransportDatePicker() {
                         return;
                     }
                     state.rangeStart = selectedDate;
+                    if (storageBounds) {
+                        state.rangeEnd = storageBounds.end;
+                    }
                     if (state.rangeEnd && state.rangeEnd < selectedDate) {
                         state.rangeEnd = null;
                     }
@@ -1440,7 +1459,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     photoInput.type = 'file';
                     photoInput.accept = 'image/*,video/*';
                     photoInput.id = 'custom-item-photo-input';
-                    photoInput.style.display = 'none';
+                    photoInput.style.position = 'fixed';
+                    photoInput.style.left = '-9999px';
+                    photoInput.style.top = '0';
+                    photoInput.style.width = '1px';
+                    photoInput.style.height = '1px';
+                    photoInput.style.opacity = '0';
+                    photoInput.style.pointerEvents = 'none';
                     document.body.appendChild(photoInput);
 
                     photoInput.addEventListener('change', function() {
@@ -1676,6 +1701,7 @@ document.addEventListener('DOMContentLoaded', function () {
             customItems: { ...(customItems || {}) },
             customItemPhotos: { ...(customItemPhotos || {}) },
             selectedPickupFloors: Array.from(window.selectedPickupFloors || []),
+            step5SelectedItems: Array.isArray(window.step5SelectedItemKeys) ? Array.from(window.step5SelectedItemKeys) : [],
             itemFloorAssignments: window.itemFloorAssignments && typeof window.itemFloorAssignments === 'object'
                 ? { ...window.itemFloorAssignments }
                 : {},
@@ -1694,6 +1720,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Keep per-floor save metadata so each floor save action is tracked independently.
         let existingFloorSavedAt = {};
+        let existingStep5SelectedItems = [];
         try {
             const rawExisting = localStorage.getItem('house_removal_inventory');
             if (rawExisting) {
@@ -1701,12 +1728,19 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (parsedExisting && parsedExisting.floorSavedAt && typeof parsedExisting.floorSavedAt === 'object') {
                     existingFloorSavedAt = parsedExisting.floorSavedAt;
                 }
+                if (parsedExisting && Array.isArray(parsedExisting.step5SelectedItems)) {
+                    existingStep5SelectedItems = parsedExisting.step5SelectedItems;
+                }
             }
         } catch (error) {
             existingFloorSavedAt = {};
+            existingStep5SelectedItems = [];
         }
 
         snapshot.floorSavedAt = { ...existingFloorSavedAt };
+        if (!Array.isArray(snapshot.step5SelectedItems) || snapshot.step5SelectedItems.length === 0) {
+            snapshot.step5SelectedItems = existingStep5SelectedItems;
+        }
         if (floorName) {
             snapshot.floorSavedAt[floorName] = Date.now();
             snapshot.lastSavedFloor = floorName;
@@ -1717,6 +1751,10 @@ document.addEventListener('DOMContentLoaded', function () {
         } catch (error) {
             console.warn('Unable to save step 3 inventory snapshot:', error);
             return false;
+        }
+
+        if (typeof window.handlePickupInventoryMutationForStep5Sync === 'function') {
+            window.handlePickupInventoryMutationForStep5Sync({ source: 'step3-snapshot' });
         }
 
         if (!options.silent && typeof window.saveCreateJobProgress === 'function') {
@@ -1746,33 +1784,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             onSave(event);
         });
-    }
-
-    const saveInventoryBtn = document.getElementById('step3-save-inventory-btn');
-    if (saveInventoryBtn) {
-        const defaultLabel = saveInventoryBtn.textContent || 'Save Inventory';
-
-        const showSavedState = () => {
-            saveInventoryBtn.textContent = 'Inventory Saved';
-            clearTimeout(saveInventoryBtn.__resetLabelTimer);
-            saveInventoryBtn.__resetLabelTimer = setTimeout(() => {
-                saveInventoryBtn.textContent = defaultLabel;
-            }, 1800);
-        };
-
-        const runInventorySave = (event) => {
-            if (event) {
-                event.preventDefault();
-                event.stopPropagation();
-            }
-
-            const didSave = window.saveStep3InventorySnapshot();
-            if (didSave) {
-                showSavedState();
-            }
-        };
-
-        bindTouchAndClickSave(saveInventoryBtn, runInventorySave);
     }
 
     // Room tab logic
@@ -2577,6 +2588,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const stickyNextBtn = document.getElementById('sticky-next-btn');
         const stickyResetBtn = document.getElementById('sticky-reset-btn');
         const stickyManageBtn = document.getElementById('sticky-manage-btn');
+        const stickyAssignNewItemsBtn = document.getElementById('sticky-assign-new-items-btn');
         const stepNextBtn = document.getElementById('step-next-btn');
         function showStickyNextBtn() {
             if (stickyNextBtn) {
@@ -2615,6 +2627,29 @@ document.addEventListener('DOMContentLoaded', function () {
                 stickyManageBtn.style.display = 'none';
                 stickyManageBtn.classList.remove('show');
                 stickyManageBtn.classList.add('hide');
+            }
+
+            if (stickyAssignNewItemsBtn) {
+                const isFloorsOnlyService = isVehicleTransportService(activeService) || isPetsService(activeService);
+                const hasUnassignedStep5Items = !isFloorsOnlyService
+                    && typeof window.isStep5DeliveryOrganizationComplete === 'function'
+                    && !window.isStep5DeliveryOrganizationComplete();
+
+                const shouldShowAssign = canManageInventory
+                    && hasVisitedOverview
+                    && hasUnassignedStep5Items
+                    && step !== 5
+                    && typeof window.setFormStep === 'function';
+
+                if (shouldShowAssign) {
+                    stickyAssignNewItemsBtn.style.display = '';
+                    stickyAssignNewItemsBtn.classList.add('show');
+                    stickyAssignNewItemsBtn.classList.remove('hide');
+                } else {
+                    stickyAssignNewItemsBtn.style.display = 'none';
+                    stickyAssignNewItemsBtn.classList.remove('show');
+                    stickyAssignNewItemsBtn.classList.add('hide');
+                }
             }
         }
 
@@ -3486,10 +3521,28 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // clearNextMissingHighlights is now defined at module level, no need to redefine
 
+        function isDomElement(node) {
+            return !!node && typeof node === 'object' && node.nodeType === 1 && typeof node.closest === 'function';
+        }
+
+        function getParentElement(node) {
+            if (!node || typeof node !== 'object') return null;
+            if (isDomElement(node)) return node;
+            if (node.parentElement && isDomElement(node.parentElement)) return node.parentElement;
+            if (node.closest && typeof node.closest === 'function') {
+                const closest = node.closest('*');
+                if (isDomElement(closest)) return closest;
+            }
+            return null;
+        }
+
         function getVisibleMissingTarget(target) {
             if (!target) return null;
 
-            const targetId = target.id || '';
+            const elementTarget = getParentElement(target);
+            if (!elementTarget) return null;
+
+            const targetId = elementTarget.id || '';
             const targetMap = {
                 'pickup-property-type': 'property-type-icon-grid',
                 'delivery-property-type': 'delivery-property-type-icon-grid',
@@ -3506,16 +3559,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (mappedEl) return mappedEl;
             }
 
-            if (target.classList?.contains('movers-confirm-btn')) {
-                return target.closest('.service-requirement-card') || target;
+            if (elementTarget.classList?.contains('movers-confirm-btn')) {
+                return elementTarget.closest('.service-requirement-card') || elementTarget;
             }
 
-            if (target.type === 'hidden' && targetId) {
+            if (elementTarget.type === 'hidden' && targetId) {
                 const optionNav = document.querySelector(`.option-nav[data-option-nav-for="${targetId}"]`);
                 if (optionNav) return optionNav;
             }
 
-            return target;
+            return elementTarget;
         }
 
         let removeMissingTargetClearHandlers = null;
@@ -3701,19 +3754,26 @@ document.addEventListener('DOMContentLoaded', function () {
 
             window.clearNextMissingHighlights();
 
-            const visibleTarget = getVisibleMissingTarget(target) || target;
+            const visibleTarget = getVisibleMissingTarget(target) || getParentElement(target) || target;
+            const visibleTargetElement = isDomElement(visibleTarget) ? visibleTarget : getParentElement(visibleTarget);
+            const fallbackTargetElement = getParentElement(target);
+            const targetElement = isDomElement(target) ? target : fallbackTargetElement;
 
-            const container = visibleTarget.closest(
+            if (!visibleTargetElement || !targetElement) {
+                return false;
+            }
+
+            const container = visibleTargetElement.closest(
                 '.service-requirement-card, .card-section, .location-nav-wrapper, .custom-dropdown-wrapper, #pickup-floors-selector, #delivery-floors-selector, #inventory-card-container, #item-organization-section'
-            ) || visibleTarget;
+            ) || visibleTargetElement;
 
             container.classList.add('next-missing-highlight');
-            visibleTarget.classList.add('input-error');
-            visibleTarget.setAttribute('aria-invalid', 'true');
-            target.classList.add('input-error');
-            target.setAttribute('aria-invalid', 'true');
+            visibleTargetElement.classList.add('input-error');
+            visibleTargetElement.setAttribute('aria-invalid', 'true');
+            targetElement.classList.add('input-error');
+            targetElement.setAttribute('aria-invalid', 'true');
 
-            bindClearMissingHighlightOnResolution(target, visibleTarget, container);
+            bindClearMissingHighlightOnResolution(targetElement, visibleTargetElement, container);
 
             if (isVehicleFieldTarget && shouldAnchorVehicleTop && typeof getVisibleVehicleStep3Section === 'function') {
                 const activeVehicleSection = getVisibleVehicleStep3Section();
@@ -3723,18 +3783,18 @@ document.addEventListener('DOMContentLoaded', function () {
                     container.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
             } else if (isVehicleFieldTarget) {
-                const vehicleFieldGroup = visibleTarget.closest('.form-group') || target.closest?.('.form-group') || container;
+                const vehicleFieldGroup = visibleTargetElement.closest('.form-group') || targetElement.closest?.('.form-group') || container;
                 scrollElementToTop(vehicleFieldGroup);
             } else {
                 container.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
 
-            if (typeof visibleTarget.focus === 'function') {
+            if (typeof visibleTargetElement.focus === 'function') {
                 setTimeout(() => {
                     try {
-                        visibleTarget.focus({ preventScroll: true });
+                        visibleTargetElement.focus({ preventScroll: true });
                     } catch (error) {
-                        visibleTarget.focus();
+                        visibleTargetElement.focus();
                     }
                 }, 140);
             }
@@ -3977,6 +4037,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 alertMissingRestriction(field);
             }, 240);
         }
+
+        window.revealMissingFieldBeforeAlert = revealMissingFieldBeforeAlert;
 
         function getFirstMissingTargetForStep(step) {
             if (typeof validateRequiredFieldsInStep === 'function') {
@@ -4547,7 +4609,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!requirementsMetForStep(step)) {
                     const missingTarget = getFirstMissingTargetForStep(step);
                     if (missingTarget) {
-                        revealMissingFieldBeforeAlert(missingTarget);
+                        if (typeof window.revealMissingFieldBeforeAlert === 'function') {
+                            window.revealMissingFieldBeforeAlert(missingTarget);
+                        }
                     }
                     return;
                 }
@@ -4608,6 +4672,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             };
         }
+
+        if (stickyAssignNewItemsBtn) {
+            stickyAssignNewItemsBtn.onclick = function() {
+                if (typeof window.setFormStep === 'function') {
+                    window.setFormStep(5);
+                }
+            };
+        }
         // Listen for input changes to update sticky button
         document.querySelectorAll('input, select').forEach(el => {
             el.addEventListener('input', function() {
@@ -4662,6 +4734,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     stickyManageBtn.style.opacity = '0';
                     stickyManageBtn.style.pointerEvents = 'none';
                 }
+                if (stickyAssignNewItemsBtn) {
+                    stickyAssignNewItemsBtn.style.opacity = '0';
+                    stickyAssignNewItemsBtn.style.pointerEvents = 'none';
+                }
             } else {
                 stickyNextBtn.style.opacity = '1';
                 stickyNextBtn.style.pointerEvents = 'auto';
@@ -4672,6 +4748,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (stickyManageBtn && stickyManageBtn.style.display !== 'none') {
                     stickyManageBtn.style.opacity = '1';
                     stickyManageBtn.style.pointerEvents = 'auto';
+                }
+                if (stickyAssignNewItemsBtn && stickyAssignNewItemsBtn.style.display !== 'none') {
+                    stickyAssignNewItemsBtn.style.opacity = '1';
+                    stickyAssignNewItemsBtn.style.pointerEvents = 'auto';
                 }
             }
         });
@@ -4803,6 +4883,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const disassemblyExpandedRooms = new Set();
     const assemblyExpandedFloors = new Set();
     const assemblyExpandedRooms = new Set();
+    let packingTreeInitialized = false;
+    let storageTreeInitialized = false;
+    let disassemblyTreeInitialized = false;
 
     // Room definitions for packing item grouping (mirrors Step 5)
     const PACKING_ROOM_CATS = {
@@ -4842,6 +4925,19 @@ document.addEventListener('DOMContentLoaded', function () {
             if (items.includes(itemName)) return roomKey;
         }
         return 'boxes';
+    }
+
+    function getServiceItemDisplayName(itemName) {
+        if (!itemName || typeof itemName !== 'string') return itemName;
+        const roomPrefixes = new Set(['hallway', 'shed', 'utility', 'living', 'dining', 'kitchen', 'office', 'bedrooms', 'bathrooms', 'garden', 'boxes']);
+        const prefixedMatch = itemName.match(/^([A-Za-z]+)\s*-\s*(.+)$/);
+        if (prefixedMatch) {
+            const prefix = prefixedMatch[1].trim().toLowerCase();
+            if (roomPrefixes.has(prefix)) {
+                return prefixedMatch[2].trim();
+            }
+        }
+        return itemName;
     }
 
     function parsePackingItemsSelection(raw) {
@@ -5183,9 +5279,14 @@ document.addEventListener('DOMContentLoaded', function () {
         if (sortedFloors.length === 0) {
             empty.style.display = 'block';
             hiddenInput.value = '';
+            packingTreeInitialized = false;
             return;
         }
         empty.style.display = 'none';
+
+        if (!packingTreeInitialized && packingExpandedFloors.size === 0) {
+            packingExpandedFloors.add(sortedFloors[0]);
+        }
 
         sortedFloors.forEach(floor => {
             const roomsInFloor = byFloor[floor];
@@ -5230,6 +5331,9 @@ document.addEventListener('DOMContentLoaded', function () {
             }).forEach(roomKey => {
                 const itemsInRoom = roomsInFloor[roomKey];
                 const roomStateKey = `${floor}::${roomKey}`;
+                if (!packingTreeInitialized && !packingExpandedRooms.size) {
+                    packingExpandedRooms.add(roomStateKey);
+                }
                 const roomExpanded = packingExpandedRooms.has(roomStateKey);
 
                 const roomEl = document.createElement('div');
@@ -5288,7 +5392,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     const labelText = document.createElement('span');
                     labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
-                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:break-word;line-height:1.3;font-size:${isNarrowPackingViewport ? '1rem' : '0.95rem'};">${getItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
+                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:break-word;line-height:1.3;font-size:${isNarrowPackingViewport ? '1rem' : '0.95rem'};">${getServiceItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
 
                     left.appendChild(labelText);
 
@@ -5401,6 +5505,8 @@ document.addEventListener('DOMContentLoaded', function () {
             floorEl.appendChild(floorContent);
             list.appendChild(floorEl);
         });
+
+        packingTreeInitialized = true;
     }
 
     window.hasValidPackingSelection = function() {
@@ -5641,7 +5747,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     const title = document.createElement('span');
                     title.style.cssText = `font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};`;
-                    title.textContent = getItemDisplayName(itemName);
+                    title.textContent = getServiceItemDisplayName(itemName);
 
                     const sub = document.createElement('span');
                     sub.style.cssText = 'font-size:0.75rem;color:#6b7280;';
@@ -5819,9 +5925,14 @@ document.addEventListener('DOMContentLoaded', function () {
         if (sortedFloors.length === 0) {
             storageItemsEmpty.style.display = 'block';
             storageItemsInput.value = '';
+            storageTreeInitialized = false;
             return;
         }
         storageItemsEmpty.style.display = 'none';
+
+        if (!storageTreeInitialized && storageExpandedFloors.size === 0) {
+            storageExpandedFloors.add(sortedFloors[0]);
+        }
 
         const eligibleStorageItems = [];
         sortedFloors.forEach((floor) => {
@@ -5866,6 +5977,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (eligibleStorageItems.length === 0) {
             storageItemsInput.value = '';
             storageItemsEmpty.style.display = 'block';
+            storageTreeInitialized = false;
             return;
         }
         storageItemsEmpty.style.display = 'none';
@@ -6023,6 +6135,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (roomEligibleItems.length === 0) return;
 
                 const roomStateKey = `storage::${floor}::${roomKey}`;
+                if (!storageTreeInitialized && !storageExpandedRooms.size) {
+                    storageExpandedRooms.add(roomStateKey);
+                }
                 const roomExpanded = storageExpandedRooms.has(roomStateKey);
                 const roomAllSelected = roomEligibleItems.every(({ itemKey, availableForStorage }) => {
                     return (parseInt(currentState[itemKey], 10) || 0) === availableForStorage;
@@ -6087,7 +6202,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     const labelText = document.createElement('span');
                     labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
-                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};">${getItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${availableForStorage}</span>`;
+                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};">${getServiceItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${availableForStorage}</span>`;
 
                     left.appendChild(labelText);
 
@@ -6201,6 +6316,8 @@ document.addEventListener('DOMContentLoaded', function () {
             storageItemsList.appendChild(floorEl);
         });
 
+        storageTreeInitialized = true;
+
         syncStorageDateUi();
     }
 
@@ -6266,8 +6383,13 @@ document.addEventListener('DOMContentLoaded', function () {
         if (sortedFloors.length === 0) {
             disassemblyEmpty.style.display = 'block';
             disassemblyItemsInput.value = '';
+            disassemblyTreeInitialized = false;
         } else {
             disassemblyEmpty.style.display = 'none';
+
+            if (!disassemblyTreeInitialized && disassemblyExpandedFloors.size === 0) {
+                disassemblyExpandedFloors.add(sortedFloors[0]);
+            }
 
             sortedFloors.forEach(floor => {
                 const roomsInFloor = byFloor[floor] || {};
@@ -6317,6 +6439,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (Object.keys(itemsInRoom).length === 0) return;
 
                     const roomStateKey = `disassembly::${floor}::${roomKey}`;
+                    if (!disassemblyTreeInitialized && !disassemblyExpandedRooms.size) {
+                        disassemblyExpandedRooms.add(roomStateKey);
+                    }
                     const roomExpanded = disassemblyExpandedRooms.has(roomStateKey);
 
                     const roomEl = document.createElement('div');
@@ -6361,6 +6486,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     Object.entries(itemsInRoom).forEach(([itemName, maxQty]) => {
                         const itemKey = getDisassemblyItemKey(floor, itemName);
                         const selectedQty = Math.max(0, Math.min(maxQty, parseInt(disassemblyState[itemKey], 10) || 0));
+                        const isChecked = selectedQty > 0;
 
                         const row = document.createElement('div');
                         row.style.cssText = isNarrowServiceViewport
@@ -6374,7 +6500,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         const labelText = document.createElement('span');
                         labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
-                        labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};">${getItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
+                        labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};">${getServiceItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
 
                         left.appendChild(labelText);
 
@@ -6382,6 +6508,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         controls.style.cssText = isNarrowServiceViewport
                             ? 'display:flex;align-items:center;justify-content:flex-start;gap:6px;flex-wrap:nowrap;width:100%;'
                             : 'display:flex;align-items:center;gap:4px;';
+
+                        const right = document.createElement('div');
+                        right.style.cssText = isNarrowServiceViewport
+                            ? 'display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;'
+                            : 'display:flex;align-items:center;gap:12px;';
 
                         const minusBtn = document.createElement('button');
                         minusBtn.type = 'button';
@@ -6392,7 +6523,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         qtyInput.type = 'number';
                         qtyInput.min = '0';
                         qtyInput.max = String(maxQty);
-                        qtyInput.value = String(selectedQty);
+                        qtyInput.value = isChecked ? String(selectedQty) : String(maxQty);
                         qtyInput.style.cssText = isNarrowServiceViewport
                             ? 'width:62px;padding:6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:1rem;'
                             : 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
@@ -6402,7 +6533,36 @@ document.addEventListener('DOMContentLoaded', function () {
                         plusBtn.textContent = '+';
                         plusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
 
+                        const tickBtn = document.createElement('button');
+                        tickBtn.type = 'button';
+                        tickBtn.textContent = '✓';
+
+                        const setTickUi = (enabled) => {
+                            tickBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+                            tickBtn.style.cssText = enabled
+                                ? 'width:36px;height:36px;border:2px solid #1d4ed8;background:#2563eb;color:#fff;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;'
+                                : 'width:36px;height:36px;border:2px solid #cbd5e1;background:#f8fafc;color:#94a3b8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;';
+                        };
+
+                        const setQtyControlsEnabled = (enabled) => {
+                            minusBtn.disabled = !enabled;
+                            plusBtn.disabled = !enabled;
+                            qtyInput.disabled = !enabled;
+
+                            minusBtn.style.opacity = enabled ? '1' : '0.45';
+                            plusBtn.style.opacity = enabled ? '1' : '0.45';
+                            qtyInput.style.opacity = enabled ? '1' : '0.7';
+
+                            minusBtn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+                            plusBtn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+                            qtyInput.style.cursor = enabled ? 'text' : 'not-allowed';
+                        };
+
+                        setTickUi(isChecked);
+                        setQtyControlsEnabled(isChecked);
+
                         minusBtn.addEventListener('click', () => {
+                            if (minusBtn.disabled) return;
                             const nextQty = (parseInt(qtyInput.value, 10) || 0) - 1;
                             setDisassemblyItemQty(itemKey, nextQty, maxQty);
                             renderDisassemblyConfig();
@@ -6410,6 +6570,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         });
 
                         plusBtn.addEventListener('click', () => {
+                            if (plusBtn.disabled) return;
                             const nextQty = (parseInt(qtyInput.value, 10) || 0) + 1;
                             setDisassemblyItemQty(itemKey, nextQty, maxQty);
                             renderDisassemblyConfig();
@@ -6417,7 +6578,20 @@ document.addEventListener('DOMContentLoaded', function () {
                         });
 
                         qtyInput.addEventListener('change', () => {
+                            if (qtyInput.disabled) return;
                             setDisassemblyItemQty(itemKey, qtyInput.value, maxQty);
+                            renderDisassemblyConfig();
+                            if (window.updateNextButtonState) window.updateNextButtonState();
+                        });
+
+                        tickBtn.addEventListener('click', () => {
+                            const currentlyEnabled = tickBtn.getAttribute('aria-pressed') === 'true';
+                            if (currentlyEnabled) {
+                                setDisassemblyItemQty(itemKey, 0, maxQty);
+                            } else {
+                                const nextQty = Math.max(1, maxQty);
+                                setDisassemblyItemQty(itemKey, nextQty, maxQty);
+                            }
                             renderDisassemblyConfig();
                             if (window.updateNextButtonState) window.updateNextButtonState();
                         });
@@ -6425,8 +6599,10 @@ document.addEventListener('DOMContentLoaded', function () {
                         controls.appendChild(minusBtn);
                         controls.appendChild(qtyInput);
                         controls.appendChild(plusBtn);
+                        right.appendChild(controls);
+                        right.appendChild(tickBtn);
                         row.appendChild(left);
-                        row.appendChild(controls);
+                        row.appendChild(right);
                         roomContent.appendChild(row);
                     });
 
@@ -6437,6 +6613,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 floorEl.appendChild(floorContent);
                 disassemblyList.appendChild(floorEl);
             });
+
+            disassemblyTreeInitialized = true;
         }
 
         // Build map of full inventory quantities for assembly (not limited to disassembly picks).
@@ -6623,6 +6801,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     const maxQty = Math.max(0, parseInt(inventoryQty, 10) || 0);
                     const selectedQty = Math.max(0, Math.min(maxQty, parseInt(assembleState[itemKey], 10) || 0));
                     const canAssemble = maxQty > 0;
+                    const isChecked = canAssemble && selectedQty > 0;
 
                     const row = document.createElement('div');
                     row.style.cssText = isNarrowServiceViewport
@@ -6636,7 +6815,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     const labelText = document.createElement('span');
                     labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
-                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};">${getItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Inventory qty available: ${maxQty}</span>`;
+                    labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};">${getServiceItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Inventory qty available: ${maxQty}</span>`;
 
                     left.appendChild(labelText);
 
@@ -6644,6 +6823,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     controls.style.cssText = isNarrowServiceViewport
                         ? 'display:flex;align-items:center;justify-content:flex-start;gap:6px;flex-wrap:nowrap;width:100%;'
                         : 'display:flex;align-items:center;gap:4px;';
+
+                    const right = document.createElement('div');
+                    right.style.cssText = isNarrowServiceViewport
+                        ? 'display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;'
+                        : 'display:flex;align-items:center;gap:12px;';
 
                     const minusBtn = document.createElement('button');
                     minusBtn.type = 'button';
@@ -6654,7 +6838,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     qtyInput.type = 'number';
                     qtyInput.min = '0';
                     qtyInput.max = String(maxQty);
-                    qtyInput.value = String(selectedQty);
+                    qtyInput.value = isChecked ? String(selectedQty) : String(maxQty);
                     qtyInput.style.cssText = isNarrowServiceViewport
                         ? 'width:62px;padding:6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:1rem;'
                         : 'width:54px;padding:4px 6px;border:1px solid #bfdbfe;border-radius:6px;text-align:center;font-weight:700;color:#1e3a8a;font-size:0.95rem;';
@@ -6664,18 +6848,39 @@ document.addEventListener('DOMContentLoaded', function () {
                     plusBtn.textContent = '+';
                     plusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
 
-                    minusBtn.disabled = !canAssemble;
-                    plusBtn.disabled = !canAssemble;
-                    qtyInput.disabled = !canAssemble;
+                    const tickBtn = document.createElement('button');
+                    tickBtn.type = 'button';
+                    tickBtn.textContent = '✓';
 
-                    if (!canAssemble) {
-                        minusBtn.style.opacity = '0.45';
-                        plusBtn.style.opacity = '0.45';
-                        qtyInput.style.opacity = '0.7';
-                        minusBtn.style.cursor = 'not-allowed';
-                        plusBtn.style.cursor = 'not-allowed';
-                        qtyInput.style.cursor = 'not-allowed';
-                    }
+                    const setTickUi = (enabled) => {
+                        if (!canAssemble) {
+                            tickBtn.setAttribute('aria-pressed', 'false');
+                            tickBtn.style.cssText = 'width:36px;height:36px;border:2px solid #d1d5db;background:#f3f4f6;color:#9ca3af;border-radius:8px;cursor:not-allowed;font-weight:900;font-size:1.05rem;line-height:1;';
+                            return;
+                        }
+                        tickBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+                        tickBtn.style.cssText = enabled
+                            ? 'width:36px;height:36px;border:2px solid #1d4ed8;background:#2563eb;color:#fff;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;'
+                            : 'width:36px;height:36px;border:2px solid #cbd5e1;background:#f8fafc;color:#94a3b8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;';
+                    };
+
+                    const setQtyControlsEnabled = (enabled) => {
+                        const shouldEnable = !!enabled && canAssemble;
+                        minusBtn.disabled = !shouldEnable;
+                        plusBtn.disabled = !shouldEnable;
+                        qtyInput.disabled = !shouldEnable;
+
+                        minusBtn.style.opacity = shouldEnable ? '1' : '0.45';
+                        plusBtn.style.opacity = shouldEnable ? '1' : '0.45';
+                        qtyInput.style.opacity = shouldEnable ? '1' : '0.7';
+
+                        minusBtn.style.cursor = shouldEnable ? 'pointer' : 'not-allowed';
+                        plusBtn.style.cursor = shouldEnable ? 'pointer' : 'not-allowed';
+                        qtyInput.style.cursor = shouldEnable ? 'text' : 'not-allowed';
+                    };
+
+                    setTickUi(isChecked);
+                    setQtyControlsEnabled(isChecked);
 
                     minusBtn.addEventListener('click', () => {
                         if (minusBtn.disabled) return;
@@ -6703,11 +6908,27 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (window.updateNextButtonState) window.updateNextButtonState();
                     });
 
+                    tickBtn.addEventListener('click', () => {
+                        if (!canAssemble) return;
+                        const currentlyEnabled = tickBtn.getAttribute('aria-pressed') === 'true';
+                        if (currentlyEnabled) {
+                            setAssembleItemQty(itemKey, 0, maxQty);
+                        } else {
+                            const nextQty = Math.max(1, maxQty);
+                            setAssembleItemQty(itemKey, nextQty, maxQty);
+                        }
+                        renderDisassemblyConfig();
+                        renderStorageConfig();
+                        if (window.updateNextButtonState) window.updateNextButtonState();
+                    });
+
                     controls.appendChild(minusBtn);
                     controls.appendChild(qtyInput);
                     controls.appendChild(plusBtn);
+                    right.appendChild(controls);
+                    right.appendChild(tickBtn);
                     row.appendChild(left);
-                    row.appendChild(controls);
+                    row.appendChild(right);
                     roomContent.appendChild(row);
                 });
 
@@ -8067,6 +8288,95 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
         if (Object.keys(fields).length === 0) return;
 
+        const activeScope = getActiveServiceScope();
+        const preservePersistedBootState = !hasUserInteracted;
+
+        const getPersistedStep5SelectedItems = () => {
+            try {
+                const scopedPayload = getSavedFullDraft(activeScope, false) || getSavedDraft(activeScope, false);
+                if (scopedPayload && Array.isArray(scopedPayload.step5SelectedItems)) {
+                    return scopedPayload.step5SelectedItems.filter((key) => String(key || '').trim());
+                }
+
+                const legacyPayload = getSavedFullDraft(activeScope, true) || getSavedDraft(activeScope, true);
+                if (legacyPayload && Array.isArray(legacyPayload.step5SelectedItems)) {
+                    return legacyPayload.step5SelectedItems.filter((key) => String(key || '').trim());
+                }
+
+                const raw = localStorage.getItem('house_removal_inventory');
+                if (!raw) return [];
+                const parsed = JSON.parse(raw);
+                if (parsed && Array.isArray(parsed.step5SelectedItems)) {
+                    return parsed.step5SelectedItems.filter((key) => String(key || '').trim());
+                }
+            } catch (error) {
+                // Ignore snapshot parse failures.
+            }
+            return [];
+        };
+
+        const isNonEmptyObject = (value) => {
+            return !!(value && typeof value === 'object' && Object.keys(value).length > 0);
+        };
+
+        const getPersistedObjectState = (fieldName) => {
+            if (!preservePersistedBootState) return {};
+
+            try {
+                const scopedPayload = getSavedFullDraft(activeScope, false) || getSavedDraft(activeScope, false);
+                const scopedValue = scopedPayload && scopedPayload[fieldName] && typeof scopedPayload[fieldName] === 'object'
+                    ? scopedPayload[fieldName]
+                    : null;
+                if (isNonEmptyObject(scopedValue)) {
+                    return safeClone(scopedValue, {});
+                }
+
+                const legacyPayload = getSavedFullDraft(activeScope, true) || getSavedDraft(activeScope, true);
+                const legacyValue = legacyPayload && legacyPayload[fieldName] && typeof legacyPayload[fieldName] === 'object'
+                    ? legacyPayload[fieldName]
+                    : null;
+                if (isNonEmptyObject(legacyValue)) {
+                    return safeClone(legacyValue, {});
+                }
+
+                const legacyRaw = localStorage.getItem('house_removal_inventory');
+                if (legacyRaw) {
+                    const legacySnapshot = JSON.parse(legacyRaw);
+                    const snapshotValue = legacySnapshot && legacySnapshot[fieldName] && typeof legacySnapshot[fieldName] === 'object'
+                        ? legacySnapshot[fieldName]
+                        : null;
+                    if (isNonEmptyObject(snapshotValue)) {
+                        return safeClone(snapshotValue, {});
+                    }
+                }
+            } catch (error) {
+                // Ignore persisted object state parse failures.
+            }
+
+            return {};
+        };
+
+        const pickObjectStateForSave = (liveValue, fieldName) => {
+            const liveObject = liveValue && typeof liveValue === 'object' ? liveValue : {};
+            if (isNonEmptyObject(liveObject)) {
+                return safeClone(liveObject, {});
+            }
+
+            const persistedObject = getPersistedObjectState(fieldName);
+            if (isNonEmptyObject(persistedObject)) {
+                return persistedObject;
+            }
+
+            return safeClone(liveObject, {});
+        };
+
+        const liveStep5SelectedItems = Array.isArray(window.step5SelectedItemKeys)
+            ? Array.from(window.step5SelectedItemKeys).filter((key) => String(key || '').trim())
+            : [];
+        const step5SelectedItemsForSave = liveStep5SelectedItems.length > 0
+            ? liveStep5SelectedItems
+            : getPersistedStep5SelectedItems();
+
         const commonState = {
             savedAt: Date.now(),
             step: getStep(),
@@ -8076,13 +8386,14 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             serviceScope: getActiveServiceScope(),
             selectedPickupFloors: Array.from(window.selectedPickupFloors || []),
             selectedDeliveryFloors: Array.from(window.selectedDeliveryFloors || []),
-            multiFloorInventory: safeClone(window.multiFloorInventory || {}, {}),
-            itemFloorAssignments: safeClone(window.itemFloorAssignments || {}, {}),
-            itemQuantities: safeClone(window.itemQuantities || {}, {}),
+            step5SelectedItems: step5SelectedItemsForSave,
+            multiFloorInventory: pickObjectStateForSave(window.multiFloorInventory, 'multiFloorInventory'),
+            itemFloorAssignments: pickObjectStateForSave(window.itemFloorAssignments, 'itemFloorAssignments'),
+            itemQuantities: pickObjectStateForSave(window.itemQuantities, 'itemQuantities'),
             customizedDraftItems: safeClone(collectCustomizedDraftRows(), []),
-            customItems: safeClone(window.customItems || {}, {}),
-            customItemPhotos: safeClone(window.customItemPhotos || {}, {}),
-            floorMediaItems: safeClone(window.floorMediaItems || {}, {}),
+            customItems: pickObjectStateForSave(window.customItems, 'customItems'),
+            customItemPhotos: pickObjectStateForSave(window.customItemPhotos, 'customItemPhotos'),
+            floorMediaItems: pickObjectStateForSave(window.floorMediaItems, 'floorMediaItems'),
             officeInventoryState: safeClone(window.officeInventoryState || null, null)
         };
 
@@ -8100,9 +8411,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
         window.__createJobRestoreTargetStep = payload.step;
 
-        const activeScope = payload.serviceScope || getActiveServiceScope();
-        const draftKeys = getDraftKeysForScope(activeScope);
-        persistValue(LAST_SCOPE_KEY, activeScope);
+        const payloadScope = payload.serviceScope || activeScope;
+        const draftKeys = getDraftKeysForScope(payloadScope);
+        persistValue(LAST_SCOPE_KEY, payloadScope);
 
         const coreRaw = JSON.stringify(corePayload);
         if (!persistValue(draftKeys.core, coreRaw)) {
@@ -8124,6 +8435,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                     customItems: payload.customItems,
                     customItemPhotos: payload.customItemPhotos,
                     selectedPickupFloors: payload.selectedPickupFloors,
+                    step5SelectedItems: payload.step5SelectedItems,
                     itemFloorAssignments: payload.itemFloorAssignments,
                     multiFloorInventory: payload.multiFloorInventory,
                     floorMediaItems: payload.floorMediaItems
@@ -8187,6 +8499,21 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             window.step3PickupFloorsConfirmed = payload.step3PickupFloorsConfirmed === true;
             if (Array.isArray(payload.selectedDeliveryFloors)) {
                 window.selectedDeliveryFloors = new Set(payload.selectedDeliveryFloors);
+            }
+            if (Array.isArray(payload.step5SelectedItems)) {
+                window.step5SelectedItemKeys = Array.from(payload.step5SelectedItems);
+            } else {
+                try {
+                    const legacyRaw = localStorage.getItem('house_removal_inventory');
+                    if (legacyRaw) {
+                        const legacyParsed = JSON.parse(legacyRaw);
+                        if (legacyParsed && Array.isArray(legacyParsed.step5SelectedItems)) {
+                            window.step5SelectedItemKeys = Array.from(legacyParsed.step5SelectedItems);
+                        }
+                    }
+                } catch (error) {
+                    // Ignore legacy selection snapshot parse errors.
+                }
             }
             if (payload.multiFloorInventory && typeof payload.multiFloorInventory === 'object') {
                 window.multiFloorInventory = overwriteObjectPreserveReference(window.multiFloorInventory, payload.multiFloorInventory) || payload.multiFloorInventory;
@@ -10374,6 +10701,32 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         return window.selectedDeliveryFloors;
     };
+    const syncStep5SelectedItemsFromWindow = () => {
+        if (Array.isArray(window.step5SelectedItemKeys)) {
+            selectedItems = new Set(window.step5SelectedItemKeys.filter((key) => String(key || '').trim()));
+        }
+    };
+
+    const syncStep5SelectedItemsToWindow = () => {
+        window.step5SelectedItemKeys = Array.from(selectedItems);
+    };
+
+    const persistStep5SelectedItems = () => {
+        syncStep5SelectedItemsToWindow();
+
+        try {
+            const rawExisting = localStorage.getItem('house_removal_inventory');
+            const existing = rawExisting ? (JSON.parse(rawExisting) || {}) : {};
+            existing.step5SelectedItems = Array.from(window.step5SelectedItemKeys || []);
+            localStorage.setItem('house_removal_inventory', JSON.stringify(existing));
+        } catch (error) {
+            // Ignore selection snapshot write failures.
+        }
+
+        if (typeof window.saveCreateJobProgress === 'function') {
+            window.saveCreateJobProgress();
+        }
+    };
     
     // Floor definitions - will be set based on delivery property type
     let deliveryFloors = ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
@@ -10426,7 +10779,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Listen for delivery property type changes
     const deliveryPropertyTypeInput = document.getElementById('delivery-property-type');
     if (deliveryPropertyTypeInput) {
-        deliveryPropertyTypeInput.addEventListener('change', function() {
+        deliveryPropertyTypeInput.addEventListener('change', function(event) {
             const selectedType = this.value;
             const propertyFloors = {
                 house: ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', 'Attic'],
@@ -10438,9 +10791,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 'storage-unit': ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th']
             };
             
-            // Reset all assignments and reinitialize with new floors
+            // Only clear assignments for trusted user edits.
+            // Restore/apply passes dispatch synthetic change events that should not wipe Step 5 state.
             const newFloors = propertyFloors[selectedType] || propertyFloors['apartment'];
-            initializeFloors(newFloors, { preserveAssignments: false });
+            const isUserInitiated = !!(event && event.isTrusted === true);
+            initializeFloors(newFloors, { preserveAssignments: !isUserInitiated });
             
             // Re-render
             renderInventoryByRoom();
@@ -10865,6 +11220,164 @@ document.addEventListener('DOMContentLoaded', function () {
 
     window.isStep5DeliveryOrganizationComplete = isStep5DeliveryOrganizationComplete;
 
+    let lastStep5CompletionState = null;
+    let lastStep5PickupInventoryMap = {};
+    let lastStep5ResyncAlertAt = 0;
+    let lastStep5ResyncAlertSignature = '';
+    let hasVisitedOverviewStep = false;
+    let step5WasEverComplete = false;
+    let step5WasCompleteAfterOverview = false;
+    let hasPendingStep5NewAssignments = false;
+
+    function syncPendingStep5AssignmentsFromCurrentState() {
+        const selectedDeliveryFloors = getSelectedDeliveryFloors();
+        const hasDeliverySelection = selectedDeliveryFloors instanceof Set && selectedDeliveryFloors.size > 0;
+        const isCompleteNow = hasDeliverySelection ? isStep5DeliveryOrganizationComplete() : false;
+
+        if (isCompleteNow) {
+            step5WasEverComplete = true;
+            hasPendingStep5NewAssignments = false;
+            window.__hasPendingStep5NewAssignments = false;
+            lastStep5CompletionState = true;
+
+            if (hasVisitedOverviewStep) {
+                step5WasCompleteAfterOverview = true;
+            }
+        }
+
+        return !!hasPendingStep5NewAssignments;
+    }
+
+    function buildStep5TrackedPickupInventoryMap() {
+        const tracked = {};
+        const selectedPickupFloors = getSelectedPickupFloors();
+        const roomItems = getItemsByRoom();
+        const applyPickupFloorFilter = shouldApplyPickupFloorFilter(roomItems, selectedPickupFloors);
+
+        Object.keys(roomItems).forEach((roomKey) => {
+            const items = roomItems[roomKey] || {};
+            Object.keys(items).forEach((itemKey) => {
+                const qty = parseInt(items[itemKey], 10) || 0;
+                if (qty <= 0) return;
+
+                const sourceFloor = getSourceFloorFromKey(itemKey);
+                if (applyPickupFloorFilter && sourceFloor !== 'Customized' && !isSourceFloorSelected(selectedPickupFloors, sourceFloor)) {
+                    return;
+                }
+
+                tracked[itemKey] = qty;
+            });
+        });
+
+        return tracked;
+    }
+
+    function didTrackedPickupInventoryIncrease(previousMap, nextMap) {
+        const prev = previousMap && typeof previousMap === 'object' ? previousMap : {};
+        const next = nextMap && typeof nextMap === 'object' ? nextMap : {};
+
+        return Object.keys(next).some((itemKey) => {
+            const prevQty = parseInt(prev[itemKey], 10) || 0;
+            const nextQty = parseInt(next[itemKey], 10) || 0;
+            return nextQty > prevQty;
+        });
+    }
+
+    function monitorStep5AssignmentSyncAfterPickupChange(options = {}) {
+        if (typeof window.__cjIsRestoring === 'function' && window.__cjIsRestoring()) {
+            return;
+        }
+
+        const currentStep = parseInt(document.body.getAttribute('data-form-step') || document.body.getAttribute('data-current-step') || '1', 10);
+        if (currentStep === 8) {
+            hasVisitedOverviewStep = true;
+        }
+
+        const selectedDeliveryFloors = getSelectedDeliveryFloors();
+        const hasDeliverySelection = selectedDeliveryFloors instanceof Set && selectedDeliveryFloors.size > 0;
+        const nextPickupMap = buildStep5TrackedPickupInventoryMap();
+        const nextCompletionState = hasDeliverySelection ? isStep5DeliveryOrganizationComplete() : false;
+
+        if (nextCompletionState) {
+            step5WasEverComplete = true;
+        }
+
+        if (hasVisitedOverviewStep && nextCompletionState) {
+            step5WasCompleteAfterOverview = true;
+        }
+
+        const previousCompletionState = lastStep5CompletionState === true;
+        const inventoryIncreased = didTrackedPickupInventoryIncrease(lastStep5PickupInventoryMap, nextPickupMap);
+        const wasCompletedBefore = previousCompletionState || step5WasEverComplete || step5WasCompleteAfterOverview;
+        const shouldPromptResync = hasVisitedOverviewStep && hasDeliverySelection && wasCompletedBefore && !nextCompletionState && inventoryIncreased;
+
+        hasPendingStep5NewAssignments = hasVisitedOverviewStep && hasDeliverySelection && wasCompletedBefore && !nextCompletionState;
+        window.__hasPendingStep5NewAssignments = hasPendingStep5NewAssignments;
+
+        lastStep5PickupInventoryMap = nextPickupMap;
+        lastStep5CompletionState = nextCompletionState;
+
+        if (!shouldPromptResync) {
+            return;
+        }
+
+        // During Step 3 editing, do not interrupt users with immediate redirects.
+        // We keep the pending flag active so the dedicated "Assign New Items"
+        // button and final submit warning can guide users at the right time.
+        if (options.showAlert !== true) {
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
+            return;
+        }
+
+        const signature = JSON.stringify(nextPickupMap);
+        const now = Date.now();
+        if (signature === lastStep5ResyncAlertSignature && (now - lastStep5ResyncAlertAt) < 1200) {
+            return;
+        }
+        lastStep5ResyncAlertSignature = signature;
+        lastStep5ResyncAlertAt = now;
+
+        const shouldNavigate = options.forceNavigateToStep5 !== false && currentStep !== 5;
+
+        if (shouldNavigate && typeof window.setFormStep === 'function') {
+            window.setFormStep(5);
+        }
+
+        alert('You added new pickup inventory after completing delivery assignments. Please assign the new items in Step 5.');
+
+        if (typeof window.renderDeliveryFloorSelector === 'function') {
+            window.renderDeliveryFloorSelector();
+        }
+        renderInventoryByRoom();
+        renderDeliveryFloors();
+
+        if (typeof window.updateNextButtonState === 'function') {
+            window.updateNextButtonState();
+        }
+    }
+
+    window.handlePickupInventoryMutationForStep5Sync = monitorStep5AssignmentSyncAfterPickupChange;
+    window.hasPendingStep5NewAssignments = function() {
+        return syncPendingStep5AssignmentsFromCurrentState();
+    };
+
+    const step5ResyncOverviewObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.attributeName !== 'data-form-step') return;
+            const step = parseInt(document.body.getAttribute('data-form-step') || document.body.getAttribute('data-current-step') || '1', 10);
+            if (step === 8 || step === 5) {
+                monitorStep5AssignmentSyncAfterPickupChange({ forceNavigateToStep5: false });
+            }
+        });
+    });
+
+    step5ResyncOverviewObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['data-form-step']
+    });
+
     function assignItemsToFloor(itemKeys, floor) {
         const roomItems = getItemsByRoom();
         const itemQtyMap = {};
@@ -10895,6 +11408,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (selectedItems.size === 0) return;
         assignItemsToFloor(Array.from(selectedItems), floor);
         selectedItems.clear();
+        persistStep5SelectedItems();
         renderInventoryByRoom();
         renderDeliveryFloors();
     }
@@ -10911,6 +11425,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         assignItemsToFloor(allItemKeys, floor);
         selectedItems.clear();
+        persistStep5SelectedItems();
         renderInventoryByRoom();
         renderDeliveryFloors();
     }
@@ -10930,6 +11445,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Function to render inventory with unassigned items highlighted
     function renderInventoryByRoom() {
         if (!inventoryList) return;
+        syncStep5SelectedItemsFromWindow();
         const selectedPickupFloors = getSelectedPickupFloors();
         
         // Save the current expanded state before re-rendering
@@ -11160,6 +11676,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 });
 
+                persistStep5SelectedItems();
+
                 renderInventoryByRoom();
                 renderDeliveryFloors();
             });
@@ -11324,6 +11842,8 @@ document.addEventListener('DOMContentLoaded', function () {
                             selectedItems.delete(item.key);
                         }
                     });
+
+                    persistStep5SelectedItems();
                     
                     renderInventoryByRoom();
                     renderDeliveryFloors();
@@ -11375,6 +11895,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         } else {
                             selectedItems.add(item.key);
                         }
+                        persistStep5SelectedItems();
                         renderInventoryByRoom();
                         renderDeliveryFloors();
                     });
@@ -11396,6 +11917,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         } else {
                             selectedItems.delete(item.key);
                         }
+                        persistStep5SelectedItems();
                         renderInventoryByRoom();
                         renderDeliveryFloors();
                     });
@@ -11489,6 +12011,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (typeof window.updateNextButtonState === 'function') {
             window.updateNextButtonState();
         }
+
+        monitorStep5AssignmentSyncAfterPickupChange({ forceNavigateToStep5: false });
     }
     
     // Function to render room sections with floor-based delivery organization
@@ -12092,6 +12616,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Render the inventory and room sections immediately
         renderInventoryByRoom();
         renderDeliveryFloors();
+        monitorStep5AssignmentSyncAfterPickupChange({ forceNavigateToStep5: false });
     }
     
     // Initialize when the organization section becomes visible
@@ -12586,31 +13111,8 @@ document.addEventListener('DOMContentLoaded', function () {
         block.style.overflow = 'visible';
         block.style.position = 'relative';
 
-        const bindFloorSaveHandlers = (targetButton, onSave) => {
-            if (!targetButton || typeof onSave !== 'function') return;
-
-            let suppressClick = false;
-
-            targetButton.addEventListener('touchend', (event) => {
-                suppressClick = true;
-                onSave(event);
-                setTimeout(() => {
-                    suppressClick = false;
-                }, 350);
-            }, { passive: false });
-
-            targetButton.addEventListener('click', (event) => {
-                if (suppressClick) {
-                    event.preventDefault();
-                    return;
-                }
-                onSave(event);
-            });
-        };
-        
         // Use a mutable reference for floor name so closures can access the updated value
         const floorRef = { name: initialFloorName };
-        let saveFloorBtn = null;
 
         // Title wrapper with controls
         const titleWrapper = document.createElement('div');
@@ -12785,10 +13287,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Update title
                 title.textContent = `Add Inventory to ${newFloor} floor`;
 
-                if (saveFloorBtn) {
-                    saveFloorBtn.textContent = `Save ${newFloor} Floor`;
-                }
-                
                 // Sort floors after changing
                 sortFloorsInContainer();
 
@@ -13300,19 +13798,28 @@ document.addEventListener('DOMContentLoaded', function () {
                 qtyDiv.appendChild(qtyDisplay);
                 qtyDiv.appendChild(plusBtn);
                 
-                // Add photo controls for all items
+                // Only show photo controls once the item has a positive quantity.
+                if (selected) {
                     const photoBtn = document.createElement('button');
                     photoBtn.type = 'button';
                     photoBtn.className = 'item-photo-btn';
                     photoBtn.title = hasCustomPhoto ? 'Change photo/video' : 'Add photo/video';
+                    photoBtn.setAttribute('aria-label', hasCustomPhoto ? 'Change photo/video' : 'Add photo/video');
                     photoBtn.textContent = hasCustomPhoto ? '📷✓' : '📷';
                     photoBtn.style.background = 'none';
                     photoBtn.style.border = 'none';
-                    photoBtn.style.cursor = 'pointer';
+                    photoBtn.style.outline = 'none';
+                    photoBtn.style.boxShadow = 'none';
+                    photoBtn.style.appearance = 'none';
+                    photoBtn.style.webkitAppearance = 'none';
                     photoBtn.style.padding = '4px 6px';
-                    photoBtn.style.color = hasCustomPhoto ? '#16a34a' : '#0ea5e9';
-                    photoBtn.style.fontWeight = '700';
+                    photoBtn.style.cursor = 'pointer';
                     photoBtn.style.marginLeft = '8px';
+                    photoBtn.style.display = 'inline-flex';
+                    photoBtn.style.alignItems = 'center';
+                    photoBtn.style.justifyContent = 'center';
+                    photoBtn.style.lineHeight = '1';
+                    photoBtn.style.color = hasCustomPhoto ? '#16a34a' : '#0ea5e9';
                     photoBtn.addEventListener('click', function(e) {
                         e.stopPropagation();
 
@@ -13322,7 +13829,13 @@ document.addEventListener('DOMContentLoaded', function () {
                             photoInput.type = 'file';
                             photoInput.accept = 'image/*,video/*';
                             photoInput.className = 'custom-item-photo-input-multifloor';
-                            photoInput.style.display = 'none';
+                            photoInput.style.position = 'fixed';
+                            photoInput.style.left = '-9999px';
+                            photoInput.style.top = '0';
+                            photoInput.style.width = '1px';
+                            photoInput.style.height = '1px';
+                            photoInput.style.opacity = '0';
+                            photoInput.style.pointerEvents = 'none';
                             block.appendChild(photoInput);
 
                             photoInput.addEventListener('change', function() {
@@ -13335,6 +13848,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                     alert('Please select a valid image or video file.');
                                     return;
                                 }
+
                                 const reader = new FileReader();
                                 reader.onload = function(evt) {
                                     setFloorCustomPhotoPreview(selectedTrackingKey, evt.target.result);
@@ -13355,7 +13869,12 @@ document.addEventListener('DOMContentLoaded', function () {
                         photoInput.setAttribute('data-item-name', itemName);
                         photoInput.setAttribute('data-tab-name', tabName);
                         photoInput.value = '';
-                        photoInput.click();
+
+                        if (typeof photoInput.showPicker === 'function') {
+                            photoInput.showPicker();
+                        } else {
+                            photoInput.click();
+                        }
                     });
                     qtyDiv.appendChild(photoBtn);
 
@@ -13367,11 +13886,19 @@ document.addEventListener('DOMContentLoaded', function () {
                         viewPhotoBtn.textContent = '👁';
                         viewPhotoBtn.style.background = 'none';
                         viewPhotoBtn.style.border = 'none';
+                        viewPhotoBtn.style.outline = 'none';
+                        viewPhotoBtn.style.boxShadow = 'none';
+                        viewPhotoBtn.style.appearance = 'none';
+                        viewPhotoBtn.style.webkitAppearance = 'none';
                         viewPhotoBtn.style.cursor = 'pointer';
                         viewPhotoBtn.style.padding = '4px 6px';
                         viewPhotoBtn.style.color = '#1d4ed8';
                         viewPhotoBtn.style.fontWeight = '700';
                         viewPhotoBtn.style.marginLeft = '4px';
+                        viewPhotoBtn.style.display = 'inline-flex';
+                        viewPhotoBtn.style.alignItems = 'center';
+                        viewPhotoBtn.style.justifyContent = 'center';
+                        viewPhotoBtn.style.lineHeight = '1';
                         viewPhotoBtn.addEventListener('click', function(e) {
                             e.stopPropagation();
                             const previewDataUrl = getFloorCustomPhotoPreview(trackingKey);
@@ -13379,19 +13906,37 @@ document.addEventListener('DOMContentLoaded', function () {
                                 alert('Preview not available for this item. Please upload the media again.');
                                 return;
                             }
-
-                            openFloorMediaPreviewModal({
-                                id: `custom-${trackingKey}`,
-                                itemName,
-                                fileName: 'Custom item media',
-                                mediaType: getMediaTypeFromPreviewDataUrl(previewDataUrl),
-                                previewDataUrl
+                            const viewModal = document.createElement('div');
+                            viewModal.style.position = 'fixed';
+                            viewModal.style.left = '0';
+                            viewModal.style.top = '0';
+                            viewModal.style.width = '100vw';
+                            viewModal.style.height = '100vh';
+                            viewModal.style.background = 'rgba(0,0,0,0.7)';
+                            viewModal.style.zIndex = '20000';
+                            viewModal.style.display = 'flex';
+                            viewModal.style.alignItems = 'center';
+                            viewModal.style.justifyContent = 'center';
+                            viewModal.style.padding = '20px';
+                            viewModal.innerHTML = `
+                                <div style="position:relative;max-width:90vw;max-height:90vh;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.25);">
+                                    <button type="button" aria-label="Close preview" style="position:absolute;top:10px;right:10px;z-index:1;border:none;background:rgba(0,0,0,0.7);color:#fff;border-radius:999px;width:32px;height:32px;cursor:pointer;font-size:18px;line-height:1;">×</button>
+                                    ${previewDataUrl.startsWith('data:video/')
+                                        ? `<video src="${previewDataUrl}" controls autoplay style="display:block;max-width:90vw;max-height:90vh;background:#000;"></video>`
+                                        : `<img src="${previewDataUrl}" alt="Item preview" style="display:block;max-width:90vw;max-height:90vh;object-fit:contain;background:#fff;">`}
+                                </div>`;
+                            const closeBtn = viewModal.querySelector('button[aria-label="Close preview"]');
+                            const dismiss = () => viewModal.remove();
+                            closeBtn.addEventListener('click', dismiss);
+                            viewModal.addEventListener('click', function(evt) {
+                                if (evt.target === viewModal) {
+                                    dismiss();
+                                }
                             });
+                            document.body.appendChild(viewModal);
                         });
                         qtyDiv.appendChild(viewPhotoBtn);
-                    }
 
-                    if (hasCustomPhoto) {
                         const removePhotoBtn = document.createElement('button');
                         removePhotoBtn.type = 'button';
                         removePhotoBtn.className = 'item-photo-remove-btn';
@@ -13399,19 +13944,24 @@ document.addEventListener('DOMContentLoaded', function () {
                         removePhotoBtn.textContent = '🗑';
                         removePhotoBtn.style.background = 'none';
                         removePhotoBtn.style.border = 'none';
+                        removePhotoBtn.style.outline = 'none';
+                        removePhotoBtn.style.boxShadow = 'none';
+                        removePhotoBtn.style.appearance = 'none';
+                        removePhotoBtn.style.webkitAppearance = 'none';
                         removePhotoBtn.style.cursor = 'pointer';
                         removePhotoBtn.style.padding = '4px 6px';
                         removePhotoBtn.style.color = '#f97316';
                         removePhotoBtn.style.fontWeight = '700';
                         removePhotoBtn.style.marginLeft = '4px';
+                        removePhotoBtn.style.display = 'inline-flex';
+                        removePhotoBtn.style.alignItems = 'center';
+                        removePhotoBtn.style.justifyContent = 'center';
+                        removePhotoBtn.style.lineHeight = '1';
                         removePhotoBtn.addEventListener('click', function(e) {
                             e.stopPropagation();
                             const confirmed = confirm('Remove this photo/video?');
-                            if (!confirmed) {
-                                return;
-                            }
+                            if (!confirmed) return;
                             removeFloorCustomPhotoPreview(trackingKey);
-                            removeCustomItemFloorMedia(trackingKey);
                             renderItems(tabName);
                             if (typeof window.saveStep3InventorySnapshot === 'function') {
                                 window.saveStep3InventorySnapshot({ silent: true });
@@ -13422,7 +13972,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         });
                         qtyDiv.appendChild(removePhotoBtn);
                     }
-
                     if (isCustomItem) {
                     const editBtn = document.createElement('button');
                     editBtn.type = 'button';
@@ -13507,8 +14056,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         }
                     });
                     qtyDiv.appendChild(deleteBtn);
-                    }
-                
+                }
+                }
+
                 li.appendChild(qtyDiv);
                 
                 li.style.cursor = 'default';
@@ -13655,12 +14205,6 @@ document.addEventListener('DOMContentLoaded', function () {
         addMediaBtn.textContent = '+ Add Photos / Videos';
         addMediaBtn.style.marginTop = '10px';
         block.appendChild(addMediaBtn);
-
-        saveFloorBtn = document.createElement('button');
-        saveFloorBtn.type = 'button';
-        saveFloorBtn.className = 'step3-floor-save-btn';
-        saveFloorBtn.textContent = `Save ${floorRef.name} Floor`;
-        block.appendChild(saveFloorBtn);
 
         const mediaListWrap = document.createElement('div');
         mediaListWrap.style.cssText = 'margin-top:12px;padding:10px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;';
@@ -13944,31 +14488,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         renderFloorMediaList();
-
-        const showFloorSavedState = () => {
-            if (!saveFloorBtn) return;
-            saveFloorBtn.textContent = `${floorRef.name} Floor Saved`;
-            clearTimeout(saveFloorBtn.__resetLabelTimer);
-            saveFloorBtn.__resetLabelTimer = setTimeout(() => {
-                saveFloorBtn.textContent = `Save ${floorRef.name} Floor`;
-            }, 1800);
-        };
-
-        const runFloorSave = (event) => {
-            if (event) {
-                event.preventDefault();
-                event.stopPropagation();
-            }
-            syncFloorToGlobal();
-            const didSave = typeof window.saveStep3InventorySnapshot === 'function'
-                ? window.saveStep3InventorySnapshot({ floorName: floorRef.name })
-                : false;
-            if (didSave) {
-                showFloorSavedState();
-            }
-        };
-
-        bindFloorSaveHandlers(saveFloorBtn, runFloorSave);
 
         // Modal for custom item
         const customModal = document.createElement('div');
@@ -16338,7 +16857,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 applyRequiredRules();
                 const firstInvalid = validateRequiredFieldsInStep(currentStep);
                 if (firstInvalid) {
-                    revealMissingFieldBeforeAlert(firstInvalid);
+                    if (typeof window.revealMissingFieldBeforeAlert === 'function') {
+                        window.revealMissingFieldBeforeAlert(firstInvalid);
+                    }
                     return;
                 }
                 unlockStep(currentStep + 1);
@@ -16363,7 +16884,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     applyRequiredRules();
                     const firstInvalid = validateRequiredFieldsInStep(currentStep);
                     if (firstInvalid) {
-                        revealMissingFieldBeforeAlert(firstInvalid);
+                        if (typeof window.revealMissingFieldBeforeAlert === 'function') {
+                            window.revealMissingFieldBeforeAlert(firstInvalid);
+                        }
                         return;
                     }
 
@@ -20109,7 +20632,93 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        quoteForm.addEventListener('submit', function(e) {
+        const showUnassignedItemsSubmitConfirmation = () => {
+            return new Promise((resolve) => {
+                const backdrop = document.createElement('div');
+                backdrop.style.cssText = `
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(15, 23, 42, 0.55);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 12000;
+                    padding: 16px;
+                `;
+
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    width: min(580px, 100%);
+                    background: #fff;
+                    border: 1px solid #bfdbfe;
+                    border-radius: 12px;
+                    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.3);
+                    padding: 18px;
+                `;
+
+                const title = document.createElement('h3');
+                title.textContent = 'Unassigned items detected';
+                title.style.cssText = 'margin: 0 0 10px 0; color: #1e3a8a; font-size: 1.08rem; font-weight: 800;';
+
+                const copy = document.createElement('p');
+                copy.style.cssText = 'margin: 0 0 14px 0; color: #334155; line-height: 1.5; font-size: 0.95rem;';
+                copy.textContent = 'You still have pickup items that are not assigned to delivery floors in Step 5. You can return to Step 5 to assign them now, or continue anyway.';
+
+                const actions = document.createElement('div');
+                actions.style.cssText = 'display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap;';
+
+                const returnBtn = document.createElement('button');
+                returnBtn.type = 'button';
+                returnBtn.textContent = 'Return to Step 5';
+                returnBtn.style.cssText = `
+                    border: 1px solid #93c5fd;
+                    background: #eff6ff;
+                    color: #1d4ed8;
+                    border-radius: 8px;
+                    padding: 9px 12px;
+                    font-size: 0.9rem;
+                    font-weight: 700;
+                    cursor: pointer;
+                `;
+
+                const proceedBtn = document.createElement('button');
+                proceedBtn.type = 'button';
+                proceedBtn.textContent = 'Proceed Anyway';
+                proceedBtn.style.cssText = `
+                    border: none;
+                    background: #1d4ed8;
+                    color: #fff;
+                    border-radius: 8px;
+                    padding: 9px 12px;
+                    font-size: 0.9rem;
+                    font-weight: 800;
+                    cursor: pointer;
+                `;
+
+                const closeWith = (shouldProceed) => {
+                    backdrop.remove();
+                    resolve(shouldProceed);
+                };
+
+                returnBtn.addEventListener('click', () => closeWith(false));
+                proceedBtn.addEventListener('click', () => closeWith(true));
+                backdrop.addEventListener('click', (event) => {
+                    if (event.target === backdrop) {
+                        closeWith(false);
+                    }
+                });
+
+                actions.appendChild(returnBtn);
+                actions.appendChild(proceedBtn);
+                modal.appendChild(title);
+                modal.appendChild(copy);
+                modal.appendChild(actions);
+                backdrop.appendChild(modal);
+                document.body.appendChild(backdrop);
+            });
+        };
+
+        quoteForm.addEventListener('submit', async function(e) {
 
             e.preventDefault();
 
@@ -20136,7 +20745,9 @@ document.addEventListener('DOMContentLoaded', function() {
             applyRequiredRules();
             const firstInvalidField = validateRequiredFields(quoteForm);
             if (firstInvalidField) {
-                revealMissingFieldBeforeAlert(firstInvalidField);
+                if (typeof window.revealMissingFieldBeforeAlert === 'function') {
+                    window.revealMissingFieldBeforeAlert(firstInvalidField);
+                }
                 const serviceGrid = document.getElementById('service-icon-grid');
                 if (firstInvalidField.id === 'item-description-hidden' && serviceGrid) {
                     markFieldError(serviceGrid);
@@ -20145,6 +20756,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     firstInvalidField.focus();
                 }
                 return;
+            }
+
+            const hasPendingStep5Assignments = typeof window.hasPendingStep5NewAssignments === 'function'
+                ? window.hasPendingStep5NewAssignments()
+                : !!window.__hasPendingStep5NewAssignments;
+            if (hasPendingStep5Assignments) {
+                const shouldProceed = await showUnassignedItemsSubmitConfirmation();
+                if (!shouldProceed) {
+                    if (typeof window.setFormStep === 'function') {
+                        window.setFormStep(5);
+                    }
+                    return;
+                }
             }
 
             // Collect form data
@@ -20242,7 +20866,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (itemTypeField) {
                     markFieldError(itemTypeField);
                     setInlineError(itemTypeField, getInlineRequiredMessage(itemTypeField, quoteForm));
-                    revealMissingFieldBeforeAlert(itemTypeField);
+                    if (typeof window.revealMissingFieldBeforeAlert === 'function') {
+                        window.revealMissingFieldBeforeAlert(itemTypeField);
+                    }
                 }
                 return;
             }
@@ -20686,6 +21312,7 @@ document.addEventListener('DOMContentLoaded', function () {
 function showOfficeRemovalSection() {
     const officeInventorySection = document.getElementById('office-removal-inventory-section');
     const officeMoveDateSection = document.getElementById('office-move-date-section');
+    const officeMoveDateInput = document.getElementById('office-move-date');
     const officeFloorsSection = document.getElementById('office-removal-floors-section');
     const officeDeliveryFloorsSection = document.getElementById('office-delivery-floors-section');
     const officeDescSection = document.getElementById('office-removal-description-section');
@@ -20703,6 +21330,11 @@ function showOfficeRemovalSection() {
     }
     if (officeMoveDateSection) {
         officeMoveDateSection.style.display = 'none';
+    }
+    if (officeMoveDateInput) {
+        officeMoveDateInput.removeAttribute('required');
+        officeMoveDateInput.removeAttribute('aria-required');
+        officeMoveDateInput.setAttribute('data-optional', 'true');
     }
     if (officeFloorsSection) {
         officeFloorsSection.style.display = 'none';
@@ -20742,6 +21374,7 @@ function showOfficeRemovalSection() {
 function hideOfficeRemovalSection() {
     const officeInventorySection = document.getElementById('office-removal-inventory-section');
     const officeMoveDateSection = document.getElementById('office-move-date-section');
+    const officeMoveDateInput = document.getElementById('office-move-date');
     const officeFloorsSection = document.getElementById('office-removal-floors-section');
     const officeDeliveryFloorsSection = document.getElementById('office-delivery-floors-section');
     const officeDescSection = document.getElementById('office-removal-description-section');
@@ -20758,6 +21391,11 @@ function hideOfficeRemovalSection() {
     }
     if (officeMoveDateSection) {
         officeMoveDateSection.style.display = 'none';
+    }
+    if (officeMoveDateInput) {
+        officeMoveDateInput.removeAttribute('required');
+        officeMoveDateInput.removeAttribute('aria-required');
+        officeMoveDateInput.setAttribute('data-optional', 'true');
     }
     if (officeFloorsSection) {
         officeFloorsSection.style.display = formStepper ? '' : 'none';
@@ -26621,6 +27259,23 @@ function getOverviewAllFloors() {
     return ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
 }
 
+function getOverviewFloorOptionsForKind(kind) {
+    const isPickup = kind === 'pickup';
+    if (isParkingLevelService(getActiveServiceValue())) {
+        return Array.isArray(VEHICLE_PARKING_LEVELS) && VEHICLE_PARKING_LEVELS.length
+            ? VEHICLE_PARKING_LEVELS.slice()
+            : getOverviewAllFloors();
+    }
+
+    const propertyTypeFieldId = isPickup ? 'pickup-property-type' : 'delivery-property-type';
+    const propertyTypeValue = String(document.getElementById(propertyTypeFieldId)?.value || '').trim();
+    const normalizedPropertyType = propertyTypeValue === 'warehouse' ? 'warehouse/Shop' : propertyTypeValue;
+    const mappedFloors = propertyFloors[normalizedPropertyType] || propertyFloors[propertyTypeValue];
+    return Array.isArray(mappedFloors) && mappedFloors.length > 0
+        ? mappedFloors.slice()
+        : getOverviewAllFloors();
+}
+
 function getOverviewPropertyTypeOptions() {
     return [
         { value: 'parking-level', label: 'Parking Level' },
@@ -26706,7 +27361,6 @@ function openOverviewEditModal(valueId) {
     saveBtn.textContent = 'Save';
 
     const propertyTypeOptions = getOverviewPropertyTypeOptions();
-    const floorOptions = getOverviewAllFloors();
     const isVehicleOverviewService = isParkingLevelService(getActiveServiceValue());
     const isPianoOverviewService = getActiveServiceValue() === 'Piano Transport';
 
@@ -26842,7 +27496,13 @@ function openOverviewEditModal(valueId) {
         }
     } else if (valueId === 'summary-pickup-floors' || valueId === 'summary-delivery-floors') {
         const isPickup = valueId === 'summary-pickup-floors';
+        const floorOptions = getOverviewFloorOptionsForKind(isPickup ? 'pickup' : 'delivery');
         const selectedSet = isPickup ? new Set(Array.from(window.selectedPickupFloors || [])) : new Set(Array.from(window.selectedDeliveryFloors || []));
+        Array.from(selectedSet).forEach((floor) => {
+            if (!floorOptions.includes(floor)) {
+                selectedSet.delete(floor);
+            }
+        });
         const previousSelectedCount = selectedSet.size;
         if (selectedSet.size === 0) {
             const fallbackSummary = getOverviewFloorSummaryText(isPickup ? 'pickup' : 'delivery');
@@ -26905,6 +27565,7 @@ function openOverviewEditModal(valueId) {
             `;
             onSave = () => {
                 let selected = Array.from(body.querySelectorAll('input[type="checkbox"]:checked')).map((cb) => cb.value);
+                selected = selected.filter((floor) => floorOptions.includes(floor));
                 if (selected.length === 0 && isPianoOverviewService) {
                     const fallback = getOverviewFloorSummaryText(isPickup ? 'pickup' : 'delivery') || 'Ground';
                     selected = [fallback.split(',')[0].trim() || 'Ground'];
