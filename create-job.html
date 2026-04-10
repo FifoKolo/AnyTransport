@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260322-1">
     <link rel="stylesheet" href="css/create-job.css?v=20260329-1">
-    <link rel="stylesheet" href="css/house-removal.css?v=20260322-1">
+    <link rel="stylesheet" href="css/house-removal.css?v=20260409-2">
     <link rel="stylesheet" href="css/sticky-next-btn.css?v=20260322-1">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js'></script>
@@ -37,9 +37,82 @@
                 <div id="auth-menu" style="display: flex;">
                     <button class="btn btn-outline" onclick="openLoginModal()">Login</button>
                 </div>
+                <!-- User menu (shown when logged in) -->
+                <div id="user-menu" style="display: none;">
+                    <a href="dashboard.html" style="text-decoration: none;">
+                        <div class="navbar-avatar" id="navbar-user-avatar">U</div>
+                    </a>
+                    <button class="btn btn-primary" onclick="logout()" style="margin-left: 10px;">Logout</button>
+                </div>
             </div>
         </div>
     </nav>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeLoginModal()">&times;</span>
+            <h2>Log In</h2>
+            <form id="login-form">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" required placeholder="your@email.com">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" required placeholder="Your password">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Log In</button>
+            </form>
+            <p style="text-align: center; margin-top: 20px;">
+                Don't have an account? <a href="#" onclick="switchToSignup()" style="color: #4A90E2;">Sign Up</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- Signup Modal -->
+    <div id="signup-modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeSignupModal()">&times;</span>
+            <h2>Sign Up</h2>
+            <form id="signup-form">
+                <div class="form-group">
+                    <label>Full Name <span style="color: #666; font-size: 0.9em;">(Will Be Hidden from Transport Provider)</span></label>
+                    <input type="text" name="name" required placeholder="John Doe">
+                </div>
+                <div class="form-group">
+                    <label>Nickname <span style="color: #666; font-size: 0.9em;">(Will be shown to the Transport Provider)</span></label>
+                    <input type="text" name="nickname" required placeholder="Johnny">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="signup-email" name="email" required placeholder="your@email.com" onpaste="return false" oncopy="return false" oncut="return false" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Confirm Email</label>
+                    <input type="email" id="signup-email-confirm" required placeholder="Confirm your email" onpaste="return false" oncopy="return false" oncut="return false" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <div style="display: flex; gap: 8px; align-items: stretch;">
+                        <input type="password" id="signup-password" name="password" required placeholder="Create a password" style="flex: 1;" onpaste="return false" oncopy="return false" oncut="return false" autocomplete="new-password">
+                        <button type="button" style="padding: 8px 12px; background: #e8f0fe; border: 1px solid #cce5ff; border-radius: 4px; cursor: pointer; white-space: nowrap;" onclick="togglePasswordVisibility(this)">Show</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Confirm Password</label>
+                    <div style="display: flex; gap: 8px; align-items: stretch;">
+                        <input type="password" id="signup-password-confirm" required placeholder="Confirm your password" style="flex: 1;" onpaste="return false" oncopy="return false" oncut="return false" autocomplete="new-password">
+                        <button type="button" style="padding: 8px 12px; background: #e8f0fe; border: 1px solid #cce5ff; border-radius: 4px; cursor: pointer; white-space: nowrap;" onclick="togglePasswordVisibility(this)">Show</button>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Sign Up</button>
+            </form>
+            <p style="text-align: center; margin-top: 20px;">
+                Already have an account? <a href="#" onclick="switchToLogin()" style="color: #4A90E2;">Log In</a>
+            </p>
+        </div>
+    </div>
 
     <main class="job-form v2">
         <div class="form-v2-grid">
@@ -255,7 +328,7 @@
                         <div class="card-section pickup-room-flex" id="pickup-room-list-wrapper" data-form-step="3">
                            
                             <div class="pickup-floors-image" id="pickup-floors-image">
-                                <img src="assets/floors.png" alt="Floors" class="clickable-image" style="cursor: pointer;" />
+                                <img src="assets/floors.png" alt="Floors" style="cursor: default;" />
                             </div>
                             <div id="pickup-room-list">
                                
@@ -370,6 +443,30 @@
                                                             <div class="card-section" id="customized-items-inventory-section" data-form-step="3" style="display:none; margin-top:2rem;">
                                                                 <h3 style="margin-bottom: 10px; color: var(--text-primary);"><span id="customized-items-heading-text">Customized Items</span> <span class="required-text" data-required-for="customized-items-hidden">(required)</span></h3>
                                                                 <p id="customized-items-subheading" style="margin: 0 0 14px; color: #64748b; font-size: 0.9rem;">Add each custom item with photos, dimensions, and weight.</p>
+                                                                <div id="specialist-antiques-value-section" style="display:none; margin: 0 0 16px; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #f8fbff;">
+                                                                    <h4 style="margin: 0 0 10px; color: var(--text-primary); font-size: 1rem;">Estimated Value</h4>
+                                                                    <div class="form-group" style="margin-bottom: 12px;">
+                                                                        <label class="form-label">What is the estimated value of the items? <span class="required-text">(required)</span></label>
+                                                                        <div class="custom-dropdown-wrapper has-option-nav">
+                                                                            <div class="option-nav option-nav--compact specialist-value-nav" data-option-nav-for="specialist-value-hidden" role="radiogroup" aria-label="Estimated value range">
+                                                                                <button type="button" class="option-nav-btn" data-value="under-500" role="radio" aria-checked="false"><span>Under €500</span></button>
+                                                                                <button type="button" class="option-nav-btn" data-value="500-1000" role="radio" aria-checked="false"><span>€500 - €1,000</span></button>
+                                                                                <button type="button" class="option-nav-btn" data-value="1000-5000" role="radio" aria-checked="false"><span>€1,000 - €5,000</span></button>
+                                                                                <button type="button" class="option-nav-btn" data-value="5000-10000" role="radio" aria-checked="false"><span>€5,000 - €10,000</span></button>
+                                                                                <button type="button" class="option-nav-btn" data-value="10000-plus" role="radio" aria-checked="false"><span>Over €10,000</span></button>
+                                                                                <button type="button" class="option-nav-btn" data-value="other" role="radio" aria-checked="false"><span>Other</span></button>
+                                                                            </div>
+                                                                            <input type="hidden" id="specialist-value-hidden" name="specialist-value" data-required="false" aria-required="false">
+                                                                        </div>
+                                                                    </div>
+                                                                    <div id="specialist-custom-value-wrap" style="display:none; margin-bottom: 0;">
+                                                                        <label for="specialist-custom-value" class="form-label">Enter custom value <span class="required-text">(required)</span></label>
+                                                                        <div style="display: flex; gap: 8px; align-items: center;">
+                                                                            <span style="font-weight: 600; color: #1e293b;">€</span>
+                                                                            <input type="number" id="specialist-custom-value" class="form-input" placeholder="e.g. 7500" min="0" step="100" style="flex: 1;">
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                                 <input type="hidden" id="customized-items-hidden" name="customized-items" data-required="true" value="">
                                                                 <div id="dimensions-list" class="dimensions-list"></div>
                                                                 <button type="button" id="add-dimension-btn" class="btn-add-dimension">
@@ -1188,7 +1285,7 @@
                         <div class="card-section pickup-room-flex" id="delivery-room-list-wrapper" data-form-step="5" style="display: none; height: 0; overflow: hidden; padding: 0; margin: 0; border: none;">
                            
                             <div class="delivery-floors-image" id="delivery-floors-image">
-                                <img src="assets/floors.png" alt="Delivery Floors" class="clickable-image" style="cursor: pointer;" />
+                                <img src="assets/floors.png" alt="Delivery Floors" style="cursor: default;" />
                             </div>
                             <div id="delivery-room-list">
                             </div>
@@ -1311,9 +1408,11 @@
                             <div class="card-section">
                                 <h3 style="margin-bottom: 10px; color: var(--text-primary);">Campervan / Car Details</h3>
                                 <p style="margin: 0 0 14px; color: #64748b; font-size: 0.92rem;">Add campervan or car details. You can add multiple vehicles.</p>
-                                <div id="car-list" style="margin-bottom: 16px;"></div>
+                                <div id="car-list" style="margin-bottom: 32px;"></div>
                                 <input type="hidden" id="car-json-hidden" name="car-data" value="">
-                                <div style="border: 1px solid #dbeafe; border-radius: 10px; padding: 16px; background: #f8fbff; margin-bottom: 16px;">
+                                <div style="margin-bottom: 8px;"><h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #1e3a8a; display: flex; align-items: center; gap: 8px;"><span style="display: inline-block; width: 24px; height: 24px; background: #3b82f6; color: white; border-radius: 50%; text-align: center; line-height: 24px; font-size: 0.8rem;">+</span> Add New Vehicle</h4></div>
+                                <div data-vehicle-entry-form="car" style="border: 2px solid #3b82f6; border-radius: 10px; padding: 16px; background: #eff6ff; margin-bottom: 16px; position: relative;">
+                                    <button type="button" id="car-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">✕ Clear form</button>
                                     <div class="form-group" style="margin-bottom: 16px;">
                                         <label class="form-label">Vehicle type <span class="required-text">(required)</span></label>
                                         <div class="custom-dropdown-wrapper has-option-nav">
@@ -1363,6 +1462,15 @@
                                                     <button type="button" class="option-nav-btn" data-value="older" role="radio" aria-checked="false"><span>Older</span></button>
                                                 </div>
                                                 <input type="hidden" id="car-year-entry-hidden" value="">
+                                                <div id="car-older-year-wrap" style="display:none; margin-top:10px;">
+                                                    <input
+                                                        type="text"
+                                                        id="car-older-year-entry"
+                                                        class="form-input"
+                                                        inputmode="numeric"
+                                                        maxlength="4"
+                                                        placeholder="Enter older year (e.g. 1998)">
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1370,7 +1478,8 @@
                                         <label class="form-label">Estimated value <span class="required-text">(required)</span></label>
                                         <div class="custom-dropdown-wrapper has-option-nav">
                                             <div class="option-nav option-nav--large car-value-entry-nav" data-option-nav-for="car-value-entry-hidden" role="radiogroup" aria-label="Estimated value">
-                                                <button type="button" class="option-nav-btn" data-value="0-2500" role="radio" aria-checked="false"><span>€0 - €2,500</span></button>
+                                                <button type="button" class="option-nav-btn" data-value="0-1000" role="radio" aria-checked="false"><span>€0 - €1,000</span></button>
+                                                <button type="button" class="option-nav-btn" data-value="1000-2500" role="radio" aria-checked="false"><span>€1000 - €2,500</span></button>
                                                 <button type="button" class="option-nav-btn" data-value="2501-5000" role="radio" aria-checked="false"><span>€2,501 - €5,000</span></button>
                                                 <button type="button" class="option-nav-btn" data-value="5001-10000" role="radio" aria-checked="false"><span>€5,001 - €10,000</span></button>
                                                 <button type="button" class="option-nav-btn" data-value="10001-15000" role="radio" aria-checked="false"><span>€10,001 - €15,000</span></button>
@@ -1455,6 +1564,7 @@
                                                 <select id="car-custom-weight-unit" class="form-input">
                                                     <option value="kg">kg</option>
                                                     <option value="lb">lb</option>
+                                                    <option value="tonne">tonne</option>
                                                 </select>
                                             </div>
                                         </div>
@@ -1491,6 +1601,7 @@
                                         <div id="car-media-preview" style="margin-top: 8px; display: none;"></div>
                                     </div>
                                     <button type="button" id="add-car-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">Save Campervan/Car</button>
+                                    <button type="button" id="car-add-another-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #ffffff; color: #1d4ed8; border: 1px solid #93c5fd; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">+ Add Another Vehicle</button>
                                     <button type="button" id="car-continue-with-saved-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">Continue with saved vehicles</button>
                                     <input type="hidden" id="car-continue-with-saved-hidden" value="">
                                 </div>
@@ -1502,9 +1613,11 @@
                             <div class="card-section">
                                 <h3 style="margin-bottom: 10px; color: var(--text-primary);">Motorbike Details</h3>
                                 <p style="margin: 0 0 14px; color: #64748b; font-size: 0.92rem;">Add motorbike details. You can add more motorbikes if needed.</p>
-                                <div id="motorbike-list" style="margin-bottom: 16px;"></div>
+                                <div id="motorbike-list" style="margin-bottom: 32px;"></div>
                                 <input type="hidden" id="motorbike-json-hidden" name="motorbike-data" value="">
-                                <div style="border: 1px solid #dbeafe; border-radius: 10px; padding: 16px; background: #f8fbff; margin-bottom: 16px;">
+                                <div style="margin-bottom: 8px;"><h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #9333ea; display: flex; align-items: center; gap: 8px;"><span style="display: inline-block; width: 24px; height: 24px; background: #9333ea; color: white; border-radius: 50%; text-align: center; line-height: 24px; font-size: 0.8rem;">+</span> Add New Motorbike</h4></div>
+                                <div data-vehicle-entry-form="motorbike" style="border: 2px solid #9333ea; border-radius: 10px; padding: 16px; background: #faf5ff; margin-bottom: 16px; position: relative;">
+                                    <button type="button" id="motorbike-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">✕ Delete</button>
                                     <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px;">
                                         <div class="form-group">
                                             <label class="form-label" for="motorbike-make-model-entry">Make & model <span class="required-text">(required)</span></label>
@@ -1527,6 +1640,15 @@
                                                     <button type="button" class="option-nav-btn" data-value="older" role="radio" aria-checked="false"><span>Older</span></button>
                                                 </div>
                                                 <input type="hidden" id="motorbike-year-entry-hidden" value="">
+                                                <div id="motorbike-older-year-wrap" style="display:none; margin-top:10px;">
+                                                    <input
+                                                        type="text"
+                                                        id="motorbike-older-year-entry"
+                                                        class="form-input"
+                                                        inputmode="numeric"
+                                                        maxlength="4"
+                                                        placeholder="Enter older year (e.g. 1998)">
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1571,6 +1693,7 @@
                                                     <select id="motorbike-custom-weight-unit" class="form-input">
                                                         <option value="kg">kg</option>
                                                         <option value="lb">lb</option>
+                                                        <option value="tonne">tonne</option>
                                                     </select>
                                                 </div>
                                             </div>
@@ -1638,6 +1761,7 @@
                                         <div id="motorbike-media-preview" style="margin-top: 8px; display: none;"></div>
                                     </div>
                                     <button type="button" id="add-motorbike-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Save Motorbike</button>
+                                    <button type="button" id="motorbike-add-another-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #ffffff; color: #1d4ed8; border: 1px solid #93c5fd; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">+ Add Another Vehicle</button>
                                     <button type="button" id="motorbike-continue-with-saved-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">Continue with saved vehicles</button>
                                     <input type="hidden" id="motorbike-continue-with-saved-hidden" value="">
                                 </div>
@@ -1649,9 +1773,11 @@
                             <div class="card-section">
                                 <h3 id="trailer-section-heading" style="margin-bottom: 10px; color: var(--text-primary);">Caravan / Trailer Details</h3>
                                 <p id="trailer-section-subtitle" style="margin: 0 0 14px; color: #64748b; font-size: 0.92rem;">Add caravan or trailer details. You can add multiple items.</p>
-                                <div id="trailer-list" style="margin-bottom: 16px;"></div>
+                                <div id="trailer-list" style="margin-bottom: 32px;"></div>
                                 <input type="hidden" id="trailer-json-hidden" name="trailer-data" value="">
-                                <div style="border: 1px solid #dbeafe; border-radius: 10px; padding: 16px; background: #f8fbff; margin-bottom: 16px;">
+                                <div style="margin-bottom: 8px;"><h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #d97706; display: flex; align-items: center; gap: 8px;"><span style="display: inline-block; width: 24px; height: 24px; background: #d97706; color: white; border-radius: 50%; text-align: center; line-height: 24px; font-size: 0.8rem;">+</span> Add New Trailer</h4></div>
+                                <div data-vehicle-entry-form="trailer" style="border: 2px solid #d97706; border-radius: 10px; padding: 16px; background: #fffbeb; margin-bottom: 16px; position: relative;">
+                                    <button type="button" id="trailer-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">✕ Delete</button>
                                     <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px;">
                                         <div class="form-group">
                                             <label class="form-label" for="trailer-make-model-entry">Make & model <span class="required-text">(required)</span></label>
@@ -1672,6 +1798,15 @@
                                                     <button type="button" class="option-nav-btn" data-value="older" role="radio" aria-checked="false"><span>Older</span></button>
                                                 </div>
                                                 <input type="hidden" id="trailer-year-entry-hidden" value="">
+                                                <div id="trailer-older-year-wrap" style="display:none; margin-top:10px;">
+                                                    <input
+                                                        type="text"
+                                                        id="trailer-older-year-entry"
+                                                        class="form-input"
+                                                        inputmode="numeric"
+                                                        maxlength="4"
+                                                        placeholder="Enter older year (e.g. 1998)">
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1739,6 +1874,7 @@
                                                 <select id="trailer-custom-weight-unit" class="form-input">
                                                     <option value="kg">kg</option>
                                                     <option value="lb">lb</option>
+                                                    <option value="tonne">tonne</option>
                                                 </select>
                                             </div>
                                         </div>
@@ -1794,6 +1930,7 @@
                                         <div id="trailer-media-preview" style="margin-top: 8px; display: none;"></div>
                                     </div>
                                     <button type="button" id="add-trailer-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Save Caravan / Trailer</button>
+                                    <button type="button" id="trailer-add-another-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #ffffff; color: #1d4ed8; border: 1px solid #93c5fd; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">+ Add Another Vehicle</button>
                                     <button type="button" id="trailer-continue-with-saved-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">Continue with saved vehicles</button>
                                     <input type="hidden" id="trailer-continue-with-saved-hidden" value="">
                                 </div>
@@ -2251,10 +2388,10 @@
     </div>
 
     <script src="js/cache-maintenance.js?v=20260322-2"></script>
-    <script src="js/auth.js?v=20260322-1"></script>
+    <script src="js/auth.js?v=20260409-3"></script>
     <script src="js/house-removal.js?v=20260322-1"></script>
-    <script src="js/multi-items-handler.js?v=20260328-8"></script>
-    <script src="js/create-job.js?v=20260328-30"></script>
+    <script src="js/multi-items-handler.js?v=20260328-44"></script>
+    <script src="js/create-job.js?v=20260410-5"></script>
 
 <script>
 function updateStep3TitleVisibility() {

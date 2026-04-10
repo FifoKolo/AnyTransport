@@ -121,6 +121,11 @@ const auth = new AuthManager();
 
 // Modal Functions
 function openLoginModal() {
+    try {
+        sessionStorage.setItem('anytransport_auth_return_url', window.location.href);
+    } catch (_error) {
+        // Ignore storage access issues; auth flow still works with default redirect.
+    }
     document.getElementById('login-modal').classList.add('show');
 }
 
@@ -173,6 +178,12 @@ if (loginForm) {
                 localStorage.removeItem('pending_quote_submission');
                 showConfirmationModal();
             } else {
+                const returnUrl = sessionStorage.getItem('anytransport_auth_return_url');
+                if (returnUrl) {
+                    sessionStorage.removeItem('anytransport_auth_return_url');
+                    window.location.href = returnUrl;
+                    return;
+                }
                 // Redirect to dashboard
                 window.location.href = 'dashboard.html';
             }
@@ -225,6 +236,12 @@ if (signupForm) {
                 localStorage.removeItem('pending_quote_submission');
                 showConfirmationModal();
             } else {
+                const returnUrl = sessionStorage.getItem('anytransport_auth_return_url');
+                if (returnUrl) {
+                    sessionStorage.removeItem('anytransport_auth_return_url');
+                    window.location.href = returnUrl;
+                    return;
+                }
                 // Redirect to dashboard
                 window.location.href = 'dashboard.html';
             }
@@ -306,8 +323,13 @@ function showConfirmationModal() {
     const modal = document.getElementById('confirmation-modal');
     if (modal) {
         const emailSpan = document.getElementById('confirmation-email');
-        if (emailSpan && auth.currentUser) {
-            emailSpan.textContent = auth.currentUser.email;
+        if (emailSpan) {
+            const chosenEmail = String(window.anytransportQuoteContactEmail || '').trim();
+            if (chosenEmail) {
+                emailSpan.textContent = chosenEmail;
+            } else if (auth.currentUser) {
+                emailSpan.textContent = auth.currentUser.email;
+            }
         }
         modal.classList.add('show');
     }
@@ -318,4 +340,5 @@ function closeConfirmationModal() {
     if (modal) {
         modal.classList.remove('show');
     }
+    window.anytransportQuoteContactEmail = '';
 }

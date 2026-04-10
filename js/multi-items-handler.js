@@ -230,7 +230,9 @@ window.multiItemsManager = {
         buttons.forEach((btn) => {
             const isSelected = String(btn.dataset.value || '') === String(value || '');
             btn.classList.toggle('selected', isSelected);
+            btn.classList.toggle('is-active', isSelected);
             btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+            btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
         });
     },
 
@@ -564,6 +566,10 @@ window.multiItemsManager = {
 
         const newFiles = Array.from(input.files || []);
         const existingMedia = this.parseVehicleMediaFromHidden(vehicleType);
+        const mediaLimit = typeof window.getServiceMediaUploadLimit === 'function'
+            ? window.getServiceMediaUploadLimit()
+            : 5;
+        const hasLimit = Number.isFinite(mediaLimit);
 
         // Process each new file and convert to data URL for preview
         Promise.all(newFiles.map((file) => this.fileToDataUrl(file))).then((dataUrls) => {
@@ -574,7 +580,13 @@ window.multiItemsManager = {
                 dataUrl: dataUrls[idx] || ''
             })).filter((item) => item.name);
 
-            const mergedMedia = [...existingMedia, ...newMediaItems];
+            const remainingSlots = hasLimit ? Math.max(0, mediaLimit - existingMedia.length) : newMediaItems.length;
+            const limitedNewMediaItems = hasLimit ? newMediaItems.slice(0, remainingSlots) : newMediaItems;
+            if (hasLimit && newMediaItems.length > limitedNewMediaItems.length) {
+                alert(`You can upload up to ${mediaLimit} files.`);
+            }
+
+            const mergedMedia = [...existingMedia, ...limitedNewMediaItems];
 
             // Remove duplicates by name
             const uniqueMedia = Array.from(new Map(
@@ -663,6 +675,23 @@ window.multiItemsManager = {
             makeInput.value = '';
         }
 
+        const sectionIdByType = {
+            car: 'car-transport-section',
+            motorbike: 'motorbike-transport-section',
+            trailer: 'trailer-campervan-section'
+        };
+        const section = document.getElementById(sectionIdByType[vehicleType] || '');
+        const activeForm = section?.querySelector?.(`[data-vehicle-entry-form="${vehicleType}"]`) || section;
+
+        const olderYearInput = document.getElementById(`${vehicleType}-older-year-entry`);
+        const olderYearWrap = document.getElementById(`${vehicleType}-older-year-wrap`);
+        if (olderYearInput) {
+            olderYearInput.value = '';
+        }
+        if (olderYearWrap) {
+            olderYearWrap.style.display = 'none';
+        }
+
         [
             'year',
             'value',
@@ -679,9 +708,28 @@ window.multiItemsManager = {
         ].forEach((suffix) => this.setVehicleFormNavValue(vehicleType, suffix, ''));
 
         const customWeightInput = document.getElementById(`${vehicleType}-custom-weight`);
+        const customWeightUnitInput = document.getElementById(`${vehicleType}-custom-weight-unit`);
         const customLengthInput = document.getElementById(`${vehicleType}-custom-length`);
+        const customLengthUnitInput = document.getElementById(`${vehicleType}-custom-length-unit`);
         if (customWeightInput) customWeightInput.value = '';
+        if (customWeightUnitInput) customWeightUnitInput.value = 'kg';
         if (customLengthInput) customLengthInput.value = '';
+        if (customLengthUnitInput) customLengthUnitInput.value = 'mm';
+
+        // Force-clear any lingering selected nav state in the active vehicle section.
+        if (activeForm) {
+            activeForm.querySelectorAll('.option-nav-btn.selected, .option-nav-btn.is-active').forEach((btn) => {
+                btn.classList.remove('selected');
+                btn.classList.remove('is-active');
+                btn.setAttribute('aria-checked', 'false');
+                btn.setAttribute('aria-pressed', 'false');
+            });
+
+            activeForm.querySelectorAll('input[type="hidden"][id$="-entry-hidden"]').forEach((hidden) => {
+                hidden.value = '';
+                hidden.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        }
 
         const mediaInput = document.getElementById(`${vehicleType}-media-input`);
         if (mediaInput) mediaInput.value = '';
@@ -703,7 +751,30 @@ window.multiItemsManager = {
             makeInput.value = vehicle.makeModel || '';
         }
 
-        this.setVehicleFormNavValue(vehicleType, 'year', vehicle.year || '');
+        const yearRaw = String(vehicle.year || '').trim();
+        const yearNav = document.querySelector(`.${vehicleType}-year-entry-nav`);
+        const hasExactYearButton = !!(yearNav && yearRaw && yearNav.querySelector(`.option-nav-btn[data-value="${yearRaw}"]`));
+        const olderYearInput = document.getElementById(`${vehicleType}-older-year-entry`);
+        const olderYearWrap = document.getElementById(`${vehicleType}-older-year-wrap`);
+
+        if (yearRaw && !hasExactYearButton) {
+            this.setVehicleFormNavValue(vehicleType, 'year', 'older');
+            if (olderYearInput) {
+                olderYearInput.value = yearRaw;
+            }
+            if (olderYearWrap) {
+                olderYearWrap.style.display = '';
+            }
+        } else {
+            this.setVehicleFormNavValue(vehicleType, 'year', yearRaw);
+            if (olderYearInput) {
+                olderYearInput.value = '';
+            }
+            if (olderYearWrap) {
+                olderYearWrap.style.display = 'none';
+            }
+        }
+
         this.setVehicleFormNavValue(vehicleType, 'value', vehicle.value || '');
         this.setVehicleFormNavValue(vehicleType, 'condition', vehicle.condition || '');
         this.setVehicleFormNavValue(vehicleType, 'method', vehicle.method || '');
@@ -740,7 +811,9 @@ window.multiItemsManager = {
                 const customWeight = parseFloat(String(vehicle.customWeight || '').trim());
                 const customUnit = String(vehicle.customWeightUnit || 'kg').trim().toLowerCase();
                 const customKg = Number.isFinite(customWeight)
-                    ? (customUnit === 'lb' ? customWeight * 0.45359237 : customWeight)
+                    ? (customUnit === 'lb'
+                        ? customWeight * 0.45359237
+                        : (customUnit === 'tonne' ? customWeight * 1000 : customWeight))
                     : 0;
                 testedWrap.style.display = (vehicle.weight === 'over-3500' || (vehicle.weight === 'custom' && customKg > 3500)) ? '' : 'none';
             }
@@ -752,12 +825,20 @@ window.multiItemsManager = {
         if (!addBtn) return;
 
         const isEditing = !!this.editingVehicleIds[vehicleType];
+        const addAnotherBtn = document.getElementById(`${vehicleType}-add-another-btn`);
         const addLabelMap = {
-            car: 'Save Campervan/Car',
-            motorbike: 'Save Motorbike',
-            trailer: 'Save Caravan / Trailer'
+            car: 'Add Campervan/Car',
+            motorbike: 'Add Motorbike',
+            trailer: 'Add Caravan / Trailer'
         };
         addBtn.textContent = isEditing ? 'Save Changes' : (addLabelMap[vehicleType] || '+ Add Vehicle');
+
+        // Keep only one visible action: add-another in add mode, save-changes in edit mode.
+        addBtn.style.display = isEditing ? '' : 'none';
+
+        if (addAnotherBtn) {
+            addAnotherBtn.style.display = isEditing ? 'none' : '';
+        }
     },
 
     renderVehiclesList(vehicleType) {
@@ -768,109 +849,264 @@ window.multiItemsManager = {
         listContainer.innerHTML = '';
 
         if (vehicles.length === 0) {
+            listContainer.style.display = 'none';
             return;
         }
 
+        listContainer.style.display = 'block';
+
+        const sectionIdMap = {
+            car: 'car-transport-section',
+            motorbike: 'motorbike-transport-section',
+            trailer: 'trailer-campervan-section'
+        };
+        const section = document.getElementById(sectionIdMap[vehicleType] || '');
+        const template = section?.querySelector(`[data-vehicle-entry-form="${vehicleType}"]`);
+        if (!template) {
+            return;
+        }
+
+        const setCloneNavValue = (clone, suffix, value) => {
+            const hidden = clone.querySelector(`#${vehicleType}-${suffix}-entry-hidden`);
+            if (hidden) hidden.value = value || '';
+            const nav = clone.querySelector(`.${vehicleType}-${suffix}-entry-nav`);
+            if (!nav) return;
+            nav.querySelectorAll('.option-nav-btn').forEach((btn) => {
+                const isSelected = String(btn.dataset.value || '') === String(value || '');
+                btn.classList.toggle('selected', isSelected);
+                btn.classList.toggle('is-active', isSelected);
+                btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+                btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+            });
+        };
+
         vehicles.forEach((vehicle, index) => {
             const vehicleEl = document.createElement('div');
-            vehicleEl.style.cssText = 'margin-bottom: 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb; overflow: hidden;';
-
-            const makeModel = vehicle.makeModel || 'Unknown';
-            const year = vehicle.year || '';
-            const value = vehicle.value || '';
-            const weightText = this.formatVehicleMeasurement(vehicle, 'weight');
-            const lengthText = this.formatVehicleMeasurement(vehicle, 'length');
-            const summary = [makeModel, year, value].filter(Boolean).join(' - ');
-            const typeLabelMap = {
-                car: 'Car/Campervan',
-                motorbike: 'Motorbike',
-                trailer: 'Caravan/Trailer'
-            };
-            const typeLabel = typeLabelMap[vehicleType] || `${vehicleType.charAt(0).toUpperCase() + vehicleType.slice(1)}`;
-
-            const headerRow = document.createElement('div');
-            headerRow.style.cssText = 'padding: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px;';
-
-            const toggleBtn = document.createElement('button');
-            toggleBtn.type = 'button';
-            toggleBtn.style.cssText = 'display:flex; align-items:center; gap:8px; flex:1; border:none; background:transparent; text-align:left; cursor:pointer; padding:0; color:#111827;';
-            toggleBtn.setAttribute('aria-expanded', 'false');
-            toggleBtn.innerHTML = `<span style="font-size:0.85rem; color:#6b7280;">▸</span><span><strong>${typeLabel} ${index + 1}:</strong> ${summary}</span>`;
-
-            const detailsWrap = document.createElement('div');
-            detailsWrap.style.cssText = 'display:none; padding: 0 12px 12px; border-top: 1px solid #e5e7eb; background:#ffffff;';
-
-            const detailList = document.createElement('ul');
-            detailList.style.cssText = 'list-style:none; margin:10px 0 0; padding:0; display:grid; gap:6px; color:#374151; font-size:0.92rem;';
-
-            const entries = [
-                ['Make & model', vehicle.makeModel],
-                ['Year', vehicle.year],
-                ['Estimated value', vehicle.value],
-                ['Type', vehicle.type],
-                ['Condition', vehicle.condition],
-                ['Transport method', vehicle.method],
-                ['Weight', weightText],
-                ['Length', lengthText],
-                ['Operational', vehicle.operational],
-                ['Roadworthy (NCT/DOE)', vehicle.roadworthy],
-                ['Insurance', vehicle.insurance],
-                ['Road tax', vehicle.roadtax],
-                ['Tested certification', vehicle.tested],
-                ['Media', this.formatVehicleMediaLabel(vehicle)],
-                ['Floors', this.getVehicleFloorsLabel(vehicle)]
-            ].filter(([, val]) => String(val || '').trim());
-
-            entries.forEach(([label, val]) => {
-                const li = document.createElement('li');
-                li.innerHTML = `<strong>${label}:</strong> ${val}`;
-                detailList.appendChild(li);
-            });
-            detailsWrap.appendChild(detailList);
-
-            toggleBtn.addEventListener('click', () => {
-                const expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
-                toggleBtn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-                const chevron = toggleBtn.querySelector('span');
-                if (chevron) chevron.textContent = expanded ? '▸' : '▾';
-                detailsWrap.style.display = expanded ? 'none' : 'block';
-            });
+            vehicleEl.style.cssText = 'margin-bottom: 14px;';
 
             const deleteBtn = document.createElement('button');
             deleteBtn.type = 'button';
             deleteBtn.textContent = '✕ Remove';
             deleteBtn.style.cssText = 'padding: 6px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem;';
-            deleteBtn.addEventListener('click', (event) => {
-                event.stopPropagation();
+            deleteBtn.addEventListener('click', () => {
                 this.deleteVehicle(vehicleType, vehicle.id);
                 if (window.updateNextButtonState) window.updateNextButtonState();
             });
 
-            const editBtn = document.createElement('button');
-            editBtn.type = 'button';
-            editBtn.textContent = 'Edit';
-            editBtn.style.cssText = 'padding: 6px 12px; background: #e0ecff; color: #1d4ed8; border: 1px solid #93c5fd; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem;';
-            editBtn.addEventListener('click', (event) => {
-                event.stopPropagation();
-                this.editingVehicleIds[vehicleType] = vehicle.id;
-                this.populateVehicleForm(vehicleType, vehicle);
-                this.updateVehicleEditUi(vehicleType);
-                const makeInput = document.getElementById(`${vehicleType}-make-model-entry`);
-                if (makeInput) {
-                    makeInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    makeInput.focus();
-                }
-            });
+            const headerRow = document.createElement('div');
+            headerRow.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;';
+
+            const title = document.createElement('div');
+            title.style.cssText = 'font-size:1.14rem; font-weight:700; color:#0f172a;';
+            title.textContent = `Vehicle ${index + 1}`;
 
             const actionsWrap = document.createElement('div');
             actionsWrap.style.cssText = 'display:flex; align-items:center; gap:8px;';
-            actionsWrap.appendChild(editBtn);
             actionsWrap.appendChild(deleteBtn);
 
-            headerRow.appendChild(toggleBtn);
+            headerRow.appendChild(title);
             headerRow.appendChild(actionsWrap);
+
+            const clone = template.cloneNode(true);
+            clone.removeAttribute('data-vehicle-entry-form');
+
+            const suffixes = [
+                'year',
+                'value',
+                'condition',
+                'method',
+                'weight',
+                'length',
+                'operational',
+                'roadworthy',
+                'insurance',
+                'roadtax',
+                'tested',
+                'type'
+            ];
+
+            const refs = {
+                makeModel: clone.querySelector(`#${vehicleType}-make-model-entry`),
+                olderYearInput: clone.querySelector(`#${vehicleType}-older-year-entry`),
+                olderYearWrap: clone.querySelector(`#${vehicleType}-older-year-wrap`),
+                customWeight: clone.querySelector(`#${vehicleType}-custom-weight`),
+                customWeightUnit: clone.querySelector(`#${vehicleType}-custom-weight-unit`),
+                customWeightWrap: clone.querySelector(`#${vehicleType}-custom-weight-wrap`),
+                customLength: clone.querySelector(`#${vehicleType}-custom-length`),
+                customLengthUnit: clone.querySelector(`#${vehicleType}-custom-length-unit`),
+                customLengthWrap: clone.querySelector(`#${vehicleType}-custom-length-wrap`),
+                testedWrap: clone.querySelector('#trailer-tested-entry-wrap')
+            };
+
+            suffixes.forEach((suffix) => {
+                refs[`${suffix}Hidden`] = clone.querySelector(`#${vehicleType}-${suffix}-entry-hidden`);
+                refs[`${suffix}Nav`] = clone.querySelector(`.${vehicleType}-${suffix}-entry-nav`);
+            });
+
+            const normalizeYearInput = (value) => String(value || '').replace(/\D+/g, '').slice(0, 4);
+
+            const isCustomLike = (value) => {
+                const normalized = String(value || '').trim().toLowerCase();
+                return normalized === 'custom' || normalized === 'other' || normalized === 'other-approx';
+            };
+
+            const syncCloneConditionalUi = () => {
+                const yearValue = String(refs.yearHidden?.value || '').trim().toLowerCase();
+                if (refs.olderYearWrap) {
+                    refs.olderYearWrap.style.display = yearValue === 'older' ? '' : 'none';
+                }
+
+                const weightValue = String(refs.weightHidden?.value || '').trim();
+                const lengthValue = String(refs.lengthHidden?.value || '').trim();
+                if (refs.customWeightWrap) refs.customWeightWrap.style.display = isCustomLike(weightValue) ? '' : 'none';
+                if (refs.customLengthWrap) refs.customLengthWrap.style.display = isCustomLike(lengthValue) ? '' : 'none';
+
+                if (vehicleType === 'trailer' && refs.testedWrap) {
+                    refs.testedWrap.style.display = (weightValue === 'over-3500' || isCustomLike(weightValue)) ? '' : 'none';
+                }
+            };
+
+            const setCloneNavValue = (suffix, value) => {
+                const hidden = refs[`${suffix}Hidden`];
+                const nav = refs[`${suffix}Nav`];
+                if (hidden) hidden.value = value || '';
+                if (nav) {
+                    nav.querySelectorAll('.option-nav-btn').forEach((btn) => {
+                        const isSelected = String(btn.dataset.value || '') === String(value || '');
+                        btn.classList.toggle('selected', isSelected);
+                        btn.classList.toggle('is-active', isSelected);
+                        btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+                        btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+                    });
+                }
+                syncCloneConditionalUi();
+            };
+
+            const makeInput = clone.querySelector(`#${vehicleType}-make-model-entry`);
+            if (makeInput) makeInput.value = vehicle.makeModel || '';
+
+            const yearRaw = String(vehicle.year || '').trim();
+            const yearNav = refs.yearNav;
+            const hasExactYearButton = !!(yearNav && yearRaw && yearNav.querySelector(`.option-nav-btn[data-value="${yearRaw}"]`));
+            if (yearRaw && !hasExactYearButton) {
+                setCloneNavValue('year', 'older');
+                if (refs.olderYearWrap) refs.olderYearWrap.style.display = '';
+                if (refs.olderYearInput) refs.olderYearInput.value = yearRaw;
+            } else {
+                setCloneNavValue('year', yearRaw);
+            }
+
+            setCloneNavValue('value', vehicle.value || '');
+            setCloneNavValue('condition', vehicle.condition || '');
+            setCloneNavValue('method', vehicle.method || '');
+            setCloneNavValue('weight', vehicle.weight || '');
+            setCloneNavValue('length', vehicle.length || '');
+            setCloneNavValue('operational', vehicle.operational || '');
+            setCloneNavValue('roadworthy', vehicle.roadworthy || '');
+            setCloneNavValue('insurance', vehicle.insurance || '');
+            setCloneNavValue('roadtax', vehicle.roadtax || '');
+            setCloneNavValue('tested', vehicle.tested || '');
+            setCloneNavValue('type', vehicle.type || '');
+
+            if (refs.customWeight) refs.customWeight.value = vehicle.customWeight || '';
+            if (refs.customWeightUnit) refs.customWeightUnit.value = vehicle.customWeightUnit || 'kg';
+            if (refs.customLength) refs.customLength.value = vehicle.customLength || '';
+            if (refs.customLengthUnit) refs.customLengthUnit.value = vehicle.customLengthUnit || 'mm';
+            syncCloneConditionalUi();
+
+            const persistCloneVehicle = () => {
+                const vehiclesNow = this.parseVehicles(vehicleType);
+                const targetIndex = vehiclesNow.findIndex((entry) => entry.id === vehicle.id);
+                if (targetIndex === -1) return;
+
+                const selectedYear = String(refs.yearHidden?.value || '').trim();
+                const resolvedYear = selectedYear.toLowerCase() === 'older'
+                    ? normalizeYearInput(refs.olderYearInput?.value || '')
+                    : selectedYear;
+
+                const selectedWeight = String(refs.weightHidden?.value || '').trim();
+                const selectedLength = String(refs.lengthHidden?.value || '').trim();
+
+                vehiclesNow[targetIndex] = {
+                    ...vehiclesNow[targetIndex],
+                    makeModel: String(refs.makeModel?.value || '').trim(),
+                    year: resolvedYear,
+                    value: String(refs.valueHidden?.value || '').trim(),
+                    condition: String(refs.conditionHidden?.value || '').trim(),
+                    method: String(refs.methodHidden?.value || '').trim(),
+                    weight: selectedWeight,
+                    length: selectedLength,
+                    customWeight: isCustomLike(selectedWeight) ? String(refs.customWeight?.value || '').trim() : '',
+                    customWeightUnit: isCustomLike(selectedWeight) ? String(refs.customWeightUnit?.value || 'kg').trim() : 'kg',
+                    customLength: isCustomLike(selectedLength) ? String(refs.customLength?.value || '').trim() : '',
+                    customLengthUnit: isCustomLike(selectedLength) ? String(refs.customLengthUnit?.value || 'mm').trim() : 'mm',
+                    operational: String(refs.operationalHidden?.value || '').trim(),
+                    roadworthy: String(refs.roadworthyHidden?.value || '').trim(),
+                    insurance: String(refs.insuranceHidden?.value || '').trim(),
+                    roadtax: String(refs.roadtaxHidden?.value || '').trim(),
+                    tested: String(refs.testedHidden?.value || '').trim(),
+                    type: String(refs.typeHidden?.value || '').trim()
+                };
+
+                this.saveVehicles(vehicleType, vehiclesNow);
+                if (window.updateNextButtonState) window.updateNextButtonState();
+            };
+
+            suffixes.forEach((suffix) => {
+                const nav = refs[`${suffix}Nav`];
+                if (!nav) return;
+                nav.addEventListener('click', (event) => {
+                    const btn = event.target.closest('.option-nav-btn');
+                    if (!btn || !nav.contains(btn)) return;
+                    setCloneNavValue(suffix, btn.dataset.value || '');
+                    persistCloneVehicle();
+                });
+            });
+
+            [refs.makeModel, refs.customWeight, refs.customLength, refs.customWeightUnit, refs.customLengthUnit, refs.olderYearInput]
+                .filter(Boolean)
+                .forEach((field) => {
+                    field.addEventListener('change', () => {
+                        if (field === refs.olderYearInput) {
+                            const normalized = normalizeYearInput(field.value);
+                            if (field.value !== normalized) field.value = normalized;
+                        }
+                        syncCloneConditionalUi();
+                        persistCloneVehicle();
+                    });
+                });
+
+            // Hide action buttons inside the cloned card; this card is read-only.
+            const addBtnInClone = clone.querySelector(`#add-${vehicleType}-btn`);
+            const addAnotherInClone = clone.querySelector(`#${vehicleType}-add-another-btn`);
+            const continueBtnInClone = clone.querySelector(`#${vehicleType}-continue-with-saved-btn`);
+            const deleteFormBtnInClone = clone.querySelector(`#${vehicleType}-delete-form-btn`);
+            if (addBtnInClone) addBtnInClone.style.display = 'none';
+            if (addAnotherInClone) addAnotherInClone.style.display = 'none';
+            if (continueBtnInClone) continueBtnInClone.style.display = 'none';
+            if (deleteFormBtnInClone) deleteFormBtnInClone.style.display = 'none';
+
+            // Prevent cloned blocks from being targeted by live vehicle form selectors.
+            clone.querySelectorAll('[class]').forEach((el) => {
+                const removeClasses = [];
+                el.classList.forEach((className) => {
+                    if (className.startsWith(`${vehicleType}-`) && className.endsWith('-entry-nav')) {
+                        removeClasses.push(className);
+                    }
+                });
+                removeClasses.forEach((className) => el.classList.remove(className));
+            });
+            clone.querySelectorAll('[data-option-nav-for]').forEach((el) => {
+                el.removeAttribute('data-option-nav-for');
+            });
+
+            // Remove duplicated IDs and disable controls to avoid conflicts.
+            clone.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+            clone.querySelectorAll('[name]').forEach((el) => el.removeAttribute('name'));
+            // Keep fields editable inline; only hide internal action buttons above.
+
             vehicleEl.appendChild(headerRow);
-            vehicleEl.appendChild(detailsWrap);
+            vehicleEl.appendChild(clone);
             listContainer.appendChild(vehicleEl);
         });
     }
@@ -1165,10 +1401,14 @@ document.addEventListener('DOMContentLoaded', function() {
     ['car', 'motorbike', 'trailer'].forEach(vehicleType => {
         const continueWithSavedBtn = document.getElementById(`${vehicleType}-continue-with-saved-btn`);
         const continueWithSavedHidden = document.getElementById(`${vehicleType}-continue-with-saved-hidden`);
+        const addAnotherBtn = document.getElementById(`${vehicleType}-add-another-btn`);
 
         const hasVehicleDraftInProgress = () => {
             const makeModel = String(document.getElementById(`${vehicleType}-make-model-entry`)?.value || '').trim();
             if (makeModel) return true;
+
+            const typedOlderYear = String(document.getElementById(`${vehicleType}-older-year-entry`)?.value || '').trim();
+            if (typedOlderYear) return true;
 
             const hiddenFieldIds = [
                 `${vehicleType}-year-entry-hidden`,
@@ -1203,6 +1443,58 @@ document.addEventListener('DOMContentLoaded', function() {
             continueWithSavedHidden.dispatchEvent(new Event('change', { bubbles: true }));
         };
 
+        const normalizeYearInput = (value) => {
+            const digits = String(value || '').replace(/\D+/g, '').slice(0, 4);
+            return digits;
+        };
+
+        const getOlderYearInput = () => document.getElementById(`${vehicleType}-older-year-entry`);
+        const getOlderYearWrap = () => document.getElementById(`${vehicleType}-older-year-wrap`);
+
+        const syncOlderYearInputVisibility = () => {
+            const yearHidden = document.getElementById(`${vehicleType}-year-entry-hidden`);
+            const olderYearInput = getOlderYearInput();
+            const olderYearWrap = getOlderYearWrap();
+            if (!yearHidden || !olderYearInput || !olderYearWrap) return;
+
+            const selectedYearValue = String(yearHidden.value || '').trim().toLowerCase();
+            const showOlderYearInput = selectedYearValue === 'older';
+            olderYearWrap.style.display = showOlderYearInput ? '' : 'none';
+
+            if (!showOlderYearInput) {
+                olderYearInput.value = '';
+                olderYearInput.classList.remove('input-error');
+                olderYearInput.removeAttribute('aria-invalid');
+            }
+        };
+
+        const resolveYearValue = () => {
+            const yearHidden = document.getElementById(`${vehicleType}-year-entry-hidden`);
+            let selectedYear = String(yearHidden?.value || '').trim();
+
+            if (!selectedYear) {
+                const yearNav = document.querySelector(`.${vehicleType}-year-entry-nav`);
+                const selectedBtn = yearNav?.querySelector('.option-nav-btn.selected')
+                    || yearNav?.querySelector('.option-nav-btn[aria-checked="true"]');
+                selectedYear = String(selectedBtn?.dataset?.value || '').trim();
+                if (selectedYear && yearHidden) {
+                    yearHidden.value = selectedYear;
+                }
+            }
+
+            if (String(selectedYear).toLowerCase() !== 'older') {
+                return { selectedYear, resolvedYear: selectedYear };
+            }
+
+            const olderYearInput = getOlderYearInput();
+            const typedOlderYear = normalizeYearInput(olderYearInput?.value || '');
+            if (olderYearInput && olderYearInput.value !== typedOlderYear) {
+                olderYearInput.value = typedOlderYear;
+            }
+
+            return { selectedYear, resolvedYear: typedOlderYear };
+        };
+
         const syncContinueWithSavedUi = () => {
             if (!continueWithSavedBtn || !continueWithSavedHidden) return;
             const savedCount = window.multiItemsManager.parseVehicles(vehicleType).length;
@@ -1215,6 +1507,19 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!shouldShow && continueWithSavedHidden.value) {
                 resetContinueWithSavedChoice();
             }
+        };
+
+        const syncAddAnotherUi = () => {
+            if (!addAnotherBtn) return;
+            const isEditing = !!window.multiItemsManager.editingVehicleIds[vehicleType];
+            addAnotherBtn.style.display = isEditing ? 'none' : '';
+        };
+
+        const deleteFormBtn = document.getElementById(`${vehicleType}-delete-form-btn`);
+        const syncDeleteFormUi = () => {
+            if (!deleteFormBtn) return;
+            const hasDraft = hasVehicleDraftInProgress();
+            deleteFormBtn.style.display = hasDraft ? '' : 'none';
         };
 
         const showVehicleSavedIndicator = (wasEdit) => {
@@ -1249,13 +1554,21 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             banner.textContent = wasEdit
-                ? 'Vehicle details updated and form reset. You can add another vehicle now.'
-                : 'Vehicle saved and form reset. You can add another vehicle now.';
+                ? 'Vehicle details updated. You can add another vehicle now.'
+                : 'Vehicle added. Use + Add Another Vehicle to start a new blank entry.';
             banner.style.display = 'block';
 
-            const topOffset = 110;
-            const targetTop = Math.max(0, window.scrollY + section.getBoundingClientRect().top - topOffset);
-            window.scrollTo({ top: targetTop, behavior: 'smooth' });
+            // Keep the user in the active form area so adding another vehicle feels continuous.
+            const makeInput = document.getElementById(`${vehicleType}-make-model-entry`);
+            const addButton = document.getElementById(`add-${vehicleType}-btn`);
+            const targetElement = makeInput || addButton;
+            if (targetElement && typeof targetElement.scrollIntoView === 'function') {
+                targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            if (!wasEdit && makeInput && typeof makeInput.focus === 'function') {
+                makeInput.focus();
+            }
 
             if (banner._hideTimer) {
                 clearTimeout(banner._hideTimer);
@@ -1276,7 +1589,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!Number.isFinite(customWeight)) return false;
 
             const unitRaw = String(document.getElementById('trailer-custom-weight-unit')?.value || 'kg').trim().toLowerCase();
-            const weightInKg = unitRaw === 'lb' ? (customWeight * 0.45359237) : customWeight;
+            const weightInKg = unitRaw === 'lb'
+                ? (customWeight * 0.45359237)
+                : (unitRaw === 'tonne' ? (customWeight * 1000) : customWeight);
             return weightInKg > 3500;
         };
 
@@ -1327,15 +1642,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 nav.querySelectorAll('.option-nav-btn').forEach((candidate) => {
                     candidate.classList.remove('selected');
+                    candidate.classList.remove('is-active');
                     candidate.setAttribute('aria-checked', 'false');
+                    candidate.setAttribute('aria-pressed', 'false');
                 });
 
                 btn.classList.add('selected');
+                btn.classList.add('is-active');
                 btn.setAttribute('aria-checked', 'true');
+                btn.setAttribute('aria-pressed', 'true');
                 hiddenInput.value = btn.dataset.value || '';
                 hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+                if (hiddenId === `${vehicleType}-year-entry-hidden`) {
+                    syncOlderYearInputVisibility();
+                }
                 resetContinueWithSavedChoice();
                 syncContinueWithSavedUi();
+                syncDeleteFormUi();
+                syncDeleteFormUi();
 
                 if (hiddenId === `${vehicleType}-weight-entry-hidden` || hiddenId === `${vehicleType}-length-entry-hidden`) {
                     window.multiItemsManager.syncVehicleCustomFieldVisibility(vehicleType);
@@ -1377,6 +1701,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 field.addEventListener('input', () => {
                     resetContinueWithSavedChoice();
                     syncContinueWithSavedUi();
+                    syncDeleteFormUi();
                     if (vehicleType === 'trailer') {
                         syncTrailerTestedRequirement();
                     }
@@ -1385,6 +1710,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 field.addEventListener('change', () => {
                     resetContinueWithSavedChoice();
                     syncContinueWithSavedUi();
+                    syncDeleteFormUi();
                     if (vehicleType === 'trailer') {
                         syncTrailerTestedRequirement();
                     }
@@ -1398,6 +1724,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 window.multiItemsManager.syncVehicleMediaFromInput(vehicleType);
                 resetContinueWithSavedChoice();
                 syncContinueWithSavedUi();
+                syncDeleteFormUi();
                 if (window.updateNextButtonState) window.updateNextButtonState();
             });
         }
@@ -1407,13 +1734,32 @@ document.addEventListener('DOMContentLoaded', function() {
             makeModelInput.addEventListener('input', () => {
                 resetContinueWithSavedChoice();
                 syncContinueWithSavedUi();
+                syncDeleteFormUi();
                 if (window.updateNextButtonState) window.updateNextButtonState();
             });
             makeModelInput.addEventListener('change', () => {
                 resetContinueWithSavedChoice();
                 syncContinueWithSavedUi();
+                syncDeleteFormUi();
                 if (window.updateNextButtonState) window.updateNextButtonState();
             });
+        }
+
+        const olderYearInput = getOlderYearInput();
+        if (olderYearInput) {
+            const onOlderYearInput = () => {
+                const normalized = normalizeYearInput(olderYearInput.value);
+                if (olderYearInput.value !== normalized) {
+                    olderYearInput.value = normalized;
+                }
+                resetContinueWithSavedChoice();
+                syncContinueWithSavedUi();
+                syncDeleteFormUi();
+                if (window.updateNextButtonState) window.updateNextButtonState();
+            };
+
+            olderYearInput.addEventListener('input', onOlderYearInput);
+            olderYearInput.addEventListener('change', onOlderYearInput);
         }
 
         if (continueWithSavedBtn && continueWithSavedHidden) {
@@ -1433,6 +1779,43 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
+        let clearAfterSuccessfulAdd = false;
+        if (addAnotherBtn) {
+            addAnotherBtn.addEventListener('click', () => {
+                const isEditing = !!window.multiItemsManager.editingVehicleIds[vehicleType];
+                if (isEditing || !addBtn) return;
+
+                clearAfterSuccessfulAdd = true;
+                addBtn.click();
+            });
+        }
+
+        if (deleteFormBtn) {
+            deleteFormBtn.addEventListener('click', () => {
+                const editingVehicleId = window.multiItemsManager.editingVehicleIds[vehicleType];
+                if (editingVehicleId) {
+                    // If editing an existing vehicle, delete that specific vehicle
+                    window.multiItemsManager.deleteVehicle(vehicleType, editingVehicleId);
+                    window.multiItemsManager.editingVehicleIds[vehicleType] = null;
+                } else {
+                    // If not editing, delete the most recently saved vehicle (undo last save)
+                    const savedVehicles = window.multiItemsManager.parseVehicles(vehicleType);
+                    if (savedVehicles.length > 0) {
+                        const lastVehicleId = savedVehicles[savedVehicles.length - 1].id;
+                        window.multiItemsManager.deleteVehicle(vehicleType, lastVehicleId);
+                    }
+                }
+                window.multiItemsManager.clearVehicleForm(vehicleType);
+                window.multiItemsManager.updateVehicleEditUi(vehicleType);
+                resetContinueWithSavedChoice();
+                syncContinueWithSavedUi();
+                syncAddAnotherUi();
+                syncDeleteFormUi();
+                window.multiItemsManager.renderVehiclesList(vehicleType);
+                if (window.updateNextButtonState) window.updateNextButtonState();
+            });
+        }
+
         const syncVehicleCustomVisibilityAfterHydration = () => {
             window.multiItemsManager.syncVehicleCustomFieldVisibility(vehicleType);
             if (vehicleType === 'trailer') {
@@ -1447,8 +1830,15 @@ document.addEventListener('DOMContentLoaded', function() {
             hiddenInput.addEventListener('input', syncVehicleCustomVisibilityAfterHydration);
         });
 
+        const yearHiddenInput = document.getElementById(`${vehicleType}-year-entry-hidden`);
+        if (yearHiddenInput) {
+            yearHiddenInput.addEventListener('change', syncOlderYearInputVisibility);
+            yearHiddenInput.addEventListener('input', syncOlderYearInputVisibility);
+        }
+
         // Run immediate + deferred syncs because draft hydration can happen asynchronously.
         syncVehicleCustomVisibilityAfterHydration();
+        syncOlderYearInputVisibility();
         if (typeof requestAnimationFrame === 'function') {
             requestAnimationFrame(() => {
                 requestAnimationFrame(syncVehicleCustomVisibilityAfterHydration);
@@ -1456,13 +1846,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         setTimeout(syncVehicleCustomVisibilityAfterHydration, 0);
         setTimeout(syncVehicleCustomVisibilityAfterHydration, 120);
+        setTimeout(syncOlderYearInputVisibility, 0);
+        setTimeout(syncOlderYearInputVisibility, 120);
 
         const addBtn = document.getElementById(`add-${vehicleType}-btn`);
         if (addBtn) {
-            addBtn.addEventListener('click', function(e) {
+            const handleAddClick = function(e) {
                 e.preventDefault();
-
-                const getEntryValue = (suffix) => {
+                e.stopPropagation();
+                console.log(`[${vehicleType}] Add button clicked`);
+                try {
+                    const getEntryValue = (suffix) => {
                     const hidden = document.getElementById(`${vehicleType}-${suffix}-entry-hidden`);
                     const hiddenValue = hidden ? String(hidden.value || '').trim() : '';
                     if (hiddenValue) {
@@ -1524,15 +1918,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 if (!makeInput || !makeInput.value.trim()) {
+                    console.warn(`[${vehicleType}] Validation failed: missing make & model`);
                     focusVehicleField(makeInput);
                     alert('Please enter make & model');
                     return;
                 }
 
-                const yearValue = getEntryValue('year');
-                if (!yearValue) {
+                const yearData = resolveYearValue();
+                if (!yearData.selectedYear) {
                     focusVehicleField('year');
                     alert('Please select a year');
+                    return;
+                }
+
+                if (String(yearData.selectedYear).toLowerCase() === 'older' && !yearData.resolvedYear) {
+                    const olderYearInputField = getOlderYearInput();
+                    focusVehicleField(olderYearInputField || 'year');
+                    alert('Please enter the vehicle year for the Older option');
                     return;
                 }
 
@@ -1620,7 +2022,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Collect data
                 const vehicleData = {
                     makeModel: makeInput.value,
-                    year: yearValue,
+                    year: yearData.resolvedYear,
                     value: valueEntryValue,
                     condition: lookup.condition,
                     method: lookup.method,
@@ -1646,28 +2048,77 @@ document.addEventListener('DOMContentLoaded', function() {
                     : window.multiItemsManager.addVehicle(vehicleType, vehicleData);
 
                 if (saved) {
+                    console.log(`[${vehicleType}] Vehicle saved successfully`);
                     const wasEdit = !!editingVehicleId;
-                    window.multiItemsManager.editingVehicleIds[vehicleType] = null;
+                    // Always clear the form after successful save (except when editing)
+                    if (!wasEdit) {
+                        window.multiItemsManager.clearVehicleForm(vehicleType);
+                        window.multiItemsManager.editingVehicleIds[vehicleType] = null;
+                        clearAfterSuccessfulAdd = false;
+                    } else {
+                        // When editing, keep the editing ID active so user can see the form
+                        const vehicles = window.multiItemsManager.parseVehicles(vehicleType);
+                        const vehicleIdToKeep = editingVehicleId || (vehicles.length > 0 ? vehicles[vehicles.length - 1].id : null);
+                        window.multiItemsManager.editingVehicleIds[vehicleType] = vehicleIdToKeep;
+                    }
                     window.multiItemsManager.updateVehicleEditUi(vehicleType);
-                    // Clear form
-                    window.multiItemsManager.clearVehicleForm(vehicleType);
                     resetContinueWithSavedChoice();
                     syncContinueWithSavedUi();
+                    syncAddAnotherUi();
+                    syncDeleteFormUi();
                     showVehicleSavedIndicator(wasEdit);
+
+                    // Scroll to the vehicle list to show saved vehicles
+                    setTimeout(() => {
+                        const listContainer = document.getElementById(`${vehicleType}-list`);
+                        if (listContainer && listContainer.style.display !== 'none') {
+                            listContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }
+                    }, 300);
 
                     if (window.updateNextButtonState) window.updateNextButtonState();
                 }
-            });
+                } catch (error) {
+                    console.error(`Vehicle save handler error: ${error.message}`, error);
+                    alert('An error occurred while saving. Please try again.');
+                }
+            };
+            
+            addBtn.addEventListener('click', handleAddClick);
         }
 
+        // Store reference to re-render when returning to this step
+        window.multiItemsManager._vehicleRenderFuncs = window.multiItemsManager._vehicleRenderFuncs || {};
+        window.multiItemsManager._vehicleRenderFuncs[vehicleType] = () => {
+            window.multiItemsManager.renderVehiclesList(vehicleType);
+            window.multiItemsManager.updateVehicleEditUi(vehicleType);
+            syncContinueWithSavedUi();
+            syncAddAnotherUi();
+            syncDeleteFormUi();
+        };
+
         // Initial render
-        window.multiItemsManager.renderVehiclesList(vehicleType);
-        window.multiItemsManager.updateVehicleEditUi(vehicleType);
-        syncContinueWithSavedUi();
+        window.multiItemsManager._vehicleRenderFuncs[vehicleType]();
         if (vehicleType === 'trailer') {
             syncTrailerTestedRequirement();
         }
     });
+
+    // Watch for step changes to re-render vehicles when returning to step 3
+    const vehicleStepObserver = setInterval(() => {
+        const currentStep = parseInt(document.body.getAttribute('data-form-step') || document.body.getAttribute('data-current-step') || '1', 10);
+        if (currentStep === 3 && window.multiItemsManager._vehicleRenderFuncs) {
+            ['car', 'motorbike', 'trailer'].forEach((vehicleType) => {
+                if (window.multiItemsManager._vehicleRenderFuncs[vehicleType]) {
+                    try {
+                        window.multiItemsManager._vehicleRenderFuncs[vehicleType]();
+                    } catch (e) {
+                        console.error(`Error re-rendering ${vehicleType} vehicles:`, e);
+                    }
+                }
+            });
+        }
+    }, 500);
 
     // Initialize piano media input
     const pianoMediaInput = document.getElementById('piano-media-input');

@@ -685,7 +685,7 @@ function initTransportDatePicker() {
                             selectedDate: state.rangeStart,
                             disableBeforeDate: storageBounds ? storageBounds.start : null,
                             disableAfterDate: storageBounds ? storageBounds.end : null,
-                            allowedDatesOnly: storageBounds ? [storageBounds.start, storageBounds.end] : null,
+                            allowedDatesOnly: storageBounds ? [storageBounds.start] : null,
                             dataAttrs: 'data-range-target="start"'
                         })}
                     </div>
@@ -708,7 +708,7 @@ function initTransportDatePicker() {
                                 ? (state.rangeStart && state.rangeStart > storageBounds.start ? state.rangeStart : storageBounds.start)
                                 : state.rangeStart,
                             disableAfterDate: storageBounds ? storageBounds.end : null,
-                            allowedDatesOnly: storageBounds ? [storageBounds.start, storageBounds.end] : null,
+                            allowedDatesOnly: storageBounds ? [storageBounds.end] : null,
                             dataAttrs: 'data-range-target="end"'
                         })}
                     </div>
@@ -753,7 +753,7 @@ function initTransportDatePicker() {
                 const selectedDate = normalizeDate(new Date(year, month - 1, day));
 
                 if (target === 'start') {
-                    if (storageBounds && (selectedDate < storageBounds.start || selectedDate > storageBounds.end)) {
+                    if (storageBounds && !sameDate(selectedDate, storageBounds.start)) {
                         return;
                     }
                     state.rangeStart = selectedDate;
@@ -775,7 +775,7 @@ function initTransportDatePicker() {
                     if (!state.rangeStart || selectedDate < state.rangeStart) {
                         return;
                     }
-                    if (storageBounds && selectedDate > storageBounds.end) {
+                    if (storageBounds && !sameDate(selectedDate, storageBounds.end)) {
                         return;
                     }
                     state.rangeEnd = selectedDate;
@@ -798,6 +798,22 @@ function initTransportDatePicker() {
         const isRangeEnd = viewType === 'range-end';
         const title = isRangeStart ? 'Select first date' : isRangeEnd ? 'Select second date' : 'Select date';
 
+        const calendarConfig = {
+            selectedDate: null,
+            disableBeforeDate: storageBounds ? storageBounds.start : null,
+            disableAfterDate: storageBounds ? storageBounds.end : null,
+            allowedDatesOnly: storageBounds ? [storageBounds.start] : null
+        };
+
+        if (isRangeStart) {
+            calendarConfig.selectedDate = state.rangeStart;
+            calendarConfig.allowedDatesOnly = null;
+        } else if (isRangeEnd) {
+            calendarConfig.selectedDate = state.rangeEnd;
+            calendarConfig.disableBeforeDate = state.rangeStart || (storageBounds ? storageBounds.start : null);
+            calendarConfig.allowedDatesOnly = null;
+        }
+
         panel.innerHTML = `
             <div class="transport-date-header">
                 <div class="transport-date-header-top">
@@ -819,12 +835,7 @@ function initTransportDatePicker() {
                     ${weekdays.map((day) => `<div class="transport-date-weekday">${day}</div>`).join('')}
                 </div>
                 <div class="transport-date-days-grid">
-                    ${buildCalendarGrid(state.month, {
-                        disableBeforeDate: storageBounds ? storageBounds.start : null,
-                        disableAfterDate: storageBounds ? storageBounds.end : null,
-                        allowedDatesOnly: storageBounds ? [storageBounds.start] : null,
-                        selectedDate: null
-                    })}
+                    ${buildCalendarGrid(state.month, calendarConfig)}
                 </div>
             </div>
         `;
@@ -832,6 +843,13 @@ function initTransportDatePicker() {
         const backButton = panel.querySelector('[data-td-back="1"]');
         if (backButton) {
             backButton.addEventListener('click', () => {
+                if (isRangeEnd) {
+                    if (state.rangeStart) {
+                        state.month = new Date(state.rangeStart.getFullYear(), state.rangeStart.getMonth(), 1);
+                    }
+                    renderCalendar('range-start');
+                    return;
+                }
                 renderMainOptions();
             });
         }
@@ -866,10 +884,10 @@ function initTransportDatePicker() {
                 if (!iso) return;
                 const [year, month, day] = iso.split('-').map(Number);
                 const selectedDate = new Date(year, month - 1, day);
+                const normalizedDate = normalizeDate(selectedDate);
 
                 if (viewType === 'fixed') {
                     if (storageBounds) {
-                        const normalizedDate = normalizeDate(selectedDate);
                         if (normalizedDate < storageBounds.start || normalizedDate > storageBounds.end) {
                             return;
                         }
@@ -877,6 +895,34 @@ function initTransportDatePicker() {
                     updateTransportDate(`On a Fixed Date: ${formatDateDisplay(selectedDate)}`);
                     closePanel();
                     return;
+                }
+
+                if (isRangeStart) {
+                    if (storageBounds && (normalizedDate < storageBounds.start || normalizedDate > storageBounds.end)) {
+                        return;
+                    }
+                    state.rangeStart = normalizedDate;
+                    if (state.rangeEnd && state.rangeEnd < normalizedDate) {
+                        state.rangeEnd = null;
+                    }
+                    state.month = new Date(normalizedDate.getFullYear(), normalizedDate.getMonth(), 1);
+                    renderCalendar('range-end');
+                    return;
+                }
+
+                if (isRangeEnd) {
+                    if (!state.rangeStart || normalizedDate < state.rangeStart) {
+                        return;
+                    }
+                    if (storageBounds && normalizedDate > storageBounds.end) {
+                        return;
+                    }
+
+                    state.rangeEnd = normalizedDate;
+                    const fromText = formatDateDisplay(state.rangeStart);
+                    const toText = formatDateDisplay(state.rangeEnd);
+                    updateTransportDate(`Between Dates: ${fromText} - ${toText}`);
+                    closePanel();
                 }
             });
         });
@@ -1973,6 +2019,8 @@ const PACKAGED_SERVICES = new Set([
     'Packaged Parcels'
 ]);
 
+const SERVICE_MEDIA_UPLOAD_LIMIT = 5;
+
 const VEHICLE_PARKING_LEVELS = ['1st', '2nd', '3rd', '4th', '5th', 'Higher than 5th', 'Ground', '-1', '-2', '-3', '-4', '-5', 'Lower Than -5'];
 
 function normalizeServiceValue(serviceValue) {
@@ -2036,6 +2084,17 @@ function isInventoryManageService(serviceValue) {
     // Quick Manage floors is available across all services once a service is selected.
     return String(normalizeServiceValue(serviceValue) || '').trim().length > 0;
 }
+
+function isMediaUploadLimitExemptService(serviceValue) {
+    const normalized = normalizeServiceValue(serviceValue);
+    return normalized === 'House Removals' || normalized === 'Office Removals';
+}
+
+function getServiceMediaUploadLimit(serviceValue = getActiveServiceValue()) {
+    return isMediaUploadLimitExemptService(serviceValue) ? Number.POSITIVE_INFINITY : SERVICE_MEDIA_UPLOAD_LIMIT;
+}
+
+window.getServiceMediaUploadLimit = getServiceMediaUploadLimit;
 
 function getPetsStep3MissingRequiredField(forAddAction = false) {
     if (!isPetsService(getActiveServiceValue())) {
@@ -2343,6 +2402,169 @@ function getEffectiveCustomizedPickupFloors() {
     return getOrderedFloorList(Array.from(floors));
 }
 
+// Check for unused floors in customized items
+function validateCustomizedItemsFloorUsage() {
+    const selectedFloors = getEffectiveCustomizedPickupFloors();
+    if (selectedFloors.length <= 1) {
+        return { isValid: true, unusedFloors: [] };
+    }
+
+    const customizedItemsField = document.getElementById('customized-items-hidden');
+    const rawValue = (customizedItemsField && customizedItemsField.value) ? customizedItemsField.value.trim() : '';
+    
+    let parsedItems = [];
+    if (rawValue) {
+        try {
+            parsedItems = JSON.parse(rawValue);
+            if (!Array.isArray(parsedItems)) {
+                parsedItems = [];
+            }
+        } catch (error) {
+            parsedItems = [];
+        }
+    }
+
+    // Get all floors that have at least one item
+    const floorsWithItems = new Set();
+    parsedItems.forEach((item) => {
+        const sourceFloor = String(item?.sourceFloor || '').trim();
+        if (sourceFloor) {
+            floorsWithItems.add(sourceFloor);
+        }
+    });
+
+    // Find unused floors
+    const unusedFloors = selectedFloors.filter((floor) => !floorsWithItems.has(floor));
+    
+    return {
+        isValid: unusedFloors.length === 0,
+        unusedFloors: unusedFloors
+    };
+}
+
+// Show modal for unused floors in customized items
+function showUnusedCustomizedFloorsModal(unusedFloors) {
+    return new Promise((resolve) => {
+        // Remove any existing modal
+        const existingModal = document.getElementById('unused-floors-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        const modal = document.createElement('div');
+        modal.id = 'unused-floors-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        `;
+
+        const content = document.createElement('div');
+        content.style.cssText = `
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        `;
+
+        const title = document.createElement('h3');
+        title.style.cssText = `
+            margin: 0 0 12px 0;
+            color: #dc2626;
+            font-size: 1.25rem;
+        `;
+        title.textContent = '⚠️ Unused Floors';
+
+        const description = document.createElement('p');
+        description.style.cssText = `
+            margin: 0 0 16px 0;
+            color: #404040;
+            line-height: 1.5;
+        `;
+        description.textContent = `You selected ${unusedFloors.length} floor${unusedFloors.length !== 1 ? 's' : ''} that ${unusedFloors.length === 1 ? 'has' : 'have'} no items assigned:`;
+
+        const floorsList = document.createElement('div');
+        floorsList.style.cssText = `
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 20px;
+        `;
+        
+        unusedFloors.forEach((floor) => {
+            const floorItem = document.createElement('div');
+            floorItem.style.cssText = `
+                color: #991b1b;
+                padding: 6px 0;
+                font-weight: 500;
+            `;
+            floorItem.textContent = `• ${floor}`;
+            floorsList.appendChild(floorItem);
+        });
+
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = `
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        `;
+
+        const addItemBtn = document.createElement('button');
+        addItemBtn.textContent = '+ Add Item to This Floor';
+        addItemBtn.style.cssText = `
+            padding: 10px 16px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95rem;
+        `;
+        addItemBtn.onclick = () => {
+            modal.remove();
+            resolve({ action: 'addItem', unusedFloors });
+        };
+
+        const deselectBtn = document.createElement('button');
+        deselectBtn.textContent = 'Deselect These Floors';
+        deselectBtn.style.cssText = `
+            padding: 10px 16px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95rem;
+        `;
+        deselectBtn.onclick = () => {
+            modal.remove();
+            resolve({ action: 'deselect', unusedFloors });
+        };
+
+        buttonContainer.appendChild(addItemBtn);
+        buttonContainer.appendChild(deselectBtn);
+
+        content.appendChild(title);
+        content.appendChild(description);
+        content.appendChild(floorsList);
+        content.appendChild(buttonContainer);
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+    });
+}
+
 function getPickupFloorsRequiringInventory() {
     const floors = new Set();
 
@@ -2546,6 +2768,35 @@ document.addEventListener('click', function(event) {
 
         const currentStep = parseInt(document.body.dataset.formStep || '1', 10);
         if (currentStep === 8) {
+            if (valueId === 'summary-pickup-floors' || valueId === 'summary-delivery-floors') {
+                const isPickup = valueId === 'summary-pickup-floors';
+                const targetStep = isPickup ? 3 : 5;
+                if (typeof window.setFormStep === 'function') {
+                    window.setFormStep(targetStep);
+                }
+                if (isPickup && typeof window.renderPickupFloorSelector === 'function') {
+                    window.renderPickupFloorSelector();
+                }
+                if (!isPickup && typeof window.renderDeliveryFloorSelector === 'function') {
+                    window.renderDeliveryFloorSelector();
+                }
+                if (!isPickup && typeof window.renderDeliveryFloors === 'function') {
+                    window.renderDeliveryFloors();
+                }
+                const targetSelector = isPickup
+                    ? document.getElementById('pickup-floors-selector')
+                    : document.getElementById('delivery-floors-selector');
+                const targetWrapper = isPickup
+                    ? document.getElementById('pickup-room-list-wrapper')
+                    : document.getElementById('item-organization-section');
+                if (targetWrapper?.scrollIntoView) {
+                    targetWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } else if (targetSelector?.scrollIntoView) {
+                    targetSelector.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+                return;
+            }
+
             if (valueId) {
                 if (typeof window.openOverviewEditModal === 'function') {
                     window.openOverviewEditModal(valueId);
@@ -2771,10 +3022,29 @@ document.addEventListener('DOMContentLoaded', function () {
                 const field = document.getElementById(fieldId);
                 if (!field || field.disabled) return '';
 
+                const resolveOlderYearValue = () => {
+                    const olderYearInputId = fieldId.replace('-year-entry-hidden', '-older-year-entry');
+                    const olderYearInput = document.getElementById(olderYearInputId);
+                    const typedYear = String(olderYearInput?.value || '').replace(/\D+/g, '').slice(0, 4);
+                    if (olderYearInput && olderYearInput.value !== typedYear) {
+                        olderYearInput.value = typedYear;
+                    }
+                    return typedYear;
+                };
+
                 const directValue = typeof field.value === 'string'
                     ? field.value.trim()
                     : String(field.value || '').trim();
-                if (directValue) return directValue;
+                if (fieldId.endsWith('-year-entry-hidden')) {
+                    if (directValue && directValue.toLowerCase() !== 'older') {
+                        return directValue;
+                    }
+                    if (directValue && directValue.toLowerCase() === 'older') {
+                        return resolveOlderYearValue();
+                    }
+                } else if (directValue) {
+                    return directValue;
+                }
 
                 if (field.type === 'hidden') {
                     const optionNav = document.querySelector(`.option-nav[data-option-nav-for="${fieldId}"]`);
@@ -2789,6 +3059,9 @@ document.addEventListener('DOMContentLoaded', function () {
                             : '';
                         if (selectedValue) {
                             field.value = selectedValue;
+                            if (fieldId.endsWith('-year-entry-hidden') && selectedValue.toLowerCase() === 'older') {
+                                return resolveOlderYearValue();
+                            }
                             return selectedValue;
                         }
                     }
@@ -2828,6 +3101,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 const value = getResolvedVehicleFieldValue(fieldId);
                 if (!value) {
+                    if (fieldId.endsWith('-year-entry-hidden')) {
+                        const yearHidden = document.getElementById(fieldId);
+                        if (String(yearHidden?.value || '').trim().toLowerCase() === 'older') {
+                            const olderYearInput = document.getElementById(fieldId.replace('-year-entry-hidden', '-older-year-entry'));
+                            if (olderYearInput) {
+                                return olderYearInput;
+                            }
+                        }
+                    }
                     return field;
                 }
             }
@@ -2862,7 +3144,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     const customWeightValue = parseFloat((document.getElementById('trailer-custom-weight')?.value || '').trim());
                     const customWeightUnit = (document.getElementById('trailer-custom-weight-unit')?.value || 'kg').trim().toLowerCase();
                     if (Number.isFinite(customWeightValue)) {
-                        const weightInKg = customWeightUnit === 'lb' ? (customWeightValue * 0.45359237) : customWeightValue;
+                        const weightInKg = customWeightUnit === 'lb'
+                            ? (customWeightValue * 0.45359237)
+                            : (customWeightUnit === 'tonne' ? (customWeightValue * 1000) : customWeightValue);
                         requiresTested = weightInKg > 3500;
                     }
                 }
@@ -4016,13 +4300,22 @@ document.addEventListener('DOMContentLoaded', function () {
             return 'required field';
         }
 
-        function alertMissingRestriction(field) {
+        function alertMissingRestriction(field, customMessage) {
             const label = getMissingFieldDisplayName(field);
-            alert(`Please fill in the required field: ${label}`);
+            const message = String(customMessage || '').trim() || `Please fill in the required field: ${label}`;
+            const liveRegion = document.getElementById('validation-live-region');
+            if (liveRegion) {
+                liveRegion.textContent = message;
+            }
+            return message;
         }
 
-        function revealMissingFieldBeforeAlert(field) {
+        function revealMissingFieldBeforeAlert(field, options = {}) {
             if (!field) return;
+
+            const alertDelayMs = Number.isFinite(Number(options.alertDelayMs)) ? Number(options.alertDelayMs) : 320;
+            const skipAlert = !!options.skipAlert;
+            const customMessage = String(options.alertMessage || '').trim();
 
             let highlighted = false;
             if (typeof highlightAndFocusMissingTarget === 'function') {
@@ -4033,9 +4326,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 scrollToField(field);
             }
 
-            setTimeout(() => {
-                alertMissingRestriction(field);
-            }, 240);
+            const message = alertMissingRestriction(field, customMessage);
+            if (!skipAlert && message) {
+                setTimeout(() => {
+                    alert(message);
+                }, alertDelayMs);
+            }
+
+            return message;
         }
 
         window.revealMissingFieldBeforeAlert = revealMissingFieldBeforeAlert;
@@ -4341,8 +4639,20 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             const rows = Array.from(dimensionsList?.querySelectorAll('.dimension-item') || []);
+            
             if (rows.length === 0) {
                 return customizedSection || customizedItemsField;
+            }
+
+            // FIRST: Check if ANY description field is empty - this is the primary blocker
+            const descriptionFields = Array.from(dimensionsList?.querySelectorAll('.dimension-description') || []);
+            for (let i = 0; i < descriptionFields.length; i++) {
+                const descField = descriptionFields[i];
+                const descValue = String(descField.value || '').trim();
+                if (!descValue) {
+                    console.error(`BLOCKING: Custom item ${i + 1} has empty description`);
+                    return descField;
+                }
             }
 
             const requiredSelectors = [
@@ -4352,6 +4662,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 '.dimension-height',
                 '.dimension-weight'
             ];
+            
+            // Field name mapping for user-friendly alerts
+            const fieldNameMap = {
+                '.dimension-description': 'Description',
+                '.dimension-width': 'Width',
+                '.dimension-depth': 'Depth',
+                '.dimension-height': 'Height',
+                '.dimension-weight': 'Weight'
+            };
 
             const selectedPickupFloors = typeof getEffectiveCustomizedPickupFloors === 'function'
                 ? getEffectiveCustomizedPickupFloors()
@@ -4359,14 +4678,18 @@ document.addEventListener('DOMContentLoaded', function () {
             const requiresSourceFloor = selectedPickupFloors.length > 1;
             if (requiresSourceFloor) {
                 requiredSelectors.push('.dimension-source-floor');
+                fieldNameMap['.dimension-source-floor'] = 'Pickup Floor';
             }
 
-            for (const row of rows) {
+            for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+                const row = rows[rowIndex];
                 for (const selector of requiredSelectors) {
                     const field = row.querySelector(selector);
                     if (!field) continue;
                     const value = String(field.value || '').trim();
                     if (!value) {
+                        const fieldName = fieldNameMap[selector] || selector;
+                        console.warn(`Missing required field in custom item ${rowIndex + 1}: ${selector}`);
                         return field;
                     }
                 }
@@ -4606,6 +4929,51 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (step >= totalSteps) {
                     return;
                 }
+                
+                // EXTRA VALIDATION FOR CUSTOMIZED ITEMS ON STEP 3
+                if (step === 3 && isCustomizedInventoryService(getActiveServiceValue())) {
+                    console.log('STEP 3 CUSTOMIZED ITEMS - Running extra validation');
+                    const dimensionsList = document.getElementById('dimensions-list');
+                    const customItems = dimensionsList?.querySelectorAll('.dimension-item') || [];
+                    console.log(`Found ${customItems.length} custom items`);
+                    
+                    const fieldNameMap = {
+                        'dimension-description': 'Description',
+                        'dimension-width': 'Width',
+                        'dimension-depth': 'Depth',
+                        'dimension-height': 'Height',
+                        'dimension-weight': 'Weight',
+                        'dimension-source-floor': 'Pickup Floor'
+                    };
+                    
+                    const requiredFields = ['dimension-description', 'dimension-width', 'dimension-depth', 'dimension-height', 'dimension-weight'];
+                    
+                    // Check every custom item for all required fields
+                    for (let i = 0; i < customItems.length; i++) {
+                        const item = customItems[i];
+                        
+                        for (const fieldClass of requiredFields) {
+                            const field = item.querySelector(`.${fieldClass}`);
+                            if (!field) continue;
+                            
+                            const fieldValue = String(field.value || '').trim();
+                            const fieldName = fieldNameMap[fieldClass] || fieldClass;
+                            console.log(`Custom item ${i + 1} ${fieldName}: "${fieldValue}"`);
+                            
+                            if (!fieldValue) {
+                                console.error(`BLOCKING: Custom item ${i + 1} ${fieldName} is missing`);
+                                if (typeof window.revealMissingFieldBeforeAlert === 'function') {
+                                    window.revealMissingFieldBeforeAlert(field, {
+                                        alertDelayMs: 320,
+                                        alertMessage: `❌ Custom Item ${i + 1} is incomplete.\n\n${fieldName} is required.\n\nPlease fill in the ${fieldName} field before proceeding to the next step.`
+                                    });
+                                }
+                                return;
+                            }
+                        }
+                    }
+                }
+                
                 if (!requirementsMetForStep(step)) {
                     const missingTarget = getFirstMissingTargetForStep(step);
                     if (missingTarget) {
@@ -4614,6 +4982,48 @@ document.addEventListener('DOMContentLoaded', function () {
                         }
                     }
                     return;
+                }
+
+                // Validate customized items floor usage on Step 3
+                if (step === 3 && isCustomizedInventoryService(getActiveServiceValue())) {
+                    const floorValidation = validateCustomizedItemsFloorUsage();
+                    if (!floorValidation.isValid && floorValidation.unusedFloors.length > 0) {
+                        const result = await showUnusedCustomizedFloorsModal(floorValidation.unusedFloors);
+                        
+                        if (result.action === 'deselect') {
+                            // Deselect the unused floors
+                            result.unusedFloors.forEach((floor) => {
+                                // Remove from window.selectedPickupFloors
+                                if (window.selectedPickupFloors instanceof Set) {
+                                    window.selectedPickupFloors.delete(floor);
+                                }
+                                
+                                // Remove from DOM buttons
+                                const btn = document.querySelector(
+                                    `#pickup-floors-selector .pickup-floor-selector-btn[data-floor="${floor.replace(/"/g, '\\"')}"]`
+                                );
+                                if (btn) {
+                                    btn.classList.remove('selected');
+                                    btn.setAttribute('aria-pressed', 'false');
+                                }
+                            });
+                            
+                            // Update state
+                            if (typeof window.saveCreateJobProgress === 'function') {
+                                window.saveCreateJobProgress();
+                            }
+                            if (typeof window.updateNextButtonState === 'function') {
+                                window.updateNextButtonState();
+                            }
+                        } else if (result.action === 'addItem') {
+                            // Scroll to the dimensions list to add a new item
+                            const dimensionsList = document.getElementById('dimensions-list');
+                            if (dimensionsList) {
+                                dimensionsList.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            }
+                        }
+                        return;
+                    }
                 }
 
                 if (step === 5) {
@@ -4649,9 +5059,16 @@ document.addEventListener('DOMContentLoaded', function () {
             };
         }
 
-        if (stickyResetBtn) {
-            stickyResetBtn.onclick = async function() {
-                const shouldReset = await showResetConfirmationModal();
+        if (stickyResetBtn && stickyResetBtn.dataset.resetBound !== '1') {
+            stickyResetBtn.dataset.resetBound = '1';
+            stickyResetBtn.addEventListener('click', async function() {
+                let shouldReset = false;
+                try {
+                    shouldReset = await showResetConfirmationModal();
+                } catch (_error) {
+                    shouldReset = window.confirm('This will clear all form data and return you to Step 1. Continue?');
+                }
+
                 if (!shouldReset) return;
 
                 isUnloadingForm = true;
@@ -4659,10 +5076,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     window.clearCreateJobProgress();
                 }
 
+                try {
+                    sessionStorage.setItem('anytransport_force_fresh_start_v1', '1');
+                } catch (_error) {
+                    // Ignore storage failures and continue with URL signal.
+                }
+
                 const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('freshStart', '1');
                 currentUrl.searchParams.set('reset', String(Date.now()));
                 window.location.assign(currentUrl.toString());
-            };
+            });
         }
 
         if (stickyManageBtn) {
@@ -5394,6 +5818,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
                     labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:break-word;line-height:1.3;font-size:${isNarrowPackingViewport ? '1rem' : '0.95rem'};">${getServiceItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
 
+                    const tickBtn = document.createElement('button');
+                    tickBtn.type = 'button';
+                    tickBtn.textContent = '✓';
+
+                    left.appendChild(tickBtn);
                     left.appendChild(labelText);
 
                     const controls = document.createElement('div');
@@ -5425,10 +5854,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     plusBtn.textContent = '+';
                     plusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
 
-                    const tickBtn = document.createElement('button');
-                    tickBtn.type = 'button';
-                    tickBtn.textContent = '✓';
-
                     const setTickUi = (enabled) => {
                         tickBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
                         tickBtn.style.cssText = enabled
@@ -5436,10 +5861,13 @@ document.addEventListener('DOMContentLoaded', function () {
                             : 'width:36px;height:36px;border:2px solid #cbd5e1;background:#f8fafc;color:#94a3b8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;';
                     };
 
+                    setTickUi(isChecked);
+
                     const setQtyControlsEnabled = (enabled) => {
                         minusBtn.disabled = !enabled;
                         plusBtn.disabled = !enabled;
                         qtyInput.disabled = !enabled;
+                        controls.style.display = enabled ? 'flex' : 'none';
 
                         minusBtn.style.opacity = enabled ? '1' : '0.45';
                         plusBtn.style.opacity = enabled ? '1' : '0.45';
@@ -5450,7 +5878,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         qtyInput.style.cursor = enabled ? 'text' : 'not-allowed';
                     };
 
-                    setTickUi(isChecked);
                     setQtyControlsEnabled(isChecked);
 
                     minusBtn.addEventListener('click', () => {
@@ -5492,7 +5919,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     controls.appendChild(qtyInput);
                     controls.appendChild(plusBtn);
                     right.appendChild(controls);
-                    right.appendChild(tickBtn);
                     row.appendChild(left);
                     row.appendChild(right);
                     roomContent.appendChild(row);
@@ -6200,12 +6626,17 @@ document.addEventListener('DOMContentLoaded', function () {
                         ? 'display:flex;align-items:flex-start;gap:8px;flex:1;min-width:0;width:100%;'
                         : 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
 
+
                     const labelText = document.createElement('span');
                     labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
                     labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};">${getServiceItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${availableForStorage}</span>`;
 
-                    left.appendChild(labelText);
+                    const tickBtn = document.createElement('button');
+                    tickBtn.type = 'button';
+                    tickBtn.textContent = '✓';
 
+                    left.appendChild(tickBtn);
+                    left.appendChild(labelText);
                     const controls = document.createElement('div');
                     controls.style.cssText = isNarrowServiceViewport
                         ? 'display:flex;align-items:center;justify-content:flex-start;gap:6px;flex-wrap:nowrap;width:100%;'
@@ -6235,14 +6666,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     plusBtn.textContent = '+';
                     plusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
 
-                    const tickBtn = document.createElement('button');
-                    tickBtn.type = 'button';
-                    tickBtn.textContent = '✓';
-
                     const setTickUi = (enabled) => {
                         tickBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
                         tickBtn.style.cssText = enabled
-                            ? 'width:36px;height:36px;border:2px solid #1d4ed8;background:#2563eb;color:#fff;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;'
+                            ? 'width:36px;height:36px;border:2px solid #16a34a;background:#22c55e;color:#fff;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;'
                             : 'width:36px;height:36px;border:2px solid #cbd5e1;background:#f8fafc;color:#94a3b8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;';
                     };
 
@@ -6250,6 +6677,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         minusBtn.disabled = !enabled;
                         plusBtn.disabled = !enabled;
                         qtyInput.disabled = !enabled;
+                        controls.style.display = enabled ? 'flex' : 'none';
 
                         minusBtn.style.opacity = enabled ? '1' : '0.45';
                         plusBtn.style.opacity = enabled ? '1' : '0.45';
@@ -6302,7 +6730,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     controls.appendChild(qtyInput);
                     controls.appendChild(plusBtn);
                     right.appendChild(controls);
-                    right.appendChild(tickBtn);
                     row.appendChild(left);
                     row.appendChild(right);
                     roomContent.appendChild(row);
@@ -6498,12 +6925,17 @@ document.addEventListener('DOMContentLoaded', function () {
                             ? 'display:flex;align-items:flex-start;gap:8px;flex:1;min-width:0;width:100%;'
                             : 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
 
+
                         const labelText = document.createElement('span');
                         labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
                         labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};">${getServiceItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Available: ${maxQty}</span>`;
 
-                        left.appendChild(labelText);
+                        const tickBtn = document.createElement('button');
+                        tickBtn.type = 'button';
+                        tickBtn.textContent = '✓';
 
+                        left.appendChild(tickBtn);
+                        left.appendChild(labelText);
                         const controls = document.createElement('div');
                         controls.style.cssText = isNarrowServiceViewport
                             ? 'display:flex;align-items:center;justify-content:flex-start;gap:6px;flex-wrap:nowrap;width:100%;'
@@ -6533,14 +6965,10 @@ document.addEventListener('DOMContentLoaded', function () {
                         plusBtn.textContent = '+';
                         plusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
 
-                        const tickBtn = document.createElement('button');
-                        tickBtn.type = 'button';
-                        tickBtn.textContent = '✓';
-
                         const setTickUi = (enabled) => {
                             tickBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
                             tickBtn.style.cssText = enabled
-                                ? 'width:36px;height:36px;border:2px solid #1d4ed8;background:#2563eb;color:#fff;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;'
+                                ? 'width:36px;height:36px;border:2px solid #16a34a;background:#22c55e;color:#fff;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;'
                                 : 'width:36px;height:36px;border:2px solid #cbd5e1;background:#f8fafc;color:#94a3b8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;';
                         };
 
@@ -6548,6 +6976,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             minusBtn.disabled = !enabled;
                             plusBtn.disabled = !enabled;
                             qtyInput.disabled = !enabled;
+                            controls.style.display = enabled ? 'flex' : 'none';
 
                             minusBtn.style.opacity = enabled ? '1' : '0.45';
                             plusBtn.style.opacity = enabled ? '1' : '0.45';
@@ -6600,7 +7029,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         controls.appendChild(qtyInput);
                         controls.appendChild(plusBtn);
                         right.appendChild(controls);
-                        right.appendChild(tickBtn);
                         row.appendChild(left);
                         row.appendChild(right);
                         roomContent.appendChild(row);
@@ -6813,12 +7241,17 @@ document.addEventListener('DOMContentLoaded', function () {
                         ? 'display:flex;align-items:flex-start;gap:8px;flex:1;min-width:0;width:100%;'
                         : 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
 
+
                     const labelText = document.createElement('span');
                     labelText.style.cssText = 'display:flex;flex-direction:column;min-width:0;';
                     labelText.innerHTML = `<span style="font-weight:600;color:#1f2937;word-break:normal;overflow-wrap:anywhere;line-height:1.25;font-size:${isNarrowServiceViewport ? '1rem' : '0.95rem'};">${getServiceItemDisplayName(itemName)}</span><span style="font-size:0.75rem;color:#6b7280;">Inventory qty available: ${maxQty}</span>`;
 
-                    left.appendChild(labelText);
+                    const tickBtn = document.createElement('button');
+                    tickBtn.type = 'button';
+                    tickBtn.textContent = '✓';
 
+                    left.appendChild(tickBtn);
+                    left.appendChild(labelText);
                     const controls = document.createElement('div');
                     controls.style.cssText = isNarrowServiceViewport
                         ? 'display:flex;align-items:center;justify-content:flex-start;gap:6px;flex-wrap:nowrap;width:100%;'
@@ -6848,10 +7281,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     plusBtn.textContent = '+';
                     plusBtn.style.cssText = 'width:36px;height:36px;border:2px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.2rem;line-height:1;';
 
-                    const tickBtn = document.createElement('button');
-                    tickBtn.type = 'button';
-                    tickBtn.textContent = '✓';
-
                     const setTickUi = (enabled) => {
                         if (!canAssemble) {
                             tickBtn.setAttribute('aria-pressed', 'false');
@@ -6860,7 +7289,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         }
                         tickBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
                         tickBtn.style.cssText = enabled
-                            ? 'width:36px;height:36px;border:2px solid #1d4ed8;background:#2563eb;color:#fff;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;'
+                            ? 'width:36px;height:36px;border:2px solid #16a34a;background:#22c55e;color:#fff;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;'
                             : 'width:36px;height:36px;border:2px solid #cbd5e1;background:#f8fafc;color:#94a3b8;border-radius:8px;cursor:pointer;font-weight:900;font-size:1.05rem;line-height:1;';
                     };
 
@@ -6869,6 +7298,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         minusBtn.disabled = !shouldEnable;
                         plusBtn.disabled = !shouldEnable;
                         qtyInput.disabled = !shouldEnable;
+                        controls.style.display = shouldEnable ? 'flex' : 'none';
 
                         minusBtn.style.opacity = shouldEnable ? '1' : '0.45';
                         plusBtn.style.opacity = shouldEnable ? '1' : '0.45';
@@ -6926,7 +7356,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     controls.appendChild(qtyInput);
                     controls.appendChild(plusBtn);
                     right.appendChild(controls);
-                    right.appendChild(tickBtn);
                     row.appendChild(left);
                     row.appendChild(right);
                     roomContent.appendChild(row);
@@ -7779,6 +8208,11 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
     };
 
     const forceFreshRuntimeState = () => {
+        window.__createJobRestoreTargetStep = 1;
+        window.__createJobRestoreUnlockedStep = 1;
+        window.__createJobMaxReachedStep = 1;
+        window.__overviewStepVisited = false;
+
         window.selectedPickupFloors = new Set();
         window.selectedDeliveryFloors = new Set();
         window.multiFloorInventory = {};
@@ -7836,6 +8270,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         consumeFreshStartRequest();
         bootLockedStep = 1;
         window.__createJobRestoreTargetStep = 1;
+        window.__createJobRestoreUnlockedStep = 1;
+        window.__createJobMaxReachedStep = 1;
+        window.__overviewStepVisited = false;
 
         return true;
     };
@@ -7998,6 +8435,12 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         removePersistedValue(LAST_SCOPE_KEY);
 
         removePersistedValue('house_removal_inventory');
+
+        // Relock navigation state immediately after a full reset.
+        window.__createJobRestoreTargetStep = 1;
+        window.__createJobRestoreUnlockedStep = 1;
+        window.__createJobMaxReachedStep = 1;
+        window.__overviewStepVisited = false;
     };
 
     const maybePurgeDraftAfterExit = () => {
@@ -8010,9 +8453,10 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
     // Seed step for downstream step engines that read this during startup.
     const bootScope = getRestoreScope();
-    let bootDraft = getSavedDraft(bootScope, false);
+    const skipBootDraftRestore = hasFreshStartRequest();
+    let bootDraft = skipBootDraftRestore ? null : getSavedDraft(bootScope, false);
     if (!bootDraft) {
-        const legacyDraft = getSavedDraft(bootScope, true);
+        const legacyDraft = skipBootDraftRestore ? null : getSavedDraft(bootScope, true);
         const legacyScope = getServiceScopeFromPayload(legacyDraft);
         if (!bootScope || !legacyScope || legacyScope === bootScope) {
             bootDraft = legacyDraft;
@@ -8124,6 +8568,17 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         if (!Array.isArray(items) || items.length === 0) return;
         const dimensionsList = document.getElementById('dimensions-list');
         if (!dimensionsList || typeof window.addDimensionItem !== 'function') return;
+
+        const valueSection = document.getElementById('specialist-antiques-value-section');
+        const customSection = document.getElementById('customized-items-inventory-section');
+        const hiddenAnchor = document.getElementById('customized-items-hidden');
+        if (valueSection && customSection && dimensionsList.contains(valueSection)) {
+            if (hiddenAnchor && hiddenAnchor.parentElement === customSection) {
+                customSection.insertBefore(valueSection, hiddenAnchor);
+            } else {
+                customSection.prepend(valueSection);
+            }
+        }
 
         dimensionsList.innerHTML = '';
         items.forEach(() => window.addDimensionItem());
@@ -8239,6 +8694,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         }
         if (typeof window.renderInventoryByRoom === 'function') {
             window.renderInventoryByRoom();
+        }
+        if (typeof window.placeSpecialistValueInsideBlueForm === 'function') {
+            window.placeSpecialistValueInsideBlueForm();
         }
         if (typeof window.updateNextButtonState === 'function') {
             window.updateNextButtonState();
@@ -8691,6 +9149,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             setTimeout(() => {
                 applyUiState();
                 restoreCustomizedDraftRows(payload.customizedDraftItems);
+                if (typeof window.placeSpecialistValueInsideBlueForm === 'function') {
+                    window.placeSpecialistValueInsideBlueForm();
+                }
                 if (
                     window.selectedDeliveryFloors instanceof Set
                     && window.selectedDeliveryFloors.size === 0
@@ -8768,6 +9229,20 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
         maybePurgeDraftAfterExit();
 
+        const flushDraftSaveNow = () => {
+            if (typeof window.saveCreateJobProgress !== 'function') return;
+            const wasUnloading = isUnloadingForm;
+            try {
+                // Force a synchronous-like final snapshot even during unload transitions.
+                isUnloadingForm = false;
+                window.saveCreateJobProgress();
+            } catch (error) {
+                // Ignore final-save failures during lifecycle transitions.
+            } finally {
+                isUnloadingForm = wasUnloading;
+            }
+        };
+
         // Mark true user interaction as early as possible.
         const markInteracted = (event) => {
             if (event && event.isTrusted === true) {
@@ -8834,19 +9309,32 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         }
 
         window.addEventListener('beforeunload', () => {
-            isUnloadingForm = true;
             clearTimeout(saveTimer);
+            flushDraftSaveNow();
+            isUnloadingForm = true;
             setExitPurgePending();
         });
 
         window.addEventListener('pagehide', (event) => {
-            isUnloadingForm = true;
             clearTimeout(saveTimer);
+            flushDraftSaveNow();
+            isUnloadingForm = true;
             // Do not mark for purge when page enters BFCache; user may return via browser back/forward.
             if (event && event.persisted) {
                 return;
             }
             setExitPurgePending();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'hidden') return;
+            clearTimeout(saveTimer);
+            flushDraftSaveNow();
+        });
+
+        window.addEventListener('offline', () => {
+            clearTimeout(saveTimer);
+            flushDraftSaveNow();
         });
 
         window.addEventListener('pageshow', (event) => {
@@ -9547,6 +10035,7 @@ if (!window.__motorbikeConfirmFloorFallbackBound) {
             const floorReady = hasSelectedPickupFloors || !!(floorHiddenInput && floorHiddenInput.value);
             const _isRestoring = typeof window.__cjIsRestoring === 'function' ? window.__cjIsRestoring() : false;
             const confirmationSatisfied = isPickupFloorConfirmationSatisfied();
+            const hasRestoredCustomizedContent = !!String(document.getElementById('customized-items-hidden')?.value || '').trim();
             let canShowInventory = !propertyPrompt && floorReady && isStep3 && (!liftRequired || liftSelected || (_isRestoring && hasSelectedPickupFloors));
 
             if (isHouseRemovalService) {
@@ -9554,7 +10043,7 @@ if (!window.__motorbikeConfirmFloorFallbackBound) {
             }
 
             if (isCustomizedItems && isStep3) {
-                canShowInventory = customizedConfirmed;
+                canShowInventory = customizedConfirmed || (_isRestoring && hasRestoredCustomizedContent);
             }
 
             inventoryCardContainer.style.display = canShowInventory ? '' : 'none';
@@ -9568,9 +10057,13 @@ if (!window.__motorbikeConfirmFloorFallbackBound) {
             if (isCustomizedItems && isStep3) {
                 const hasSelectedPickupFloors = !!(window.selectedPickupFloors && window.selectedPickupFloors.size > 0);
                 const customizedConfirmed = window.step3PickupFloorsConfirmed === true && hasSelectedPickupFloors;
+                const isRestoring = typeof window.__cjIsRestoring === 'function' ? window.__cjIsRestoring() : false;
+                const hasRestoredCustomizedContent = !!String(document.getElementById('customized-items-hidden')?.value || '').trim();
+                const shouldShowCustomizedSection = customizedConfirmed || (isRestoring && hasRestoredCustomizedContent);
+
                 if (customInventorySection) {
-                    customInventorySection.style.display = customizedConfirmed ? 'block' : 'none';
-                    customInventorySection.classList.toggle('step-hidden', !customizedConfirmed);
+                    customInventorySection.style.display = shouldShowCustomizedSection ? 'block' : 'none';
+                    customInventorySection.classList.toggle('step-hidden', !shouldShowCustomizedSection);
                 }
                 if (houseInventorySection) {
                     houseInventorySection.style.display = 'none';
@@ -11864,12 +12357,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         border-left: 3px solid ${isSelected ? '#2563eb' : '#f59e0b'};
                         border-radius: 4px;
                         display: flex;
-                        justify-content: space-between;
                         align-items: center;
                         cursor: pointer;
                         transition: all 0.2s ease;
-                        flex-wrap: wrap;
-                        gap: 8px;
                     `;
                     
                     itemEl.addEventListener('mouseover', () => {
@@ -11899,7 +12389,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         renderInventoryByRoom();
                         renderDeliveryFloors();
                     });
-                    
+
                     // Checkbox
                     const checkbox = document.createElement('input');
                     checkbox.type = 'checkbox';
@@ -11908,6 +12398,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         width: 18px;
                         height: 18px;
                         cursor: pointer;
+                        flex-shrink: 0;
                         margin-right: 8px;
                     `;
                     checkbox.addEventListener('change', (e) => {
@@ -11928,6 +12419,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         flex-direction: column;
                         gap: 2px;
                         flex: 1;
+                        min-width: 0;
                     `;
                     
                     const itemName = document.createElement('div');
@@ -11954,6 +12446,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         flex-direction: column;
                         align-items: flex-end;
                         gap: 4px;
+                        flex-shrink: 0;
+                        margin-left: auto;
                     `;
                     
                     const qty = document.createElement('span');
@@ -12092,11 +12586,31 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         
         // Render each delivery floor (only selected ones), sorted in canonical floor order.
+        // Include floors that have assigned items even if not in current property type
+        const canonicalFloorOrder = ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
         const floorSortOrder = new Map(deliveryFloors.map((floorName, index) => [floorName, index]));
+        
+        // Get all floors with assigned items
+        const floorsWithAssignments = new Set();
+        Object.values(itemFloorAssignments).forEach((perFloor) => {
+            if (perFloor && typeof perFloor === 'object') {
+                Object.keys(perFloor).forEach((floorName) => {
+                    const qty = parseInt(perFloor[floorName], 10) || 0;
+                    if (qty > 0) {
+                        floorsWithAssignments.add(floorName);
+                    }
+                });
+            }
+        });
+        
         const floorsToRender = selectedDeliveryFloors.size > 0
             ? Array.from(selectedDeliveryFloors)
-                .filter(floor => floorSortOrder.has(floor))
-                .sort((a, b) => floorSortOrder.get(a) - floorSortOrder.get(b))
+                .filter(floor => floorSortOrder.has(floor) || floorsWithAssignments.has(floor))
+                .sort((a, b) => {
+                    const indexA = canonicalFloorOrder.indexOf(a);
+                    const indexB = canonicalFloorOrder.indexOf(b);
+                    return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+                })
             : deliveryFloors;
             
         floorsToRender.forEach(floor => {
@@ -12551,8 +13065,8 @@ document.addEventListener('DOMContentLoaded', function () {
                             renderDeliveryFloors();
                         });
                     
-                        itemEl.appendChild(itemInfo);
                         itemEl.appendChild(removeBtn);
+                        itemEl.appendChild(itemInfo);
                         roomItemsWrap.appendChild(itemEl);
                     });
 
@@ -13091,6 +13605,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (!acceptedFiles.length) {
                 alert('Please upload only image or video files.');
+                return;
+            }
+
+            const maxFiles = getServiceMediaUploadLimit();
+            if (Number.isFinite(maxFiles) && acceptedFiles.length > maxFiles) {
+                alert(`You can upload up to ${maxFiles} files at once.`);
                 return;
             }
 
@@ -15768,11 +16288,103 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    function placeSpecialistValueInsideBlueForm() {
+        const customSection = document.getElementById('customized-items-inventory-section');
+        const valueSection = document.getElementById('specialist-antiques-value-section');
+        const hiddenAnchor = document.getElementById('customized-items-hidden');
+        const titleNode = document.getElementById('customized-items-heading-text');
+        const valueHidden = document.getElementById('specialist-value-hidden');
+        if (!customSection || !valueSection || !dimensionsList) return;
+
+        const normalizeLabel = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        const activeServiceValue = (
+            document.getElementById('item-description-hidden')?.value
+            || document.getElementById('create-job-hidden')?.value
+            || decodeURIComponent(new URLSearchParams(window.location.search).get('service') || '')
+            || ''
+        ).trim();
+        const headingText = normalizeLabel(titleNode?.textContent || '');
+        const hasSpecialistHeading = headingText.includes('specialist') && headingText.includes('antiques');
+        const hasSpecialistSelection = !!(
+            String(valueHidden?.value || '').trim()
+            || valueSection.querySelector('.option-nav-btn.selected, .option-nav-btn[aria-checked="true"]')
+        );
+        const isSpecialist = normalizeLabel(activeServiceValue) === 'specialist & antiques'
+            || hasSpecialistHeading
+            || hasSpecialistSelection;
+        const firstItem = dimensionsList.querySelector('.dimension-item');
+
+        if (!isSpecialist) {
+            valueSection.style.display = 'none';
+            if (valueSection.parentElement !== customSection) {
+                if (hiddenAnchor && hiddenAnchor.parentElement === customSection) {
+                    customSection.insertBefore(valueSection, hiddenAnchor);
+                } else {
+                    customSection.prepend(valueSection);
+                }
+            }
+            return;
+        }
+
+        if (!firstItem) {
+            // During refresh/restore, items can be rendered a tick later; keep section visible and anchored.
+            if (valueSection.parentElement !== customSection) {
+                if (hiddenAnchor && hiddenAnchor.parentElement === customSection) {
+                    customSection.insertBefore(valueSection, hiddenAnchor);
+                } else {
+                    customSection.prepend(valueSection);
+                }
+            }
+            valueSection.style.display = 'block';
+            return;
+        }
+
+        const dimensionsInputs = firstItem.querySelector('.dimension-inputs');
+        const valueSlot = firstItem.querySelector('.specialist-value-slot');
+        const isAlreadyPlacedAfterDimensions = (
+            valueSection.parentElement === firstItem
+            && valueSection.previousElementSibling === dimensionsInputs
+        );
+
+        if (!isAlreadyPlacedAfterDimensions) {
+            if (valueSlot && valueSlot.parentElement === firstItem) {
+                valueSlot.replaceWith(valueSection);
+            } else if (dimensionsInputs && dimensionsInputs.parentElement === firstItem) {
+                dimensionsInputs.insertAdjacentElement('afterend', valueSection);
+            } else if (valueSection.parentElement !== firstItem) {
+                firstItem.appendChild(valueSection);
+            }
+        }
+        valueSection.style.marginTop = '12px';
+        valueSection.style.marginBottom = '8px';
+        valueSection.style.display = 'block';
+    }
+
+    if (dimensionsList) {
+        const specialistPlacementObserver = new MutationObserver(() => {
+            placeSpecialistValueInsideBlueForm();
+        });
+        specialistPlacementObserver.observe(dimensionsList, { childList: true, subtree: true });
+    }
+
+    window.placeSpecialistValueInsideBlueForm = placeSpecialistValueInsideBlueForm;
+
+    // Re-apply placement after restored state hydrates on refresh/back-forward cache.
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(placeSpecialistValueInsideBlueForm, 0);
+        setTimeout(placeSpecialistValueInsideBlueForm, 250);
+    });
+    window.addEventListener('pageshow', () => {
+        setTimeout(placeSpecialistValueInsideBlueForm, 0);
+        setTimeout(placeSpecialistValueInsideBlueForm, 250);
+    });
+
     if (addDimensionBtn) {
         addDimensionBtn.addEventListener('click', (e) => {
             e.preventDefault();
             addDimensionItem();
             renumberCustomizedItemTitles();
+            placeSpecialistValueInsideBlueForm();
             updateCustomizedItemsHiddenValue();
         });
     }
@@ -15783,8 +16395,21 @@ document.addEventListener('DOMContentLoaded', function() {
             const deleteBtn = e.target.closest('.btn-delete-dimension');
             if (deleteBtn) {
                 const item = deleteBtn.closest('.dimension-item');
-                if (item) item.remove();
+                if (item) {
+                    const valueSection = document.getElementById('specialist-antiques-value-section');
+                    const customSection = document.getElementById('customized-items-inventory-section');
+                    const hiddenAnchor = document.getElementById('customized-items-hidden');
+                    if (valueSection && customSection && item.contains(valueSection)) {
+                        if (hiddenAnchor && hiddenAnchor.parentElement === customSection) {
+                            customSection.insertBefore(valueSection, hiddenAnchor);
+                        } else {
+                            customSection.prepend(valueSection);
+                        }
+                    }
+                    item.remove();
+                }
                 renumberCustomizedItemTitles();
+                placeSpecialistValueInsideBlueForm();
                 updateCustomizedItemsHiddenValue();
             }
         });
@@ -16174,7 +16799,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const getVehicleSummary = (makeModelId, yearId) => {
             const makeModel = getInputValue(makeModelId);
-            const year = getInputValue(yearId);
+            const yearRaw = getInputValue(yearId);
+            const olderYearId = yearId.replace('-year-entry-hidden', '-older-year-entry');
+            const typedOlderYear = String(getInputValue(olderYearId) || '').replace(/\D+/g, '').slice(0, 4);
+            const year = yearRaw.toLowerCase() === 'older' ? typedOlderYear : yearRaw;
             if (makeModel || year) {
                 return year ? `${makeModel} (${year})`.trim() : makeModel;
             }
@@ -16949,11 +17577,35 @@ document.addEventListener('DOMContentLoaded', function() {
             hideSpecialistAntiquesSection();
             hideMotorbikeTransportSection();
             hideTrailerCampervanSection();
+            hidePianoDeliverySection();
             hideIndustrialSection();
+            hideBoatsSection();
+            hideClearanceSection();
+            hideFreightSection();
 
             setTimeout(() => {
                 updateHouseInventoryVisibility();
             }, 100);
+        } else if (value === 'Specialist & Antiques') {
+            if (inventorySection) {
+                inventorySection.style.display = 'none';
+                inventorySection.classList.add('progressive-hidden');
+            }
+            if (genericSection) genericSection.style.display = 'block';
+            if (carTransportSection) carTransportSection.style.display = 'none';
+            resetMandatoryAdditionalInfoForm();
+            hideManpowerSection();
+            hideOfficeRemovalSection();
+            hideVehiclePartsSection();
+            hideIndustrialSection();
+            hideBoatsSection();
+            hideClearanceSection();
+            hideFreightSection();
+            hidePackagingSection();
+            hideMotorbikeTransportSection();
+            hideTrailerCampervanSection();
+            hidePianoDeliverySection();
+            showSpecialistAntiquesSection();
         } else if (isCarCamperTransportService(value)) {
             if (inventorySection) {
                 inventorySection.style.display = 'none';
@@ -17392,6 +18044,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (dimensionsList && dimensionsList.children.length === 0) {
                 addDimensionItem();
             }
+            placeSpecialistValueInsideBlueForm();
             syncCustomizedItemFloorFields();
         } else {
             customSection.style.display = 'none';
@@ -18123,7 +18776,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const item = document.createElement('div');
         item.className = 'dimension-item';
         item.innerHTML = `
-            <div class="custom-item-title" style="font-size:1rem; font-weight:800; color:#0f172a; margin:0 0 10px;">Custom item ${itemIndex}</div>
+            <div class="custom-item-title" style="font-size:1.5rem; font-weight:800; color:#0f172a; margin:0 0 10px;">Custom item ${itemIndex}</div>
             <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
                 <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">Optional</span></label>
                 <button type="button" class="btn-delete-photos-top" style="border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:6px;padding:5px 10px;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap;">Delete photos</button>
@@ -18157,8 +18810,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input type="file" class="photo-input" accept="image/*,video/*" id="custom-item-photo-${itemIndex}-3">
                 </div>
             </div>
-            <label class="form-label" style="margin:0;">Add Approximate Dimensions</label>
-            <input type="text" class="form-input dimension-description" placeholder="Enter Item Description here (Naming the Item name and model will help Transport Provider with what exact item they will be transporting)" maxlength="200">
+            <label class="form-label" style="margin:0;">Add description <span class="required-text" style="display:inline;">(required)</span></label>
+            <input type="text" class="form-input dimension-description" placeholder="Enter Item Description here (Naming the Item name and model will help Transport Provider with what exact item they will be transporting)" maxlength="200" required data-required="true" aria-required="true">
             <div class="dimension-source-floor-wrap" style="margin-top:10px;display:none;">
                 <label class="form-label" style="margin:0 0 6px;">Pickup floor for this item <span class="required-text dimension-source-floor-required" style="display:none;">(required)</span></label>
                 <select class="form-input dimension-source-floor" aria-label="Pickup floor for this item">
@@ -18200,8 +18853,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     </select>
                 </div>
             </div>
+            ${itemIndex === 1 ? '<div class="specialist-value-slot" style="margin-top:12px;"></div>' : ''}
             <div class="dimension-photos-list" style="margin-top:12px;padding:10px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;display:none;">
-                <div style="font-weight:700;color:#1f2937;margin-bottom:8px;">Uploaded Files</div>
+                <div style="font-weight:550;color:#1f2937;margin-bottom:8px;">Uploaded Files</div>
             </div>
             <button type="button" class="btn-delete-dimension">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -18253,7 +18907,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            photoList.innerHTML = '<div style="font-weight:700;color:#1f2937;margin-bottom:8px;">Uploaded Files</div>';
+            photoList.innerHTML = '<div style="font-weight:550;color:#1f2937;margin-bottom:8px;">Uploaded Files</div>';
             photoList.style.display = 'block';
             
             uploadedPhotos.forEach((entry) => {
@@ -18281,9 +18935,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 row.appendChild(info);
                 
+                const actionsWrap = document.createElement('div');
+                actionsWrap.style.cssText = 'display:flex;align-items:center;gap:6px;';
+                
+                const inspectBtn = document.createElement('button');
+                inspectBtn.type = 'button';
+                inspectBtn.textContent = 'Inspect';
+                inspectBtn.style.cssText = 'border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;border-radius:5px;padding:4px 8px;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;';
+                inspectBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (entry.file) {
+                        showPhotoPreview(entry.file);
+                    } else if (entry.previewDataUrl) {
+                        showPhotoPreview(entry.previewDataUrl, entry.type, fileName);
+                    } else {
+                        alert('Preview is unavailable after refresh for this file. Please re-upload if needed.');
+                    }
+                });
+                
+                const changeBtn = document.createElement('button');
+                changeBtn.type = 'button';
+                changeBtn.textContent = 'Change';
+                changeBtn.style.cssText = 'border:1px solid #dbeafe;background:#f8fbff;color:#1e40af;border-radius:5px;padding:4px 8px;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;';
+                changeBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    entry.input.value = '';
+                    entry.input.click();
+                });
+                
                 const removeBtn = document.createElement('button');
                 removeBtn.type = 'button';
-                removeBtn.textContent = '✕ Remove';
+                removeBtn.textContent = 'Remove';
                 removeBtn.style.cssText = 'border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:5px;padding:4px 8px;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;';
                 removeBtn.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -18295,7 +18979,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     updateCustomizedItemsHiddenValue();
                     entry.input.dispatchEvent(new Event('change', { bubbles: true }));
                 });
-                row.appendChild(removeBtn);
+                
+                actionsWrap.appendChild(inspectBtn);
+                actionsWrap.appendChild(changeBtn);
+                actionsWrap.appendChild(removeBtn);
+                row.appendChild(actionsWrap);
                 
                 photoList.appendChild(row);
             });
@@ -18396,7 +19084,32 @@ document.addEventListener('DOMContentLoaded', function() {
         syncCustomizedItemFloorField(item, true);
         
         bindPhotoUploadHandlers(item);
+        
+        // Attach event listeners to dimension fields for this item
+        const dimensionFields = item.querySelectorAll('.dimension-field, .dimension-description, .dimension-source-floor, .dimension-size-unit, .dimension-weight-unit');
+        dimensionFields.forEach(field => {
+            field.addEventListener('input', () => {
+                updateCustomizedItemsHiddenValue();
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+            });
+            field.addEventListener('change', () => {
+                updateCustomizedItemsHiddenValue();
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+            });
+            field.addEventListener('blur', () => {
+                updateCustomizedItemsHiddenValue();
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+            });
+        });
+        
         renumberCustomizedItemTitles();
+        placeSpecialistValueInsideBlueForm();
         updateCustomizedItemsHiddenValue();
     }
 
@@ -18504,6 +19217,10 @@ document.addEventListener('DOMContentLoaded', function() {
     initVehicleTextfieldDigitRestriction();
 
     const quoteForm = document.getElementById('create-job-form');
+    if (quoteForm) {
+        // Use app-level validation so browser required popups do not block custom submit dialogs.
+        quoteForm.noValidate = true;
+    }
     window.globalServiceMediaFiles = Array.isArray(window.globalServiceMediaFiles)
         ? window.globalServiceMediaFiles
         : [];
@@ -18514,7 +19231,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const hidden = document.getElementById('global-service-media-hidden');
         if (!input || !list || !hidden) return;
 
-        const maxFiles = 6;
         const toSizeLabel = (bytes) => {
             const size = Number(bytes) || 0;
             if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
@@ -18572,13 +19288,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const existing = window.globalServiceMediaFiles || [];
             const next = [...existing];
+            const maxFiles = getServiceMediaUploadLimit();
 
             for (const file of picked) {
                 const type = String(file?.type || '');
                 if (!type.startsWith('image/') && !type.startsWith('video/')) {
                     continue;
                 }
-                if (next.length >= maxFiles) {
+                if (Number.isFinite(maxFiles) && next.length >= maxFiles) {
                     alert(`You can upload up to ${maxFiles} files.`);
                     break;
                 }
@@ -19991,7 +20708,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const isVehiclePartsService = serviceValue === 'Vehicle Parts';
         const shouldHidePacking = isVehicleService || isPackagedService || isVehiclePartsService || isPetsTransportService;
         const shouldHideDisassembly = isVehicleService || isPackagedService || isVehiclePartsService || isPetsTransportService;
-        const shouldHideStorage = isVehicleService || isPackagedService || isVehiclePartsService;
+        const shouldHideStorage = isPackagedService || isVehiclePartsService;
 
         const pickupPropertySection = document.getElementById('property-type-selection-section');
         const pickupLiftSection = document.getElementById('pickup-lift-section');
@@ -20718,9 +21435,199 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         };
 
+        const showQuoteEmailConfirmation = (defaultEmail) => {
+            return new Promise((resolve) => {
+                const backdrop = document.createElement('div');
+                backdrop.style.cssText = `
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(15, 23, 42, 0.55);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 12001;
+                    padding: 16px;
+                `;
+
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    width: min(560px, 100%);
+                    background: #fff;
+                    border: 1px solid #bfdbfe;
+                    border-radius: 12px;
+                    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.3);
+                    padding: 18px;
+                `;
+
+                const title = document.createElement('h3');
+                title.textContent = 'Confirm your quote email';
+                title.style.cssText = 'margin: 0 0 10px 0; color: #1e3a8a; font-size: 1.08rem; font-weight: 800;';
+
+                const copy = document.createElement('p');
+                copy.style.cssText = 'margin: 0 0 10px 0; color: #334155; line-height: 1.5; font-size: 0.95rem;';
+                copy.textContent = 'When you press Send, your price details will be emailed to the account email below. You can change it if you want this quote sent elsewhere.';
+
+                const accountEmail = document.createElement('p');
+                accountEmail.style.cssText = 'margin: 0 0 12px 0; color: #0f172a; font-size: 0.92rem;';
+                accountEmail.innerHTML = `Signed-in email: <strong>${String(defaultEmail || '').trim()}</strong>`;
+
+                const inputLabel = document.createElement('label');
+                inputLabel.textContent = 'Quote email address';
+                inputLabel.style.cssText = 'display:block; font-size:0.9rem; font-weight:700; color:#0f172a; margin-bottom:6px;';
+
+                const emailInput = document.createElement('input');
+                emailInput.type = 'email';
+                emailInput.value = String(defaultEmail || '').trim();
+                emailInput.placeholder = 'you@example.com';
+                emailInput.style.cssText = 'width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.95rem; margin-bottom:8px;';
+
+                const helper = document.createElement('p');
+                helper.style.cssText = 'margin: 0 0 12px 0; color: #64748b; font-size: 0.85rem;';
+                helper.textContent = 'You can edit this email before sending.';
+
+                const errorText = document.createElement('p');
+                errorText.style.cssText = 'display:none; margin:0 0 12px 0; color:#b91c1c; font-size:0.85rem; font-weight:600;';
+
+                const actions = document.createElement('div');
+                actions.style.cssText = 'display:flex; justify-content:flex-end; gap:10px; flex-wrap:wrap;';
+
+                const cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.textContent = 'Cancel';
+                cancelBtn.style.cssText = `
+                    border: 1px solid #93c5fd;
+                    background: #eff6ff;
+                    color: #1d4ed8;
+                    border-radius: 8px;
+                    padding: 9px 12px;
+                    font-size: 0.9rem;
+                    font-weight: 700;
+                    cursor: pointer;
+                `;
+
+                const sendBtn = document.createElement('button');
+                sendBtn.type = 'button';
+                sendBtn.textContent = 'Send Quote Request';
+                sendBtn.style.cssText = `
+                    border: none;
+                    background: #1d4ed8;
+                    color: #fff;
+                    border-radius: 8px;
+                    padding: 9px 12px;
+                    font-size: 0.9rem;
+                    font-weight: 800;
+                    cursor: pointer;
+                `;
+
+                const closeWith = (email) => {
+                    backdrop.remove();
+                    resolve(email);
+                };
+
+                const validateEmail = (value) => {
+                    const normalized = String(value || '').trim();
+                    if (!normalized) {
+                        return 'Please enter an email address.';
+                    }
+                    const emailRegex = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
+                    if (!emailRegex.test(normalized)) {
+                        return 'Please enter a valid email address.';
+                    }
+                    return '';
+                };
+
+                const confirmAndClose = () => {
+                    const chosenEmail = String(emailInput.value || '').trim();
+                    const validationError = validateEmail(chosenEmail);
+                    if (validationError) {
+                        errorText.textContent = validationError;
+                        errorText.style.display = 'block';
+                        emailInput.focus();
+                        return;
+                    }
+                    closeWith(chosenEmail);
+                };
+
+                cancelBtn.addEventListener('click', () => closeWith(null));
+                sendBtn.addEventListener('click', confirmAndClose);
+                emailInput.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        confirmAndClose();
+                    }
+                });
+                backdrop.addEventListener('click', (event) => {
+                    if (event.target === backdrop) {
+                        closeWith(null);
+                    }
+                });
+
+                actions.appendChild(cancelBtn);
+                actions.appendChild(sendBtn);
+                modal.appendChild(title);
+                modal.appendChild(copy);
+                modal.appendChild(accountEmail);
+                modal.appendChild(inputLabel);
+                modal.appendChild(emailInput);
+                modal.appendChild(helper);
+                modal.appendChild(errorText);
+                modal.appendChild(actions);
+                backdrop.appendChild(modal);
+                document.body.appendChild(backdrop);
+                emailInput.focus();
+            });
+        };
+
         quoteForm.addEventListener('submit', async function(e) {
 
             e.preventDefault();
+
+            const ensureFormErrorSummary = () => {
+                let summary = document.getElementById('form-error-summary');
+                if (summary) return summary;
+
+                summary = document.createElement('div');
+                summary.id = 'form-error-summary';
+                summary.setAttribute('role', 'alert');
+                summary.style.cssText = 'display:none; margin:0 0 12px 0; padding:10px 12px; border:1px solid #fecaca; border-radius:8px; background:#fff1f2; color:#991b1b; font-weight:700; font-size:0.92rem;';
+
+                const container = quoteForm.querySelector('.form-v2-main-grid') || quoteForm;
+                container.prepend(summary);
+                return summary;
+            };
+
+            const formErrorSummary = ensureFormErrorSummary();
+
+            const promptLoginForPricing = (message) => {
+                const notice = message || 'Please sign in to get your price estimate. We will use your signed-in account email for the quote.';
+                const hasLoginModal = !!document.getElementById('login-modal');
+                const canOpenModal = typeof openLoginModal === 'function';
+
+                alert(notice);
+
+                if (hasLoginModal && canOpenModal) {
+                    try {
+                        sessionStorage.setItem('anytransport_auth_return_url', window.location.href);
+                    } catch (_error) {
+                        // Ignore storage write issues and still open the modal.
+                    }
+                    openLoginModal();
+                    return;
+                }
+
+                window.location.href = 'index.html#login';
+            };
+
+            if (typeof auth === 'undefined' || !auth.isLoggedIn()) {
+                promptLoginForPricing();
+                return;
+            }
+
+            const currentUser = auth.getUser();
+            if (!currentUser || !currentUser.email) {
+                promptLoginForPricing('Your account is missing an email address. Please sign in again to continue.');
+                return;
+            }
 
             const showSubmitValidationError = (message, targetEl, fieldForAlert) => {
                 const text = String(message || '').trim();
@@ -20737,14 +21644,37 @@ document.addEventListener('DOMContentLoaded', function() {
                     setTimeout(() => {
                         alertMissingRestriction(fieldForAlert);
                     }, 240);
-                } else if (text) {
-                    alert(text);
                 }
             };
 
+            if (formErrorSummary) {
+                formErrorSummary.style.display = 'none';
+                formErrorSummary.textContent = '';
+            }
+
             applyRequiredRules();
-            const firstInvalidField = validateRequiredFields(quoteForm);
-            if (firstInvalidField) {
+            let stepValidationFailure = null;
+            if (typeof validateRequiredFieldsInStep === 'function') {
+                for (let step = 1; step <= 7; step += 1) {
+                    const invalidField = validateRequiredFieldsInStep(step);
+                    if (invalidField) {
+                        stepValidationFailure = { step, invalidField };
+                        break;
+                    }
+                }
+            }
+
+            if (stepValidationFailure) {
+                const firstInvalidField = stepValidationFailure.invalidField;
+                const missingFieldLabel = (typeof getMissingFieldDisplayName === 'function')
+                    ? getMissingFieldDisplayName(firstInvalidField)
+                    : 'required field';
+                showSubmitValidationError(`Please complete the required field: ${missingFieldLabel}.`, firstInvalidField);
+
+                if (typeof window.setFormStep === 'function') {
+                    window.setFormStep(stepValidationFailure.step);
+                }
+
                 if (typeof window.revealMissingFieldBeforeAlert === 'function') {
                     window.revealMissingFieldBeforeAlert(firstInvalidField);
                 }
@@ -21057,46 +21987,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
             }
 
-            // Check if user is logged in AFTER validation
-            if (typeof auth === 'undefined' || !auth.isLoggedIn()) {
-                // Save quote data temporarily
-                localStorage.setItem('pending_quote_submission', JSON.stringify(quoteData));
-                localStorage.setItem('pending_quote_data', JSON.stringify(quoteData));
-                
-                // Show login modal with notice
-                const loginModal = document.getElementById('login-modal');
-                const loginNotice = document.getElementById('login-modal-notice');
-                
-                if (loginModal) {
-                    // Show the notice
-                    if (loginNotice) {
-                        loginNotice.style.display = 'block';
-                    }
-                    // Add show class to display modal
-                    loginModal.classList.add('show');
-                    // Ensure it's visible by setting z-index high
-                    loginModal.style.zIndex = '9999';
-                } else {
-                    // Fallback if modal not on page
-                    alert('Please log in or sign up to submit your quote request');
-                    window.location.href = 'index.html#login';
-                }
+            const selectedQuoteEmail = await showQuoteEmailConfirmation(currentUser.email);
+            if (!selectedQuoteEmail) {
                 return;
             }
 
-            // Get user information from auth
-            const currentUser = auth.getUser();
-            
             // Add user information to quote data
-            quoteData.customerName = currentUser.name;
-            quoteData.customerEmail = currentUser.email;
+            quoteData.customerName = currentUser.name || quoteData.customerName;
+            quoteData.customerEmail = selectedQuoteEmail;
             quoteData.customerPhone = currentUser.phone || '';
 
             // Save request to localStorage (in production, this would send to server)
             const requests = JSON.parse(localStorage.getItem('anytransport_quote_requests') || '[]');
             quoteData.id = Math.random().toString(36).substr(2, 9);
             quoteData.status = 'pending'; // Awaiting quote from AnyTransport
-            quoteData.userId = auth.getUser().id; // Link to user
+            quoteData.userId = currentUser.id; // Link to user
             requests.push(quoteData);
             localStorage.setItem('anytransport_quote_requests', JSON.stringify(requests));
             
@@ -21105,6 +22010,9 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Set flag for pending quote submission
             localStorage.setItem('pending_quote_submission', 'true');
+
+            // Pass selected email to confirmation UI
+            window.anytransportQuoteContactEmail = selectedQuoteEmail;
 
             // Show confirmation modal
             showConfirmationModal();
@@ -21518,14 +22426,105 @@ function hidePackagingSection() {
 
 function hideSpecialistAntiquesSection() {
     const specialistSection = document.getElementById('office-removal-description-section');
+    const specialistValueSection = document.getElementById('specialist-antiques-value-section');
+    const customValueWrap = document.getElementById('specialist-custom-value-wrap');
+    const customValueInput = document.getElementById('specialist-custom-value');
+    const valueHidden = document.getElementById('specialist-value-hidden');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
     if (specialistSection) {
         specialistSection.setAttribute('data-form-step', '2');
         specialistSection.style.display = 'none';
     }
+    if (specialistValueSection) {
+        specialistValueSection.style.display = 'none';
+    }
+    if (customValueWrap) {
+        customValueWrap.style.display = 'none';
+    }
+    if (customValueInput) {
+        customValueInput.value = '';
+    }
+    if (valueHidden) {
+        valueHidden.value = '';
+        valueHidden.setAttribute('data-required', 'false');
+        valueHidden.setAttribute('aria-required', 'false');
+        valueHidden.dispatchEvent(new Event('change', { bubbles: true }));
+    }
     if (deliveryLocationCol) {
         deliveryLocationCol.style.display = '';
     }
+}
+
+function showSpecialistAntiquesSection() {
+    const specialistSection = document.getElementById('office-removal-description-section');
+    const specialistValueSection = document.getElementById('specialist-antiques-value-section');
+    const deliveryLocationCol = document.getElementById('delivery-location-col');
+    const officeGenericCard = document.getElementById('office-generic-description-card');
+
+    if (specialistSection) {
+        specialistSection.setAttribute('data-form-step', '3');
+        specialistSection.style.display = 'block';
+    }
+    if (specialistValueSection) {
+        specialistValueSection.style.display = 'block';
+    }
+    const valueHidden = document.getElementById('specialist-value-hidden');
+    if (valueHidden) {
+        valueHidden.setAttribute('data-required', 'true');
+        valueHidden.setAttribute('aria-required', 'true');
+    }
+    if (officeGenericCard) {
+        officeGenericCard.style.display = 'none';
+    }
+    if (deliveryLocationCol) {
+        deliveryLocationCol.style.display = '';
+    }
+
+    setupSpecialistValueListeners();
+    if (typeof window.placeSpecialistValueInsideBlueForm === 'function') {
+        window.placeSpecialistValueInsideBlueForm();
+    }
+}
+
+function setupSpecialistValueListeners() {
+    const valueButtons = document.querySelectorAll('.specialist-value-nav .option-nav-btn');
+    const customValueWrap = document.getElementById('specialist-custom-value-wrap');
+    const customValueInput = document.getElementById('specialist-custom-value');
+    const valueHidden = document.getElementById('specialist-value-hidden');
+
+    valueButtons.forEach((btn) => {
+        if (btn.dataset.specialistValueBound === 'true') return;
+        btn.dataset.specialistValueBound = 'true';
+
+        btn.addEventListener('click', () => {
+            valueButtons.forEach((b) => {
+                b.classList.remove('selected');
+                b.setAttribute('aria-checked', 'false');
+            });
+            btn.classList.add('selected');
+            btn.setAttribute('aria-checked', 'true');
+
+            const value = btn.getAttribute('data-value') || '';
+            if (valueHidden) {
+                valueHidden.value = value;
+                valueHidden.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            if (customValueWrap) {
+                customValueWrap.style.display = value === 'other' ? 'block' : 'none';
+                if (value !== 'other' && customValueInput) {
+                    customValueInput.value = '';
+                    customValueInput.removeAttribute('data-required');
+                    customValueInput.setAttribute('aria-required', 'false');
+                }
+                if (value === 'other' && customValueInput) {
+                    customValueInput.setAttribute('data-required', 'true');
+                    customValueInput.setAttribute('aria-required', 'true');
+                    customValueInput.focus();
+                }
+            }
+        });
+    });
 }
 
 function showMotorbikeTransportSection() {
@@ -21937,7 +22936,7 @@ function getMultiStopOfficeInventoryMarkup(stopId) {
 function buildMultiStopDimensionItem() {
     return `
         <div class="dimension-item multi-stop-dimension-item">
-            <input type="text" class="form-input dimension-description" placeholder="Enter Item Description here">
+            <input type="text" class="form-input dimension-description" placeholder="Enter Item Description here" required data-required="true" aria-required="true">
             <div class="dimension-inputs">
                 <input type="number" class="form-input dimension-field" placeholder="Width" min="0" step="0.1">
                 <input type="number" class="form-input dimension-field" placeholder="Depth" min="0" step="0.1">
@@ -25211,17 +26210,13 @@ function getVehicleOverviewDetailRows(serviceValue) {
                 : (serviceValue === 'Boats' ? 'Boat' : 'Caravan/Trailer');
 
         vehicles.forEach((vehicle, index) => {
-            const itemLabel = `${baseLabel} ${index + 1}`;
             const makeModel = String(vehicle?.makeModel || '').trim();
             const year = String(vehicle?.year || '').trim();
             const value = String(vehicle?.value || '').trim();
+            const itemLabel = makeModel || `${baseLabel} ${index + 1}`;
             const summaryParts = [];
 
-            if (makeModel && year) {
-                summaryParts.push(`${makeModel} (${year})`);
-            } else if (makeModel) {
-                summaryParts.push(makeModel);
-            } else if (year) {
+            if (year) {
                 summaryParts.push(`Year: ${year}`);
             }
 
@@ -25841,6 +26836,44 @@ function buildOverviewFloorInventoryMarkup(kind) {
         }
 
         const assignments = window.itemFloorAssignments || {};
+        const customizedDetailByNameAndFloor = {};
+        const customizedDetailByName = {};
+
+        if (isCustomizedInventoryService(serviceValue)) {
+            const serializedItems = String(document.getElementById('customized-items-hidden')?.value || '').trim();
+            if (serializedItems) {
+                try {
+                    const parsedItems = JSON.parse(serializedItems);
+                    if (Array.isArray(parsedItems)) {
+                        const fallbackSourceFloor = selectedPickup[0]
+                            || (document.getElementById('pickup-floor-select')?.value || '').trim()
+                            || 'Ground';
+
+                        parsedItems.forEach((item) => {
+                            const name = String(item?.name || '').trim();
+                            if (!name) return;
+
+                            const baseName = normalizeOverviewItemName(name);
+                            const width = String(item?.width || '').trim();
+                            const depth = String(item?.depth || '').trim();
+                            const height = String(item?.height || '').trim();
+                            const sizeUnit = String(item?.sizeUnit || 'cm').trim() || 'cm';
+                            const weight = String(item?.weight || '').trim();
+                            const weightUnit = String(item?.weightUnit || 'kg').trim() || 'kg';
+                            const sourceFloor = String(item?.sourceFloor || '').trim() || fallbackSourceFloor;
+                            const detailedLabel = `${name} (${width}x${depth}x${height}${sizeUnit}, ${weight}${weightUnit})`;
+
+                            customizedDetailByNameAndFloor[`${baseName}||${sourceFloor}`] = detailedLabel;
+                            if (!customizedDetailByName[baseName]) {
+                                customizedDetailByName[baseName] = detailedLabel;
+                            }
+                        });
+                    }
+                } catch (error) {
+                    // Ignore malformed customized payload.
+                }
+            }
+        }
         const indexedCustomizedNames = new Set();
 
         if (isCustomizedInventoryService(serviceValue)) {
@@ -25864,11 +26897,21 @@ function buildOverviewFloorInventoryMarkup(kind) {
             if (isLegacyCustomizedKey && indexedCustomizedNames.has(baseName)) {
                 return;
             }
+
+            const normalizedSourceFloor = String(sourceFloor || '').trim();
+            let displayName = baseName;
+            if (isCustomizedInventoryService(serviceValue)) {
+                const floorScopedKey = `${baseName}||${normalizedSourceFloor}`;
+                displayName = customizedDetailByNameAndFloor[floorScopedKey]
+                    || customizedDetailByName[baseName]
+                    || baseName;
+            }
+
             Object.keys(perFloor).forEach((floorName) => {
                 const qty = parseInt(perFloor[floorName], 10) || 0;
                 if (qty <= 0) return;
                 if (!grouped[floorName]) grouped[floorName] = {};
-                grouped[floorName][baseName] = (grouped[floorName][baseName] || 0) + qty;
+                grouped[floorName][displayName] = (grouped[floorName][displayName] || 0) + qty;
             });
         });
     }
@@ -27839,6 +28882,9 @@ window.addEventListener('pageshow', function(event) {
         if (pickupFloorsImage) pickupFloorsImage.style.display = 'none';
         if (pickupRoomList) pickupRoomList.style.display = 'none';
         if (step3Title) step3Title.style.display = 'none';
+        if (typeof window.placeSpecialistValueInsideBlueForm === 'function') {
+            window.placeSpecialistValueInsideBlueForm();
+        }
     };
 
     const rehydrateFromBrowserReturn = () => {
@@ -27848,18 +28894,27 @@ window.addEventListener('pageshow', function(event) {
         const savedStep = Number.isFinite(parseInt(window.__createJobRestoreTargetStep, 10))
             ? parseInt(window.__createJobRestoreTargetStep, 10)
             : getStepFromUi();
+        const restoredServiceValue = String(
+            (serviceHidden && serviceHidden.value)
+            || (createJobHidden && createJobHidden.value)
+            || (cjHidden && cjHidden.value)
+            || ''
+        ).trim();
+        const serviceToApply = decodedService || restoredServiceValue;
 
-        if (serviceHidden) {
-            serviceHidden.value = decodedService;
-            serviceHidden.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        if (createJobHidden) {
-            createJobHidden.value = decodedService;
-            createJobHidden.dispatchEvent(new Event('change', { bubbles: true }));
+        if (serviceToApply) {
+            if (serviceHidden) {
+                serviceHidden.value = serviceToApply;
+                serviceHidden.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            if (createJobHidden) {
+                createJobHidden.value = serviceToApply;
+                createJobHidden.dispatchEvent(new Event('change', { bubbles: true }));
+            }
         }
 
-        if (typeof window.applyServiceSelection === 'function') {
-            window.applyServiceSelection(decodedService, decodedService);
+        if (serviceToApply && typeof window.applyServiceSelection === 'function') {
+            window.applyServiceSelection(serviceToApply, serviceToApply);
         }
 
         // Re-apply the saved step now that service initialisation may have
@@ -27869,7 +28924,7 @@ window.addEventListener('pageshow', function(event) {
             window.setFormStep(effectiveStep);
         }
 
-        if (isCustomizedInventoryService(decodedService) && effectiveStep === 3) {
+        if (serviceToApply && isCustomizedInventoryService(serviceToApply) && effectiveStep === 3) {
             forceCustomizedStep3Layout();
         }
     };

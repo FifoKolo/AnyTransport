@@ -284,6 +284,29 @@ body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-bl
     box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
 }
 
+@media (min-width: 901px) {
+    body[data-form-step="3"] #house-removal-inventory-section > #room-tabs,
+    body[data-current-step="3"] #house-removal-inventory-section > #room-tabs,
+    body[data-form-step="3"] #house-removal-inventory-section .floor-inventory-block > .inventory-tabs,
+    body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-block > .inventory-tabs,
+    body[data-form-step="3"] #house-removal-inventory-section .floor-inventory-block > .inventory-tabs-sticky,
+    body[data-current-step="3"] #house-removal-inventory-section .floor-inventory-block > .inventory-tabs-sticky {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        max-width: 100%;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    body[data-form-step="3"] #house-removal-inventory-section .inventory-tab,
+    body[data-current-step="3"] #house-removal-inventory-section .inventory-tab {
+        flex: 0 0 clamp(120px, 11vw, 170px);
+        min-width: clamp(120px, 11vw, 170px);
+    }
+}
+
 @media (max-width: 900px) {
     body[data-form-step="3"] #house-removal-inventory-section > .inventory-floor-title,
     body[data-form-step="3"] #house-removal-inventory-section .floor-inventory-block > .inventory-block-header {

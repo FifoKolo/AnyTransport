@@ -3905,7 +3905,7 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     border: 2px dashed #bfdbfe;
     border-radius: 4px;
     background: #eff6ff;
-    cursor: pointer;
+    cursor: pointer !important;
     transition: border-color 0.2s, background 0.2s;
     position: relative;
 }
