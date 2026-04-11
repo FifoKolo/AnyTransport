@@ -62,7 +62,8 @@ class AuthManager {
             name: formData.name,
             email: formData.email,
             password: formData.password, // Should NOT be stored client-side in production
-            phone: formData.phone,
+            phone: formData.contact || formData.phone || '',
+            contact: formData.contact || formData.phone || '',
             city: formData.city,
             role: formData.role,
             createdAt: new Date()
@@ -200,6 +201,7 @@ if (signupForm) {
         const nameInput = this.querySelector('input[name="name"]');
         const emailInput = this.querySelector('#signup-email');
         const emailConfirmInput = this.querySelector('#signup-email-confirm');
+        const contactInput = this.querySelector('#signup-contact');
         const passwordInput = this.querySelector('#signup-password');
         const passwordConfirmInput = this.querySelector('#signup-password-confirm');
         
@@ -207,9 +209,10 @@ if (signupForm) {
             name: nameInput.value,
             email: emailInput.value,
             emailConfirm: emailConfirmInput.value,
+            contact: contactInput.value,
             password: passwordInput.value,
             confirmPassword: passwordConfirmInput.value,
-            phone: '',
+            phone: contactInput.value,
             city: '',
             role: 'customer'
         };
@@ -226,7 +229,7 @@ if (signupForm) {
             return;
         }
 
-        if (formData.name && formData.email && formData.password) {
+        if (formData.name && formData.email && formData.contact && formData.password) {
             auth.signup(formData);
             closeSignupModal();
             

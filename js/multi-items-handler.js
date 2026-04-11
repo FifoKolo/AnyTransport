@@ -3,6 +3,25 @@
 
 window.multiItemsManager = {
     editingVehicleIds: {},
+    showVehicleDraftForm: {},
+    pendingVehicleMediaSync: {},
+    allowProgrammaticVehicleAddClick: {},
+    scheduleProgressSyncTimer: null,
+    scheduleProgressSync(delayMs = 120) {
+        if (this.scheduleProgressSyncTimer) {
+            clearTimeout(this.scheduleProgressSyncTimer);
+        }
+
+        this.scheduleProgressSyncTimer = setTimeout(() => {
+            this.scheduleProgressSyncTimer = null;
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
+            if (typeof window.saveCreateJobProgress === 'function') {
+                window.saveCreateJobProgress();
+            }
+        }, delayMs);
+    },
     // Parse stored pianos from JSON
     parsePianos() {
         const hidden = document.getElementById('pianos-json-hidden');
@@ -92,8 +111,6 @@ window.multiItemsManager = {
             } else {
                 sizeLabel = this.getPianoSizeLabel(piano.size);
             }
-
-            detailEl.innerHTML = `<strong>Piano ${index + 1}:</strong> ${typeLabel}${typeGroupLabel ? ` (${typeGroupLabel})` : ''}${sizeLabel ? ' - ' + sizeLabel : ''}`;
             detailEl.style.flex = '1';
 
             const deleteBtn = document.createElement('button');
@@ -289,6 +306,58 @@ window.multiItemsManager = {
         }
     },
 
+    syncVehicleDraftUi(vehicleType) {
+        const suffixes = ['year', 'value', 'condition', 'method', 'weight', 'length', 'operational', 'roadworthy', 'insurance', 'roadtax', 'tested', 'type'];
+
+        suffixes.forEach((suffix) => {
+            const hidden = document.getElementById(`${vehicleType}-${suffix}-entry-hidden`);
+            const visible = document.getElementById(`${vehicleType}-${suffix}-visible`);
+            const nav = document.querySelector(`.${vehicleType}-${suffix}-entry-nav`);
+            const value = String(hidden?.value || '').trim();
+
+            if (visible) {
+                visible.value = value;
+                visible.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            if (nav) {
+                nav.querySelectorAll('.option-nav-btn').forEach((btn) => {
+                    const isSelected = String(btn.dataset.value || '') === value;
+                    btn.classList.toggle('selected', isSelected);
+                    btn.classList.toggle('is-active', isSelected);
+                    btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+                    btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+                });
+            }
+        });
+
+        const makeInput = document.getElementById(`${vehicleType}-make-model-entry`);
+        if (makeInput) {
+            makeInput.dispatchEvent(new Event('input', { bubbles: true }));
+            makeInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        this.syncVehicleCustomFieldVisibility(vehicleType);
+
+        if (vehicleType === 'trailer') {
+            const testedHidden = document.getElementById('trailer-tested-entry-hidden');
+            if (testedHidden) {
+                const testedValue = String(testedHidden.value || '').trim();
+                document.querySelectorAll('.trailer-tested-entry-nav .option-nav-btn').forEach((btn) => {
+                    const isSelected = String(btn.dataset.value || '') === testedValue;
+                    btn.classList.toggle('selected', isSelected);
+                    btn.classList.toggle('is-active', isSelected);
+                    btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+                    btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+                });
+            }
+        }
+
+        if (typeof window.updateNextButtonState === 'function') {
+            window.updateNextButtonState();
+        }
+    },
+
     formatVehicleMeasurement(vehicle, kind) {
         const selected = String(vehicle?.[kind] || '').trim();
         if (selected !== 'custom') {
@@ -361,11 +430,106 @@ window.multiItemsManager = {
         return parts.join(', ');
     },
 
+    renderVehiclePhotoTiles(vehicleType, mediaItems, formRoot, options = {}) {
+        const readOnly = !!options.readOnly;
+        const sectionIdMap = {
+            car: 'car-transport-section',
+            motorbike: 'motorbike-transport-section',
+            trailer: 'trailer-campervan-section'
+        };
+
+        const section = document.getElementById(sectionIdMap[vehicleType] || '');
+        const activeForm = formRoot || section?.querySelector?.(`[data-vehicle-entry-form="${vehicleType}"]`);
+        if (!activeForm) return;
+
+        const tiles = Array.from(activeForm.querySelectorAll('.vehicle-photo-upload-area'));
+        if (!tiles.length) return;
+
+        const files = Array.isArray(mediaItems) ? mediaItems : [];
+
+        tiles.forEach((tile, index) => {
+            const svg = tile.querySelector('svg');
+            const text = tile.querySelector('span');
+            const media = files[index] || null;
+            const existingRemoveBtn = tile.querySelector('.vehicle-tile-remove-btn');
+            const existingInspectBtn = tile.querySelector('.vehicle-tile-inspect-btn');
+
+            if (existingRemoveBtn) {
+                existingRemoveBtn.remove();
+            }
+            if (existingInspectBtn) {
+                existingInspectBtn.remove();
+            }
+
+            tile.style.backgroundImage = '';
+            tile.style.backgroundSize = '';
+            tile.style.backgroundPosition = '';
+            tile.style.backgroundRepeat = '';
+            tile.style.borderStyle = '';
+
+            if (svg) svg.style.display = '';
+            if (text) {
+                text.style.display = '';
+                text.innerHTML = 'Drag photo or video here <strong>upload</strong>';
+            }
+
+            if (readOnly) {
+                tile.removeAttribute('for');
+                tile.style.cursor = 'default';
+                tile.setAttribute('aria-disabled', 'true');
+            } else {
+                tile.setAttribute('for', `${vehicleType}-media-input`);
+                tile.style.cursor = 'pointer';
+                tile.removeAttribute('aria-disabled');
+            }
+
+            if (!media) return;
+
+            const mediaType = String(media?.type || '').toLowerCase();
+            const isImage = mediaType.startsWith('image/');
+            const hasData = !!String(media?.dataUrl || '').trim();
+
+            if (!readOnly) {
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'vehicle-tile-remove-btn';
+                removeBtn.textContent = 'Remove';
+                removeBtn.style.cssText = 'position:absolute;top:8px;right:8px;border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:6px;padding:3px 8px;font-size:0.75rem;font-weight:700;cursor:pointer;z-index:3;';
+                removeBtn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    this.deleteVehicleMedia(vehicleType, index);
+                });
+                tile.appendChild(removeBtn);
+            }
+
+            if (isImage && hasData) {
+                tile.style.backgroundImage = `linear-gradient(rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0.08)), url("${media.dataUrl}")`;
+                tile.style.backgroundSize = 'cover';
+                tile.style.backgroundPosition = 'center';
+                tile.style.backgroundRepeat = 'no-repeat';
+                tile.style.borderStyle = 'solid';
+                if (svg) svg.style.display = 'none';
+                if (text) {
+                    text.style.display = 'none';
+                }
+                return;
+            }
+
+            if (text) {
+                text.style.display = '';
+                text.innerHTML = '<strong>Video selected</strong>';
+            }
+        });
+    },
+
     renderVehicleMediaPreview(vehicleType, mediaItems) {
         const preview = document.getElementById(`${vehicleType}-media-preview`);
         if (!preview) return;
 
         const files = Array.isArray(mediaItems) ? mediaItems : [];
+        this.renderVehiclePhotoTiles(vehicleType, files);
+
         if (files.length === 0) {
             preview.innerHTML = '';
             preview.style.display = 'none';
@@ -399,7 +563,6 @@ window.multiItemsManager = {
         preview.innerHTML = `<div style="display:flex; flex-wrap:wrap; gap:6px;">${chips}</div>`;
         preview.style.display = 'block';
 
-        // Add event listeners for delete buttons
         preview.querySelectorAll('[data-delete-media]').forEach((btn) => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -410,7 +573,6 @@ window.multiItemsManager = {
             });
         });
 
-        // Add event listeners for detail inspection
         preview.querySelectorAll('[data-media-index]').forEach((chip) => {
             chip.addEventListener('click', (e) => {
                 if (e.target.closest('[data-delete-media]')) return;
@@ -562,7 +724,7 @@ window.multiItemsManager = {
 
     syncVehicleMediaFromInput(vehicleType) {
         const input = document.getElementById(`${vehicleType}-media-input`);
-        if (!input) return;
+        if (!input) return Promise.resolve([]);
 
         const newFiles = Array.from(input.files || []);
         const existingMedia = this.parseVehicleMediaFromHidden(vehicleType);
@@ -572,7 +734,7 @@ window.multiItemsManager = {
         const hasLimit = Number.isFinite(mediaLimit);
 
         // Process each new file and convert to data URL for preview
-        Promise.all(newFiles.map((file) => this.fileToDataUrl(file))).then((dataUrls) => {
+        const syncPromise = Promise.all(newFiles.map((file) => this.fileToDataUrl(file))).then((dataUrls) => {
             const newMediaItems = newFiles.map((file, idx) => ({
                 name: String(file?.name || '').trim(),
                 type: String(file?.type || '').trim(),
@@ -595,7 +757,18 @@ window.multiItemsManager = {
 
             this.saveVehicleMediaToHidden(vehicleType, uniqueMedia);
             this.renderVehicleMediaPreview(vehicleType, uniqueMedia);
+            return uniqueMedia;
         });
+
+        this.pendingVehicleMediaSync[vehicleType] = syncPromise
+            .catch(() => [])
+            .finally(() => {
+                if (this.pendingVehicleMediaSync[vehicleType] === syncPromise) {
+                    this.pendingVehicleMediaSync[vehicleType] = null;
+                }
+            });
+
+        return this.pendingVehicleMediaSync[vehicleType];
     },
 
     fileToDataUrl(file) {
@@ -605,6 +778,41 @@ window.multiItemsManager = {
             reader.onerror = () => resolve('');
             reader.readAsDataURL(file);
         });
+    },
+
+    async resolveVehicleMediaForSave(vehicleType) {
+        const existing = this.parseVehicleMediaFromHidden(vehicleType);
+        if (existing.length > 0) {
+            return existing;
+        }
+
+        const input = document.getElementById(`${vehicleType}-media-input`);
+        const files = Array.from(input?.files || []);
+        if (files.length === 0) {
+            return [];
+        }
+
+        const mediaLimit = typeof window.getServiceMediaUploadLimit === 'function'
+            ? window.getServiceMediaUploadLimit()
+            : 5;
+        const hasLimit = Number.isFinite(mediaLimit);
+        const limitedFiles = hasLimit ? files.slice(0, mediaLimit) : files;
+
+        if (hasLimit && files.length > limitedFiles.length) {
+            alert(`You can upload up to ${mediaLimit} files.`);
+        }
+
+        const dataUrls = await Promise.all(limitedFiles.map((file) => this.fileToDataUrl(file)));
+        const mediaItems = limitedFiles.map((file, idx) => ({
+            name: String(file?.name || '').trim(),
+            type: String(file?.type || '').trim(),
+            size: Number(file?.size || 0) || 0,
+            dataUrl: String(dataUrls[idx] || '')
+        })).filter((item) => item.name);
+
+        this.saveVehicleMediaToHidden(vehicleType, mediaItems);
+        this.renderVehicleMediaPreview(vehicleType, mediaItems);
+        return mediaItems;
     },
 
     renderVehicleFloorSelector(vehicleType) {
@@ -718,6 +926,11 @@ window.multiItemsManager = {
 
         // Force-clear any lingering selected nav state in the active vehicle section.
         if (activeForm) {
+            activeForm.querySelectorAll(`[id^="${vehicleType}-"][id$="-visible"]`).forEach((field) => {
+                field.value = '';
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+
             activeForm.querySelectorAll('.option-nav-btn.selected, .option-nav-btn.is-active').forEach((btn) => {
                 btn.classList.remove('selected');
                 btn.classList.remove('is-active');
@@ -728,6 +941,33 @@ window.multiItemsManager = {
             activeForm.querySelectorAll('input[type="hidden"][id$="-entry-hidden"]').forEach((hidden) => {
                 hidden.value = '';
                 hidden.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+
+            // Keep custom select shells in sync with cleared native select values.
+            activeForm.querySelectorAll('.vehicle-select-shell').forEach((shell) => {
+                const select = shell.querySelector('select');
+                const label = shell.querySelector('.vehicle-select-label');
+                const menu = shell.querySelector('.vehicle-select-menu');
+                if (!select) return;
+
+                if (label) {
+                    const selectedOption = select.options[select.selectedIndex];
+                    label.textContent = selectedOption ? selectedOption.textContent : '';
+                }
+
+                if (menu) {
+                    menu.querySelectorAll('.vehicle-select-option').forEach((item) => {
+                        const isSelected = String(item.dataset.value || '') === String(select.value || '');
+                        item.classList.toggle('is-selected', isSelected);
+                        item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+                    });
+                }
+
+                shell.classList.remove('is-open');
+                const trigger = shell.querySelector('.vehicle-select-trigger');
+                if (trigger) {
+                    trigger.setAttribute('aria-expanded', 'false');
+                }
             });
         }
 
@@ -743,6 +983,8 @@ window.multiItemsManager = {
             const testedWrap = document.getElementById('trailer-tested-entry-wrap');
             if (testedWrap) testedWrap.style.display = 'none';
         }
+
+        this.updateVehicleEntryTitle(vehicleType);
     },
 
     populateVehicleForm(vehicleType, vehicle) {
@@ -787,6 +1029,12 @@ window.multiItemsManager = {
         this.setVehicleFormNavValue(vehicleType, 'tested', vehicle.tested || '');
         this.setVehicleFormNavValue(vehicleType, 'type', vehicle.type || '');
 
+        ['type', 'year', 'value', 'condition', 'method', 'roadworthy', 'insurance', 'roadtax', 'tested', 'weight', 'length'].forEach((suffix) => {
+            const visible = document.getElementById(`${vehicleType}-${suffix}-visible`);
+            if (!visible) return;
+            visible.value = String(vehicle?.[suffix] || '').trim();
+        });
+
         const customWeightInput = document.getElementById(`${vehicleType}-custom-weight`);
         const customWeightUnitInput = document.getElementById(`${vehicleType}-custom-weight-unit`);
         const customLengthInput = document.getElementById(`${vehicleType}-custom-length`);
@@ -824,21 +1072,52 @@ window.multiItemsManager = {
         const addBtn = document.getElementById(`add-${vehicleType}-btn`);
         if (!addBtn) return;
 
-        const isEditing = !!this.editingVehicleIds[vehicleType];
+        const vehicles = this.parseVehicles(vehicleType);
+        const hasSavedVehicles = vehicles.length > 0;
+        const shouldShowDraftForm = !!this.showVehicleDraftForm[vehicleType] || !hasSavedVehicles;
         const addAnotherBtn = document.getElementById(`${vehicleType}-add-another-btn`);
         const addLabelMap = {
             car: 'Add Campervan/Car',
             motorbike: 'Add Motorbike',
-            trailer: 'Add Caravan / Trailer'
+            trailer: 'Save Caravan / Trailer'
         };
-        addBtn.textContent = isEditing ? 'Save Changes' : (addLabelMap[vehicleType] || '+ Add Vehicle');
+        addBtn.textContent = addLabelMap[vehicleType] || '+ Add Vehicle';
 
-        // Keep only one visible action: add-another in add mode, save-changes in edit mode.
-        addBtn.style.display = isEditing ? '' : 'none';
+        // Keep primary save button hidden in UI; Add Another is the only visible action button.
+        addBtn.style.display = 'none';
 
         if (addAnotherBtn) {
-            addAnotherBtn.style.display = isEditing ? 'none' : '';
+            addAnotherBtn.style.display = (vehicleType === 'car' || vehicleType === 'motorbike' || vehicleType === 'trailer')
+                ? ''
+                : (shouldShowDraftForm ? '' : 'none');
         }
+
+        this.updateVehicleEntryTitle(vehicleType);
+    },
+
+    updateVehicleEntryTitle(vehicleType) {
+        const sectionIdMap = {
+            car: 'car-transport-section',
+            motorbike: 'motorbike-transport-section',
+            trailer: 'trailer-campervan-section'
+        };
+        const section = document.getElementById(sectionIdMap[vehicleType] || '');
+        const form = section?.querySelector?.(`[data-vehicle-entry-form="${vehicleType}"]`);
+        const titleNode = form?.querySelector?.('.custom-item-title');
+        if (!titleNode) return;
+
+        const vehicles = this.parseVehicles(vehicleType);
+        const editingId = this.editingVehicleIds?.[vehicleType];
+
+        if (editingId) {
+            const editIndex = vehicles.findIndex((vehicle) => vehicle.id === editingId);
+            if (editIndex >= 0) {
+                titleNode.textContent = `Vehicle ${editIndex + 1}`;
+                return;
+            }
+        }
+
+        titleNode.textContent = `Vehicle ${vehicles.length + 1}`;
     },
 
     renderVehiclesList(vehicleType) {
@@ -861,222 +1140,135 @@ window.multiItemsManager = {
             trailer: 'trailer-campervan-section'
         };
         const section = document.getElementById(sectionIdMap[vehicleType] || '');
-        const template = section?.querySelector(`[data-vehicle-entry-form="${vehicleType}"]`);
-        if (!template) {
-            return;
+        const entryForm = section?.querySelector?.(`[data-vehicle-entry-form="${vehicleType}"]`);
+
+        const isEditing = !!this.editingVehicleIds[vehicleType];
+        const isDraftVisible = !!this.showVehicleDraftForm[vehicleType];
+        const isSimpleEditableVehicle = vehicleType === 'motorbike' || vehicleType === 'trailer';
+        const shouldShowEntryForm = true;
+        if (entryForm) {
+            // Keep the live vehicle form always visible so users can freely adjust details without entering edit mode.
+            entryForm.style.display = shouldShowEntryForm ? '' : 'none';
         }
 
-        const setCloneNavValue = (clone, suffix, value) => {
-            const hidden = clone.querySelector(`#${vehicleType}-${suffix}-entry-hidden`);
-            if (hidden) hidden.value = value || '';
-            const nav = clone.querySelector(`.${vehicleType}-${suffix}-entry-nav`);
-            if (!nav) return;
-            nav.querySelectorAll('.option-nav-btn').forEach((btn) => {
-                const isSelected = String(btn.dataset.value || '') === String(value || '');
-                btn.classList.toggle('selected', isSelected);
-                btn.classList.toggle('is-active', isSelected);
-                btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
-                btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
-            });
-        };
+        if (!entryForm) {
+            return;
+        }
 
         vehicles.forEach((vehicle, index) => {
             const vehicleEl = document.createElement('div');
             vehicleEl.style.cssText = 'margin-bottom: 14px;';
 
+            const openVehicleInEditor = () => {
+                this.editingVehicleIds[vehicleType] = vehicle.id;
+                this.showVehicleDraftForm[vehicleType] = true;
+                this.populateVehicleForm(vehicleType, vehicle);
+                this.updateVehicleEditUi(vehicleType);
+                this.renderVehiclesList(vehicleType);
+                if (entryForm && typeof entryForm.scrollIntoView === 'function') {
+                    entryForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            };
+
+            const actionsWrap = document.createElement('div');
+            actionsWrap.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:8px; justify-content:flex-end;';
+
+            const actionRow = document.createElement('div');
+            actionRow.style.cssText = 'display:flex; gap:8px;';
+
             const deleteBtn = document.createElement('button');
             deleteBtn.type = 'button';
-            deleteBtn.textContent = '✕ Remove';
-            deleteBtn.style.cssText = 'padding: 6px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem;';
+            deleteBtn.textContent = 'Remove';
+            deleteBtn.style.cssText = 'padding:6px 12px; background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; border-radius:6px; cursor:pointer; font-weight:700; font-size:0.86rem;';
             deleteBtn.addEventListener('click', () => {
                 this.deleteVehicle(vehicleType, vehicle.id);
                 if (window.updateNextButtonState) window.updateNextButtonState();
             });
 
-            const headerRow = document.createElement('div');
-            headerRow.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;';
+            actionRow.appendChild(deleteBtn);
+            actionsWrap.appendChild(actionRow);
 
-            const title = document.createElement('div');
-            title.style.cssText = 'font-size:1.14rem; font-weight:700; color:#0f172a;';
-            title.textContent = `Vehicle ${index + 1}`;
-
-            const actionsWrap = document.createElement('div');
-            actionsWrap.style.cssText = 'display:flex; align-items:center; gap:8px;';
-            actionsWrap.appendChild(deleteBtn);
-
-            headerRow.appendChild(title);
-            headerRow.appendChild(actionsWrap);
-
-            const clone = template.cloneNode(true);
+            const clone = entryForm.cloneNode(true);
             clone.removeAttribute('data-vehicle-entry-form');
+            clone.style.display = '';
 
-            const suffixes = [
-                'year',
-                'value',
-                'condition',
-                'method',
-                'weight',
-                'length',
-                'operational',
-                'roadworthy',
-                'insurance',
-                'roadtax',
-                'tested',
-                'type'
-            ];
-
-            const refs = {
-                makeModel: clone.querySelector(`#${vehicleType}-make-model-entry`),
-                olderYearInput: clone.querySelector(`#${vehicleType}-older-year-entry`),
-                olderYearWrap: clone.querySelector(`#${vehicleType}-older-year-wrap`),
-                customWeight: clone.querySelector(`#${vehicleType}-custom-weight`),
-                customWeightUnit: clone.querySelector(`#${vehicleType}-custom-weight-unit`),
-                customWeightWrap: clone.querySelector(`#${vehicleType}-custom-weight-wrap`),
-                customLength: clone.querySelector(`#${vehicleType}-custom-length`),
-                customLengthUnit: clone.querySelector(`#${vehicleType}-custom-length-unit`),
-                customLengthWrap: clone.querySelector(`#${vehicleType}-custom-length-wrap`),
-                testedWrap: clone.querySelector('#trailer-tested-entry-wrap')
-            };
-
-            suffixes.forEach((suffix) => {
-                refs[`${suffix}Hidden`] = clone.querySelector(`#${vehicleType}-${suffix}-entry-hidden`);
-                refs[`${suffix}Nav`] = clone.querySelector(`.${vehicleType}-${suffix}-entry-nav`);
-            });
-
-            const normalizeYearInput = (value) => String(value || '').replace(/\D+/g, '').slice(0, 4);
-
-            const isCustomLike = (value) => {
-                const normalized = String(value || '').trim().toLowerCase();
-                return normalized === 'custom' || normalized === 'other' || normalized === 'other-approx';
-            };
-
-            const syncCloneConditionalUi = () => {
-                const yearValue = String(refs.yearHidden?.value || '').trim().toLowerCase();
-                if (refs.olderYearWrap) {
-                    refs.olderYearWrap.style.display = yearValue === 'older' ? '' : 'none';
-                }
-
-                const weightValue = String(refs.weightHidden?.value || '').trim();
-                const lengthValue = String(refs.lengthHidden?.value || '').trim();
-                if (refs.customWeightWrap) refs.customWeightWrap.style.display = isCustomLike(weightValue) ? '' : 'none';
-                if (refs.customLengthWrap) refs.customLengthWrap.style.display = isCustomLike(lengthValue) ? '' : 'none';
-
-                if (vehicleType === 'trailer' && refs.testedWrap) {
-                    refs.testedWrap.style.display = (weightValue === 'over-3500' || isCustomLike(weightValue)) ? '' : 'none';
+            const setCloneValue = (selector, value) => {
+                const field = clone.querySelector(selector);
+                if (!field) return;
+                if (field.tagName === 'SELECT' || field.tagName === 'INPUT' || field.tagName === 'TEXTAREA') {
+                    field.value = String(value || '').trim();
                 }
             };
 
-            const setCloneNavValue = (suffix, value) => {
-                const hidden = refs[`${suffix}Hidden`];
-                const nav = refs[`${suffix}Nav`];
-                if (hidden) hidden.value = value || '';
-                if (nav) {
-                    nav.querySelectorAll('.option-nav-btn').forEach((btn) => {
-                        const isSelected = String(btn.dataset.value || '') === String(value || '');
-                        btn.classList.toggle('selected', isSelected);
-                        btn.classList.toggle('is-active', isSelected);
-                        btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
-                        btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+            setCloneValue(`#${vehicleType}-make-model-entry`, vehicle.makeModel || '');
+            setCloneValue(`#${vehicleType}-year-visible`, vehicle.year || '');
+            setCloneValue(`#${vehicleType}-value-visible`, vehicle.value || '');
+            setCloneValue(`#${vehicleType}-condition-visible`, vehicle.condition || '');
+            setCloneValue(`#${vehicleType}-method-visible`, vehicle.method || '');
+            setCloneValue(`#${vehicleType}-roadworthy-visible`, vehicle.roadworthy || '');
+            setCloneValue(`#${vehicleType}-insurance-visible`, vehicle.insurance || '');
+            setCloneValue(`#${vehicleType}-roadtax-visible`, vehicle.roadtax || '');
+            setCloneValue(`#${vehicleType}-weight-visible`, vehicle.weight || '');
+            setCloneValue(`#${vehicleType}-length-visible`, vehicle.length || '');
+            setCloneValue(`#${vehicleType}-type-visible`, vehicle.type || '');
+            setCloneValue(`#${vehicleType}-tested-visible`, vehicle.tested || '');
+
+            setCloneValue(`#${vehicleType}-custom-weight`, vehicle.customWeight || '');
+            setCloneValue(`#${vehicleType}-custom-weight-unit`, vehicle.customWeightUnit || 'kg');
+            setCloneValue(`#${vehicleType}-custom-length`, vehicle.customLength || '');
+            setCloneValue(`#${vehicleType}-custom-length-unit`, vehicle.customLengthUnit || 'mm');
+
+            clone.querySelectorAll('.vehicle-select-shell').forEach((shell) => {
+                const select = shell.querySelector('select');
+                const label = shell.querySelector('.vehicle-select-label');
+                const menu = shell.querySelector('.vehicle-select-menu');
+                if (!select) return;
+
+                if (label) {
+                    const selectedOption = select.options[select.selectedIndex];
+                    label.textContent = selectedOption ? selectedOption.textContent : '';
+                }
+
+                if (menu) {
+                    menu.querySelectorAll('.vehicle-select-option').forEach((item) => {
+                        const isSelected = String(item.dataset.value || '') === String(select.value || '');
+                        item.classList.toggle('is-selected', isSelected);
+                        item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
                     });
                 }
-                syncCloneConditionalUi();
-            };
 
-            const makeInput = clone.querySelector(`#${vehicleType}-make-model-entry`);
-            if (makeInput) makeInput.value = vehicle.makeModel || '';
+                shell.classList.remove('is-open');
+                const trigger = shell.querySelector('.vehicle-select-trigger');
+                if (trigger) {
+                    trigger.setAttribute('aria-expanded', 'false');
+                }
+            });
 
-            const yearRaw = String(vehicle.year || '').trim();
-            const yearNav = refs.yearNav;
-            const hasExactYearButton = !!(yearNav && yearRaw && yearNav.querySelector(`.option-nav-btn[data-value="${yearRaw}"]`));
-            if (yearRaw && !hasExactYearButton) {
-                setCloneNavValue('year', 'older');
-                if (refs.olderYearWrap) refs.olderYearWrap.style.display = '';
-                if (refs.olderYearInput) refs.olderYearInput.value = yearRaw;
-            } else {
-                setCloneNavValue('year', yearRaw);
+            const cloneTitle = clone.querySelector('.custom-item-title');
+            if (cloneTitle) {
+                cloneTitle.textContent = `Vehicle ${index + 1}`;
             }
 
-            setCloneNavValue('value', vehicle.value || '');
-            setCloneNavValue('condition', vehicle.condition || '');
-            setCloneNavValue('method', vehicle.method || '');
-            setCloneNavValue('weight', vehicle.weight || '');
-            setCloneNavValue('length', vehicle.length || '');
-            setCloneNavValue('operational', vehicle.operational || '');
-            setCloneNavValue('roadworthy', vehicle.roadworthy || '');
-            setCloneNavValue('insurance', vehicle.insurance || '');
-            setCloneNavValue('roadtax', vehicle.roadtax || '');
-            setCloneNavValue('tested', vehicle.tested || '');
-            setCloneNavValue('type', vehicle.type || '');
+            const cloneMedia = Array.isArray(vehicle.media) ? vehicle.media : [];
+            this.renderVehiclePhotoTiles(vehicleType, cloneMedia, clone, { readOnly: true });
 
-            if (refs.customWeight) refs.customWeight.value = vehicle.customWeight || '';
-            if (refs.customWeightUnit) refs.customWeightUnit.value = vehicle.customWeightUnit || 'kg';
-            if (refs.customLength) refs.customLength.value = vehicle.customLength || '';
-            if (refs.customLengthUnit) refs.customLengthUnit.value = vehicle.customLengthUnit || 'mm';
-            syncCloneConditionalUi();
+            const clonePreview = clone.querySelector(`#${vehicleType}-media-preview`);
+            if (clonePreview) {
+                clonePreview.innerHTML = '';
+                clonePreview.style.display = 'none';
+            }
 
-            const persistCloneVehicle = () => {
-                const vehiclesNow = this.parseVehicles(vehicleType);
-                const targetIndex = vehiclesNow.findIndex((entry) => entry.id === vehicle.id);
-                if (targetIndex === -1) return;
+            const cloneWeightWrap = clone.querySelector(`#${vehicleType}-custom-weight-wrap`);
+            const cloneLengthWrap = clone.querySelector(`#${vehicleType}-custom-length-wrap`);
+            const weightMode = String(vehicle.weight || '').trim().toLowerCase();
+            const lengthMode = String(vehicle.length || '').trim().toLowerCase();
+            if (cloneWeightWrap) {
+                cloneWeightWrap.style.display = (weightMode === 'custom' || weightMode === 'other' || weightMode === 'other-approx') ? '' : 'none';
+            }
+            if (cloneLengthWrap) {
+                cloneLengthWrap.style.display = (lengthMode === 'custom' || lengthMode === 'other' || lengthMode === 'other-approx') ? '' : 'none';
+            }
 
-                const selectedYear = String(refs.yearHidden?.value || '').trim();
-                const resolvedYear = selectedYear.toLowerCase() === 'older'
-                    ? normalizeYearInput(refs.olderYearInput?.value || '')
-                    : selectedYear;
-
-                const selectedWeight = String(refs.weightHidden?.value || '').trim();
-                const selectedLength = String(refs.lengthHidden?.value || '').trim();
-
-                vehiclesNow[targetIndex] = {
-                    ...vehiclesNow[targetIndex],
-                    makeModel: String(refs.makeModel?.value || '').trim(),
-                    year: resolvedYear,
-                    value: String(refs.valueHidden?.value || '').trim(),
-                    condition: String(refs.conditionHidden?.value || '').trim(),
-                    method: String(refs.methodHidden?.value || '').trim(),
-                    weight: selectedWeight,
-                    length: selectedLength,
-                    customWeight: isCustomLike(selectedWeight) ? String(refs.customWeight?.value || '').trim() : '',
-                    customWeightUnit: isCustomLike(selectedWeight) ? String(refs.customWeightUnit?.value || 'kg').trim() : 'kg',
-                    customLength: isCustomLike(selectedLength) ? String(refs.customLength?.value || '').trim() : '',
-                    customLengthUnit: isCustomLike(selectedLength) ? String(refs.customLengthUnit?.value || 'mm').trim() : 'mm',
-                    operational: String(refs.operationalHidden?.value || '').trim(),
-                    roadworthy: String(refs.roadworthyHidden?.value || '').trim(),
-                    insurance: String(refs.insuranceHidden?.value || '').trim(),
-                    roadtax: String(refs.roadtaxHidden?.value || '').trim(),
-                    tested: String(refs.testedHidden?.value || '').trim(),
-                    type: String(refs.typeHidden?.value || '').trim()
-                };
-
-                this.saveVehicles(vehicleType, vehiclesNow);
-                if (window.updateNextButtonState) window.updateNextButtonState();
-            };
-
-            suffixes.forEach((suffix) => {
-                const nav = refs[`${suffix}Nav`];
-                if (!nav) return;
-                nav.addEventListener('click', (event) => {
-                    const btn = event.target.closest('.option-nav-btn');
-                    if (!btn || !nav.contains(btn)) return;
-                    setCloneNavValue(suffix, btn.dataset.value || '');
-                    persistCloneVehicle();
-                });
-            });
-
-            [refs.makeModel, refs.customWeight, refs.customLength, refs.customWeightUnit, refs.customLengthUnit, refs.olderYearInput]
-                .filter(Boolean)
-                .forEach((field) => {
-                    field.addEventListener('change', () => {
-                        if (field === refs.olderYearInput) {
-                            const normalized = normalizeYearInput(field.value);
-                            if (field.value !== normalized) field.value = normalized;
-                        }
-                        syncCloneConditionalUi();
-                        persistCloneVehicle();
-                    });
-                });
-
-            // Hide action buttons inside the cloned card; this card is read-only.
             const addBtnInClone = clone.querySelector(`#add-${vehicleType}-btn`);
             const addAnotherInClone = clone.querySelector(`#${vehicleType}-add-another-btn`);
             const continueBtnInClone = clone.querySelector(`#${vehicleType}-continue-with-saved-btn`);
@@ -1086,34 +1278,358 @@ window.multiItemsManager = {
             if (continueBtnInClone) continueBtnInClone.style.display = 'none';
             if (deleteFormBtnInClone) deleteFormBtnInClone.style.display = 'none';
 
-            // Prevent cloned blocks from being targeted by live vehicle form selectors.
-            clone.querySelectorAll('[class]').forEach((el) => {
-                const removeClasses = [];
-                el.classList.forEach((className) => {
-                    if (className.startsWith(`${vehicleType}-`) && className.endsWith('-entry-nav')) {
-                        removeClasses.push(className);
-                    }
-                });
-                removeClasses.forEach((className) => el.classList.remove(className));
-            });
-            clone.querySelectorAll('[data-option-nav-for]').forEach((el) => {
-                el.removeAttribute('data-option-nav-for');
-            });
+            const persistSavedVehicleEdit = (mutate) => {
+                const current = this.parseVehicles(vehicleType);
+                const editIndex = current.findIndex((entry) => entry.id === vehicle.id);
+                if (editIndex < 0) return;
 
-            // Remove duplicated IDs and disable controls to avoid conflicts.
+                mutate(current[editIndex]);
+
+                if (document.getElementById(`${vehicleType}-json-hidden`)) {
+                    const jsonHidden = document.getElementById(`${vehicleType}-json-hidden`);
+                    jsonHidden.value = current.length > 0 ? JSON.stringify(current) : '';
+                    jsonHidden.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+                if (typeof window.saveCreateJobProgress === 'function') {
+                    window.saveCreateJobProgress();
+                }
+            };
+
+            const bindSimpleSavedField = (selector, key, options = {}) => {
+                const field = clone.querySelector(selector);
+                if (!field) return;
+
+                const commit = () => {
+                    let nextValue = String(field.value || '').trim();
+                    if (options.normalizeYear) {
+                        nextValue = nextValue.replace(/\D+/g, '').slice(0, 4);
+                        field.value = nextValue;
+                    }
+
+                    persistSavedVehicleEdit((entry) => {
+                        entry[key] = nextValue;
+                        if (options.afterMutate) {
+                            options.afterMutate(entry, nextValue);
+                        }
+                    });
+
+                    if (options.afterCommit) {
+                        options.afterCommit(nextValue);
+                    }
+                };
+
+                field.addEventListener('change', commit);
+                if (field.tagName === 'INPUT') {
+                    field.addEventListener('blur', commit);
+                }
+            };
+
+            if (isSimpleEditableVehicle) {
+                clone.querySelectorAll('input[type="file"]').forEach((field) => {
+                    field.disabled = true;
+                });
+
+                if (vehicleType === 'motorbike') {
+                    bindSimpleSavedField(`#${vehicleType}-make-model-entry`, 'makeModel');
+                    bindSimpleSavedField(`#${vehicleType}-year-visible`, 'year', { normalizeYear: true });
+                    bindSimpleSavedField(`#${vehicleType}-value-visible`, 'value');
+                    bindSimpleSavedField(`#${vehicleType}-condition-visible`, 'condition');
+                    bindSimpleSavedField(`#${vehicleType}-roadworthy-visible`, 'roadworthy');
+                    bindSimpleSavedField(`#${vehicleType}-insurance-visible`, 'insurance');
+                    bindSimpleSavedField(`#${vehicleType}-roadtax-visible`, 'roadtax');
+                    bindSimpleSavedField(`#${vehicleType}-weight-visible`, 'weight', {
+                        afterMutate: (entry, nextValue) => {
+                            const mode = String(nextValue || '').trim().toLowerCase();
+                            if (!(mode === 'custom' || mode === 'other' || mode === 'other-approx')) {
+                                entry.customWeight = '';
+                            }
+                        },
+                        afterCommit: () => {
+                            if (cloneWeightWrap) {
+                                const modeValue = String(clone.querySelector('#motorbike-weight-visible')?.value || '').trim().toLowerCase();
+                                cloneWeightWrap.style.display = (modeValue === 'custom' || modeValue === 'other' || modeValue === 'other-approx') ? '' : 'none';
+                            }
+                        }
+                    });
+                    bindSimpleSavedField(`#${vehicleType}-length-visible`, 'length', {
+                        afterMutate: (entry, nextValue) => {
+                            const mode = String(nextValue || '').trim().toLowerCase();
+                            if (!(mode === 'custom' || mode === 'other' || mode === 'other-approx')) {
+                                entry.customLength = '';
+                            }
+                        },
+                        afterCommit: () => {
+                            if (cloneLengthWrap) {
+                                const modeValue = String(clone.querySelector('#motorbike-length-visible')?.value || '').trim().toLowerCase();
+                                cloneLengthWrap.style.display = (modeValue === 'custom' || modeValue === 'other' || modeValue === 'other-approx') ? '' : 'none';
+                            }
+                        }
+                    });
+                    bindSimpleSavedField(`#${vehicleType}-custom-weight`, 'customWeight');
+                    bindSimpleSavedField(`#${vehicleType}-custom-weight-unit`, 'customWeightUnit', {
+                        afterMutate: (entry, nextValue) => {
+                            entry.customWeightUnit = nextValue || 'kg';
+                        }
+                    });
+                    bindSimpleSavedField(`#${vehicleType}-custom-length`, 'customLength');
+                    bindSimpleSavedField(`#${vehicleType}-custom-length-unit`, 'customLengthUnit', {
+                        afterMutate: (entry, nextValue) => {
+                            entry.customLengthUnit = nextValue || 'mm';
+                        }
+                    });
+                }
+
+                if (vehicleType === 'trailer') {
+                    bindSimpleSavedField(`#${vehicleType}-make-model-entry`, 'makeModel');
+                    bindSimpleSavedField(`#${vehicleType}-type-visible`, 'type');
+                    bindSimpleSavedField(`#${vehicleType}-year-visible`, 'year', { normalizeYear: true });
+                    bindSimpleSavedField(`#${vehicleType}-value-visible`, 'value');
+                    bindSimpleSavedField(`#${vehicleType}-condition-visible`, 'condition');
+                    bindSimpleSavedField(`#${vehicleType}-method-visible`, 'method');
+                    bindSimpleSavedField(`#${vehicleType}-roadworthy-visible`, 'roadworthy');
+                    bindSimpleSavedField(`#${vehicleType}-weight-visible`, 'weight', {
+                        afterMutate: (entry, nextValue) => {
+                            const mode = String(nextValue || '').trim().toLowerCase();
+                            if (!(mode === 'custom' || mode === 'other' || mode === 'other-approx')) {
+                                entry.customWeight = '';
+                            }
+                        },
+                        afterCommit: () => {
+                            const modeValue = String(clone.querySelector('#trailer-weight-visible')?.value || '').trim().toLowerCase();
+                            if (cloneWeightWrap) {
+                                cloneWeightWrap.style.display = (modeValue === 'custom' || modeValue === 'other' || modeValue === 'other-approx') ? '' : 'none';
+                            }
+                        }
+                    });
+                    bindSimpleSavedField(`#${vehicleType}-length-visible`, 'length', {
+                        afterMutate: (entry, nextValue) => {
+                            const mode = String(nextValue || '').trim().toLowerCase();
+                            if (!(mode === 'custom' || mode === 'other' || mode === 'other-approx')) {
+                                entry.customLength = '';
+                            }
+                        },
+                        afterCommit: () => {
+                            const modeValue = String(clone.querySelector('#trailer-length-visible')?.value || '').trim().toLowerCase();
+                            if (cloneLengthWrap) {
+                                cloneLengthWrap.style.display = (modeValue === 'custom' || modeValue === 'other' || modeValue === 'other-approx') ? '' : 'none';
+                            }
+                        }
+                    });
+                    bindSimpleSavedField(`#${vehicleType}-tested-visible`, 'tested');
+                    bindSimpleSavedField(`#${vehicleType}-custom-weight`, 'customWeight');
+                    bindSimpleSavedField(`#${vehicleType}-custom-weight-unit`, 'customWeightUnit', {
+                        afterMutate: (entry, nextValue) => {
+                            entry.customWeightUnit = nextValue || 'kg';
+                        }
+                    });
+                    bindSimpleSavedField(`#${vehicleType}-custom-length`, 'customLength');
+                    bindSimpleSavedField(`#${vehicleType}-custom-length-unit`, 'customLengthUnit', {
+                        afterMutate: (entry, nextValue) => {
+                            entry.customLengthUnit = nextValue || 'mm';
+                        }
+                    });
+                }
+            } else {
+                clone.querySelectorAll('input, select, textarea, button').forEach((field) => {
+                    if (field.dataset && field.dataset.vehicleClearMedia === vehicleType) {
+                        field.style.display = 'none';
+                        return;
+                    }
+                    if (field.tagName === 'BUTTON') return;
+                    field.disabled = true;
+                    field.readOnly = true;
+                });
+            }
+
             clone.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
             clone.querySelectorAll('[name]').forEach((el) => el.removeAttribute('name'));
-            // Keep fields editable inline; only hide internal action buttons above.
 
-            vehicleEl.appendChild(headerRow);
+            clone.style.cursor = 'default';
+            clone.removeAttribute('title');
+
+            vehicleEl.appendChild(actionsWrap);
             vehicleEl.appendChild(clone);
             listContainer.appendChild(vehicleEl);
         });
+
+        if (!isSimpleEditableVehicle && !isEditing && !isDraftVisible && vehicles.length > 0) {
+            const addNewBtn = document.createElement('button');
+            addNewBtn.type = 'button';
+            addNewBtn.textContent = '+ Add Another Vehicle';
+            addNewBtn.style.cssText = 'width: 100%; margin-top: 6px; padding: 10px 16px; background: #ffffff; color: #1d4ed8; border: 1px solid #93c5fd; border-radius: 8px; cursor: pointer; font-weight: 700;';
+            addNewBtn.addEventListener('click', () => {
+                this.editingVehicleIds[vehicleType] = null;
+                this.showVehicleDraftForm[vehicleType] = true;
+                this.clearVehicleForm(vehicleType);
+                this.updateVehicleEditUi(vehicleType);
+                this.renderVehiclesList(vehicleType);
+                if (entryForm && typeof entryForm.scrollIntoView === 'function') {
+                    entryForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+            listContainer.appendChild(addNewBtn);
+        }
+
+        this.updateVehicleEntryTitle(vehicleType);
     }
 };
 
+if (!window.multiItemsManager.__simpleCarModePatched) {
+    window.multiItemsManager.__simpleCarModePatched = true;
+
+    window.multiItemsManager.__originalRenderVehiclesList = window.multiItemsManager.renderVehiclesList;
+    window.multiItemsManager.renderVehiclesList = function(vehicleType) {
+        if (vehicleType === 'car' && typeof this.renderSimpleCarList === 'function') {
+            return this.renderSimpleCarList();
+        }
+        return this.__originalRenderVehiclesList.call(this, vehicleType);
+    };
+
+    window.multiItemsManager.__originalUpdateVehicleEditUi = window.multiItemsManager.updateVehicleEditUi;
+    window.multiItemsManager.updateVehicleEditUi = function(vehicleType) {
+        if (vehicleType === 'car') {
+            const addBtn = document.getElementById('add-car-btn');
+            const addAnotherBtn = document.getElementById('car-add-another-btn');
+            const continueBtn = document.getElementById('car-continue-with-saved-btn');
+            if (addBtn) addBtn.style.display = 'none';
+            if (addAnotherBtn) addAnotherBtn.style.display = '';
+            if (continueBtn) continueBtn.style.display = 'none';
+            this.updateVehicleEntryTitle('car');
+            return;
+        }
+        return this.__originalUpdateVehicleEditUi.call(this, vehicleType);
+    };
+}
+
 // Initialize piano form handlers
 document.addEventListener('DOMContentLoaded', function() {
+    const initVehicleCustomSelects = () => {
+        const selectNodes = document.querySelectorAll('[data-vehicle-entry-form] select.form-input');
+        if (!selectNodes.length) return;
+
+        const closeAllVehicleSelectMenus = () => {
+            document.querySelectorAll('.vehicle-select-shell.is-open').forEach((shell) => {
+                shell.classList.remove('is-open');
+            });
+        };
+
+        if (!window.__vehicleSelectGlobalCloseBound) {
+            document.addEventListener('click', (event) => {
+                if (!event.target.closest('.vehicle-select-shell')) {
+                    closeAllVehicleSelectMenus();
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    closeAllVehicleSelectMenus();
+                }
+            });
+
+            window.__vehicleSelectGlobalCloseBound = true;
+        }
+
+        selectNodes.forEach((select) => {
+            if (select.dataset.vehicleCustomSelectReady === 'true') return;
+            select.dataset.vehicleCustomSelectReady = 'true';
+
+            const shell = document.createElement('div');
+            shell.className = 'vehicle-select-shell';
+
+            const trigger = document.createElement('button');
+            trigger.type = 'button';
+            trigger.className = 'vehicle-select-trigger';
+            trigger.setAttribute('aria-haspopup', 'listbox');
+            trigger.setAttribute('aria-expanded', 'false');
+
+            const label = document.createElement('span');
+            label.className = 'vehicle-select-label';
+
+            const menu = document.createElement('ul');
+            menu.className = 'vehicle-select-menu';
+            menu.setAttribute('role', 'listbox');
+
+            const setTriggerLabel = () => {
+                const selectedOption = select.options[select.selectedIndex];
+                label.textContent = selectedOption ? selectedOption.textContent : '';
+            };
+
+            const rebuildMenu = () => {
+                menu.innerHTML = '';
+                Array.from(select.options).forEach((option) => {
+                    const item = document.createElement('li');
+                    item.className = 'vehicle-select-option';
+                    item.setAttribute('role', 'option');
+                    item.textContent = option.textContent || '';
+                    item.dataset.value = option.value;
+
+                    if (option.disabled) {
+                        item.classList.add('is-disabled');
+                        item.setAttribute('aria-disabled', 'true');
+                    }
+
+                    if (option.value === select.value) {
+                        item.classList.add('is-selected');
+                        item.setAttribute('aria-selected', 'true');
+                    }
+
+                    item.addEventListener('click', () => {
+                        if (option.disabled) return;
+                        select.value = option.value;
+                        select.dispatchEvent(new Event('input', { bubbles: true }));
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                        shell.classList.remove('is-open');
+                        trigger.setAttribute('aria-expanded', 'false');
+                        setTriggerLabel();
+                        rebuildMenu();
+                    });
+
+                    menu.appendChild(item);
+                });
+            };
+
+            trigger.appendChild(label);
+            const parent = select.parentNode;
+            if (!parent) return;
+            parent.insertBefore(shell, select);
+            shell.appendChild(select);
+            shell.appendChild(trigger);
+            shell.appendChild(menu);
+
+            select.classList.add('vehicle-select-native');
+
+            const toggleMenu = () => {
+                const open = shell.classList.contains('is-open');
+                closeAllVehicleSelectMenus();
+                if (!open) {
+                    shell.classList.add('is-open');
+                    trigger.setAttribute('aria-expanded', 'true');
+                } else {
+                    shell.classList.remove('is-open');
+                    trigger.setAttribute('aria-expanded', 'false');
+                }
+            };
+
+            trigger.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleMenu();
+            });
+
+            select.addEventListener('change', () => {
+                setTriggerLabel();
+                rebuildMenu();
+            });
+
+            setTriggerLabel();
+            rebuildMenu();
+        });
+    };
+
     const setPianoUnknownMediaRequired = (required) => {
         const hidden = document.getElementById('global-service-media-hidden');
         const requiredText = document.getElementById('global-service-media-required-text');
@@ -1397,11 +1913,580 @@ document.addEventListener('DOMContentLoaded', function() {
         return (serviceHidden?.value || '').trim() === 'Boats';
     };
 
+    const setupSimpleCarCampervanFlow = () => {
+        const manager = window.multiItemsManager;
+        if (!manager) return;
+
+        const addBtn = document.getElementById('add-car-btn');
+        const addAnotherBtn = document.getElementById('car-add-another-btn');
+        const continueBtn = document.getElementById('car-continue-with-saved-btn');
+        const continueHidden = document.getElementById('car-continue-with-saved-hidden');
+        const deleteFormBtn = document.getElementById('car-delete-form-btn');
+        const listContainer = document.getElementById('car-list');
+        const jsonField = document.getElementById('car-json-hidden');
+        if (!addAnotherBtn || !listContainer || !jsonField) return;
+
+        const setHidden = (id, value) => {
+            const field = document.getElementById(id);
+            if (!field) return;
+            field.value = String(value || '').trim();
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+
+        const syncVisibleToHidden = () => {
+            const suffixes = ['type', 'year', 'value', 'condition', 'method', 'roadworthy', 'insurance', 'roadtax', 'weight', 'length'];
+            suffixes.forEach((suffix) => {
+                const visible = document.getElementById(`car-${suffix}-visible`);
+                let value = String(visible?.value || '').trim();
+                if (suffix === 'year') {
+                    value = value.replace(/\D+/g, '').slice(0, 4);
+                    if (visible) visible.value = value;
+                }
+                setHidden(`car-${suffix}-entry-hidden`, value);
+            });
+
+            if (typeof manager.syncVehicleCustomFieldVisibility === 'function') {
+                manager.syncVehicleCustomFieldVisibility('car');
+            }
+        };
+
+        const collectDraft = () => {
+            const read = (id) => String(document.getElementById(id)?.value || '').trim();
+            const media = typeof manager.resolveVehicleMediaForSave === 'function'
+                ? null
+                : (typeof manager.parseVehicleMediaFromHidden === 'function' ? manager.parseVehicleMediaFromHidden('car') : []);
+
+            return {
+                makeModel: read('car-make-model-entry'),
+                year: read('car-year-entry-hidden'),
+                value: read('car-value-entry-hidden'),
+                type: read('car-type-entry-hidden'),
+                condition: read('car-condition-entry-hidden'),
+                method: read('car-method-entry-hidden'),
+                roadworthy: read('car-roadworthy-entry-hidden'),
+                insurance: read('car-insurance-entry-hidden'),
+                roadtax: read('car-roadtax-entry-hidden'),
+                weight: read('car-weight-entry-hidden'),
+                length: read('car-length-entry-hidden'),
+                customWeight: read('car-custom-weight'),
+                customWeightUnit: read('car-custom-weight-unit') || 'kg',
+                customLength: read('car-custom-length'),
+                customLengthUnit: read('car-custom-length-unit') || 'mm',
+                media
+            };
+        };
+
+        const isCustomLike = (value) => {
+            const normalized = String(value || '').trim().toLowerCase();
+            return normalized === 'custom' || normalized === 'other' || normalized === 'other-approx';
+        };
+
+        const getMissingDraftField = (draft) => {
+            if (!draft.makeModel) return document.getElementById('car-make-model-entry');
+            if (!draft.type) return document.getElementById('car-type-visible') || document.getElementById('car-type-entry-hidden');
+            if (!draft.year) return document.getElementById('car-year-visible') || document.getElementById('car-year-entry-hidden');
+            if (!draft.value) return document.getElementById('car-value-visible') || document.getElementById('car-value-entry-hidden');
+            if (!draft.condition) return document.getElementById('car-condition-visible') || document.getElementById('car-condition-entry-hidden');
+            if (!draft.method) return document.getElementById('car-method-visible') || document.getElementById('car-method-entry-hidden');
+            if (!draft.roadworthy) return document.getElementById('car-roadworthy-visible') || document.getElementById('car-roadworthy-entry-hidden');
+            if (!draft.insurance) return document.getElementById('car-insurance-visible') || document.getElementById('car-insurance-entry-hidden');
+            if (!draft.roadtax) return document.getElementById('car-roadtax-visible') || document.getElementById('car-roadtax-entry-hidden');
+            if (!draft.weight) return document.getElementById('car-weight-visible') || document.getElementById('car-weight-entry-hidden');
+            if (!draft.length) return document.getElementById('car-length-visible') || document.getElementById('car-length-entry-hidden');
+
+            if (isCustomLike(draft.weight) && !draft.customWeight) {
+                return document.getElementById('car-custom-weight');
+            }
+            if (isCustomLike(draft.length) && !draft.customLength) {
+                return document.getElementById('car-custom-length');
+            }
+
+            return null;
+        };
+
+        const clearDraft = () => {
+            if (typeof manager.clearVehicleForm === 'function') {
+                manager.clearVehicleForm('car');
+            }
+            manager.editingVehicleIds.car = null;
+            manager.showVehicleDraftForm.car = true;
+            if (continueHidden) {
+                continueHidden.value = '';
+                continueHidden.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        };
+
+        const commitSimpleCarDraft = (options = {}) => {
+            const {
+                mediaOverride = null,
+                showAlert = true,
+                focusOnMissing = true,
+                clearAfterSave = true
+            } = options;
+
+            const draft = collectDraft();
+            draft.media = Array.isArray(mediaOverride)
+                ? mediaOverride
+                : manager.parseVehicleMediaFromHidden('car');
+            draft.id = Date.now() + Math.random();
+
+            const missing = getMissingDraftField(draft);
+            if (missing) {
+                if (focusOnMissing && typeof missing.scrollIntoView === 'function') {
+                    missing.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                if (focusOnMissing && typeof missing.focus === 'function') {
+                    missing.focus();
+                }
+                if (showAlert) {
+                    alert('Please complete all required car/campervan fields before adding another vehicle.');
+                }
+                return false;
+            }
+
+            const vehicles = manager.parseVehicles('car');
+            vehicles.push(draft);
+            manager.saveVehicles('car', vehicles);
+
+            if (clearAfterSave) {
+                clearDraft();
+            }
+            renderSimpleCarList();
+
+            if (typeof manager.updateVehicleEntryTitle === 'function') {
+                manager.updateVehicleEntryTitle('car');
+            }
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
+            if (typeof window.saveCreateJobProgress === 'function') {
+                window.saveCreateJobProgress();
+            }
+
+            return true;
+        };
+
+        manager.commitSimpleCarDraft = commitSimpleCarDraft;
+
+        const renderSimpleCarList = () => {
+            const vehicles = manager.parseVehicles('car');
+            listContainer.innerHTML = '';
+            const section = document.getElementById('car-transport-section');
+            const entryForm = section?.querySelector?.('[data-vehicle-entry-form="car"]');
+
+            if (!vehicles.length) {
+                listContainer.style.display = 'none';
+                return;
+            }
+
+            listContainer.style.display = 'block';
+            vehicles.forEach((vehicle, index) => {
+                const card = document.createElement('div');
+                card.style.cssText = 'margin-bottom: 14px;';
+
+                const actionsWrap = document.createElement('div');
+                actionsWrap.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:8px; justify-content:flex-end;';
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.textContent = 'Remove';
+                removeBtn.style.cssText = 'padding:6px 12px; background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; border-radius:6px; cursor:pointer; font-weight:700; font-size:0.86rem;';
+                removeBtn.addEventListener('click', () => {
+                    const current = manager.parseVehicles('car');
+                    const filtered = current.filter((entry) => entry.id !== vehicle.id);
+                    manager.saveVehicles('car', filtered);
+                    renderSimpleCarList();
+                    if (typeof window.updateNextButtonState === 'function') {
+                        window.updateNextButtonState();
+                    }
+                    if (typeof window.saveCreateJobProgress === 'function') {
+                        window.saveCreateJobProgress();
+                    }
+                });
+
+                actionsWrap.appendChild(removeBtn);
+
+                if (!entryForm) {
+                    const fallback = document.createElement('div');
+                    fallback.style.cssText = 'padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb;';
+                    const model = String(vehicle?.makeModel || '').trim() || `Vehicle ${index + 1}`;
+                    const year = String(vehicle?.year || '').trim();
+                    const type = String(vehicle?.type || '').trim();
+                    const worth = String(vehicle?.value || '').trim();
+                    const summaryParts = [year, type, worth].filter(Boolean);
+                    fallback.innerHTML = `<strong>Vehicle ${index + 1}:</strong> ${model}${summaryParts.length ? ` (${summaryParts.join(' | ')})` : ''}`;
+
+                    card.appendChild(actionsWrap);
+                    card.appendChild(fallback);
+                    listContainer.appendChild(card);
+                    return;
+                }
+
+                const clone = entryForm.cloneNode(true);
+                clone.removeAttribute('data-vehicle-entry-form');
+                clone.style.display = '';
+
+                const setCloneValue = (selector, value) => {
+                    const field = clone.querySelector(selector);
+                    if (!field) return;
+                    if (field.tagName === 'SELECT' || field.tagName === 'INPUT' || field.tagName === 'TEXTAREA') {
+                        field.value = String(value || '').trim();
+                    }
+                };
+
+                setCloneValue('#car-make-model-entry', vehicle.makeModel || '');
+                setCloneValue('#car-type-visible', vehicle.type || '');
+                setCloneValue('#car-year-visible', vehicle.year || '');
+                setCloneValue('#car-value-visible', vehicle.value || '');
+                setCloneValue('#car-condition-visible', vehicle.condition || '');
+                setCloneValue('#car-method-visible', vehicle.method || '');
+                setCloneValue('#car-roadworthy-visible', vehicle.roadworthy || '');
+                setCloneValue('#car-insurance-visible', vehicle.insurance || '');
+                setCloneValue('#car-roadtax-visible', vehicle.roadtax || '');
+                setCloneValue('#car-weight-visible', vehicle.weight || '');
+                setCloneValue('#car-length-visible', vehicle.length || '');
+                setCloneValue('#car-custom-weight', vehicle.customWeight || '');
+                setCloneValue('#car-custom-weight-unit', vehicle.customWeightUnit || 'kg');
+                setCloneValue('#car-custom-length', vehicle.customLength || '');
+                setCloneValue('#car-custom-length-unit', vehicle.customLengthUnit || 'mm');
+
+                const cloneTitle = clone.querySelector('.custom-item-title');
+                if (cloneTitle) {
+                    cloneTitle.textContent = `Vehicle ${index + 1}`;
+                }
+
+                const cloneWeightWrap = clone.querySelector('#car-custom-weight-wrap');
+                const cloneLengthWrap = clone.querySelector('#car-custom-length-wrap');
+                const weightMode = String(vehicle.weight || '').trim().toLowerCase();
+                const lengthMode = String(vehicle.length || '').trim().toLowerCase();
+                if (cloneWeightWrap) {
+                    cloneWeightWrap.style.display = (weightMode === 'custom' || weightMode === 'other' || weightMode === 'other-approx') ? '' : 'none';
+                }
+                if (cloneLengthWrap) {
+                    cloneLengthWrap.style.display = (lengthMode === 'custom' || lengthMode === 'other' || lengthMode === 'other-approx') ? '' : 'none';
+                }
+
+                const cloneMedia = Array.isArray(vehicle.media) ? vehicle.media : [];
+                manager.renderVehiclePhotoTiles('car', cloneMedia, clone, { readOnly: true });
+
+                const clonePreview = clone.querySelector('#car-media-preview');
+                if (clonePreview) {
+                    clonePreview.innerHTML = '';
+                    clonePreview.style.display = 'none';
+                }
+
+                const addBtnInClone = clone.querySelector('#add-car-btn');
+                const addAnotherInClone = clone.querySelector('#car-add-another-btn');
+                const continueBtnInClone = clone.querySelector('#car-continue-with-saved-btn');
+                const deleteFormBtnInClone = clone.querySelector('#car-delete-form-btn');
+                if (addBtnInClone) addBtnInClone.style.display = 'none';
+                if (addAnotherInClone) addAnotherInClone.style.display = 'none';
+                if (continueBtnInClone) continueBtnInClone.style.display = 'none';
+                if (deleteFormBtnInClone) deleteFormBtnInClone.style.display = 'none';
+
+                const persistSavedCarEdit = (mutate) => {
+                    const current = manager.parseVehicles('car');
+                    const editIndex = current.findIndex((entry) => entry.id === vehicle.id);
+                    if (editIndex < 0) return;
+
+                    mutate(current[editIndex]);
+
+                    if (jsonField) {
+                        jsonField.value = current.length > 0 ? JSON.stringify(current) : '';
+                        jsonField.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+
+                    if (typeof window.updateNextButtonState === 'function') {
+                        window.updateNextButtonState();
+                    }
+                    if (typeof window.saveCreateJobProgress === 'function') {
+                        window.saveCreateJobProgress();
+                    }
+                };
+
+                const syncCloneCustomWraps = () => {
+                    const weightSelect = clone.querySelector('#car-weight-visible');
+                    const lengthSelect = clone.querySelector('#car-length-visible');
+                    const weightModeValue = String(weightSelect?.value || '').trim().toLowerCase();
+                    const lengthModeValue = String(lengthSelect?.value || '').trim().toLowerCase();
+
+                    if (cloneWeightWrap) {
+                        cloneWeightWrap.style.display = (weightModeValue === 'custom' || weightModeValue === 'other' || weightModeValue === 'other-approx') ? '' : 'none';
+                    }
+                    if (cloneLengthWrap) {
+                        cloneLengthWrap.style.display = (lengthModeValue === 'custom' || lengthModeValue === 'other' || lengthModeValue === 'other-approx') ? '' : 'none';
+                    }
+                };
+
+                const bindSavedField = (selector, key, options = {}) => {
+                    const field = clone.querySelector(selector);
+                    if (!field) return;
+
+                    const commit = () => {
+                        let nextValue = String(field.value || '').trim();
+                        if (options.normalizeYear) {
+                            nextValue = nextValue.replace(/\D+/g, '').slice(0, 4);
+                            field.value = nextValue;
+                        }
+
+                        persistSavedCarEdit((entry) => {
+                            entry[key] = nextValue;
+                            if (options.afterMutate) {
+                                options.afterMutate(entry, nextValue);
+                            }
+                        });
+
+                        if (options.afterCommit) {
+                            options.afterCommit(nextValue);
+                        }
+                    };
+
+                    field.addEventListener('change', commit);
+                    if (field.tagName === 'INPUT') {
+                        field.addEventListener('blur', commit);
+                    }
+                };
+
+                bindSavedField('#car-make-model-entry', 'makeModel');
+                bindSavedField('#car-type-visible', 'type');
+                bindSavedField('#car-year-visible', 'year', { normalizeYear: true });
+                bindSavedField('#car-value-visible', 'value');
+                bindSavedField('#car-condition-visible', 'condition');
+                bindSavedField('#car-method-visible', 'method');
+                bindSavedField('#car-roadworthy-visible', 'roadworthy');
+                bindSavedField('#car-insurance-visible', 'insurance');
+                bindSavedField('#car-roadtax-visible', 'roadtax');
+                bindSavedField('#car-weight-visible', 'weight', {
+                    afterMutate: (entry, nextValue) => {
+                        const mode = String(nextValue || '').trim().toLowerCase();
+                        if (!(mode === 'custom' || mode === 'other' || mode === 'other-approx')) {
+                            entry.customWeight = '';
+                        }
+                    },
+                    afterCommit: () => syncCloneCustomWraps()
+                });
+                bindSavedField('#car-length-visible', 'length', {
+                    afterMutate: (entry, nextValue) => {
+                        const mode = String(nextValue || '').trim().toLowerCase();
+                        if (!(mode === 'custom' || mode === 'other' || mode === 'other-approx')) {
+                            entry.customLength = '';
+                        }
+                    },
+                    afterCommit: () => syncCloneCustomWraps()
+                });
+                bindSavedField('#car-custom-weight', 'customWeight');
+                bindSavedField('#car-custom-weight-unit', 'customWeightUnit', {
+                    afterMutate: (entry, nextValue) => {
+                        entry.customWeightUnit = nextValue || 'kg';
+                    }
+                });
+                bindSavedField('#car-custom-length', 'customLength');
+                bindSavedField('#car-custom-length-unit', 'customLengthUnit', {
+                    afterMutate: (entry, nextValue) => {
+                        entry.customLengthUnit = nextValue || 'mm';
+                    }
+                });
+
+                clone.querySelectorAll('input[type="file"]').forEach((field) => {
+                    field.disabled = true;
+                });
+                clone.querySelectorAll('button').forEach((field) => {
+                    if (field.dataset && field.dataset.vehicleClearMedia === 'car') {
+                        field.style.display = 'none';
+                        return;
+                    }
+                    field.style.display = 'none';
+                });
+
+                clone.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+                clone.querySelectorAll('[name]').forEach((el) => el.removeAttribute('name'));
+
+                card.appendChild(actionsWrap);
+                card.appendChild(clone);
+                listContainer.appendChild(card);
+            });
+        };
+
+        manager.renderSimpleCarList = renderSimpleCarList;
+
+        const persistAndRefreshState = () => {
+            syncVisibleToHidden();
+            window.multiItemsManager?.scheduleProgressSync?.();
+        };
+
+        if (addBtn) addBtn.style.display = 'none';
+        if (continueBtn) continueBtn.style.display = 'none';
+        if (addAnotherBtn) {
+            addAnotherBtn.style.display = '';
+            addAnotherBtn.type = 'button';
+        }
+
+        const visibleFieldIds = [
+            'car-type-visible', 'car-year-visible', 'car-value-visible', 'car-condition-visible',
+            'car-method-visible', 'car-roadworthy-visible', 'car-insurance-visible', 'car-roadtax-visible',
+            'car-weight-visible', 'car-length-visible', 'car-make-model-entry',
+            'car-custom-weight', 'car-custom-weight-unit', 'car-custom-length', 'car-custom-length-unit'
+        ];
+
+        visibleFieldIds.forEach((fieldId) => {
+            const field = document.getElementById(fieldId);
+            if (!field || field.dataset.simpleCarBound === '1') return;
+            field.dataset.simpleCarBound = '1';
+            field.addEventListener('input', persistAndRefreshState);
+            field.addEventListener('change', persistAndRefreshState);
+        });
+
+        const mediaInput = document.getElementById('car-media-input');
+        if (mediaInput && mediaInput.dataset.simpleCarBound !== '1') {
+            mediaInput.dataset.simpleCarBound = '1';
+            mediaInput.addEventListener('change', () => {
+                if (typeof manager.syncVehicleMediaFromInput === 'function') {
+                    manager.syncVehicleMediaFromInput('car');
+                }
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+                    window.multiItemsManager?.scheduleProgressSync?.();
+            });
+        }
+
+        const clearMediaBtn = document.querySelector('[data-vehicle-clear-media="car"]');
+        if (clearMediaBtn && clearMediaBtn.dataset.simpleCarBound !== '1') {
+            clearMediaBtn.dataset.simpleCarBound = '1';
+            clearMediaBtn.addEventListener('click', () => {
+                const input = document.getElementById('car-media-input');
+                if (input) input.value = '';
+                manager.saveVehicleMediaToHidden('car', []);
+                manager.renderVehicleMediaPreview('car', []);
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+                if (typeof window.saveCreateJobProgress === 'function') {
+                    window.saveCreateJobProgress();
+                }
+            });
+        }
+
+        if (deleteFormBtn && deleteFormBtn.dataset.simpleCarBound !== '1') {
+            deleteFormBtn.dataset.simpleCarBound = '1';
+            deleteFormBtn.addEventListener('click', () => {
+                clearDraft();
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+                if (typeof window.saveCreateJobProgress === 'function') {
+                    window.saveCreateJobProgress();
+                }
+            });
+        }
+
+        if (addAnotherBtn.dataset.simpleCarBound !== '1') {
+            addAnotherBtn.dataset.simpleCarBound = '1';
+            addAnotherBtn.addEventListener('click', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                syncVisibleToHidden();
+
+                if (typeof manager.pendingVehicleMediaSync?.car?.then === 'function') {
+                    await manager.pendingVehicleMediaSync.car;
+                }
+
+                const media = typeof manager.resolveVehicleMediaForSave === 'function'
+                    ? await manager.resolveVehicleMediaForSave('car')
+                    : manager.parseVehicleMediaFromHidden('car');
+                commitSimpleCarDraft({
+                    mediaOverride: Array.isArray(media) ? media : [],
+                    showAlert: true,
+                    focusOnMissing: true,
+                    clearAfterSave: true
+                });
+            });
+        }
+
+        manager._vehicleRenderFuncs = manager._vehicleRenderFuncs || {};
+        manager._vehicleRenderFuncs.car = () => {
+            if (addBtn) addBtn.style.display = 'none';
+            if (continueBtn) continueBtn.style.display = 'none';
+            if (addAnotherBtn) {
+                addAnotherBtn.style.display = '';
+                addAnotherBtn.type = 'button';
+            }
+            syncVisibleToHidden();
+            renderSimpleCarList();
+        };
+
+        manager._vehicleRenderFuncs.car();
+        setTimeout(() => manager._vehicleRenderFuncs.car(), 0);
+        setTimeout(() => manager._vehicleRenderFuncs.car(), 150);
+    };
+
     // Initialize vehicle handlers for each type
     ['car', 'motorbike', 'trailer'].forEach(vehicleType => {
+        if (vehicleType === 'car') {
+            setupSimpleCarCampervanFlow();
+            return;
+        }
+
         const continueWithSavedBtn = document.getElementById(`${vehicleType}-continue-with-saved-btn`);
         const continueWithSavedHidden = document.getElementById(`${vehicleType}-continue-with-saved-hidden`);
         const addAnotherBtn = document.getElementById(`${vehicleType}-add-another-btn`);
+
+        const syncVehicleMediaUiFromHidden = () => {
+            const mediaItems = window.multiItemsManager.parseVehicleMediaFromHidden(vehicleType);
+            window.multiItemsManager.renderVehicleMediaPreview(vehicleType, mediaItems);
+        };
+
+        const defaultFieldsByType = {
+            car: {},
+            motorbike: {},
+            trailer: {}
+        };
+
+        const syncVisibleVehicleFieldsToHidden = () => {
+            const syncPairsByType = {
+                car: ['type', 'year', 'value', 'condition', 'method', 'roadworthy', 'insurance', 'roadtax', 'weight', 'length'],
+                motorbike: ['year', 'value', 'condition', 'roadworthy', 'insurance', 'roadtax', 'weight', 'length'],
+                trailer: ['type', 'year', 'value', 'condition', 'method', 'roadworthy', 'tested', 'weight', 'length']
+            };
+
+            const fields = syncPairsByType[vehicleType] || [];
+            fields.forEach((suffix) => {
+                const visible = document.getElementById(`${vehicleType}-${suffix}-visible`);
+                const hidden = document.getElementById(`${vehicleType}-${suffix}-entry-hidden`);
+                if (!visible || !hidden) return;
+
+                let nextValue = String(visible.value || '').trim();
+                if (suffix === 'year') {
+                    nextValue = nextValue.replace(/\D+/g, '').slice(0, 4);
+                    visible.value = nextValue;
+                }
+                hidden.value = nextValue;
+                hidden.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+
+            window.multiItemsManager.syncVehicleCustomFieldVisibility(vehicleType);
+            if (vehicleType === 'trailer') {
+                syncTrailerTestedRequirement();
+            }
+        };
+
+        const applyVehicleFieldDefaults = () => {
+            const defaults = defaultFieldsByType[vehicleType] || {};
+            Object.entries(defaults).forEach(([suffix, defaultValue]) => {
+                const hidden = document.getElementById(`${vehicleType}-${suffix}-entry-hidden`);
+                if (!hidden) return;
+
+                const currentValue = String(hidden.value || '').trim();
+                if (!currentValue) {
+                    hidden.value = defaultValue;
+                }
+            });
+
+            const customLengthInput = document.getElementById(`${vehicleType}-custom-length`);
+            if (customLengthInput && !String(customLengthInput.value || '').trim()) {
+                customLengthInput.value = '0';
+            }
+        };
 
         const hasVehicleDraftInProgress = () => {
             const makeModel = String(document.getElementById(`${vehicleType}-make-model-entry`)?.value || '').trim();
@@ -1558,14 +2643,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 : 'Vehicle added. Use + Add Another Vehicle to start a new blank entry.';
             banner.style.display = 'block';
 
-            // Keep the user in the active form area so adding another vehicle feels continuous.
             const makeInput = document.getElementById(`${vehicleType}-make-model-entry`);
-            const addButton = document.getElementById(`add-${vehicleType}-btn`);
-            const targetElement = makeInput || addButton;
-            if (targetElement && typeof targetElement.scrollIntoView === 'function') {
-                targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-
             if (!wasEdit && makeInput && typeof makeInput.focus === 'function') {
                 makeInput.focus();
             }
@@ -1729,21 +2807,49 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
+        const clearMediaBtn = document.querySelector(`[data-vehicle-clear-media="${vehicleType}"]`);
+        if (clearMediaBtn) {
+            clearMediaBtn.addEventListener('click', () => {
+                const mediaInputField = document.getElementById(`${vehicleType}-media-input`);
+                if (mediaInputField) mediaInputField.value = '';
+                window.multiItemsManager.saveVehicleMediaToHidden(vehicleType, []);
+                window.multiItemsManager.renderVehicleMediaPreview(vehicleType, []);
+                if (window.updateNextButtonState) window.updateNextButtonState();
+            });
+        }
+
         const makeModelInput = document.getElementById(`${vehicleType}-make-model-entry`);
         if (makeModelInput) {
             makeModelInput.addEventListener('input', () => {
                 resetContinueWithSavedChoice();
                 syncContinueWithSavedUi();
                 syncDeleteFormUi();
-                if (window.updateNextButtonState) window.updateNextButtonState();
+                window.multiItemsManager?.scheduleProgressSync?.();
             });
             makeModelInput.addEventListener('change', () => {
                 resetContinueWithSavedChoice();
                 syncContinueWithSavedUi();
                 syncDeleteFormUi();
-                if (window.updateNextButtonState) window.updateNextButtonState();
+                window.multiItemsManager?.scheduleProgressSync?.();
             });
         }
+
+        document.querySelectorAll(`[id^="${vehicleType}-"][id$="-visible"]`).forEach((field) => {
+            field.addEventListener('input', () => {
+                syncVisibleVehicleFieldsToHidden();
+                resetContinueWithSavedChoice();
+                syncContinueWithSavedUi();
+                syncDeleteFormUi();
+                window.multiItemsManager?.scheduleProgressSync?.();
+            });
+            field.addEventListener('change', () => {
+                syncVisibleVehicleFieldsToHidden();
+                resetContinueWithSavedChoice();
+                syncContinueWithSavedUi();
+                syncDeleteFormUi();
+                window.multiItemsManager?.scheduleProgressSync?.();
+            });
+        });
 
         const olderYearInput = getOlderYearInput();
         if (olderYearInput) {
@@ -1780,13 +2886,32 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         let clearAfterSuccessfulAdd = false;
+        let allowProgrammaticAddClick = false;
         if (addAnotherBtn) {
             addAnotherBtn.addEventListener('click', () => {
                 const isEditing = !!window.multiItemsManager.editingVehicleIds[vehicleType];
                 if (isEditing || !addBtn) return;
 
+                const beforeSavedCount = window.multiItemsManager.parseVehicles(vehicleType).length;
                 clearAfterSuccessfulAdd = true;
-                addBtn.click();
+            allowProgrammaticAddClick = true;
+            addBtn.click();
+            allowProgrammaticAddClick = false;
+
+                // Guard against stale UI state: if save succeeded, force a fresh blank draft view.
+                setTimeout(() => {
+                    const afterSavedCount = window.multiItemsManager.parseVehicles(vehicleType).length;
+                    if (afterSavedCount > beforeSavedCount) {
+                        window.multiItemsManager.editingVehicleIds[vehicleType] = null;
+                        window.multiItemsManager.showVehicleDraftForm[vehicleType] = true;
+                        window.multiItemsManager.clearVehicleForm(vehicleType);
+                        window.multiItemsManager.updateVehicleEditUi(vehicleType);
+                        window.multiItemsManager.renderVehiclesList(vehicleType);
+                        syncContinueWithSavedUi();
+                        syncAddAnotherUi();
+                        syncDeleteFormUi();
+                    }
+                }, 0);
             });
         }
 
@@ -1798,12 +2923,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     window.multiItemsManager.deleteVehicle(vehicleType, editingVehicleId);
                     window.multiItemsManager.editingVehicleIds[vehicleType] = null;
                 } else {
-                    // If not editing, delete the most recently saved vehicle (undo last save)
+                    // If not editing, this button should only clear the in-progress draft form.
+                    // Saved vehicles are removed via the card-level Remove action.
                     const savedVehicles = window.multiItemsManager.parseVehicles(vehicleType);
-                    if (savedVehicles.length > 0) {
-                        const lastVehicleId = savedVehicles[savedVehicles.length - 1].id;
-                        window.multiItemsManager.deleteVehicle(vehicleType, lastVehicleId);
-                    }
+                    window.multiItemsManager.showVehicleDraftForm[vehicleType] = savedVehicles.length === 0;
                 }
                 window.multiItemsManager.clearVehicleForm(vehicleType);
                 window.multiItemsManager.updateVehicleEditUi(vehicleType);
@@ -1849,235 +2972,266 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(syncOlderYearInputVisibility, 0);
         setTimeout(syncOlderYearInputVisibility, 120);
 
+        const commitVehicleDraft = (mediaForSave, options = {}) => {
+            const {
+                showAlert = true,
+                clearAfterSuccessfulAdd = true
+            } = options;
+
+            syncVisibleVehicleFieldsToHidden();
+
+            const getEntryValue = (suffix) => {
+                const hidden = document.getElementById(`${vehicleType}-${suffix}-entry-hidden`);
+                const hiddenValue = hidden ? String(hidden.value || '').trim() : '';
+                if (hiddenValue) {
+                    return hiddenValue;
+                }
+
+                const visible = document.getElementById(`${vehicleType}-${suffix}-visible`);
+                const visibleValue = visible ? String(visible.value || '').trim() : '';
+                if (visibleValue) {
+                    if (hidden) {
+                        hidden.value = visibleValue;
+                        hidden.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    return visibleValue;
+                }
+
+                const nav = document.querySelector(`.${vehicleType}-${suffix}-entry-nav`);
+                if (!nav) {
+                    return '';
+                }
+
+                const selectedBtn = nav.querySelector('.option-nav-btn.selected')
+                    || nav.querySelector('.option-nav-btn[aria-checked="true"]');
+                const selectedValue = selectedBtn ? String(selectedBtn.dataset.value || '').trim() : '';
+
+                if (selectedValue && hidden) {
+                    hidden.value = selectedValue;
+                }
+
+                return selectedValue;
+            };
+
+            const makeInput = document.getElementById(`${vehicleType}-make-model-entry`);
+            const yearInput = document.getElementById(`${vehicleType}-year-entry-hidden`);
+            const valueInput = document.getElementById(`${vehicleType}-value-entry-hidden`);
+            const conditionInput = document.getElementById(`${vehicleType}-condition-entry-hidden`);
+            const methodInput = document.getElementById(`${vehicleType}-method-entry-hidden`);
+            const weightInput = document.getElementById(`${vehicleType}-weight-entry-hidden`);
+            const lengthInput = document.getElementById(`${vehicleType}-length-entry-hidden`);
+            const operationalInput = document.getElementById(`${vehicleType}-operational-entry-hidden`);
+            const roadworthyInput = document.getElementById(`${vehicleType}-roadworthy-entry-hidden`);
+            const insuranceInput = document.getElementById(`${vehicleType}-insurance-entry-hidden`);
+            const roadtaxInput = document.getElementById(`${vehicleType}-roadtax-entry-hidden`);
+            const testedInput = document.getElementById(`${vehicleType}-tested-entry-hidden`);
+            const typeInput = document.getElementById(`${vehicleType}-type-entry-hidden`);
+
+            const focusVehicleField = (suffixOrField) => {
+                let target = null;
+
+                if (typeof suffixOrField === 'string') {
+                    const navByClass = document.querySelector(`.${vehicleType}-${suffixOrField}-entry-nav`);
+                    const navByData = document.querySelector(`.option-nav[data-option-nav-for="${vehicleType}-${suffixOrField}-entry-hidden"]`);
+                    target = navByClass || navByData || document.getElementById(`${vehicleType}-${suffixOrField}-entry-hidden`);
+                } else if (suffixOrField) {
+                    target = suffixOrField;
+                }
+
+                if (!target) return;
+
+                if (typeof target.scrollIntoView === 'function') {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+
+                if (typeof target.focus === 'function') {
+                    setTimeout(() => {
+                        target.focus({ preventScroll: true });
+                    }, 0);
+                }
+            };
+
+            const vehicleDisplayLabel = vehicleType === 'trailer' ? 'caravan/trailer' : 'vehicle';
+
+            if (!makeInput || !makeInput.value.trim()) {
+                if (showAlert) alert(`Please enter ${vehicleDisplayLabel} make and model`);
+                focusVehicleField(makeInput);
+                return false;
+            }
+
+            const yearData = resolveYearValue();
+            if (!yearData.selectedYear) {
+                if (showAlert) alert(`Please select a ${vehicleDisplayLabel} year`);
+                focusVehicleField('year');
+                return false;
+            }
+
+            if (String(yearData.selectedYear).toLowerCase() === 'older' && !yearData.resolvedYear) {
+                const olderYearInputField = getOlderYearInput();
+                focusVehicleField(olderYearInputField || 'year');
+                if (showAlert) alert(`Please enter the ${vehicleDisplayLabel} year for the Older option`);
+                return false;
+            }
+
+            const valueEntryValue = getEntryValue('value');
+            if (!valueEntryValue) {
+                focusVehicleField('value');
+                if (showAlert) alert(`Please select ${vehicleDisplayLabel} estimated value`);
+                return false;
+            }
+
+            const requiredByType = {
+                car: ['type', 'condition', 'method', 'weight', 'length', 'roadworthy', 'insurance', 'roadtax'],
+                motorbike: ['condition', 'weight', 'roadworthy', 'insurance', 'roadtax'],
+                trailer: ['type', 'condition', 'method', 'weight', 'length', 'roadworthy']
+            };
+            const requiredFieldLabel = {
+                condition: 'condition',
+                method: 'transport method',
+                weight: 'weight',
+                length: 'length',
+                roadworthy: (vehicleType === 'trailer' && isBoatsServiceActive()) ? 'seaworthy' : 'roadworthy (NCT/DOE)',
+                insurance: 'insurance',
+                roadtax: 'road tax',
+                tested: 'tested certification status',
+                type: vehicleType === 'car' ? 'vehicle type' : 'type'
+            };
+            const lookup = {
+                condition: getEntryValue('condition'),
+                method: getEntryValue('method'),
+                weight: getEntryValue('weight'),
+                length: getEntryValue('length'),
+                operational: getEntryValue('operational'),
+                roadworthy: getEntryValue('roadworthy'),
+                insurance: getEntryValue('insurance'),
+                roadtax: getEntryValue('roadtax'),
+                tested: getEntryValue('tested'),
+                type: getEntryValue('type')
+            };
+            const missingExtra = (requiredByType[vehicleType] || []).find((fieldName) => {
+                return !String(lookup[fieldName] || '').trim();
+            });
+            if (missingExtra) {
+                focusVehicleField(missingExtra);
+                if (showAlert) alert(`Please select ${requiredFieldLabel[missingExtra] || missingExtra}`);
+                return false;
+            }
+
+            const customWeightInput = document.getElementById(`${vehicleType}-custom-weight`);
+            const customWeightUnitInput = document.getElementById(`${vehicleType}-custom-weight-unit`);
+            const customLengthInput = document.getElementById(`${vehicleType}-custom-length`);
+            const customLengthUnitInput = document.getElementById(`${vehicleType}-custom-length-unit`);
+
+            const customWeightValue = lookup.weight === 'custom'
+                ? String(customWeightInput?.value || '').trim()
+                : '';
+            const customLengthValue = lookup.length === 'custom'
+                ? String(customLengthInput?.value || '').trim()
+                : '';
+
+            if (lookup.weight === 'custom' && !customWeightValue) {
+                focusVehicleField(customWeightInput);
+                if (showAlert) alert('Please enter approximate weight');
+                return false;
+            }
+
+            if (lookup.length === 'custom' && !customLengthValue) {
+                focusVehicleField(customLengthInput);
+                if (showAlert) alert('Please enter approximate length');
+                return false;
+            }
+
+            const trailerNeedsTested = vehicleType === 'trailer' && !isBoatsServiceActive() && (
+                lookup.weight === 'over-3500'
+                || (lookup.weight === 'custom' && isCustomWeightAboveTrailerThreshold())
+            );
+
+            if (trailerNeedsTested && !String(lookup.tested || '').trim()) {
+                focusVehicleField('tested');
+                if (showAlert) alert('Please select tested certification status for trailers over 3500kg');
+                return false;
+            }
+
+            const vehicleData = {
+                makeModel: makeInput.value,
+                year: yearData.resolvedYear,
+                value: valueEntryValue,
+                condition: lookup.condition,
+                method: lookup.method,
+                weight: lookup.weight,
+                length: lookup.length,
+                customWeight: lookup.weight === 'custom' ? customWeightValue : '',
+                customWeightUnit: lookup.weight === 'custom' ? String(customWeightUnitInput?.value || 'kg').trim() : 'kg',
+                customLength: lookup.length === 'custom' ? customLengthValue : '',
+                customLengthUnit: lookup.length === 'custom' ? String(customLengthUnitInput?.value || 'mm').trim() : 'mm',
+                operational: lookup.operational,
+                roadworthy: lookup.roadworthy,
+                insurance: lookup.insurance,
+                roadtax: lookup.roadtax,
+                tested: lookup.tested,
+                type: lookup.type,
+                media: Array.isArray(mediaForSave) ? mediaForSave : window.multiItemsManager.parseVehicleMediaFromHidden(vehicleType),
+                floors: window.multiItemsManager.parseFloorsFromHidden(vehicleType)
+            };
+
+            const saved = window.multiItemsManager.addVehicle(vehicleType, vehicleData);
+
+            if (saved) {
+                const wasEdit = false;
+                window.multiItemsManager.clearVehicleForm(vehicleType);
+                window.multiItemsManager.editingVehicleIds[vehicleType] = null;
+                window.multiItemsManager.showVehicleDraftForm[vehicleType] = true;
+                window.multiItemsManager.updateVehicleEditUi(vehicleType);
+                window.multiItemsManager.renderVehiclesList(vehicleType);
+                resetContinueWithSavedChoice();
+                syncContinueWithSavedUi();
+                syncAddAnotherUi();
+                syncDeleteFormUi();
+                showVehicleSavedIndicator(wasEdit);
+
+                if (window.updateNextButtonState) window.updateNextButtonState();
+                if (typeof window.saveCreateJobProgress === 'function') {
+                    window.saveCreateJobProgress();
+                }
+            }
+
+            return saved;
+        };
+
+        window.multiItemsManager.commitVehicleDraft = window.multiItemsManager.commitVehicleDraft || {};
+        window.multiItemsManager.commitVehicleDraft[vehicleType] = commitVehicleDraft;
+
         const addBtn = document.getElementById(`add-${vehicleType}-btn`);
         if (addBtn) {
-            const handleAddClick = function(e) {
+            const handleAddClick = async function(e) {
                 e.preventDefault();
                 e.stopPropagation();
+
+                // Ignore unintended synthetic clicks (for example from unrelated validation flows).
+                // We only allow synthetic clicks triggered by the explicit "+ Add Another Vehicle" action.
+                const isProgrammaticClick = !!(e && Object.prototype.hasOwnProperty.call(e, 'isTrusted') && e.isTrusted === false);
+                const allowProgrammaticFromManager = !!(window.multiItemsManager.allowProgrammaticVehicleAddClick && window.multiItemsManager.allowProgrammaticVehicleAddClick[vehicleType]);
+                if (allowProgrammaticFromManager && window.multiItemsManager.allowProgrammaticVehicleAddClick) {
+                    window.multiItemsManager.allowProgrammaticVehicleAddClick[vehicleType] = false;
+                }
+
+                if (isProgrammaticClick && !allowProgrammaticAddClick && !allowProgrammaticFromManager) {
+                    return;
+                }
+
                 console.log(`[${vehicleType}] Add button clicked`);
                 try {
-                    const getEntryValue = (suffix) => {
-                    const hidden = document.getElementById(`${vehicleType}-${suffix}-entry-hidden`);
-                    const hiddenValue = hidden ? String(hidden.value || '').trim() : '';
-                    if (hiddenValue) {
-                        return hiddenValue;
+                    const pendingMediaSync = window.multiItemsManager.pendingVehicleMediaSync?.[vehicleType];
+                    if (pendingMediaSync && typeof pendingMediaSync.then === 'function') {
+                        await pendingMediaSync;
                     }
 
-                    const nav = document.querySelector(`.${vehicleType}-${suffix}-entry-nav`);
-                    if (!nav) {
-                        return '';
+                    const mediaForSave = await window.multiItemsManager.resolveVehicleMediaForSave(vehicleType);
+
+                    const saved = commitVehicleDraft(mediaForSave, { showAlert: true, clearAfterSuccessfulAdd: true });
+                    if (!saved) {
+                        return;
                     }
-
-                    const selectedBtn = nav.querySelector('.option-nav-btn.selected')
-                        || nav.querySelector('.option-nav-btn[aria-checked="true"]');
-                    const selectedValue = selectedBtn ? String(selectedBtn.dataset.value || '').trim() : '';
-
-                    if (selectedValue && hidden) {
-                        hidden.value = selectedValue;
-                    }
-
-                    return selectedValue;
-                };
-
-                const makeInput = document.getElementById(`${vehicleType}-make-model-entry`);
-                const yearInput = document.getElementById(`${vehicleType}-year-entry-hidden`);
-                const valueInput = document.getElementById(`${vehicleType}-value-entry-hidden`);
-                const conditionInput = document.getElementById(`${vehicleType}-condition-entry-hidden`);
-                const methodInput = document.getElementById(`${vehicleType}-method-entry-hidden`);
-                const weightInput = document.getElementById(`${vehicleType}-weight-entry-hidden`);
-                const lengthInput = document.getElementById(`${vehicleType}-length-entry-hidden`);
-                const operationalInput = document.getElementById(`${vehicleType}-operational-entry-hidden`);
-                const roadworthyInput = document.getElementById(`${vehicleType}-roadworthy-entry-hidden`);
-                const insuranceInput = document.getElementById(`${vehicleType}-insurance-entry-hidden`);
-                const roadtaxInput = document.getElementById(`${vehicleType}-roadtax-entry-hidden`);
-                const testedInput = document.getElementById(`${vehicleType}-tested-entry-hidden`);
-                const typeInput = document.getElementById(`${vehicleType}-type-entry-hidden`);
-
-                const focusVehicleField = (suffixOrField) => {
-                    let target = null;
-
-                    if (typeof suffixOrField === 'string') {
-                        const navByClass = document.querySelector(`.${vehicleType}-${suffixOrField}-entry-nav`);
-                        const navByData = document.querySelector(`.option-nav[data-option-nav-for="${vehicleType}-${suffixOrField}-entry-hidden"]`);
-                        target = navByClass || navByData || document.getElementById(`${vehicleType}-${suffixOrField}-entry-hidden`);
-                    } else if (suffixOrField) {
-                        target = suffixOrField;
-                    }
-
-                    if (!target) return;
-
-                    if (typeof target.scrollIntoView === 'function') {
-                        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-
-                    if (typeof target.focus === 'function') {
-                        setTimeout(() => {
-                            target.focus({ preventScroll: true });
-                        }, 0);
-                    }
-                };
-
-                if (!makeInput || !makeInput.value.trim()) {
-                    console.warn(`[${vehicleType}] Validation failed: missing make & model`);
-                    focusVehicleField(makeInput);
-                    alert('Please enter make & model');
-                    return;
-                }
-
-                const yearData = resolveYearValue();
-                if (!yearData.selectedYear) {
-                    focusVehicleField('year');
-                    alert('Please select a year');
-                    return;
-                }
-
-                if (String(yearData.selectedYear).toLowerCase() === 'older' && !yearData.resolvedYear) {
-                    const olderYearInputField = getOlderYearInput();
-                    focusVehicleField(olderYearInputField || 'year');
-                    alert('Please enter the vehicle year for the Older option');
-                    return;
-                }
-
-                const valueEntryValue = getEntryValue('value');
-                if (!valueEntryValue) {
-                    focusVehicleField('value');
-                    alert('Please select estimated value');
-                    return;
-                }
-
-                const requiredByType = {
-                    car: ['type', 'condition', 'method', 'weight', 'length', 'roadworthy', 'insurance', 'roadtax'],
-                    motorbike: ['condition', 'weight', 'roadworthy', 'insurance', 'roadtax'],
-                    trailer: ['type', 'condition', 'method', 'weight', 'length', 'roadworthy']
-                };
-                const requiredFieldLabel = {
-                    condition: 'condition',
-                    method: 'transport method',
-                    weight: 'weight',
-                    length: 'length',
-                    roadworthy: (vehicleType === 'trailer' && isBoatsServiceActive()) ? 'seaworthy' : 'roadworthy (NCT/DOE)',
-                    insurance: 'insurance',
-                    roadtax: 'road tax',
-                    tested: 'tested certification status',
-                    type: vehicleType === 'car' ? 'vehicle type' : 'type'
-                };
-                const lookup = {
-                    condition: getEntryValue('condition'),
-                    method: getEntryValue('method'),
-                    weight: getEntryValue('weight'),
-                    length: getEntryValue('length'),
-                    operational: getEntryValue('operational'),
-                    roadworthy: getEntryValue('roadworthy'),
-                    insurance: getEntryValue('insurance'),
-                    roadtax: getEntryValue('roadtax'),
-                    tested: getEntryValue('tested'),
-                    type: getEntryValue('type')
-                };
-                const missingExtra = (requiredByType[vehicleType] || []).find((fieldName) => {
-                    return !String(lookup[fieldName] || '').trim();
-                });
-                if (missingExtra) {
-                    focusVehicleField(missingExtra);
-                    alert(`Please select ${requiredFieldLabel[missingExtra] || missingExtra}`);
-                    return;
-                }
-
-                const customWeightInput = document.getElementById(`${vehicleType}-custom-weight`);
-                const customWeightUnitInput = document.getElementById(`${vehicleType}-custom-weight-unit`);
-                const customLengthInput = document.getElementById(`${vehicleType}-custom-length`);
-                const customLengthUnitInput = document.getElementById(`${vehicleType}-custom-length-unit`);
-
-                const customWeightValue = lookup.weight === 'custom'
-                    ? String(customWeightInput?.value || '').trim()
-                    : '';
-                const customLengthValue = lookup.length === 'custom'
-                    ? String(customLengthInput?.value || '').trim()
-                    : '';
-
-                if (lookup.weight === 'custom' && !customWeightValue) {
-                    focusVehicleField(customWeightInput);
-                    alert('Please enter approximate weight');
-                    if (customWeightInput) customWeightInput.focus();
-                    return;
-                }
-
-                if (lookup.length === 'custom' && !customLengthValue) {
-                    focusVehicleField(customLengthInput);
-                    alert('Please Enter approx length');
-                    if (customLengthInput) customLengthInput.focus();
-                    return;
-                }
-
-                const trailerNeedsTested = vehicleType === 'trailer' && !isBoatsServiceActive() && (
-                    lookup.weight === 'over-3500'
-                    || (lookup.weight === 'custom' && isCustomWeightAboveTrailerThreshold())
-                );
-
-                if (trailerNeedsTested && !String(lookup.tested || '').trim()) {
-                    focusVehicleField('tested');
-                    alert('Please select tested certification status for trailers over 3500kg');
-                    return;
-                }
-
-                // Collect data
-                const vehicleData = {
-                    makeModel: makeInput.value,
-                    year: yearData.resolvedYear,
-                    value: valueEntryValue,
-                    condition: lookup.condition,
-                    method: lookup.method,
-                    weight: lookup.weight,
-                    length: lookup.length,
-                    customWeight: lookup.weight === 'custom' ? customWeightValue : '',
-                    customWeightUnit: lookup.weight === 'custom' ? String(customWeightUnitInput?.value || 'kg').trim() : 'kg',
-                    customLength: lookup.length === 'custom' ? customLengthValue : '',
-                    customLengthUnit: lookup.length === 'custom' ? String(customLengthUnitInput?.value || 'mm').trim() : 'mm',
-                    operational: lookup.operational,
-                    roadworthy: lookup.roadworthy,
-                    insurance: lookup.insurance,
-                    roadtax: lookup.roadtax,
-                    tested: lookup.tested,
-                    type: lookup.type,
-                    media: window.multiItemsManager.parseVehicleMediaFromHidden(vehicleType),
-                    floors: window.multiItemsManager.parseFloorsFromHidden(vehicleType)
-                };
-
-                const editingVehicleId = window.multiItemsManager.editingVehicleIds[vehicleType];
-                const saved = editingVehicleId
-                    ? window.multiItemsManager.updateVehicle(vehicleType, editingVehicleId, vehicleData)
-                    : window.multiItemsManager.addVehicle(vehicleType, vehicleData);
-
-                if (saved) {
-                    console.log(`[${vehicleType}] Vehicle saved successfully`);
-                    const wasEdit = !!editingVehicleId;
-                    // Always clear the form after successful save (except when editing)
-                    if (!wasEdit) {
-                        window.multiItemsManager.clearVehicleForm(vehicleType);
-                        window.multiItemsManager.editingVehicleIds[vehicleType] = null;
-                        clearAfterSuccessfulAdd = false;
-                    } else {
-                        // When editing, keep the editing ID active so user can see the form
-                        const vehicles = window.multiItemsManager.parseVehicles(vehicleType);
-                        const vehicleIdToKeep = editingVehicleId || (vehicles.length > 0 ? vehicles[vehicles.length - 1].id : null);
-                        window.multiItemsManager.editingVehicleIds[vehicleType] = vehicleIdToKeep;
-                    }
-                    window.multiItemsManager.updateVehicleEditUi(vehicleType);
-                    resetContinueWithSavedChoice();
-                    syncContinueWithSavedUi();
-                    syncAddAnotherUi();
-                    syncDeleteFormUi();
-                    showVehicleSavedIndicator(wasEdit);
-
-                    // Scroll to the vehicle list to show saved vehicles
-                    setTimeout(() => {
-                        const listContainer = document.getElementById(`${vehicleType}-list`);
-                        if (listContainer && listContainer.style.display !== 'none') {
-                            listContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                        }
-                    }, 300);
-
-                    if (window.updateNextButtonState) window.updateNextButtonState();
-                }
                 } catch (error) {
                     console.error(`Vehicle save handler error: ${error.message}`, error);
                     alert('An error occurred while saving. Please try again.');
@@ -2092,6 +3246,7 @@ document.addEventListener('DOMContentLoaded', function() {
         window.multiItemsManager._vehicleRenderFuncs[vehicleType] = () => {
             window.multiItemsManager.renderVehiclesList(vehicleType);
             window.multiItemsManager.updateVehicleEditUi(vehicleType);
+            syncVehicleMediaUiFromHidden();
             syncContinueWithSavedUi();
             syncAddAnotherUi();
             syncDeleteFormUi();
@@ -2099,26 +3254,59 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Initial render
         window.multiItemsManager._vehicleRenderFuncs[vehicleType]();
+        syncVehicleMediaUiFromHidden();
+        setTimeout(syncVehicleMediaUiFromHidden, 0);
+        setTimeout(syncVehicleMediaUiFromHidden, 150);
         if (vehicleType === 'trailer') {
             syncTrailerTestedRequirement();
         }
     });
 
-    // Watch for step changes to re-render vehicles when returning to step 3
-    const vehicleStepObserver = setInterval(() => {
+    // Watch for step changes and re-render vehicles only when entering step 3.
+    let lastObservedStep = parseInt(document.body.getAttribute('data-form-step') || document.body.getAttribute('data-current-step') || '1', 10);
+    const rerenderVehiclesIfNeeded = () => {
         const currentStep = parseInt(document.body.getAttribute('data-form-step') || document.body.getAttribute('data-current-step') || '1', 10);
-        if (currentStep === 3 && window.multiItemsManager._vehicleRenderFuncs) {
-            ['car', 'motorbike', 'trailer'].forEach((vehicleType) => {
-                if (window.multiItemsManager._vehicleRenderFuncs[vehicleType]) {
-                    try {
-                        window.multiItemsManager._vehicleRenderFuncs[vehicleType]();
-                    } catch (e) {
-                        console.error(`Error re-rendering ${vehicleType} vehicles:`, e);
-                    }
-                }
-            });
+        if (currentStep !== 3 || currentStep === lastObservedStep || !window.multiItemsManager._vehicleRenderFuncs) {
+            lastObservedStep = currentStep;
+            return;
         }
-    }, 500);
+
+        lastObservedStep = currentStep;
+        ['car', 'motorbike', 'trailer'].forEach((vehicleType) => {
+            if (window.multiItemsManager._vehicleRenderFuncs[vehicleType]) {
+                try {
+                    window.multiItemsManager._vehicleRenderFuncs[vehicleType]();
+                } catch (e) {
+                    console.error(`Error re-rendering ${vehicleType} vehicles:`, e);
+                }
+            }
+        });
+    };
+
+    if (document.body && typeof MutationObserver === 'function') {
+        const stepMutationObserver = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                if (mutation.type === 'attributes') {
+                    rerenderVehiclesIfNeeded();
+                    break;
+                }
+            }
+        });
+        stepMutationObserver.observe(document.body, {
+            attributes: true,
+            attributeFilter: ['data-form-step', 'data-current-step']
+        });
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            rerenderVehiclesIfNeeded();
+        }
+    });
+
+    window.addEventListener('pageshow', () => {
+        rerenderVehiclesIfNeeded();
+    });
 
     // Initialize piano media input
     const pianoMediaInput = document.getElementById('piano-media-input');
@@ -2136,5 +3324,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (window.updateNextButtonState) window.updateNextButtonState();
         });
     }
+
+    // Keep native selects until custom vehicle-select CSS is restored.
+    // The enhancer currently renders unstyled list menus when reverted CSS is missing.
+    // initVehicleCustomSelects();
 });
 

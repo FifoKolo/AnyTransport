@@ -13,33 +13,56 @@ const contactBlocker = {
         return !this.blockedInputTypes.has(inputType);
     },
 
-    // Keep only the first 5 digits while preserving other characters.
-    trimToMaxDigits(value) {
+    // Keep only the first 5 numeric tokens while preserving other characters.
+    trimToMaxDigits(value, maxDigits = this.maxDigitsPerField) {
         if (!value) return '';
 
-        let digitCount = 0;
+        const lowerValue = String(value).toLowerCase();
+        let tokenCount = 0;
         let trimmed = '';
-        for (const ch of String(value)) {
+
+        for (let index = 0; index < String(value).length; index += 1) {
+            const ch = String(value)[index];
+
             if (/\d/.test(ch)) {
-                if (digitCount < this.maxDigitsPerField) {
-                    digitCount += 1;
+                if (tokenCount < maxDigits) {
+                    tokenCount += 1;
                     trimmed += ch;
                 }
                 continue;
             }
+
+            const remaining = lowerValue.slice(index);
+            const matchedWord = this.numberWords.find((word) => {
+                if (!remaining.startsWith(word)) return false;
+                const nextChar = remaining.charAt(word.length);
+                return !nextChar || /[^a-z]/i.test(nextChar);
+            });
+
+            if (matchedWord) {
+                if (tokenCount < maxDigits) {
+                    tokenCount += 1;
+                    trimmed += String(value).slice(index, index + matchedWord.length);
+                }
+                index += matchedWord.length - 1;
+                continue;
+            }
+
             trimmed += ch;
         }
         return trimmed;
     },
 
-    enforceMaxDigitCount(target) {
+    enforceMaxDigitCount(target, options = {}) {
         if (!this.isEligibleTarget(target)) return false;
         const value = String(target.value || '');
-        const digits = value.match(/\d/g) || [];
-        if (digits.length <= this.maxDigitsPerField) return false;
+        const trimmed = this.trimToMaxDigits(value, this.maxDigitsPerField);
+        if (trimmed === value) return false;
 
-        target.value = this.trimToMaxDigits(value);
-        alert(`You can enter a maximum of ${this.maxDigitsPerField} numbers in this field.`);
+        target.value = trimmed;
+        if (!options.silent) {
+            alert(`You can enter a maximum of ${this.maxDigitsPerField} numbers in this field.`);
+        }
         target.focus();
         return true;
     },
@@ -58,6 +81,109 @@ const contactBlocker = {
     }
 };
 
+const bindGlobalDigitLimit = () => {
+    const applyDigitLimit = (target) => {
+        if (!contactBlocker.isEligibleTarget(target)) return;
+        contactBlocker.enforceMaxDigitCount(target, { silent: true });
+    };
+
+    document.addEventListener('input', (event) => {
+        applyDigitLimit(event.target);
+    }, true);
+
+    document.addEventListener('change', (event) => {
+        applyDigitLimit(event.target);
+    }, true);
+
+    document.addEventListener('paste', (event) => {
+        const target = event.target;
+        if (!contactBlocker.isEligibleTarget(target)) return;
+        setTimeout(() => applyDigitLimit(target), 0);
+    }, true);
+
+    document.querySelectorAll('input[type="text"], input[type="number"], input[type="tel"], textarea').forEach((field) => {
+        applyDigitLimit(field);
+    });
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindGlobalDigitLimit, { once: true });
+} else {
+    bindGlobalDigitLimit();
+}
+
+
+const getStorageDatesSummaryText = () => {
+    const storageInput = document.getElementById('service-storage');
+    if (!storageInput || storageInput.value !== 'yes') return '';
+
+    const storageDateModeInput = document.getElementById('service-storage-date-mode');
+    const storageStartInput = document.getElementById('service-storage-start-datetime');
+    const storageEndInput = document.getElementById('service-storage-end-datetime');
+    const storageStartApproxFromInput = document.getElementById('service-storage-start-approx-from');
+    const storageStartApproxToInput = document.getElementById('service-storage-start-approx-to');
+    const storageEndApproxFromInput = document.getElementById('service-storage-end-approx-from');
+    const storageEndApproxToInput = document.getElementById('service-storage-end-approx-to');
+
+    if (!storageDateModeInput || !storageStartInput || !storageEndInput || !storageStartApproxFromInput || !storageStartApproxToInput || !storageEndApproxFromInput || !storageEndApproxToInput) {
+        return '';
+    }
+
+    const parseApproxDateValue = (raw) => {
+        const value = String(raw || '').trim();
+        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return null;
+        const year = parseInt(match[1], 10);
+        const monthIndex = parseInt(match[2], 10) - 1;
+        const day = parseInt(match[3], 10);
+        if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || !Number.isFinite(day)) return null;
+        if (monthIndex < 0 || monthIndex > 11 || day < 1 || day > 31) return null;
+        return new Date(year, monthIndex, day);
+    };
+
+    const formatDateDisplay = (date) => new Intl.DateTimeFormat('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+    }).format(date);
+
+    const formatApproxDateLabel = (raw) => {
+        const date = parseApproxDateValue(raw);
+        if (!date) return '';
+        return new Intl.DateTimeFormat('en-GB', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
+        }).format(date);
+    };
+
+    const isApproxMode = String(storageDateModeInput.value || 'exact').trim().toLowerCase() === 'approx';
+    if (isApproxMode) {
+        const approxStartFrom = parseApproxDateValue(storageStartApproxFromInput.value);
+        const approxStartTo = parseApproxDateValue(storageStartApproxToInput.value);
+        const approxEndFrom = parseApproxDateValue(storageEndApproxFromInput.value);
+        const approxEndTo = parseApproxDateValue(storageEndApproxToInput.value);
+        const hasAllApproxDates = !!(approxStartFrom && approxStartTo && approxEndFrom && approxEndTo);
+        const hasValidRanges = hasAllApproxDates
+            && approxStartTo >= approxStartFrom
+            && approxEndTo >= approxEndFrom
+            && approxEndFrom >= approxStartTo;
+
+        if (!hasValidRanges) return '';
+
+            return `Estimated storage in ${formatApproxWindowsCompact(approxStartFrom, approxStartTo, approxEndFrom, approxEndTo)}`;
+    }
+
+    const startDate = parseApproxDateValue(storageStartInput.value);
+    const endDate = parseApproxDateValue(storageEndInput.value);
+    if (!startDate || !endDate || !(endDate > startDate)) {
+        return '';
+    }
+
+    return `Storage dates: ${formatDateDisplay(startDate)} - ${formatDateDisplay(endDate)}`;
+};
+
+window.getStorageDatesSummaryText = getStorageDatesSummaryText;
 let lastAutoAdvancedFloor = '';
 let lastAutoAdvancedlift = '';
 
@@ -169,11 +295,22 @@ function initTransportDatePicker() {
     const panel = document.getElementById('transport-date-panel');
     const display = document.getElementById('service-transport-date-display');
     const storageServiceInput = document.getElementById('service-storage');
+    const storageDateModeInput = document.getElementById('service-storage-date-mode');
     const storageStartInput = document.getElementById('service-storage-start-datetime');
     const storageEndInput = document.getElementById('service-storage-end-datetime');
+    const storageStartApproxFromInput = document.getElementById('service-storage-start-approx-from');
+    const storageStartApproxToInput = document.getElementById('service-storage-start-approx-to');
+    const storageEndApproxFromInput = document.getElementById('service-storage-end-approx-from');
+    const storageEndApproxToInput = document.getElementById('service-storage-end-approx-to');
     const step7StorageWrap = document.getElementById('step7-storage-date-controls');
+    const step7StorageExactWrap = document.getElementById('step7-storage-exact-date-controls');
+    const step7StorageApproxWrap = document.getElementById('step7-storage-approx-date-controls');
     const step7StorageStartInput = document.getElementById('step7-storage-start-datetime');
     const step7StorageEndInput = document.getElementById('step7-storage-end-datetime');
+    const step7StorageStartApproxFromInput = document.getElementById('step7-storage-start-approx-from');
+    const step7StorageStartApproxToInput = document.getElementById('step7-storage-start-approx-to');
+    const step7StorageEndApproxFromInput = document.getElementById('step7-storage-end-approx-from');
+    const step7StorageEndApproxToInput = document.getElementById('step7-storage-end-approx-to');
     const preferredPickupTimeInput = document.getElementById('preferred-time-pickup');
     const preferredDeliveryTimeInput = document.getElementById('preferred-time-delivery');
     const timeWindowRow = document.getElementById('transport-time-window-row');
@@ -225,6 +362,8 @@ function initTransportDatePicker() {
         'Tomorrow Anytime'
     ];
 
+    let panelMode = 'transport';
+
     function normalizeDate(date) {
         return new Date(date.getFullYear(), date.getMonth(), date.getDate());
     }
@@ -240,6 +379,8 @@ function initTransportDatePicker() {
     function getStorageDateBounds() {
         const storageEnabled = String(storageServiceInput?.value || '').trim().toLowerCase() === 'yes';
         if (!storageEnabled) return null;
+        const isApproxMode = String(storageDateModeInput?.value || 'exact').trim().toLowerCase() === 'approx';
+        if (isApproxMode) return null;
 
         const startDate = parseDateInputValue(storageStartInput?.value || '');
         const endDate = parseDateInputValue(storageEndInput?.value || '');
@@ -249,21 +390,63 @@ function initTransportDatePicker() {
         return { start: startDate, end: endDate };
     }
 
+    function getTransportDateBounds() {
+        const storageEnabled = String(storageServiceInput?.value || '').trim().toLowerCase() === 'yes';
+        if (!storageEnabled) return null;
+
+        const isApproxMode = String(storageDateModeInput?.value || 'exact').trim().toLowerCase() === 'approx';
+        if (isApproxMode) {
+            const approxStartFrom = parseDateInputValue(storageStartApproxFromInput?.value || '');
+            const approxEndTo = parseDateInputValue(storageEndApproxToInput?.value || '');
+            if (!approxStartFrom || !approxEndTo || approxEndTo < approxStartFrom) return null;
+            return { start: approxStartFrom, end: approxEndTo };
+        }
+
+        return getStorageDateBounds();
+    }
+
+    function getApproxTransportWindowBounds() {
+        const storageEnabled = String(storageServiceInput?.value || '').trim().toLowerCase() === 'yes';
+        const isApproxMode = String(storageDateModeInput?.value || 'exact').trim().toLowerCase() === 'approx';
+        if (!storageEnabled || !isApproxMode) return null;
+
+        const inStart = parseDateInputValue(storageStartApproxFromInput?.value || '');
+        const inEnd = parseDateInputValue(storageStartApproxToInput?.value || '');
+        const outStart = parseDateInputValue(storageEndApproxFromInput?.value || '');
+        const outEnd = parseDateInputValue(storageEndApproxToInput?.value || '');
+
+        if (!inStart || !inEnd || !outStart || !outEnd) return null;
+        if (inEnd < inStart || outEnd < outStart) return null;
+
+        return {
+            inWindow: { start: inStart, end: inEnd },
+            outWindow: { start: outStart, end: outEnd }
+        };
+    }
+
     function getAvailableDateOptions() {
-        const storageBounds = getStorageDateBounds();
+        const storageBounds = getTransportDateBounds();
         if (!storageBounds) return optionItems;
         return optionItems.filter((item) => item.id === 'between-dates');
     }
 
     function enforceStorageDateValueIfNeeded() {
-        const storageBounds = getStorageDateBounds();
+        const storageBounds = getTransportDateBounds();
         if (!storageBounds) return;
 
-        const requiredStart = formatDateDisplay(storageBounds.start);
-        const requiredEnd = formatDateDisplay(storageBounds.end);
-        const requiredValue = `Between Dates: ${requiredStart} - ${requiredEnd}`;
+        const isApproxMode = String(storageDateModeInput?.value || 'exact').trim().toLowerCase() === 'approx';
+        const requiredValue = isApproxMode
+            ? `Between Dates: ${formatApproxWindowsCompact(
+                parseDateInputValue(storageStartApproxFromInput?.value || '') || storageBounds.start,
+                parseDateInputValue(storageStartApproxToInput?.value || '') || storageBounds.start,
+                parseDateInputValue(storageEndApproxFromInput?.value || '') || storageBounds.end,
+                parseDateInputValue(storageEndApproxToInput?.value || '') || storageBounds.end
+            )}`
+            : `Between Dates: ${formatDateDisplay(storageBounds.start)} - ${formatDateDisplay(storageBounds.end)}`;
         const currentValue = String(hiddenInput.value || '').trim();
-        const isAllowedStorageValue = currentValue.startsWith('Between Dates:');
+        const isAllowedStorageValue = isApproxMode
+            ? currentValue.startsWith('Between Dates: Storage in ')
+            : currentValue.startsWith('Between Dates:');
 
         if (!isAllowedStorageValue) {
             updateTransportDate(requiredValue);
@@ -271,6 +454,13 @@ function initTransportDatePicker() {
         }
 
         if (currentValue.startsWith('Between Dates:')) {
+            if (isApproxMode) {
+                if (currentValue !== requiredValue) {
+                    updateTransportDate(requiredValue);
+                }
+                return;
+            }
+
             const match = currentValue.match(/^Between Dates:\s*(.+?)\s*-\s*(.+)$/);
             if (!match) {
                 updateTransportDate(requiredValue);
@@ -292,13 +482,33 @@ function initTransportDatePicker() {
         if (!step7StorageWrap || !step7StorageStartInput || !step7StorageEndInput) return;
 
         const storageEnabled = String(storageServiceInput?.value || '').trim().toLowerCase() === 'yes';
+        const isApproxStorageMode = String(storageDateModeInput?.value || 'exact').trim().toLowerCase() === 'approx';
         step7StorageWrap.style.display = storageEnabled ? 'block' : 'none';
 
+        const approxStartFromValue = String(document.getElementById('service-storage-start-approx-from')?.value || '').trim();
+        const approxStartToValue = String(document.getElementById('service-storage-start-approx-to')?.value || '').trim();
+        const approxEndFromValue = String(document.getElementById('service-storage-end-approx-from')?.value || '').trim();
+        const approxEndToValue = String(document.getElementById('service-storage-end-approx-to')?.value || '').trim();
+        const fallbackStartValue = String(storageStartInput?.value || '').trim();
+        const fallbackEndValue = String(storageEndInput?.value || '').trim();
+
         syncingStep7Storage = true;
-        step7StorageStartInput.value = String(storageStartInput?.value || '').trim();
-        step7StorageEndInput.value = String(storageEndInput?.value || '').trim();
-        step7StorageStartInput.disabled = !storageEnabled;
-        step7StorageEndInput.disabled = !storageEnabled;
+        if (step7StorageExactWrap) {
+            step7StorageExactWrap.style.display = isApproxStorageMode ? 'none' : 'grid';
+        }
+        if (step7StorageApproxWrap) {
+            step7StorageApproxWrap.style.display = isApproxStorageMode ? 'block' : 'none';
+        }
+
+        step7StorageStartInput.value = isApproxStorageMode ? (approxStartFromValue || fallbackStartValue) : fallbackStartValue;
+        step7StorageEndInput.value = isApproxStorageMode ? (approxEndToValue || fallbackEndValue) : fallbackEndValue;
+        step7StorageStartInput.disabled = !storageEnabled || isApproxStorageMode;
+        step7StorageEndInput.disabled = !storageEnabled || isApproxStorageMode;
+
+        if (step7StorageStartApproxFromInput) step7StorageStartApproxFromInput.value = approxStartFromValue;
+        if (step7StorageStartApproxToInput) step7StorageStartApproxToInput.value = approxStartToValue;
+        if (step7StorageEndApproxFromInput) step7StorageEndApproxFromInput.value = approxEndFromValue;
+        if (step7StorageEndApproxToInput) step7StorageEndApproxToInput.value = approxEndToValue;
         syncingStep7Storage = false;
     }
 
@@ -306,8 +516,19 @@ function initTransportDatePicker() {
         if (syncingStep7Storage) return;
         if (!storageStartInput || !storageEndInput || !step7StorageStartInput || !step7StorageEndInput) return;
 
-        storageStartInput.value = String(step7StorageStartInput.value || '').trim();
-        storageEndInput.value = String(step7StorageEndInput.value || '').trim();
+        const isApproxStorageMode = String(storageDateModeInput?.value || 'exact').trim().toLowerCase() === 'approx';
+        const nextStartValue = String(step7StorageStartInput.value || '').trim();
+        const nextEndValue = String(step7StorageEndInput.value || '').trim();
+
+        storageStartInput.value = nextStartValue;
+        storageEndInput.value = nextEndValue;
+
+        if (isApproxStorageMode) {
+            if (step7StorageStartApproxFromInput) storageStartApproxFromInput.value = String(step7StorageStartApproxFromInput.value || '').trim();
+            if (step7StorageStartApproxToInput) storageStartApproxToInput.value = String(step7StorageStartApproxToInput.value || '').trim();
+            if (step7StorageEndApproxFromInput) storageEndApproxFromInput.value = String(step7StorageEndApproxFromInput.value || '').trim();
+            if (step7StorageEndApproxToInput) storageEndApproxToInput.value = String(step7StorageEndApproxToInput.value || '').trim();
+        }
 
         storageStartInput.dispatchEvent(new Event('input', { bubbles: true }));
         storageStartInput.dispatchEvent(new Event('change', { bubbles: true }));
@@ -336,6 +557,94 @@ function initTransportDatePicker() {
             month: 'short',
             year: 'numeric'
         }).format(date);
+    }
+
+    function parseApproxDateValue(raw) {
+        const value = String(raw || '').trim();
+        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return null;
+        const year = parseInt(match[1], 10);
+        const monthIndex = parseInt(match[2], 10) - 1;
+        const day = parseInt(match[3], 10);
+        if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || !Number.isFinite(day)) return null;
+        if (monthIndex < 0 || monthIndex > 11 || day < 1 || day > 31) return null;
+        return new Date(year, monthIndex, day);
+    }
+
+    function formatApproxDateLabel(raw) {
+        const date = parseApproxDateValue(raw);
+        if (!date) return '';
+        return new Intl.DateTimeFormat('en-GB', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
+        }).format(date);
+    }
+
+    function formatDayRangeCompact(startDate, endDate) {
+        if (!startDate || !endDate) return '';
+        const daySuffix = (day) => {
+            const normalizedDay = day % 100;
+            if (normalizedDay >= 11 && normalizedDay <= 13) return 'th';
+            switch (day % 10) {
+                case 1: return 'st';
+                case 2: return 'nd';
+                case 3: return 'rd';
+                default: return 'th';
+            }
+        };
+        return `${startDate.getDate()}-${endDate.getDate()}${daySuffix(endDate.getDate())}`;
+    }
+
+    function formatApproxWindowsCompact(startDate, endDate, outStartDate, outEndDate) {
+        const storageInCompact = formatDayRangeCompact(startDate, endDate);
+        const storageOutCompact = formatDayRangeCompact(outStartDate, outEndDate);
+        if (!storageInCompact || !storageOutCompact) return '';
+        return `${storageInCompact} ${storageOutCompact}`;
+    }
+
+    function getStorageDatesSummaryText() {
+        const storageInput = document.getElementById('service-storage');
+        if (!storageInput || storageInput.value !== 'yes') return '';
+
+        const storageDateModeInput = document.getElementById('service-storage-date-mode');
+        const storageStartInput = document.getElementById('service-storage-start-datetime');
+        const storageEndInput = document.getElementById('service-storage-end-datetime');
+        const storageStartApproxFromInput = document.getElementById('service-storage-start-approx-from');
+        const storageStartApproxToInput = document.getElementById('service-storage-start-approx-to');
+        const storageEndApproxFromInput = document.getElementById('service-storage-end-approx-from');
+        const storageEndApproxToInput = document.getElementById('service-storage-end-approx-to');
+
+        if (!storageDateModeInput || !storageStartInput || !storageEndInput || !storageStartApproxFromInput || !storageStartApproxToInput || !storageEndApproxFromInput || !storageEndApproxToInput) {
+            return '';
+        }
+
+        const isApproxMode = String(storageDateModeInput.value || 'exact').trim().toLowerCase() === 'approx';
+        if (isApproxMode) {
+            const approxStartFrom = parseApproxDateValue(storageStartApproxFromInput.value);
+            const approxStartTo = parseApproxDateValue(storageStartApproxToInput.value);
+            const approxEndFrom = parseApproxDateValue(storageEndApproxFromInput.value);
+            const approxEndTo = parseApproxDateValue(storageEndApproxToInput.value);
+            const hasAllApproxDates = !!(approxStartFrom && approxStartTo && approxEndFrom && approxEndTo);
+            const hasValidRanges = hasAllApproxDates
+                && approxStartTo >= approxStartFrom
+                && approxEndTo >= approxEndFrom
+                && approxEndFrom >= approxStartTo;
+
+            if (!hasValidRanges) return '';
+
+            const storageInCompact = formatDayRangeCompact(approxStartFrom, approxStartTo);
+            const storageOutCompact = formatDayRangeCompact(approxEndFrom, approxEndTo);
+            return `Estimated storage in ${storageInCompact} ${storageOutCompact}`;
+        }
+
+        const startDate = new Date(storageStartInput.value);
+        const endDate = new Date(storageEndInput.value);
+        if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime()) || !(endDate > startDate)) {
+            return '';
+        }
+
+        return `Storage dates: ${formatDateDisplay(startDate)} - ${formatDateDisplay(endDate)}`;
     }
 
     function setDisplayValue(text, isPlaceholder) {
@@ -526,6 +835,7 @@ function initTransportDatePicker() {
         state.view = 'main';
         state.rangeStart = null;
         state.rangeEnd = null;
+        panelMode = 'transport';
     }
 
     function renderMainOptions() {
@@ -566,7 +876,7 @@ function initTransportDatePicker() {
                 }
 
                 if (item.target === 'between') {
-                    const storageBounds = getStorageDateBounds();
+                    const storageBounds = getTransportDateBounds();
                     if (storageBounds) {
                         state.rangeStart = storageBounds.start;
                         state.rangeEnd = storageBounds.end;
@@ -619,6 +929,8 @@ function initTransportDatePicker() {
             disableBeforeDate = null,
             disableAfterDate = null,
             selectedDate = null,
+            rangeStartDate = null,
+            rangeEndDate = null,
             allowedDatesOnly = null,
             dataAttrs = ''
         } = config;
@@ -633,11 +945,18 @@ function initTransportDatePicker() {
             const isAfterLimit = !!disableAfterDate && normalizedDate > disableAfterDate;
             const isNotInAllowedSet = allowedDatesOnly && !allowedDatesOnly.some((allowedDate) => sameDate(normalizedDate, allowedDate));
             const isDisabled = isPastDate || isBeforeLimit || isAfterLimit || isNotInAllowedSet;
+            const hasRange = !!(rangeStartDate && rangeEndDate);
+            const isRangeStart = hasRange && sameDate(normalizedDate, rangeStartDate);
+            const isRangeEnd = hasRange && sameDate(normalizedDate, rangeEndDate);
+            const isInRange = hasRange && normalizedDate >= rangeStartDate && normalizedDate <= rangeEndDate;
 
             const classes = ['transport-date-day'];
             if (isOtherMonth) classes.push('other-month');
             if (isDisabled) classes.push('disabled');
             if (sameDate(selectedDate, date)) classes.push('selected');
+            if (isInRange) classes.push('in-range');
+            if (isRangeStart) classes.push('range-start');
+            if (isRangeEnd) classes.push('range-end');
 
             buttons.push(`
                 <button type="button" class="${classes.join(' ')}" data-calendar-date="${toIsoDate(date)}" ${dataAttrs} ${isDisabled ? 'disabled' : ''}>${date.getDate()}</button>
@@ -647,17 +966,27 @@ function initTransportDatePicker() {
         return buttons.join('');
     }
 
-    function renderBetweenCalendars() {
+    function renderBetweenCalendars(options = {}) {
+        const isStorageRangePicker = !!options.forStorageRange;
+        const approxWindows = isStorageRangePicker ? null : getApproxTransportWindowBounds();
         state.view = 'between';
         panel.classList.add('between-mode');
-        const storageBounds = getStorageDateBounds();
+        const storageBounds = isStorageRangePicker ? null : getTransportDateBounds();
 
-        if (storageBounds) {
+        if (approxWindows) {
+            state.rangeStartMonth = new Date(approxWindows.inWindow.start.getFullYear(), approxWindows.inWindow.start.getMonth(), 1);
+            state.rangeEndMonth = new Date(approxWindows.outWindow.start.getFullYear(), approxWindows.outWindow.start.getMonth(), 1);
+        } else if (storageBounds) {
             state.rangeStart = storageBounds.start;
             state.rangeEnd = storageBounds.end;
             state.rangeStartMonth = new Date(storageBounds.start.getFullYear(), storageBounds.start.getMonth(), 1);
             state.rangeEndMonth = new Date(storageBounds.end.getFullYear(), storageBounds.end.getMonth(), 1);
         }
+
+        const formatApproxTransportLabel = () => {
+            if (!approxWindows) return '';
+            return `Between Dates: ${formatApproxWindowsCompact(approxWindows.inWindow.start, approxWindows.inWindow.end, approxWindows.outWindow.start, approxWindows.outWindow.end)}`;
+        };
 
         panel.innerHTML = `
             <div class="transport-date-header">
@@ -674,18 +1003,20 @@ function initTransportDatePicker() {
                     <div class="transport-date-calendar-title">Starting date</div>
                     <div class="transport-date-calendar-month-row">
                         <button type="button" class="transport-date-month-nav" data-range-month="start" data-range-dir="prev">‹</button>
-                        <div class="transport-date-month-label">${new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(state.rangeStartMonth)}</div>
+                        <div class="transport-date-month-label">${new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(approxWindows ? approxWindows.inWindow.start : state.rangeStartMonth)}</div>
                         <button type="button" class="transport-date-month-nav" data-range-month="start" data-range-dir="next">›</button>
                     </div>
                     <div class="transport-date-weekdays">
                         ${weekdays.map((day) => `<div class="transport-date-weekday">${day}</div>`).join('')}
                     </div>
                     <div class="transport-date-days-grid">
-                        ${buildCalendarGrid(state.rangeStartMonth, {
-                            selectedDate: state.rangeStart,
-                            disableBeforeDate: storageBounds ? storageBounds.start : null,
-                            disableAfterDate: storageBounds ? storageBounds.end : null,
-                            allowedDatesOnly: storageBounds ? [storageBounds.start] : null,
+                        ${buildCalendarGrid(approxWindows ? approxWindows.inWindow.start : state.rangeStartMonth, {
+                            selectedDate: approxWindows ? approxWindows.inWindow.start : state.rangeStart,
+                            rangeStartDate: approxWindows ? approxWindows.inWindow.start : state.rangeStart,
+                            rangeEndDate: approxWindows ? approxWindows.inWindow.end : state.rangeEnd,
+                            disableBeforeDate: approxWindows ? approxWindows.inWindow.start : (storageBounds ? storageBounds.start : null),
+                            disableAfterDate: approxWindows ? approxWindows.inWindow.end : (storageBounds ? storageBounds.end : null),
+                            allowedDatesOnly: approxWindows ? null : (storageBounds ? [storageBounds.start] : null),
                             dataAttrs: 'data-range-target="start"'
                         })}
                     </div>
@@ -695,20 +1026,22 @@ function initTransportDatePicker() {
                     <div class="transport-date-calendar-title">End date</div>
                     <div class="transport-date-calendar-month-row">
                         <button type="button" class="transport-date-month-nav" data-range-month="end" data-range-dir="prev">‹</button>
-                        <div class="transport-date-month-label">${new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(state.rangeEndMonth)}</div>
+                        <div class="transport-date-month-label">${new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(approxWindows ? approxWindows.outWindow.start : state.rangeEndMonth)}</div>
                         <button type="button" class="transport-date-month-nav" data-range-month="end" data-range-dir="next">›</button>
                     </div>
                     <div class="transport-date-weekdays">
                         ${weekdays.map((day) => `<div class="transport-date-weekday">${day}</div>`).join('')}
                     </div>
                     <div class="transport-date-days-grid">
-                        ${buildCalendarGrid(state.rangeEndMonth, {
-                            selectedDate: state.rangeEnd,
-                            disableBeforeDate: storageBounds
+                        ${buildCalendarGrid(approxWindows ? approxWindows.outWindow.start : state.rangeEndMonth, {
+                            selectedDate: approxWindows ? approxWindows.outWindow.end : state.rangeEnd,
+                            rangeStartDate: approxWindows ? approxWindows.outWindow.start : state.rangeStart,
+                            rangeEndDate: approxWindows ? approxWindows.outWindow.end : state.rangeEnd,
+                            disableBeforeDate: approxWindows ? approxWindows.outWindow.start : (storageBounds
                                 ? (state.rangeStart && state.rangeStart > storageBounds.start ? state.rangeStart : storageBounds.start)
-                                : state.rangeStart,
-                            disableAfterDate: storageBounds ? storageBounds.end : null,
-                            allowedDatesOnly: storageBounds ? [storageBounds.end] : null,
+                                : state.rangeStart),
+                            disableAfterDate: approxWindows ? approxWindows.outWindow.end : (storageBounds ? storageBounds.end : null),
+                            allowedDatesOnly: approxWindows ? null : (storageBounds ? [storageBounds.end] : null),
                             dataAttrs: 'data-range-target="end"'
                         })}
                     </div>
@@ -718,7 +1051,13 @@ function initTransportDatePicker() {
 
         const backButton = panel.querySelector('[data-td-back="1"]');
         if (backButton) {
-            backButton.addEventListener('click', renderMainOptions);
+            backButton.addEventListener('click', () => {
+                if (isStorageRangePicker) {
+                    closePanel();
+                    return;
+                }
+                renderMainOptions();
+            });
         }
 
         const closeTextButton = panel.querySelector('[data-td-close-text="1"]');
@@ -740,7 +1079,7 @@ function initTransportDatePicker() {
                 } else {
                     state.rangeEndMonth = new Date(state.rangeEndMonth.getFullYear(), state.rangeEndMonth.getMonth() + delta, 1);
                 }
-                renderBetweenCalendars();
+                renderBetweenCalendars(options);
             });
         });
 
@@ -753,11 +1092,17 @@ function initTransportDatePicker() {
                 const selectedDate = normalizeDate(new Date(year, month - 1, day));
 
                 if (target === 'start') {
-                    if (storageBounds && !sameDate(selectedDate, storageBounds.start)) {
+                    if (approxWindows) {
+                        if (selectedDate < approxWindows.inWindow.start || selectedDate > approxWindows.inWindow.end) {
+                            return;
+                        }
+                    } else if (storageBounds && !sameDate(selectedDate, storageBounds.start)) {
                         return;
                     }
                     state.rangeStart = selectedDate;
-                    if (storageBounds) {
+                    if (approxWindows) {
+                        state.rangeStartMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                    } else if (storageBounds) {
                         state.rangeEnd = storageBounds.end;
                     }
                     if (state.rangeEnd && state.rangeEnd < selectedDate) {
@@ -775,31 +1120,74 @@ function initTransportDatePicker() {
                     if (!state.rangeStart || selectedDate < state.rangeStart) {
                         return;
                     }
-                    if (storageBounds && !sameDate(selectedDate, storageBounds.end)) {
+                    if (approxWindows) {
+                        if (selectedDate < approxWindows.outWindow.start || selectedDate > approxWindows.outWindow.end) {
+                            return;
+                        }
+                    } else if (storageBounds && !sameDate(selectedDate, storageBounds.end)) {
                         return;
                     }
                     state.rangeEnd = selectedDate;
                     state.rangeEndMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
 
-                    const fromText = formatDateDisplay(state.rangeStart);
-                    const toText = formatDateDisplay(state.rangeEnd);
-                    updateTransportDate(`Between Dates: ${fromText} - ${toText}`);
+                    if (isStorageRangePicker) {
+                        if (storageStartInput) {
+                            storageStartInput.value = toIsoDate(state.rangeStart);
+                            storageStartInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            storageStartInput.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                        if (storageEndInput) {
+                            storageEndInput.value = toIsoDate(state.rangeEnd);
+                            storageEndInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            storageEndInput.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                        closePanel();
+                        return;
+                    }
+
+                    if (approxWindows) {
+                        updateTransportDate(formatApproxTransportLabel());
+                    } else {
+                        const fromText = formatDateDisplay(state.rangeStart);
+                        const toText = formatDateDisplay(state.rangeEnd);
+                        updateTransportDate(`Between Dates: ${fromText} - ${toText}`);
+                    }
                     closePanel();
                 }
             });
         });
     }
 
+    function openStorageRangeCalendar() {
+        if (!storageStartInput || !storageEndInput) return;
+        const start = parseDateInputValue(storageStartInput.value) || todayStart;
+        const endFromInput = parseDateInputValue(storageEndInput.value);
+        const end = endFromInput && endFromInput >= start
+            ? endFromInput
+            : new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
+
+        state.rangeStart = start;
+        state.rangeEnd = end;
+        state.rangeStartMonth = new Date(start.getFullYear(), start.getMonth(), 1);
+        state.rangeEndMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+
+        panelMode = 'storage';
+        renderBetweenCalendars({ forStorageRange: true });
+        openPanel();
+    }
+
     function renderCalendar(viewType) {
         state.view = viewType;
         panel.classList.remove('between-mode');
-        const storageBounds = getStorageDateBounds();
+        const storageBounds = getTransportDateBounds();
         const isRangeStart = viewType === 'range-start';
         const isRangeEnd = viewType === 'range-end';
         const title = isRangeStart ? 'Select first date' : isRangeEnd ? 'Select second date' : 'Select date';
 
         const calendarConfig = {
             selectedDate: null,
+            rangeStartDate: state.rangeStart,
+            rangeEndDate: state.rangeEnd,
             disableBeforeDate: storageBounds ? storageBounds.start : null,
             disableAfterDate: storageBounds ? storageBounds.end : null,
             allowedDatesOnly: storageBounds ? [storageBounds.start] : null
@@ -930,6 +1318,7 @@ function initTransportDatePicker() {
 
     trigger.addEventListener('click', (event) => {
         event.stopPropagation();
+        panelMode = 'transport';
         if (panel.classList.contains('active')) {
             closePanel();
             return;
@@ -969,7 +1358,7 @@ function initTransportDatePicker() {
         });
     });
 
-    [storageServiceInput, storageStartInput, storageEndInput].filter(Boolean).forEach((input) => {
+    [storageServiceInput, storageDateModeInput, storageStartInput, storageEndInput].filter(Boolean).forEach((input) => {
         const handleStorageServiceDateChange = () => {
             syncStep7StorageControlsFromService();
             enforceStorageDateValueIfNeeded();
@@ -2881,10 +3270,17 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             if (stickyAssignNewItemsBtn) {
-                const isFloorsOnlyService = isVehicleTransportService(activeService) || isPetsService(activeService);
-                const hasUnassignedStep5Items = !isFloorsOnlyService
-                    && typeof window.isStep5DeliveryOrganizationComplete === 'function'
-                    && !window.isStep5DeliveryOrganizationComplete();
+                const isVehicleService = isVehicleTransportService(activeService);
+                const hasPendingStep5Assignments = typeof window.hasPendingStep5NewAssignments === 'function'
+                    ? window.hasPendingStep5NewAssignments()
+                    : !!window.__hasPendingStep5NewAssignments;
+                const hasIncompleteStep5Assignments = typeof window.isStep5DeliveryOrganizationComplete === 'function'
+                    ? !window.isStep5DeliveryOrganizationComplete()
+                    : false;
+
+                const hasUnassignedStep5Items = isVehicleService
+                    ? hasPendingStep5Assignments
+                    : hasIncompleteStep5Assignments;
 
                 const shouldShowAssign = canManageInventory
                     && hasVisitedOverview
@@ -2928,6 +3324,23 @@ document.addEventListener('DOMContentLoaded', function () {
                 return null;
             }
 
+            const getVehicleAlertTarget = (fieldId, fallbackField) => {
+                if (!fieldId) return fallbackField || null;
+
+                const visibleId = fieldId.replace('-entry-hidden', '-visible');
+                const visibleField = document.getElementById(visibleId);
+                if (visibleField && !visibleField.disabled && visibleField.offsetParent !== null) {
+                    return visibleField;
+                }
+
+                const optionNav = document.querySelector(`.option-nav[data-option-nav-for="${fieldId}"]`);
+                if (optionNav && optionNav.offsetParent !== null) {
+                    return optionNav;
+                }
+
+                return fallbackField || document.getElementById(fieldId) || null;
+            };
+
             const section = getVisibleVehicleStep3Section();
             if (!section) {
                 return null;
@@ -2958,6 +3371,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     : 'trailer';
 
             const addVehicleBtn = document.getElementById(`add-${vehiclePrefix}-btn`);
+            const addAnotherVehicleBtn = document.getElementById(`${vehiclePrefix}-add-another-btn`);
             const continueWithSavedBtn = document.getElementById(`${vehiclePrefix}-continue-with-saved-btn`);
             const continueWithSavedHidden = document.getElementById(`${vehiclePrefix}-continue-with-saved-hidden`);
 
@@ -3080,7 +3494,20 @@ document.addEventListener('DOMContentLoaded', function () {
             // Hidden option selections can persist after saving; treat draft as active only when
             // core vehicle identity (make/model) or custom numeric inputs are being edited.
             const hasDraftInProgress = hasCoreVehicleDraft || hasCustomDraftInProgress;
-            const continueWithSavedChosen = String(continueWithSavedHidden?.value || '').trim() === '1';
+            const continueWithSavedBtnHidden = continueWithSavedBtn
+                ? (continueWithSavedBtn.style.display === 'none' || continueWithSavedBtn.hidden === true)
+                : false;
+            const continueWithSavedChosen = String(continueWithSavedHidden?.value || '').trim() === '1'
+                && continueWithSavedBtnHidden;
+
+            const isSimpleCarMode = vehiclePrefix === 'car'
+                && !!(window.multiItemsManager && window.multiItemsManager.__simpleCarModePatched);
+
+            if (isSimpleCarMode) {
+                if (hasSavedVehicles && !hasDraftInProgress) {
+                    return null;
+                }
+            }
 
             if (hasSavedVehicles && !hasDraftInProgress) {
                 return null;
@@ -3110,7 +3537,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             }
                         }
                     }
-                    return field;
+                    return getVehicleAlertTarget(fieldId, field);
                 }
             }
 
@@ -3158,66 +3585,111 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (hasSavedVehicles && hasDraftInProgress && continueWithSavedChosen) {
                             return null;
                         }
-                        return testedField;
+                        return getVehicleAlertTarget('trailer-tested-entry-hidden', testedField);
                     }
                 }
             }
 
-            if (hasDraftInProgress && !continueWithSavedChosen && addVehicleBtn && typeof addVehicleBtn.click === 'function') {
-                const getDraftFilledState = () => {
-                    return isFormFieldFilled(makeModelFieldId)
-                        || isFormFieldFilled(`${vehiclePrefix}-custom-weight`)
-                        || isFormFieldFilled(`${vehiclePrefix}-custom-length`);
+            if (hasDraftInProgress && !continueWithSavedChosen) {
+                // Draft is complete by this point (required field checks above already passed).
+                // Save the draft vehicle without opening an extra blank form.
+                const parseVehicleCount = (rawValue) => {
+                    const rawText = String(rawValue || '').trim();
+                    if (!rawText) return 0;
+                    try {
+                        const parsed = JSON.parse(rawText);
+                        return Array.isArray(parsed) ? parsed.length : 0;
+                    } catch (_error) {
+                        return 0;
+                    }
                 };
 
-                addVehicleBtn.click();
+                const beforeCount = parseVehicleCount(raw);
+                if (isSimpleCarMode) {
+                    const canCommitSimpleDraft = !!(
+                        window.multiItemsManager
+                        && typeof window.multiItemsManager.commitSimpleCarDraft === 'function'
+                    );
 
-                const draftStillFilled = getDraftFilledState();
-                const postClickRaw = (jsonField.value || '').trim();
-                if (draftStillFilled) {
-                    return addVehicleBtn || continueWithSavedBtn || section;
-                }
-                if (!draftStillFilled) {
-                    if (!postClickRaw) {
-                        return addVehicleBtn || jsonField;
-                    }
-                    try {
-                        const postClickParsed = JSON.parse(postClickRaw);
-                        if (Array.isArray(postClickParsed) && postClickParsed.length > 0) {
+                    if (canCommitSimpleDraft) {
+                        const committed = window.multiItemsManager.commitSimpleCarDraft({
+                            showAlert: false,
+                            focusOnMissing: false,
+                            clearAfterSave: true
+                        });
+                        if (committed) {
                             return null;
                         }
-                    } catch (_error) {
-                        return addVehicleBtn || jsonField;
+                        return jsonField || section;
+                    }
+
+                    if (addAnotherVehicleBtn && typeof addAnotherVehicleBtn.click === 'function') {
+                        addAnotherVehicleBtn.click();
+                        const afterCountSimple = parseVehicleCount(jsonField.value || '');
+                        if (afterCountSimple > beforeCount) {
+                            return null;
+                        }
+                        return jsonField || section;
                     }
                 }
+
+                const canCommitGenericVehicleDraft = !!(
+                    window.multiItemsManager
+                    && window.multiItemsManager.commitVehicleDraft
+                    && typeof window.multiItemsManager.commitVehicleDraft[vehiclePrefix] === 'function'
+                );
+
+                if (canCommitGenericVehicleDraft) {
+                    const committed = window.multiItemsManager.commitVehicleDraft[vehiclePrefix](
+                        typeof window.multiItemsManager.parseVehicleMediaFromHidden === 'function'
+                            ? window.multiItemsManager.parseVehicleMediaFromHidden(vehiclePrefix)
+                            : [],
+                        {
+                            showAlert: false,
+                            clearAfterSuccessfulAdd: true
+                        }
+                    );
+
+                    if (committed) {
+                        return null;
+                    }
+
+                    return jsonField || section;
+                }
+
+                const canUseHiddenAdd = !!(
+                    addVehicleBtn
+                    && typeof addVehicleBtn.click === 'function'
+                );
+
+                if (canUseHiddenAdd) {
+                    if (window.multiItemsManager) {
+                        window.multiItemsManager.allowProgrammaticVehicleAddClick = window.multiItemsManager.allowProgrammaticVehicleAddClick || {};
+                        window.multiItemsManager.allowProgrammaticVehicleAddClick[vehiclePrefix] = true;
+                    }
+                    addVehicleBtn.click();
+                    const afterCount = parseVehicleCount(jsonField.value || '');
+                    if (afterCount > beforeCount) {
+                        return null;
+                    }
+                }
+
+                return jsonField || section;
             }
 
             if (!raw) {
-                // If the form is complete but user did not click Add yet, try to save it now.
-                if (addVehicleBtn && typeof addVehicleBtn.click === 'function') {
-                    addVehicleBtn.click();
-                    const postClickRaw = (jsonField.value || '').trim();
-                    if (postClickRaw) {
-                        try {
-                            const postClickParsed = JSON.parse(postClickRaw);
-                            if (Array.isArray(postClickParsed) && postClickParsed.length > 0) {
-                                return null;
-                            }
-                        } catch (error) {
-                            // fall through to explicit missing add button path
-                        }
-                    }
-                }
-                return addVehicleBtn || jsonField;
+                // Never auto-save via hidden button click during Next validation.
+                // Require explicit save/add or continue action from the user.
+                return jsonField || section;
             }
 
             try {
                 const parsed = JSON.parse(raw);
                 if (!Array.isArray(parsed) || parsed.length === 0) {
-                    return addVehicleBtn || jsonField;
+                    return jsonField || section;
                 }
             } catch (error) {
-                return addVehicleBtn || jsonField;
+                return jsonField || section;
             }
 
             return null;
@@ -4047,30 +4519,68 @@ document.addEventListener('DOMContentLoaded', function () {
                 return false;
             }
 
-            const container = visibleTargetElement.closest(
-                '.service-requirement-card, .card-section, .location-nav-wrapper, .custom-dropdown-wrapper, #pickup-floors-selector, #delivery-floors-selector, #inventory-card-container, #item-organization-section'
-            ) || visibleTargetElement;
+            const getControlHighlightNode = () => {
+                const candidates = [visibleTargetElement, targetElement].filter(Boolean);
 
-            container.classList.add('next-missing-highlight');
+                for (const node of candidates) {
+                    if (!(node instanceof HTMLElement)) continue;
+
+                    if (node.matches('input, textarea')) {
+                        return node;
+                    }
+
+                    if (node.matches('select')) {
+                        return node.closest('.vehicle-select-shell') || node;
+                    }
+
+                    const vehicleSelectShell = node.closest('.vehicle-select-shell');
+                    if (vehicleSelectShell) {
+                        return vehicleSelectShell;
+                    }
+
+                    if (node.classList.contains('option-nav') || node.classList.contains('location-nav')) {
+                        return node;
+                    }
+                }
+
+                if (targetElement?.id && /-entry-hidden$/.test(targetElement.id)) {
+                    const visibleId = targetElement.id.replace('-entry-hidden', '-visible');
+                    const visibleControl = document.getElementById(visibleId);
+                    if (visibleControl) {
+                        if (visibleControl.matches('select')) {
+                            return visibleControl.closest('.vehicle-select-shell') || visibleControl;
+                        }
+                        return visibleControl;
+                    }
+                }
+
+                return visibleTargetElement.closest(
+                    '.custom-dropdown-wrapper, .option-nav, .location-nav, #pickup-floors-selector, #delivery-floors-selector, .form-group'
+                ) || visibleTargetElement;
+            };
+
+            const highlightNode = getControlHighlightNode();
+
+            highlightNode.classList.add('next-missing-highlight');
             visibleTargetElement.classList.add('input-error');
             visibleTargetElement.setAttribute('aria-invalid', 'true');
             targetElement.classList.add('input-error');
             targetElement.setAttribute('aria-invalid', 'true');
 
-            bindClearMissingHighlightOnResolution(targetElement, visibleTargetElement, container);
+            bindClearMissingHighlightOnResolution(targetElement, visibleTargetElement, highlightNode);
 
             if (isVehicleFieldTarget && shouldAnchorVehicleTop && typeof getVisibleVehicleStep3Section === 'function') {
                 const activeVehicleSection = getVisibleVehicleStep3Section();
                 if (activeVehicleSection) {
                     scrollElementToTop(activeVehicleSection);
                 } else {
-                    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    highlightNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
             } else if (isVehicleFieldTarget) {
-                const vehicleFieldGroup = visibleTargetElement.closest('.form-group') || targetElement.closest?.('.form-group') || container;
+                const vehicleFieldGroup = visibleTargetElement.closest('.form-group') || targetElement.closest?.('.form-group') || highlightNode;
                 scrollElementToTop(vehicleFieldGroup);
             } else {
-                container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                highlightNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
 
             if (typeof visibleTargetElement.focus === 'function') {
@@ -4096,15 +4606,42 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const fieldId = field.id || '';
 
+            const getVehicleFieldPrefix = (targetField) => {
+                if (!targetField) return '';
+                const vehicleForm = targetField.closest?.('[data-vehicle-entry-form]');
+                const titleText = cleanLabel(vehicleForm?.querySelector?.('.custom-item-title')?.textContent);
+                if (titleText) return titleText;
+
+                const section = targetField.closest?.('#car-transport-section, #motorbike-transport-section, #trailer-campervan-section');
+                const fallbackTitle = cleanLabel(section?.querySelector?.('[data-vehicle-entry-form] .custom-item-title')?.textContent);
+                return fallbackTitle || '';
+            };
+
+            const toVehicleScopedLabel = (targetField, label) => {
+                const baseLabel = cleanLabel(label);
+                if (!baseLabel) return '';
+
+                const isVehicleField = /^(car|motorbike|trailer)-/.test(String(targetField?.id || fieldId));
+                if (!isVehicleField) return baseLabel;
+
+                const prefix = getVehicleFieldPrefix(targetField || field);
+                if (!prefix) return baseLabel;
+
+                const compactLabel = baseLabel.replace(/^(Car\/Campervan|Motorbike|Trailer\/Caravan|Boat)\s+/i, '');
+                return `${prefix}: ${compactLabel}`;
+            };
+
             const getCustomizedItemFieldLabel = (targetField) => {
                 const row = targetField?.closest?.('.dimension-item');
                 if (!row) return '';
+                if (row.closest?.('[data-vehicle-entry-form]')) return '';
 
                 const rows = Array.from(row.parentElement?.querySelectorAll('.dimension-item') || []);
                 const rowIndex = rows.indexOf(row) + 1;
                 const rowPrefix = rowIndex > 0 ? `Customized item ${rowIndex}` : 'Customized item';
 
                 if (targetField.classList?.contains('dimension-description')) return `${rowPrefix} description`;
+                if (targetField.classList?.contains('dimension-quantity')) return `${rowPrefix} quantity`;
                 if (targetField.classList?.contains('dimension-width')) return `${rowPrefix} width`;
                 if (targetField.classList?.contains('dimension-depth')) return `${rowPrefix} depth`;
                 if (targetField.classList?.contains('dimension-height')) return `${rowPrefix} height`;
@@ -4177,6 +4714,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 'car-roadworthy-entry-hidden': 'Car/Campervan roadworthy status',
                 'car-insurance-entry-hidden': 'Car/Campervan insurance status',
                 'car-roadtax-entry-hidden': 'Car/Campervan road tax status',
+                'car-type-visible': 'Car/Campervan type',
+                'car-year-visible': 'Car/Campervan year',
+                'car-value-visible': 'Car/Campervan estimated value',
+                'car-condition-visible': 'Car/Campervan condition',
+                'car-method-visible': 'Car/Campervan transport method',
+                'car-roadworthy-visible': 'Car/Campervan roadworthy status',
+                'car-insurance-visible': 'Car/Campervan insurance status',
+                'car-roadtax-visible': 'Car/Campervan road tax status',
+                'car-weight-visible': 'Car/Campervan weight',
+                'car-length-visible': 'Car/Campervan length',
                 'motorbike-make-model-entry': 'Motorbike make & model',
                 'motorbike-year-entry-hidden': 'Motorbike year',
                 'motorbike-value-entry-hidden': 'Motorbike estimated value',
@@ -4186,6 +4733,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 'motorbike-roadworthy-entry-hidden': 'Motorbike roadworthy status',
                 'motorbike-insurance-entry-hidden': 'Motorbike insurance status',
                 'motorbike-roadtax-entry-hidden': 'Motorbike road tax status',
+                'motorbike-year-visible': 'Motorbike year',
+                'motorbike-value-visible': 'Motorbike estimated value',
+                'motorbike-condition-visible': 'Motorbike condition',
+                'motorbike-roadworthy-visible': 'Motorbike roadworthy status',
+                'motorbike-insurance-visible': 'Motorbike insurance status',
+                'motorbike-roadtax-visible': 'Motorbike road tax status',
+                'motorbike-weight-visible': 'Motorbike weight',
+                'motorbike-length-visible': 'Motorbike length',
                 'trailer-make-model-entry': 'Trailer/Caravan make & model',
                 'trailer-year-entry-hidden': 'Trailer/Caravan year',
                 'trailer-value-entry-hidden': 'Trailer/Caravan estimated value',
@@ -4196,6 +4751,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 'trailer-length-entry-hidden': 'Trailer/Caravan length',
                 'trailer-roadworthy-entry-hidden': 'Trailer/Caravan roadworthy status',
                 'trailer-tested-entry-hidden': 'Trailer/Caravan tested certification status',
+                'trailer-type-visible': 'Trailer/Caravan type',
+                'trailer-year-visible': 'Trailer/Caravan year',
+                'trailer-value-visible': 'Trailer/Caravan estimated value',
+                'trailer-condition-visible': 'Trailer/Caravan condition',
+                'trailer-method-visible': 'Trailer/Caravan transport method',
+                'trailer-roadworthy-visible': 'Trailer/Caravan roadworthy status',
+                'trailer-tested-visible': 'Trailer/Caravan tested certification status',
+                'trailer-weight-visible': 'Trailer/Caravan weight',
+                'trailer-length-visible': 'Trailer/Caravan length',
                 'car-json-hidden': 'Car/Campervan details (click + Save Campervan / Car)',
                 'motorbike-json-hidden': 'Motorbike details (click + Save Motorbike)',
                 'trailer-json-hidden': 'Trailer/Caravan details (click + Save Caravan / Trailer)',
@@ -4237,12 +4801,21 @@ document.addEventListener('DOMContentLoaded', function () {
                 'trailer-length-entry-hidden': 'Boat length',
                 'trailer-roadworthy-entry-hidden': 'Boat seaworthy status',
                 'trailer-tested-entry-hidden': 'Boat tested certification status',
+                'trailer-type-visible': 'Boat type',
+                'trailer-year-visible': 'Boat year',
+                'trailer-value-visible': 'Boat estimated value',
+                'trailer-condition-visible': 'Boat condition',
+                'trailer-method-visible': 'Boat transport method',
+                'trailer-roadworthy-visible': 'Boat seaworthy status',
+                'trailer-tested-visible': 'Boat tested certification status',
+                'trailer-weight-visible': 'Weight of boat',
+                'trailer-length-visible': 'Boat length',
                 'trailer-json-hidden': 'Boat details (click + Save Boat)'
             };
 
             const isBoatsServiceActive = normalizeServiceValue(getActiveServiceValue()) === 'Boats';
             if (isBoatsServiceActive && fieldId && boatFieldLabels[fieldId]) {
-                return boatFieldLabels[fieldId];
+                return toVehicleScopedLabel(field, boatFieldLabels[fieldId]);
             }
 
             if (fieldId && explicitFieldLabels[fieldId]) {
@@ -4254,7 +4827,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         return `Inventory details (missing: ${missingFloors.join(', ')})`;
                     }
                 }
-                return explicitFieldLabels[fieldId];
+                return toVehicleScopedLabel(field, explicitFieldLabels[fieldId]);
             }
 
             if (field.classList?.contains('movers-confirm-btn')) {
@@ -4284,7 +4857,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             const groupLabel = cleanLabel(field.closest?.('.form-group')?.querySelector('.form-label')?.textContent);
-            if (groupLabel) return groupLabel;
+            if (groupLabel) return toVehicleScopedLabel(field, groupLabel);
 
             const sectionHeading = cleanLabel(
                 field.querySelector?.('h2, h3, .section-title, .form-label')?.textContent
@@ -4657,6 +5230,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const requiredSelectors = [
                 '.dimension-description',
+                '.dimension-quantity',
                 '.dimension-width',
                 '.dimension-depth',
                 '.dimension-height',
@@ -4666,6 +5240,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // Field name mapping for user-friendly alerts
             const fieldNameMap = {
                 '.dimension-description': 'Description',
+                '.dimension-quantity': 'Quantity',
                 '.dimension-width': 'Width',
                 '.dimension-depth': 'Depth',
                 '.dimension-height': 'Height',
@@ -5394,7 +5969,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return parsedItems
                 .map((item) => ({
                     name: String(item?.name || '').trim(),
-                    qty: 1,
+                    qty: Math.max(1, parseInt(item?.quantity ?? item?.qty ?? 1, 10) || 1),
                     sourceFloor: String(item?.sourceFloor || '').trim()
                 }))
                 .filter((item) => !!item.name);
@@ -6234,18 +6809,49 @@ document.addEventListener('DOMContentLoaded', function () {
         return `${year}-${month}-${day}`;
     }
 
+    function parseApproxDateValue(raw) {
+        const value = String(raw || '').trim();
+        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return null;
+        const year = parseInt(match[1], 10);
+        const monthIndex = parseInt(match[2], 10) - 1;
+        const day = parseInt(match[3], 10);
+        if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || !Number.isFinite(day)) return null;
+        if (monthIndex < 0 || monthIndex > 11 || day < 1 || day > 31) return null;
+        return new Date(year, monthIndex, day);
+    }
+
+    function formatApproxDateLabel(raw) {
+        const date = parseApproxDateValue(raw);
+        if (!date) return '';
+        return new Intl.DateTimeFormat('en-GB', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
+        }).format(date);
+    }
+
     function renderStorageConfig() {
         const isNarrowServiceViewport = window.innerWidth <= 540;
         const isVehicleService = isVehicleLikeStepFlowService(getActiveServiceValue());
         const storageInput = document.getElementById('service-storage');
         const storageModeInput = document.getElementById('service-storage-mode');
+        const storageDateModeInput = document.getElementById('service-storage-date-mode');
+        const storageApproxToggle = document.getElementById('service-storage-date-approx-toggle');
         const storageItemsInput = document.getElementById('service-storage-items');
         const storageItemsConfig = document.getElementById('storage-items-config');
         const storageItemsList = document.getElementById('storage-items-list');
         const storageItemsEmpty = document.getElementById('storage-items-empty');
         const storageDurationConfig = document.getElementById('storage-duration-config');
+        const storageExactDateConfig = document.getElementById('storage-exact-date-config');
+        const storageApproxDateConfig = document.getElementById('storage-approx-date-config');
+        const storageApproxSummary = document.getElementById('step7-storage-approx-summary');
         const storageStartInput = document.getElementById('service-storage-start-datetime');
         const storageEndInput = document.getElementById('service-storage-end-datetime');
+        const storageStartApproxFromInput = document.getElementById('service-storage-start-approx-from');
+        const storageStartApproxToInput = document.getElementById('service-storage-start-approx-to');
+        const storageEndApproxFromInput = document.getElementById('service-storage-end-approx-from');
+        const storageEndApproxToInput = document.getElementById('service-storage-end-approx-to');
         const storageDurationPreview = document.getElementById('storage-duration-preview');
         const syncStorageDateUi = () => {
             if (typeof window.syncStorageDatesAcrossSteps === 'function') {
@@ -6253,8 +6859,16 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         };
 
-        if (!storageInput || !storageModeInput || !storageItemsInput || !storageItemsConfig || !storageItemsList || !storageItemsEmpty || !storageDurationConfig || !storageStartInput || !storageEndInput || !storageDurationPreview) {
+        if (!storageInput || !storageModeInput || !storageDateModeInput || !storageApproxToggle || !storageItemsInput || !storageItemsConfig || !storageItemsList || !storageItemsEmpty || !storageDurationConfig || !storageExactDateConfig || !storageApproxDateConfig || !storageStartInput || !storageEndInput || !storageStartApproxFromInput || !storageStartApproxToInput || !storageEndApproxFromInput || !storageEndApproxToInput || !storageDurationPreview) {
             return;
+        }
+
+        if (storageApproxToggle.dataset.bound !== 'true') {
+            storageApproxToggle.addEventListener('change', () => {
+                storageDateModeInput.value = storageApproxToggle.checked ? 'approx' : 'exact';
+                storageDateModeInput.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            storageApproxToggle.dataset.bound = 'true';
         }
 
         const isStorageYes = storageInput.value === 'yes';
@@ -6265,34 +6879,97 @@ document.addEventListener('DOMContentLoaded', function () {
             storageItemsList.innerHTML = '';
             storageItemsEmpty.style.display = 'none';
             storageDurationPreview.textContent = '';
+            storageDateModeInput.value = 'exact';
+            storageApproxToggle.checked = false;
+            storageExactDateConfig.style.display = 'grid';
+            storageApproxDateConfig.style.display = 'none';
+            if (storageApproxSummary) {
+                storageApproxSummary.textContent = '';
+                storageApproxSummary.style.display = 'none';
+            }
             syncStorageDateUi();
             return;
         }
+
+        const dateModeValue = String(storageDateModeInput.value || 'exact').trim().toLowerCase();
+        const isApproxMode = dateModeValue === 'approx';
+        storageDateModeInput.value = isApproxMode ? 'approx' : 'exact';
+        storageApproxToggle.checked = isApproxMode;
+        storageExactDateConfig.style.display = isApproxMode ? 'none' : 'grid';
+        storageApproxDateConfig.style.display = isApproxMode ? 'block' : 'none';
 
         if (!storageModeInput.value) {
             storageModeInput.value = 'selected';
         }
 
-        if (!storageStartInput.value) {
-            const start = getTodayDate();
-            storageStartInput.value = toDateInputValue(start);
-        }
-        if (!storageEndInput.value) {
-            const defaultEnd = new Date(storageStartInput.value);
-            if (Number.isFinite(defaultEnd.getTime())) {
-                defaultEnd.setDate(defaultEnd.getDate() + 7);
-                storageEndInput.value = toDateInputValue(defaultEnd);
+        if (!isApproxMode) {
+            if (!storageStartInput.value) {
+                const start = getTodayDate();
+                storageStartInput.value = toDateInputValue(start);
+            }
+            if (!storageEndInput.value) {
+                const defaultEnd = new Date(storageStartInput.value);
+                if (Number.isFinite(defaultEnd.getTime())) {
+                    defaultEnd.setDate(defaultEnd.getDate() + 7);
+                    storageEndInput.value = toDateInputValue(defaultEnd);
+                }
             }
         }
 
-        const startDate = new Date(storageStartInput.value);
-        const endDate = new Date(storageEndInput.value);
-        if (Number.isFinite(startDate.getTime()) && Number.isFinite(endDate.getTime()) && endDate > startDate) {
-            storageDurationPreview.textContent = getStorageDurationText(startDate, endDate);
-            storageDurationPreview.style.color = '#1e40af';
+        const applyDateMinConstraint = (inputEl, minValue) => {
+            if (!inputEl) return;
+            const normalizedMin = String(minValue || '').trim();
+            if (normalizedMin) {
+                inputEl.min = normalizedMin;
+                if (String(inputEl.value || '').trim() && String(inputEl.value).trim() < normalizedMin) {
+                    inputEl.value = normalizedMin;
+                }
+                return;
+            }
+            inputEl.removeAttribute('min');
+        };
+
+        const approxStartFromValue = String(storageStartApproxFromInput.value || '').trim();
+        const approxStartToValue = String(storageStartApproxToInput.value || '').trim();
+        const approxEndFromValue = String(storageEndApproxFromInput.value || '').trim();
+
+        // Keep each range chronological and prevent selecting earlier dates in the calendar picker.
+        applyDateMinConstraint(storageStartApproxToInput, approxStartFromValue);
+        applyDateMinConstraint(storageEndApproxFromInput, approxStartToValue || approxStartFromValue);
+        applyDateMinConstraint(storageEndApproxToInput, approxEndFromValue || approxStartToValue || approxStartFromValue);
+
+        if (isApproxMode) {
+            const approxStartFrom = parseApproxDateValue(storageStartApproxFromInput.value);
+            const approxStartTo = parseApproxDateValue(storageStartApproxToInput.value);
+            const approxEndFrom = parseApproxDateValue(storageEndApproxFromInput.value);
+            const approxEndTo = parseApproxDateValue(storageEndApproxToInput.value);
+
+            const hasAllApproxDates = !!(approxStartFrom && approxStartTo && approxEndFrom && approxEndTo);
+            const hasValidRanges = hasAllApproxDates
+                && approxStartTo >= approxStartFrom
+                && approxEndTo >= approxEndFrom
+                && approxEndFrom >= approxStartTo;
+
+            if (!hasAllApproxDates) {
+                storageDurationPreview.textContent = '';
+                storageDurationPreview.style.color = '#1e40af';
+            } else if (hasValidRanges) {
+                storageDurationPreview.textContent = `Estimated storage ${formatApproxWindowsCompact(approxStartFrom, approxStartTo, approxEndFrom, approxEndTo)}`;
+                storageDurationPreview.style.color = '#1e40af';
+            } else {
+                storageDurationPreview.textContent = 'Add valid estimated date windows. End window must start on/after the start window end date.';
+                storageDurationPreview.style.color = '#b91c1c';
+            }
         } else {
-            storageDurationPreview.textContent = 'Storage end date must be later than start date.';
-            storageDurationPreview.style.color = '#b91c1c';
+            const startDate = new Date(storageStartInput.value);
+            const endDate = new Date(storageEndInput.value);
+            if (Number.isFinite(startDate.getTime()) && Number.isFinite(endDate.getTime()) && endDate > startDate) {
+                storageDurationPreview.textContent = getStorageDurationText(startDate, endDate);
+                storageDurationPreview.style.color = '#1e40af';
+            } else {
+                storageDurationPreview.textContent = 'Storage end date must be later than start date.';
+                storageDurationPreview.style.color = '#b91c1c';
+            }
         }
 
         if (isVehicleService) {
@@ -7375,12 +8052,30 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!storageInput || storageInput.value !== 'yes') return true;
 
         const storageItemsInput = document.getElementById('service-storage-items');
+        const storageDateModeInput = document.getElementById('service-storage-date-mode');
         const storageStartInput = document.getElementById('service-storage-start-datetime');
         const storageEndInput = document.getElementById('service-storage-end-datetime');
-        if (!storageItemsInput || !storageStartInput || !storageEndInput) return false;
+        const storageStartApproxFromInput = document.getElementById('service-storage-start-approx-from');
+        const storageStartApproxToInput = document.getElementById('service-storage-start-approx-to');
+        const storageEndApproxFromInput = document.getElementById('service-storage-end-approx-from');
+        const storageEndApproxToInput = document.getElementById('service-storage-end-approx-to');
+        if (!storageItemsInput || !storageDateModeInput || !storageStartInput || !storageEndInput || !storageStartApproxFromInput || !storageStartApproxToInput || !storageEndApproxFromInput || !storageEndApproxToInput) return false;
+
+        const isApproxMode = String(storageDateModeInput.value || 'exact').trim().toLowerCase() === 'approx';
+        const approxStartFrom = parseApproxDateValue(storageStartApproxFromInput.value);
+        const approxStartTo = parseApproxDateValue(storageStartApproxToInput.value);
+        const approxEndFrom = parseApproxDateValue(storageEndApproxFromInput.value);
+        const approxEndTo = parseApproxDateValue(storageEndApproxToInput.value);
+        const hasValidApproxWindows = !!(approxStartFrom && approxStartTo && approxEndFrom && approxEndTo)
+            && approxStartTo >= approxStartFrom
+            && approxEndTo >= approxEndFrom
+            && approxEndFrom >= approxStartTo;
 
         const isVehicleService = isVehicleLikeStepFlowService(getActiveServiceValue());
         if (isVehicleService) {
+            if (isApproxMode) {
+                return hasValidApproxWindows;
+            }
             const vehicleStart = new Date(storageStartInput.value);
             const vehicleEnd = new Date(storageEndInput.value);
             if (!Number.isFinite(vehicleStart.getTime()) || !Number.isFinite(vehicleEnd.getTime())) {
@@ -7393,6 +8088,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const hasItems = Object.values(state).some(qty => (parseInt(qty, 10) || 0) > 0);
         if (!hasItems) return false;
 
+        if (isApproxMode) {
+            return hasValidApproxWindows;
+        }
+
         const startDate = new Date(storageStartInput.value);
         const endDate = new Date(storageEndInput.value);
         if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) {
@@ -7400,6 +8099,45 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         return endDate > startDate;
+    };
+
+    window.getStorageSelectionErrorMessage = function() {
+        const storageInput = document.getElementById('service-storage');
+        if (!storageInput || storageInput.value !== 'yes') return '';
+
+        const storageDateModeInput = document.getElementById('service-storage-date-mode');
+        const storageStartInput = document.getElementById('service-storage-start-datetime');
+        const storageEndInput = document.getElementById('service-storage-end-datetime');
+        const storageStartApproxFromInput = document.getElementById('service-storage-start-approx-from');
+        const storageStartApproxToInput = document.getElementById('service-storage-start-approx-to');
+        const storageEndApproxFromInput = document.getElementById('service-storage-end-approx-from');
+        const storageEndApproxToInput = document.getElementById('service-storage-end-approx-to');
+
+        if (!storageDateModeInput || !storageStartInput || !storageEndInput || !storageStartApproxFromInput || !storageStartApproxToInput || !storageEndApproxFromInput || !storageEndApproxToInput) {
+            return 'Storage dates are incomplete.';
+        }
+
+        const isApproxMode = String(storageDateModeInput.value || 'exact').trim().toLowerCase() === 'approx';
+        if (isApproxMode) {
+            const approxStartFrom = parseApproxDateValue(storageStartApproxFromInput.value);
+            const approxStartTo = parseApproxDateValue(storageStartApproxToInput.value);
+            const approxEndFrom = parseApproxDateValue(storageEndApproxFromInput.value);
+            const approxEndTo = parseApproxDateValue(storageEndApproxToInput.value);
+            const hasValidApproxWindows = !!(approxStartFrom && approxStartTo && approxEndFrom && approxEndTo)
+                && approxStartTo >= approxStartFrom
+                && approxEndTo >= approxEndFrom
+                && approxEndFrom >= approxStartTo;
+
+            return hasValidApproxWindows ? '' : 'Please enter valid estimated storage date windows. The end window must start on or after the start window ends.';
+        }
+
+        const startDate = new Date(storageStartInput.value);
+        const endDate = new Date(storageEndInput.value);
+        if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) {
+            return 'Storage dates are incomplete.';
+        }
+
+        return endDate > startDate ? '' : 'Storage end date must be later than start date.';
     };
 
     window.hasValidDisassemblySelection = function() {
@@ -7440,7 +8178,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        if (e.target.id === 'service-storage' || e.target.id === 'service-storage-mode' || e.target.id === 'service-storage-items' || e.target.id === 'service-storage-start-datetime' || e.target.id === 'service-storage-end-datetime') {
+        if (e.target.id === 'service-storage' || e.target.id === 'service-storage-mode' || e.target.id === 'service-storage-date-mode' || e.target.id === 'service-storage-items' || e.target.id === 'service-storage-start-datetime' || e.target.id === 'service-storage-end-datetime' || e.target.id === 'service-storage-start-approx-from' || e.target.id === 'service-storage-start-approx-to' || e.target.id === 'service-storage-end-approx-from' || e.target.id === 'service-storage-end-approx-to') {
             renderStorageConfig();
             if (window.updateNextButtonState) {
                 window.updateNextButtonState();
@@ -7612,17 +8350,30 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (service === 'storage') {
             const storageModeInput = document.getElementById('service-storage-mode');
+            const storageDateModeInput = document.getElementById('service-storage-date-mode');
             const storageItemsInput = document.getElementById('service-storage-items');
             const storageStartInput = document.getElementById('service-storage-start-datetime');
             const storageEndInput = document.getElementById('service-storage-end-datetime');
+            const storageStartApproxFromInput = document.getElementById('service-storage-start-approx-from');
+            const storageStartApproxToInput = document.getElementById('service-storage-start-approx-to');
+            const storageEndApproxFromInput = document.getElementById('service-storage-end-approx-from');
+            const storageEndApproxToInput = document.getElementById('service-storage-end-approx-to');
             if (value === 'no') {
                 if (storageModeInput) storageModeInput.value = '';
+                if (storageDateModeInput) storageDateModeInput.value = 'exact';
                 if (storageItemsInput) storageItemsInput.value = '';
                 if (storageStartInput) storageStartInput.value = '';
                 if (storageEndInput) storageEndInput.value = '';
+                if (storageStartApproxFromInput) storageStartApproxFromInput.value = '';
+                if (storageStartApproxToInput) storageStartApproxToInput.value = '';
+                if (storageEndApproxFromInput) storageEndApproxFromInput.value = '';
+                if (storageEndApproxToInput) storageEndApproxToInput.value = '';
             } else {
                 if (storageModeInput && !storageModeInput.value) {
                     storageModeInput.value = 'selected';
+                }
+                if (storageDateModeInput && !storageDateModeInput.value) {
+                    storageDateModeInput.value = 'exact';
                 }
             }
         }
@@ -8004,12 +8755,22 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
     const persistValue = (key, value) => {
         let ok = false;
+        let localWriteFailed = false;
 
         try {
             localStorage.setItem(key, value);
             ok = true;
         } catch (error) {
+            localWriteFailed = true;
             // Ignore and continue fallback attempts.
+        }
+
+        if (localWriteFailed) {
+            try {
+                localStorage.removeItem(key);
+            } catch (error) {
+                // Ignore localStorage cleanup failures.
+            }
         }
 
         try {
@@ -8199,8 +8960,22 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
         try {
             const url = new URL(window.location.href);
-            if (!url.searchParams.has('freshStart')) return;
+            const hasFreshStart = url.searchParams.has('freshStart');
+            const hasReset = url.searchParams.has('reset');
+            if (!hasFreshStart && !hasReset) return;
             url.searchParams.delete('freshStart');
+            url.searchParams.delete('reset');
+            window.history.replaceState(window.history.state, document.title, `${url.pathname}${url.search}${url.hash}`);
+        } catch (error) {
+            // Ignore URL rewrite errors.
+        }
+    };
+
+    const consumeResetQueryParam = () => {
+        try {
+            const url = new URL(window.location.href);
+            if (!url.searchParams.has('reset')) return;
+            url.searchParams.delete('reset');
             window.history.replaceState(window.history.state, document.title, `${url.pathname}${url.search}${url.hash}`);
         } catch (error) {
             // Ignore URL rewrite errors.
@@ -8509,12 +9284,247 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         }
     };
 
+    const parseJsonArrayFieldById = (fieldId) => {
+        const el = document.getElementById(fieldId);
+        const raw = String(el?.value || '').trim();
+        if (!raw) return [];
+        try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+            return [];
+        }
+    };
+
+    const sanitizeVehicleListForSnapshot = (list) => {
+        if (!Array.isArray(list)) return [];
+        return list.map((vehicle) => {
+            const clone = safeClone(vehicle, {}) || {};
+            const media = Array.isArray(clone.media) ? clone.media : [];
+            clone.media = media.map((item) => ({
+                name: String(item?.name || '').trim(),
+                type: String(item?.type || '').trim(),
+                size: Number(item?.size || 0) || 0,
+                dataUrl: ''
+            }));
+            return clone;
+        });
+    };
+
+    const collectVehicleDraftSnapshot = () => {
+        return {
+            car: sanitizeVehicleListForSnapshot(parseJsonArrayFieldById('car-json-hidden')),
+            motorbike: sanitizeVehicleListForSnapshot(parseJsonArrayFieldById('motorbike-json-hidden')),
+            trailer: sanitizeVehicleListForSnapshot(parseJsonArrayFieldById('trailer-json-hidden'))
+        };
+    };
+
+    const hasVehicleDraftInput = (vehicleType) => {
+        const read = (id) => String(document.getElementById(id)?.value || '').trim();
+        return !!(
+            read(`${vehicleType}-make-model-entry`)
+            || read(`${vehicleType}-older-year-entry`)
+            || read(`${vehicleType}-year-entry-hidden`)
+            || read(`${vehicleType}-value-entry-hidden`)
+            || read(`${vehicleType}-condition-entry-hidden`)
+            || read(`${vehicleType}-method-entry-hidden`)
+            || read(`${vehicleType}-roadworthy-entry-hidden`)
+            || read(`${vehicleType}-insurance-entry-hidden`)
+            || read(`${vehicleType}-roadtax-entry-hidden`)
+            || read(`${vehicleType}-tested-entry-hidden`)
+            || read(`${vehicleType}-type-entry-hidden`)
+            || read(`${vehicleType}-weight-entry-hidden`)
+            || read(`${vehicleType}-length-entry-hidden`)
+            || read(`${vehicleType}-custom-weight`)
+            || read(`${vehicleType}-custom-length`)
+            || read(`${vehicleType}-media-hidden`)
+            || read(`${vehicleType}-floors-hidden`)
+        );
+    };
+
+    const collectVehicleUiSnapshot = () => {
+        const manager = window.multiItemsManager || {};
+        const editing = manager.editingVehicleIds && typeof manager.editingVehicleIds === 'object'
+            ? manager.editingVehicleIds
+            : {};
+        const draft = manager.showVehicleDraftForm && typeof manager.showVehicleDraftForm === 'object'
+            ? manager.showVehicleDraftForm
+            : {};
+
+        const build = (vehicleType) => {
+            const savedVehicles = parseJsonArrayFieldById(`${vehicleType}-json-hidden`);
+            const editingId = editing[vehicleType] || null;
+            const hasDraft = hasVehicleDraftInput(vehicleType);
+            const showDraft = draft[vehicleType] === true || !!editingId || hasDraft || savedVehicles.length === 0;
+            return {
+                showDraft,
+                editingId
+            };
+        };
+
+        return {
+            car: build('car'),
+            motorbike: build('motorbike'),
+            trailer: build('trailer')
+        };
+    };
+
+    const VEHICLE_DRAFT_FIELD_IDS = {
+        car: [
+            'car-make-model-entry', 'car-older-year-entry',
+            'car-type-visible', 'car-year-visible', 'car-value-visible', 'car-condition-visible',
+            'car-method-visible', 'car-roadworthy-visible', 'car-insurance-visible', 'car-roadtax-visible',
+            'car-weight-visible', 'car-length-visible',
+            'car-year-entry-hidden', 'car-value-entry-hidden', 'car-condition-entry-hidden',
+            'car-method-entry-hidden', 'car-roadworthy-entry-hidden', 'car-insurance-entry-hidden',
+            'car-roadtax-entry-hidden', 'car-weight-entry-hidden', 'car-length-entry-hidden',
+            'car-tested-entry-hidden', 'car-type-entry-hidden',
+            'car-custom-weight', 'car-custom-weight-unit', 'car-custom-length', 'car-custom-length-unit',
+            'car-floors-hidden'
+        ],
+        motorbike: [
+            'motorbike-make-model-entry', 'motorbike-older-year-entry',
+            'motorbike-year-visible', 'motorbike-value-visible', 'motorbike-condition-visible',
+            'motorbike-roadworthy-visible', 'motorbike-insurance-visible', 'motorbike-roadtax-visible',
+            'motorbike-weight-visible', 'motorbike-length-visible',
+            'motorbike-year-entry-hidden', 'motorbike-value-entry-hidden', 'motorbike-condition-entry-hidden',
+            'motorbike-method-entry-hidden', 'motorbike-roadworthy-entry-hidden', 'motorbike-insurance-entry-hidden',
+            'motorbike-roadtax-entry-hidden', 'motorbike-weight-entry-hidden', 'motorbike-length-entry-hidden',
+            'motorbike-tested-entry-hidden', 'motorbike-type-entry-hidden',
+            'motorbike-custom-weight', 'motorbike-custom-weight-unit', 'motorbike-custom-length', 'motorbike-custom-length-unit',
+            'motorbike-floors-hidden'
+        ],
+        trailer: [
+            'trailer-make-model-entry', 'trailer-older-year-entry',
+            'trailer-type-visible', 'trailer-year-visible', 'trailer-value-visible', 'trailer-condition-visible',
+            'trailer-method-visible', 'trailer-roadworthy-visible', 'trailer-tested-visible',
+            'trailer-weight-visible', 'trailer-length-visible',
+            'trailer-year-entry-hidden', 'trailer-value-entry-hidden', 'trailer-condition-entry-hidden',
+            'trailer-method-entry-hidden', 'trailer-roadworthy-entry-hidden', 'trailer-insurance-entry-hidden',
+            'trailer-roadtax-entry-hidden', 'trailer-weight-entry-hidden', 'trailer-length-entry-hidden',
+            'trailer-tested-entry-hidden', 'trailer-type-entry-hidden',
+            'trailer-custom-weight', 'trailer-custom-weight-unit', 'trailer-custom-length', 'trailer-custom-length-unit',
+            'trailer-floors-hidden'
+        ]
+    };
+
+    const collectVehicleLiveDraftSnapshot = () => {
+        const build = (vehicleType) => {
+            const values = {};
+            (VEHICLE_DRAFT_FIELD_IDS[vehicleType] || []).forEach((fieldId) => {
+                const field = document.getElementById(fieldId);
+                if (!field) return;
+                const value = String(field.value || '');
+                // Keep this snapshot lightweight; main control state already persists media JSON.
+                if (value.length > 2000) return;
+                values[fieldId] = value;
+            });
+
+            const hasDraft = Object.values(values).some((value) => String(value || '').trim().length > 0);
+            return hasDraft ? { hasDraft: true, values } : { hasDraft: false, values: {} };
+        };
+
+        return {
+            car: build('car'),
+            motorbike: build('motorbike'),
+            trailer: build('trailer')
+        };
+    };
+
+    const applyVehicleDraftSnapshot = (snapshot) => {
+        if (!snapshot || typeof snapshot !== 'object') return;
+
+        ['car', 'motorbike', 'trailer'].forEach((vehicleType) => {
+            const field = document.getElementById(`${vehicleType}-json-hidden`);
+            if (!field) return;
+
+            const restoredList = Array.isArray(snapshot[vehicleType]) ? snapshot[vehicleType] : [];
+            if (restoredList.length === 0) return;
+
+            const currentList = parseJsonArrayFieldById(`${vehicleType}-json-hidden`);
+            if (currentList.length >= restoredList.length) return;
+
+            field.value = JSON.stringify(restoredList);
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    };
+
+    const applyVehicleUiSnapshot = (snapshot) => {
+        if (!snapshot || typeof snapshot !== 'object' || !window.multiItemsManager) return;
+
+        const manager = window.multiItemsManager;
+        manager.editingVehicleIds = manager.editingVehicleIds || {};
+        manager.showVehicleDraftForm = manager.showVehicleDraftForm || {};
+
+        ['car', 'motorbike', 'trailer'].forEach((vehicleType) => {
+            const next = snapshot[vehicleType] && typeof snapshot[vehicleType] === 'object'
+                ? snapshot[vehicleType]
+                : {};
+            manager.editingVehicleIds[vehicleType] = next.editingId || null;
+            manager.showVehicleDraftForm[vehicleType] = next.showDraft === true || hasVehicleDraftInput(vehicleType);
+
+            if (typeof manager.updateVehicleEditUi === 'function') {
+                manager.updateVehicleEditUi(vehicleType);
+            }
+            if (typeof manager.renderVehiclesList === 'function') {
+                manager.renderVehiclesList(vehicleType);
+            }
+
+            if (typeof manager.parseVehicleMediaFromHidden === 'function' && typeof manager.renderVehicleMediaPreview === 'function') {
+                const mediaItems = manager.parseVehicleMediaFromHidden(vehicleType);
+                manager.renderVehicleMediaPreview(vehicleType, mediaItems);
+            }
+        });
+    };
+
+    const applyVehicleLiveDraftSnapshot = (snapshot) => {
+        if (!snapshot || typeof snapshot !== 'object') return;
+
+        ['car', 'motorbike', 'trailer'].forEach((vehicleType) => {
+            const entry = snapshot[vehicleType] && typeof snapshot[vehicleType] === 'object'
+                ? snapshot[vehicleType]
+                : null;
+            if (!entry || entry.hasDraft !== true || !entry.values || typeof entry.values !== 'object') {
+                return;
+            }
+
+            Object.entries(entry.values).forEach(([fieldId, value]) => {
+                const field = document.getElementById(fieldId);
+                if (!field) return;
+                field.value = String(value || '');
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+
+            if (window.multiItemsManager) {
+                window.multiItemsManager.showVehicleDraftForm = window.multiItemsManager.showVehicleDraftForm || {};
+                window.multiItemsManager.showVehicleDraftForm[vehicleType] = true;
+
+                if (typeof window.multiItemsManager.syncVehicleCustomFieldVisibility === 'function') {
+                    window.multiItemsManager.syncVehicleCustomFieldVisibility(vehicleType);
+                }
+                if (typeof window.multiItemsManager.updateVehicleEditUi === 'function') {
+                    window.multiItemsManager.updateVehicleEditUi(vehicleType);
+                }
+                if (typeof window.multiItemsManager.renderVehiclesList === 'function') {
+                    window.multiItemsManager.renderVehiclesList(vehicleType);
+                }
+                if (typeof window.multiItemsManager.parseVehicleMediaFromHidden === 'function'
+                    && typeof window.multiItemsManager.renderVehicleMediaPreview === 'function') {
+                    const mediaItems = window.multiItemsManager.parseVehicleMediaFromHidden(vehicleType);
+                    window.multiItemsManager.renderVehicleMediaPreview(vehicleType, mediaItems);
+                }
+            }
+        });
+    };
+
     const collectCustomizedDraftRows = () => {
         const rows = Array.from(document.querySelectorAll('#dimensions-list .dimension-item'));
         if (!rows.length) return [];
 
         return rows.map((row) => {
             const name = String(row.querySelector('.dimension-description')?.value || '').trim();
+            const quantity = Math.max(0, parseInt(String(row.querySelector('.dimension-quantity')?.value || '1').trim(), 10) || 0);
             const width = String(row.querySelector('.dimension-width')?.value || '').trim();
             const depth = String(row.querySelector('.dimension-depth')?.value || '').trim();
             const height = String(row.querySelector('.dimension-height')?.value || '').trim();
@@ -8550,6 +9560,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
             return {
                 name,
+                quantity,
                 width,
                 depth,
                 height,
@@ -8560,7 +9571,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 photos
             };
         }).filter((item) => {
-            return !!(item.name || item.width || item.depth || item.height || item.weight || item.sourceFloor || (Array.isArray(item.photos) && item.photos.length > 0));
+            return !!(item.name || item.quantity || item.width || item.depth || item.height || item.weight || item.sourceFloor || (Array.isArray(item.photos) && item.photos.length > 0));
         });
     };
 
@@ -8595,6 +9606,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             };
 
             setFieldValue('.dimension-description', data.name);
+            setFieldValue('.dimension-quantity', data.quantity || data.qty || 1);
             setFieldValue('.dimension-width', data.width);
             setFieldValue('.dimension-depth', data.depth);
             setFieldValue('.dimension-height', data.height);
@@ -8714,6 +9726,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         const fields = {};
         const coreFields = {};
         const idState = {};
+        const coreIdState = {};
 
         controls.forEach((el, index) => {
             const key = getControlKey(el, index);
@@ -8741,6 +9754,14 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                     value: rawValue,
                     checked: !!el.checked
                 };
+
+                if (rawValue.length <= 500) {
+                    coreIdState[el.id] = {
+                        type,
+                        value: rawValue,
+                        checked: !!el.checked
+                    };
+                }
             }
         });
 
@@ -8852,7 +9873,26 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             customItems: pickObjectStateForSave(window.customItems, 'customItems'),
             customItemPhotos: pickObjectStateForSave(window.customItemPhotos, 'customItemPhotos'),
             floorMediaItems: pickObjectStateForSave(window.floorMediaItems, 'floorMediaItems'),
-            officeInventoryState: safeClone(window.officeInventoryState || null, null)
+            officeInventoryState: safeClone(window.officeInventoryState || null, null),
+            vehicleLiveDraftSnapshot: collectVehicleLiveDraftSnapshot(),
+            vehicleDraftSnapshot: collectVehicleDraftSnapshot(),
+            vehicleUiSnapshot: collectVehicleUiSnapshot()
+        };
+
+        const coreState = {
+            savedAt: commonState.savedAt,
+            step: commonState.step,
+            maxReachedStep: commonState.maxReachedStep,
+            overviewVisited: commonState.overviewVisited,
+            step3PickupFloorsConfirmed: commonState.step3PickupFloorsConfirmed,
+            serviceScope: commonState.serviceScope,
+            selectedPickupFloors: commonState.selectedPickupFloors,
+            selectedDeliveryFloors: commonState.selectedDeliveryFloors,
+            step5SelectedItems: commonState.step5SelectedItems,
+            customizedDraftItems: commonState.customizedDraftItems,
+            vehicleLiveDraftSnapshot: commonState.vehicleLiveDraftSnapshot,
+            vehicleDraftSnapshot: commonState.vehicleDraftSnapshot,
+            vehicleUiSnapshot: commonState.vehicleUiSnapshot
         };
 
         const payload = {
@@ -8862,9 +9902,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         };
 
         const corePayload = {
-            ...commonState,
+            ...coreState,
             fields: coreFields,
-            idState
+            idState: coreIdState
         };
 
         window.__createJobRestoreTargetStep = payload.step;
@@ -9007,6 +10047,24 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 window.officeInventoryState = safeClone(payload.officeInventoryState, null) || payload.officeInventoryState;
             }
 
+            if (payload.vehicleDraftSnapshot && typeof payload.vehicleDraftSnapshot === 'object') {
+                applyVehicleDraftSnapshot(payload.vehicleDraftSnapshot);
+            }
+
+            if (payload.vehicleUiSnapshot && typeof payload.vehicleUiSnapshot === 'object') {
+                const uiSnapshot = payload.vehicleUiSnapshot;
+                setTimeout(() => applyVehicleUiSnapshot(uiSnapshot), 0);
+                setTimeout(() => applyVehicleUiSnapshot(uiSnapshot), 250);
+                setTimeout(() => applyVehicleUiSnapshot(uiSnapshot), 1000);
+            }
+
+            if (payload.vehicleLiveDraftSnapshot && typeof payload.vehicleLiveDraftSnapshot === 'object') {
+                const liveDraftSnapshot = payload.vehicleLiveDraftSnapshot;
+                setTimeout(() => applyVehicleLiveDraftSnapshot(liveDraftSnapshot), 0);
+                setTimeout(() => applyVehicleLiveDraftSnapshot(liveDraftSnapshot), 250);
+                setTimeout(() => applyVehicleLiveDraftSnapshot(liveDraftSnapshot), 1000);
+            }
+
             const controls = getControls().filter(shouldTrack);
             controls.forEach((el, index) => {
                 const key = getControlKey(el, index);
@@ -9076,6 +10134,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
             applyUiState();
             restoreCustomizedDraftRows(payload.customizedDraftItems);
+            applyVehicleLiveDraftSnapshot(payload.vehicleLiveDraftSnapshot);
 
             // Step 7 custom date picker UI uses a separate visible label and does not
             // listen directly to hidden input value restores.
@@ -9201,6 +10260,12 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 if (typeof updateOverviewFloorAndInventorySummary === 'function') {
                     updateOverviewFloorAndInventorySummary();
                 }
+                if (typeof window.renderStorageConfig === 'function') {
+                    window.renderStorageConfig();
+                }
+                if (typeof window.updateFormSummary === 'function') {
+                    window.updateFormSummary();
+                }
             }, 0);
 
         } finally {
@@ -9225,6 +10290,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
     };
 
     const initPersistenceLifecycle = () => {
+        consumeResetQueryParam();
         applyFreshStartIfRequested();
 
         maybePurgeDraftAfterExit();
@@ -9260,6 +10326,10 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
         const runRestoreAttempt = () => {
             if (hasUserInteracted) return;
+            const currentStep = getStep();
+            const bootTargetStep = Number.isFinite(parseInt(bootLockedStep, 10)) ? parseInt(bootLockedStep, 10) : 1;
+            // Avoid late restore passes clobbering newer in-memory progress.
+            if (currentStep > bootTargetStep) return;
             window.restoreCreateJobProgress();
         };
 
@@ -9274,11 +10344,15 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             // so late initializers cannot persist an unintended step change.
             if (!hasUserInteracted && Number.isFinite(parseInt(bootLockedStep, 10))) {
                 const targetStep = parseInt(bootLockedStep, 10);
-                if (typeof window.setFormStep === 'function') {
-                    window.setFormStep(targetStep);
-                } else {
-                    document.body.dataset.formStep = String(targetStep);
-                    document.body.dataset.currentStep = String(targetStep);
+                const currentStep = getStep();
+                // Never force the step backwards during delayed boot stabilization.
+                if (currentStep <= 1 && targetStep > currentStep) {
+                    if (typeof window.setFormStep === 'function') {
+                        window.setFormStep(targetStep);
+                    } else {
+                        document.body.dataset.formStep = String(targetStep);
+                        document.body.dataset.currentStep = String(targetStep);
+                    }
                 }
             }
 
@@ -9467,6 +10541,11 @@ function renderPickupFloorSelector() {
     }
 
     syncPickupFloorHiddenFromSelection();
+
+    // Keep customized-item floor dropdowns aligned with current pickup floor selection.
+    if (typeof window.syncCustomizedItemFloorFields === 'function') {
+        window.syncCustomizedItemFloorFields();
+    }
 
     // If selections were pruned, keep rendered multi-floor inventory blocks aligned.
     if (removedInvalidFloor && typeof window.renderSelectedPickupFloorsInventory === 'function') {
@@ -9850,6 +10929,9 @@ window.togglePickupFloor = async function(floor) {
     if (typeof window.updateNextButtonState === 'function') {
         window.updateNextButtonState();
     }
+    if (typeof window.updateOrganizationSectionVisibility === 'function') {
+        window.updateOrganizationSectionVisibility();
+    }
 
     // Keep multi-floor inventory blocks synced with current floor selection.
     if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
@@ -9879,6 +10961,9 @@ window.toggleDeliveryFloor = function(floor) {
     }
     if (typeof window.updateNextButtonState === 'function') {
         window.updateNextButtonState();
+    }
+    if (typeof window.updateOrganizationSectionVisibility === 'function') {
+        window.updateOrganizationSectionVisibility();
     }
 };
 
@@ -10478,6 +11563,10 @@ if (!window.__motorbikeConfirmFloorFallbackBound) {
                     window.addDimensionItem();
                 }
 
+                if (typeof window.syncCustomizedItemFloorFields === 'function') {
+                    window.syncCustomizedItemFloorFields();
+                }
+
                 // Scroll to inventory section
                 setTimeout(() => {
                     if (inventoryCardContainer) {
@@ -11008,6 +12097,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                         let itemsHtml = '<div style="display: flex; flex-direction: column; gap: 8px;">';
                                         parsedItems.forEach((item, idx) => {
                                             const name = (item.name || '').trim();
+                                            const quantity = Math.max(1, parseInt(item.quantity ?? item.qty ?? 1, 10) || 1);
                                             const width = item.width || '';
                                             const depth = item.depth || '';
                                             const height = item.height || '';
@@ -11019,7 +12109,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                                 <div style="padding: 10px; border: 1px solid #ddd; border-radius: 6px; background: #f9f9f9;">
                                                     <div style="font-weight: 600; color: #0f172a; margin-bottom: 4px;">${name}</div>
                                                     <div style="font-size: 0.85rem; color: #6b7280;">
-                                                        ${width}x${depth}x${height}${sizeUnit} | ${weight}${weightUnit}
+                                                        Qty ${quantity} | ${width}x${depth}x${height}${sizeUnit} | ${weight}${weightUnit}
                                                     </div>
                                                 </div>
                                             `;
@@ -11107,7 +12197,21 @@ document.addEventListener('DOMContentLoaded', function () {
     const applyStep5ServiceCopy = () => {
         const isVehicleService = isVehicleLikeStepFlowService(getActiveServiceValue());
         const isPetsTransportService = isPetsService(getActiveServiceValue());
-        const isFloorsOnlyService = isVehicleService || isPetsTransportService;
+
+        // In Step 5 vehicle flows, show vehicle entries under a clearer room label.
+        if (window.ROOM_CATEGORIES && window.ROOM_CATEGORIES.boxes) {
+            window.ROOM_CATEGORIES.boxes.name = isVehicleService ? 'Vehicle' : 'Custom Items';
+        }
+
+        const pickupFloorCount = window.selectedPickupFloors instanceof Set
+            ? window.selectedPickupFloors.size
+            : document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected').length;
+        const deliveryFloorCount = window.selectedDeliveryFloors instanceof Set
+            ? window.selectedDeliveryFloors.size
+            : document.querySelectorAll('#delivery-floors-selector .delivery-floor-selector-btn.selected').length;
+        const shouldShowVehicleAssignment = isVehicleService
+            && (pickupFloorCount >= 2 || deliveryFloorCount >= 2);
+        const isFloorsOnlyService = isPetsTransportService || (isVehicleService && !shouldShowVehicleAssignment);
         const isParkingService = isParkingLevelService(getActiveServiceValue());
         const isFreight = isFreightService(getActiveServiceValue());
         const isClearance = isClearanceService(getActiveServiceValue());
@@ -11143,24 +12247,28 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (step5AssignmentGuide) {
-            step5AssignmentGuide.style.display = isFloorsOnlyService ? 'none' : '';
+            step5AssignmentGuide.style.display = isVehicleService ? 'none' : (isFloorsOnlyService ? 'none' : '');
         }
 
         if (step5VehicleNote) {
-            step5VehicleNote.style.display = isFloorsOnlyService ? 'block' : 'none';
-            if (isFloorsOnlyService) {
-                step5VehicleNote.textContent = isFreight
+            const vehicleAssignmentText = shouldShowVehicleAssignment
+                ? 'You selected 2 or more floors for vehicle transport. Use the section below to assign items to the delivery floors.'
+                : 'Vehicle transport does not require item assignment. Confirm the delivery parking level above, then continue to the next step.';
+
+            step5VehicleNote.style.display = (isVehicleService || isPetsTransportService) ? 'block' : 'none';
+            step5VehicleNote.textContent = isVehicleService
+                ? vehicleAssignmentText
+                : (isFreight
                     ? 'Freight transport does not require item assignment. Confirm the delivery parking level above, then continue to the next step.'
                     : (isClearance
                         ? 'Clearance service does not require item assignment. Confirm the delivery floor above, then continue to the next step.'
                         : (isPetsTransportService
                             ? 'Pet transport does not require item assignment. Confirm the delivery floor above, then continue to the next step.'
-                            : 'Vehicle transport does not require item assignment. Confirm the delivery parking level above, then continue to the next step.'));
-            }
+                            : '')));
         }
 
         if (step5OrganizationContainer) {
-            step5OrganizationContainer.style.display = isFloorsOnlyService ? 'none' : '';
+            step5OrganizationContainer.style.display = isPetsTransportService ? 'none' : (isVehicleService ? (shouldShowVehicleAssignment ? '' : 'none') : '');
         }
     };
     
@@ -11440,16 +12548,53 @@ document.addEventListener('DOMContentLoaded', function () {
                             const name = (item?.name || '').trim();
                             if (!name) return;
                             const sourceFloor = String(item?.sourceFloor || '').trim() || fallbackSourceFloor;
+                            const quantity = Math.max(1, parseInt(item?.quantity ?? item?.qty ?? 1, 10) || 1);
 
                             // Keep the display label clean (name), while keeping key unique with a 3rd segment.
                             const itemKey = `${name}||${sourceFloor}||${index}`;
-                            roomItems.boxes[itemKey] = 1;
+                            roomItems.boxes[itemKey] = quantity;
                         });
                     }
                 } catch (error) {
                     // Ignore malformed customized items payload.
                 }
             }
+        }
+
+        if (isVehicleLikeStepFlowService(currentServiceValue) && window.multiItemsManager) {
+            const vehicleLabels = {
+                car: 'Campervan / Car',
+                motorbike: 'Motorbike',
+                trailer: 'Trailer / Caravan'
+            };
+
+            const getVehicleItemKey = (vehicleType, vehicle, index) => {
+                const id = vehicle && vehicle.id != null ? String(vehicle.id) : `${index}`;
+                return `${vehicleType}::${id}||Unassigned`;
+            };
+
+            ['car', 'motorbike', 'trailer'].forEach((vehicleType) => {
+                if (typeof window.multiItemsManager.parseVehicles !== 'function') return;
+
+                const savedVehicles = window.multiItemsManager.parseVehicles(vehicleType) || [];
+                if (!Array.isArray(savedVehicles) || savedVehicles.length === 0) return;
+
+                savedVehicles.forEach((vehicle, index) => {
+                    const makeModel = String(vehicle?.makeModel || '').trim();
+                    const labelBase = vehicleLabels[vehicleType] || 'Vehicle';
+                    const itemName = makeModel
+                        ? `${labelBase} ${index + 1}: ${makeModel}`
+                        : `${labelBase} ${index + 1}`;
+                    const itemKey = getVehicleItemKey(vehicleType, vehicle, index);
+                    const roomKey = 'boxes';
+
+                    if (!roomItems[roomKey]) {
+                        roomItems[roomKey] = {};
+                    }
+
+                    roomItems[roomKey][itemKey] = 1;
+                });
+            });
         }
 
         // For Piano Transport, create organization items from saved pianos (or current draft)
@@ -11566,6 +12711,18 @@ document.addEventListener('DOMContentLoaded', function () {
     // Helper function to extract item name from key
     function getItemNameFromKey(itemKey) {
         const rawName = itemKey.split('||')[0];
+        const vehicleKeyMatch = rawName.match(/^(car|motorbike|trailer)::(.+)$/i);
+        if (vehicleKeyMatch && window.multiItemsManager && typeof window.multiItemsManager.parseVehicles === 'function') {
+            const vehicleType = vehicleKeyMatch[1].toLowerCase();
+            const vehicleId = vehicleKeyMatch[2];
+            const vehicles = window.multiItemsManager.parseVehicles(vehicleType) || [];
+            const foundVehicle = vehicles.find((vehicle) => String(vehicle?.id || '') === String(vehicleId));
+            const labelBase = vehicleType === 'car'
+                ? 'Campervan / Car'
+                : (vehicleType === 'motorbike' ? 'Motorbike' : 'Trailer / Caravan');
+            const makeModel = String(foundVehicle?.makeModel || '').trim();
+            return makeModel ? `${labelBase}: ${makeModel}` : labelBase;
+        }
         const boxPrefixMatch = rawName.match(/^([^\-]+)\s-\s(Small Boxes|Medium Boxes|Large Boxes|XL Boxes|Extra Large Boxes)$/i);
         return boxPrefixMatch && boxPrefixMatch[2] ? boxPrefixMatch[2] : rawName;
     }
@@ -11804,7 +12961,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const wasCompletedBefore = previousCompletionState || step5WasEverComplete || step5WasCompleteAfterOverview;
         const shouldPromptResync = hasVisitedOverviewStep && hasDeliverySelection && wasCompletedBefore && !nextCompletionState && inventoryIncreased;
 
-        hasPendingStep5NewAssignments = hasVisitedOverviewStep && hasDeliverySelection && wasCompletedBefore && !nextCompletionState;
+        hasPendingStep5NewAssignments = hasVisitedOverviewStep && hasDeliverySelection && wasCompletedBefore && !nextCompletionState && inventoryIncreased;
         window.__hasPendingStep5NewAssignments = hasPendingStep5NewAssignments;
 
         lastStep5PickupInventoryMap = nextPickupMap;
@@ -11946,6 +13103,9 @@ document.addEventListener('DOMContentLoaded', function () {
         
         const roomItems = getItemsByRoom();
         const applyPickupFloorFilter = shouldApplyPickupFloorFilter(roomItems, selectedPickupFloors);
+        const totalItemCount = Object.values(roomItems).reduce((sum, items) => {
+            return sum + Object.keys(items || {}).length;
+        }, 0);
         
         // First, show items with remaining quantity to assign
         const unassignedItems = [];
@@ -11957,9 +13117,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (remaining > 0) {
                     const itemName = getItemNameFromKey(itemKey);
                     const sourceFloor = getSourceFloorFromKey(itemKey);
+                    const isVehicleUnassignedItem = sourceFloor === 'Unassigned';
                     
                     // Filter by selected pickup floors - if any floors selected, only show items from those floors
-                    if (applyPickupFloorFilter && sourceFloor !== 'Customized' && !isSourceFloorSelected(selectedPickupFloors, sourceFloor)) {
+                    if (applyPickupFloorFilter && !isVehicleUnassignedItem && sourceFloor !== 'Customized' && !isSourceFloorSelected(selectedPickupFloors, sourceFloor)) {
                         return; // Skip items not on selected pickup floors
                     }
                     
@@ -11977,12 +13138,170 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         
         inventoryList.innerHTML = '';
+
+        if (totalItemCount === 0) {
+            const emptyState = document.createElement('p');
+            emptyState.style.cssText = 'color: #9ca3af; font-size: 0.95rem; margin: 0; padding: 12px; background: #f9fafb; border-radius: 6px; text-align: center; font-weight: 600;';
+            emptyState.textContent = isVehicleLikeStepFlowService(getActiveServiceValue())
+                ? 'No vehicles added yet. Save a vehicle in Step 3 to see it here.'
+                : 'No items in inventory yet. Add items in Step 3 to organize them here.';
+            inventoryList.appendChild(emptyState);
+            return;
+        }
         
         if (unassignedItems.length === 0) {
             inventoryList.innerHTML = '<p style="color: #10b981; font-size: 0.9rem; margin: 0; padding: 12px; background: #f0fdf4; border-radius: 6px; text-align: center; font-weight: 600;">✓ All items assigned!</p>';
             if (typeof window.updateNextButtonState === 'function') {
                 window.updateNextButtonState();
             }
+            return;
+        }
+
+        if (isVehicleLikeStepFlowService(getActiveServiceValue())) {
+            inventoryList.innerHTML = '';
+
+            const header = document.createElement('div');
+            header.style.cssText = `
+                margin-bottom: 16px;
+                padding-bottom: 12px;
+                border-bottom: 2px solid #fcd34d;
+                background: #fffbeb;
+                padding: 12px;
+                border-radius: 6px;
+            `;
+
+            const headerText = document.createElement('div');
+            headerText.style.cssText = `
+                font-weight: 600;
+                color: #92400e;
+                font-size: 0.95rem;
+            `;
+            headerText.textContent = `⚠️ ${unassignedItems.length} vehicle${unassignedItems.length !== 1 ? 's' : ''} unassigned`;
+
+            const headerHint = document.createElement('div');
+            headerHint.style.cssText = `
+                font-size: 0.85rem;
+                color: #b45309;
+                margin-top: 4px;
+            `;
+            headerHint.textContent = 'Select a vehicle, then add it to a delivery floor';
+
+            header.appendChild(headerText);
+            header.appendChild(headerHint);
+            inventoryList.appendChild(header);
+
+            unassignedItems.forEach((item) => {
+                const isSelected = selectedItems.has(item.key);
+
+                const itemEl = document.createElement('div');
+                itemEl.style.cssText = `
+                    font-size: 0.9rem;
+                    color: #6b7280;
+                    padding: 10px 12px;
+                    background: ${isSelected ? '#dbeafe' : '#fef3c7'};
+                    border-left: 3px solid ${isSelected ? '#2563eb' : '#f59e0b'};
+                    border-radius: 4px;
+                    display: flex;
+                    align-items: center;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    margin-bottom: 8px;
+                `;
+
+                itemEl.addEventListener('mouseover', () => {
+                    if (!isSelected) {
+                        itemEl.style.background = '#fde68a';
+                        itemEl.style.borderLeftColor = '#d97706';
+                    }
+                });
+
+                itemEl.addEventListener('mouseout', () => {
+                    if (!isSelected) {
+                        itemEl.style.background = '#fef3c7';
+                        itemEl.style.borderLeftColor = '#f59e0b';
+                    }
+                });
+
+                itemEl.addEventListener('click', (e) => {
+                    if (e.target.tagName === 'INPUT') return;
+
+                    if (selectedItems.has(item.key)) {
+                        selectedItems.delete(item.key);
+                    } else {
+                        selectedItems.add(item.key);
+                    }
+                    persistStep5SelectedItems();
+                    renderInventoryByRoom();
+                    renderDeliveryFloors();
+                });
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = isSelected;
+                checkbox.style.cssText = `
+                    width: 18px;
+                    height: 18px;
+                    cursor: pointer;
+                    flex-shrink: 0;
+                    margin-right: 8px;
+                `;
+                checkbox.addEventListener('change', (e) => {
+                    e.stopPropagation();
+                    if (e.target.checked) {
+                        selectedItems.add(item.key);
+                    } else {
+                        selectedItems.delete(item.key);
+                    }
+                    persistStep5SelectedItems();
+                    renderInventoryByRoom();
+                    renderDeliveryFloors();
+                });
+
+                const itemNameAndSource = document.createElement('div');
+                itemNameAndSource.style.cssText = `
+                    display: flex;
+                    flex-direction: column;
+                    gap: 2px;
+                    flex: 1;
+                    min-width: 0;
+                `;
+
+                const itemName = document.createElement('div');
+                itemName.style.cssText = `
+                    font-weight: 500;
+                    color: #374151;
+                `;
+                itemName.textContent = item.name;
+
+                const sourceLabel = document.createElement('div');
+                sourceLabel.style.cssText = `
+                    font-size: 0.8rem;
+                    color: #b45309;
+                `;
+                sourceLabel.textContent = 'Vehicle';
+
+                const qtyLabel = document.createElement('div');
+                qtyLabel.style.cssText = `
+                    background: #f59e0b;
+                    color: white;
+                    border-radius: 4px;
+                    padding: 2px 8px;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    margin-left: 8px;
+                    flex-shrink: 0;
+                `;
+                qtyLabel.textContent = `x${item.remaining}`;
+
+                itemNameAndSource.appendChild(itemName);
+                itemNameAndSource.appendChild(sourceLabel);
+                itemEl.appendChild(checkbox);
+                itemEl.appendChild(itemNameAndSource);
+                itemEl.appendChild(qtyLabel);
+
+                inventoryList.appendChild(itemEl);
+            });
+
             return;
         }
         
@@ -12513,6 +13832,11 @@ document.addEventListener('DOMContentLoaded', function () {
     function renderDeliveryFloors() {
         if (!floorsGrid) return;
         const selectedDeliveryFloors = getSelectedDeliveryFloors();
+        const serviceValue = getActiveServiceValue();
+        const isParkingService = isParkingLevelService(serviceValue);
+        const activeFloorOrder = isParkingService
+            ? VEHICLE_PARKING_LEVELS
+            : deliveryFloors;
 
         // Recovery path: if selected floors were lost but assignments still exist,
         // rebuild selection from assigned floors so Step 5 can render correctly.
@@ -12587,8 +13911,10 @@ document.addEventListener('DOMContentLoaded', function () {
         
         // Render each delivery floor (only selected ones), sorted in canonical floor order.
         // Include floors that have assigned items even if not in current property type
-        const canonicalFloorOrder = ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
-        const floorSortOrder = new Map(deliveryFloors.map((floorName, index) => [floorName, index]));
+        const canonicalFloorOrder = isParkingService
+            ? [...VEHICLE_PARKING_LEVELS]
+            : ['Basement', 'Ground', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'Attic'];
+        const floorSortOrder = new Map(activeFloorOrder.map((floorName, index) => [floorName, index]));
         
         // Get all floors with assigned items
         const floorsWithAssignments = new Set();
@@ -12607,11 +13933,15 @@ document.addEventListener('DOMContentLoaded', function () {
             ? Array.from(selectedDeliveryFloors)
                 .filter(floor => floorSortOrder.has(floor) || floorsWithAssignments.has(floor))
                 .sort((a, b) => {
+                    const explicitA = floorSortOrder.has(a) ? floorSortOrder.get(a) : Number.MAX_SAFE_INTEGER;
+                    const explicitB = floorSortOrder.has(b) ? floorSortOrder.get(b) : Number.MAX_SAFE_INTEGER;
+                    if (explicitA !== explicitB) return explicitA - explicitB;
+
                     const indexA = canonicalFloorOrder.indexOf(a);
                     const indexB = canonicalFloorOrder.indexOf(b);
                     return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
                 })
-            : deliveryFloors;
+            : activeFloorOrder;
             
         floorsToRender.forEach(floor => {
             const hasSelection = selectedItems.size > 0;
@@ -14979,7 +16309,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
             mediaModal.__onAdd = async ({ itemName, acceptedFiles }) => {
                 const targetStore = ensureFloorMediaStore(floorRef.name);
-                for (const file of acceptedFiles) {
+                const mediaLimit = getServiceMediaUploadLimit();
+                const hasLimit = Number.isFinite(mediaLimit);
+                const remainingSlots = hasLimit ? Math.max(0, mediaLimit - targetStore.length) : acceptedFiles.length;
+                const filesToAdd = hasLimit ? acceptedFiles.slice(0, remainingSlots) : acceptedFiles;
+
+                if (hasLimit && acceptedFiles.length > filesToAdd.length) {
+                    alert(`You can upload up to ${mediaLimit} files.`);
+                }
+
+                for (const file of filesToAdd) {
                     const lowerType = String(file.type || '').toLowerCase();
                     const fallbackName = String(file.name || 'Uploaded media').replace(/\.[^/.]+$/, '').trim();
                     const entryItemName = String(itemName || '').trim() || fallbackName || 'Uploaded media';
@@ -16049,17 +17388,36 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!area.style.position) {
                 area.style.position = 'relative';
             }
+            area.style.overflow = 'hidden';
+
+            const clearPreviewObjectUrl = () => {
+                const objectUrl = String(input.dataset.previewObjectUrl || '').trim();
+                if (!objectUrl) return;
+                try {
+                    URL.revokeObjectURL(objectUrl);
+                } catch (_) {}
+                delete input.dataset.previewObjectUrl;
+            };
 
             const getPhotoState = () => {
                 const hasFiles = input.files && input.files.length > 0;
                 if (hasFiles) {
                     const file = input.files[0];
+                    let previewUrl = String(input.dataset.savedPreview || '').trim();
+                    if (!previewUrl) {
+                        previewUrl = String(input.dataset.previewObjectUrl || '').trim();
+                        if (!previewUrl) {
+                            previewUrl = URL.createObjectURL(file);
+                            input.dataset.previewObjectUrl = previewUrl;
+                        }
+                    }
                     return {
                         hasMedia: true,
                         file,
                         fileName: String(file?.name || '').trim() || 'Uploaded media',
                         fileType: String(file?.type || '').trim(),
-                        savedPreview: String(input.dataset.savedPreview || '').trim()
+                        savedPreview: String(input.dataset.savedPreview || '').trim(),
+                        previewUrl
                     };
                 }
 
@@ -16067,21 +17425,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 const savedType = String(input.dataset.savedType || '').trim();
                 const savedPreview = String(input.dataset.savedPreview || '').trim();
                 if (savedName || savedType || savedPreview) {
+                    clearPreviewObjectUrl();
                     return {
                         hasMedia: true,
                         file: null,
                         fileName: savedName || 'Uploaded media',
                         fileType: savedType,
-                        savedPreview
+                        savedPreview,
+                        previewUrl: savedPreview
                     };
                 }
 
+                clearPreviewObjectUrl();
                 return {
                     hasMedia: false,
                     file: null,
                     fileName: '',
                     fileType: '',
-                    savedPreview: ''
+                    savedPreview: '',
+                    previewUrl: ''
                 };
             };
 
@@ -16090,14 +17452,37 @@ document.addEventListener('DOMContentLoaded', function() {
                 const span = area.querySelector('span');
                 if (!span) return;
                 let clearBtn = area.querySelector('.photo-clear-btn');
+                const svg = area.querySelector('svg');
+
+                area.style.backgroundImage = '';
+                area.style.backgroundSize = '';
+                area.style.backgroundPosition = '';
+                area.style.backgroundRepeat = '';
+                area.style.borderStyle = '';
+                if (svg) svg.style.display = '';
                 
                 if (mediaState.hasMedia) {
-                    const fileName = mediaState.fileName;
                     const fileType = String(mediaState.fileType || '').startsWith('video/') ? 'Video' : 'Photo';
-                    const truncatedName = fileName.length > 30 ? fileName.substring(0, 27) + '...' : fileName;
-                    span.innerHTML = `✓ <strong>${fileType}</strong><br><span style="font-size:0.85rem;word-break:break-word;cursor:pointer;">${truncatedName}</span>`;
-                    area.style.borderColor = '#10b981';
-                    area.style.background = '#f0fdf4';
+                    const previewUrl = String(mediaState.previewUrl || '').trim();
+                    const isVideo = String(mediaState.fileType || '').startsWith('video/') || previewUrl.startsWith('data:video/');
+
+                    if (!isVideo && previewUrl) {
+                        area.style.backgroundImage = `linear-gradient(rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0.08)), url("${previewUrl}")`;
+                        area.style.backgroundSize = 'cover';
+                        area.style.backgroundPosition = 'center';
+                        area.style.backgroundRepeat = 'no-repeat';
+                        area.style.borderStyle = 'solid';
+                        if (svg) svg.style.display = 'none';
+                        span.style.cssText = '';
+                        span.style.display = 'none';
+                    } else {
+                        span.style.cssText = '';
+                        span.style.display = '';
+                        span.innerHTML = `<strong>${fileType} selected</strong>`;
+                    }
+
+                    area.style.borderColor = '#bfdbfe';
+                    area.style.backgroundColor = '#eff6ff';
                     area.style.cursor = 'pointer';
 
                     if (!clearBtn) {
@@ -16105,10 +17490,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         clearBtn.type = 'button';
                         clearBtn.className = 'photo-clear-btn';
                         clearBtn.textContent = 'Remove';
-                        clearBtn.style.cssText = 'position:absolute;top:8px;right:8px;border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:6px;padding:3px 8px;font-size:0.75rem;font-weight:700;cursor:pointer;z-index:2;';
+                        clearBtn.style.cssText = 'position:absolute;top:8px;right:8px;border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:6px;padding:3px 8px;font-size:0.75rem;font-weight:700;cursor:pointer;z-index:3;';
                         clearBtn.addEventListener('click', (event) => {
                             event.preventDefault();
                             event.stopPropagation();
+                            clearPreviewObjectUrl();
                             input.value = '';
                             delete input.dataset.savedName;
                             delete input.dataset.savedType;
@@ -16118,10 +17504,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         area.appendChild(clearBtn);
                     }
                 } else {
+                    span.style.cssText = '';
+                    span.style.display = '';
                     span.innerHTML = 'Drag photo or video here <strong>upload</strong>';
-                    area.style.borderColor = '#ddd';
-                    area.style.background = '#f9f9f9';
-                    area.style.cursor = 'auto';
+                    area.style.borderColor = '#bfdbfe';
+                    area.style.backgroundColor = '#eff6ff';
+                    area.style.cursor = 'pointer';
                     if (clearBtn) {
                         clearBtn.remove();
                     }
@@ -16129,21 +17517,11 @@ document.addEventListener('DOMContentLoaded', function() {
             };
 
             area.addEventListener('click', () => {
-                const mediaState = getPhotoState();
-                if (mediaState.hasMedia) {
-                    if (mediaState.file) {
-                        showPhotoPreview(mediaState.file);
-                    } else if (mediaState.savedPreview) {
-                        showPhotoPreview(mediaState.savedPreview, mediaState.fileType, mediaState.fileName);
-                    } else {
-                        alert('Preview is unavailable after refresh for this file. Please re-upload if needed.');
-                    }
-                } else {
-                    input.click();
-                }
+                input.click();
             });
 
             input.addEventListener('change', () => {
+                clearPreviewObjectUrl();
                 updateAreaVisual();
                 if (typeof updateCustomizedItemsHiddenValue === 'function') {
                     updateCustomizedItemsHiddenValue();
@@ -16157,9 +17535,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             area.addEventListener('dragleave', () => {
-                const mediaState = getPhotoState();
-                area.style.borderColor = mediaState.hasMedia ? '#10b981' : '#ddd';
-                area.style.background = mediaState.hasMedia ? '#f0fdf4' : '#f9f9f9';
+                updateAreaVisual();
             });
 
             area.addEventListener('drop', (e) => {
@@ -16183,6 +17559,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const rows = Array.from(dimensionsList.querySelectorAll('.dimension-item'));
         const parsedItems = rows.map((row) => {
             const name = (row.querySelector('.dimension-description')?.value || '').trim();
+            const quantityRaw = (row.querySelector('.dimension-quantity')?.value || '1').trim();
+            const quantity = Math.max(0, parseInt(quantityRaw, 10) || 0);
             const width = (row.querySelector('.dimension-width')?.value || '').trim();
             const depth = (row.querySelector('.dimension-depth')?.value || '').trim();
             const height = (row.querySelector('.dimension-height')?.value || '').trim();
@@ -16195,6 +17573,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             return {
                 name,
+                quantity,
                 width,
                 depth,
                 height,
@@ -16203,7 +17582,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 weightUnit,
                 sourceFloor,
                 photos,
-                valid: !!name && !!width && !!depth && !!height && !!weight && (!requiresSourceFloor || !!sourceFloor)
+                valid: !!name && quantity > 0 && !!width && !!depth && !!height && !!weight && (!requiresSourceFloor || !!sourceFloor)
             };
         });
 
@@ -16287,6 +17666,8 @@ document.addEventListener('DOMContentLoaded', function() {
             updateCustomizedItemsHiddenValue();
         }
     };
+
+    window.syncCustomizedItemFloorFields = syncCustomizedItemFloorFields;
 
     function placeSpecialistValueInsideBlueForm() {
         const customSection = document.getElementById('customized-items-inventory-section');
@@ -16942,6 +18323,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const moveDateSummary = moveDate
                 ? (timeParts.length > 0 ? `${moveDate} (${timeParts.join(' | ')})` : moveDate)
                 : '';
+            const storageDatesSummary = typeof window.getStorageDatesSummaryText === 'function' ? window.getStorageDatesSummaryText() : '';
             const specialInstructions = getInputValue('service-special-instructions') || getInputValue('generic-special-instructions');
 
             let itemsSummary = '';
@@ -17134,6 +18516,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setSummaryValue('summary-delivery-address', deliveryAddress || '—');
             setSummaryValue('summary-items', itemsSummary || '—');
             setSummaryValue('summary-date', moveDateSummary || '—');
+            setSummaryValue('summary-storage-dates', storageDatesSummary || '—');
             setSummaryValue('summary-notes', specialInstructions || '—');
             updateOverviewFloorAndInventorySummary();
             
@@ -17155,8 +18538,21 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             let firstInvalid = null;
+            const activeServiceValue = getActiveServiceValue();
+            const isVehicleStep = step === 3 && isVehicleTransportService(activeServiceValue);
+
+            const isFieldInSavedVehicleList = (field) => {
+                if (!field || typeof field.closest !== 'function') return false;
+                return !!field.closest('#car-list, #motorbike-list, #trailer-list');
+            };
 
             stepFields.forEach((field) => {
+                if (isVehicleStep && isFieldInSavedVehicleList(field)) {
+                    clearFieldError(field);
+                    clearInlineError(field);
+                    return;
+                }
+
                 if (!isElementVisible(field)) {
                     clearFieldError(field);
                     clearInlineError(field);
@@ -17333,7 +18729,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         const wrapperToggle = missingVehicleField.closest('.custom-dropdown-wrapper')?.querySelector('.dropdown-toggle');
                         markFieldError(wrapperToggle);
                     }
-                    return firstInvalid || missingVehicleField;
+                    return missingVehicleField;
                 }
             }
 
@@ -17444,6 +18840,11 @@ document.addEventListener('DOMContentLoaded', function() {
             ensureStepStartsAtTop(previousStep, step);
             if (step === 3) {
                 updateHouseInventoryVisibility();
+                if (window.multiItemsManager && typeof window.multiItemsManager.syncVehicleDraftUi === 'function') {
+                    ['car', 'motorbike', 'trailer'].forEach((vehicleType) => {
+                        window.multiItemsManager.syncVehicleDraftUi(vehicleType);
+                    });
+                }
             }
             if (step === 6) {
                 // Initialize step 6 service requirements
@@ -17490,6 +18891,23 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     return;
                 }
+
+                const storageErrorMessage = typeof window.getStorageSelectionErrorMessage === 'function'
+                    ? window.getStorageSelectionErrorMessage()
+                    : '';
+                if (storageErrorMessage) {
+                    alert(storageErrorMessage);
+                    const storageStart = document.getElementById('service-storage-start-datetime');
+                    const storageEnd = document.getElementById('service-storage-end-datetime');
+                    const approxStartTo = document.getElementById('service-storage-start-approx-to');
+                    const approxEndFrom = document.getElementById('service-storage-end-approx-from');
+                    const focusTarget = storageStart || storageEnd || approxStartTo || approxEndFrom;
+                    if (focusTarget && typeof focusTarget.focus === 'function') {
+                        focusTarget.focus();
+                    }
+                    return;
+                }
+
                 unlockStep(currentStep + 1);
                 setFormStep(currentStep + 1);
             });
@@ -18135,7 +19553,13 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (isBoatsService && isStep3) {
                 step3TitleHeading.textContent = 'Step 3: Boat Transport Details';
             } else if (isVehicleParkingService) {
-                step3TitleHeading.textContent = 'Step 3: Select Pickup Parking Level and Vehicle Details';
+                if (serviceValue === 'Motorbike Transport') {
+                    step3TitleHeading.textContent = 'Step 3: Motorbike Details';
+                } else if (serviceValue === 'Caravan / Trailer Transport' || serviceValue === 'Trailer Transport') {
+                    step3TitleHeading.textContent = 'Step 3: Caravan / Trailer Details';
+                } else {
+                    step3TitleHeading.textContent = 'Step 3: Campervan / Car Details';
+                }
             } else {
                 step3TitleHeading.textContent = 'Step 3: Please select all the floors you are moving from (multiple selections available)';
             }
@@ -18661,7 +20085,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const addBtn = document.getElementById('add-trailer-btn');
         if (addBtn) {
-            addBtn.textContent = isBoatsService ? '+ Add Boat' : '+ Add Caravan / Trailer';
+            addBtn.textContent = isBoatsService ? 'Save Boat' : 'Save Caravan / Trailer';
         }
 
         const makeModelInput = document.getElementById('trailer-make-model-entry');
@@ -18716,21 +20140,7 @@ document.addEventListener('DOMContentLoaded', function() {
             '#trailer-campervan-section'
         ];
 
-        const trimToMaxDigits = (value, maxDigits) => {
-            const raw = String(value || '');
-            let digitsUsed = 0;
-            let next = '';
-
-            for (const ch of raw) {
-                if (/\d/.test(ch)) {
-                    if (digitsUsed >= maxDigits) continue;
-                    digitsUsed += 1;
-                }
-                next += ch;
-            }
-
-            return next;
-        };
+        const trimToMaxDigits = (value, maxDigits) => contactBlocker.trimToMaxDigits(value, maxDigits);
 
         const bindRestriction = (field) => {
             if (!field || field.dataset.vehicleDigitsRestricted === 'true') return;
@@ -18778,11 +20188,11 @@ document.addEventListener('DOMContentLoaded', function() {
         item.innerHTML = `
             <div class="custom-item-title" style="font-size:1.5rem; font-weight:800; color:#0f172a; margin:0 0 10px;">Custom item ${itemIndex}</div>
             <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
-                <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">Optional</span></label>
+                <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
                 <button type="button" class="btn-delete-photos-top" style="border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:6px;padding:5px 10px;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap;">Delete photos</button>
             </div>
-            <div class="photo-upload-grid">
-                <div class="photo-upload-area">
+            <div class="photo-upload-grid vehicle-photo-upload-grid custom-item-photo-grid">
+                <div class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <rect x="3" y="3" width="18" height="18" rx="2"></rect>
                         <circle cx="8.5" cy="8.5" r="1.5"></circle>
@@ -18791,7 +20201,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span>Drag photo or video here <strong>upload</strong></span>
                     <input type="file" class="photo-input" accept="image/*,video/*" id="custom-item-photo-${itemIndex}-1">
                 </div>
-                <div class="photo-upload-area">
+                <div class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <rect x="3" y="3" width="18" height="18" rx="2"></rect>
                         <circle cx="8.5" cy="8.5" r="1.5"></circle>
@@ -18800,7 +20210,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span>Drag photo or video here <strong>upload</strong></span>
                     <input type="file" class="photo-input" accept="image/*,video/*" id="custom-item-photo-${itemIndex}-2">
                 </div>
-                <div class="photo-upload-area">
+                <div class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <rect x="3" y="3" width="18" height="18" rx="2"></rect>
                         <circle cx="8.5" cy="8.5" r="1.5"></circle>
@@ -18809,7 +20219,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span>Drag photo or video here <strong>upload</strong></span>
                     <input type="file" class="photo-input" accept="image/*,video/*" id="custom-item-photo-${itemIndex}-3">
                 </div>
+                <div class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <path d="M21 15l-5-5L5 21"></path>
+                    </svg>
+                    <span>Drag photo or video here <strong>upload</strong></span>
+                    <input type="file" class="photo-input" accept="image/*,video/*" id="custom-item-photo-${itemIndex}-4">
+                </div>
+                <div class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <path d="M21 15l-5-5L5 21"></path>
+                    </svg>
+                    <span>Drag photo or video here <strong>upload</strong></span>
+                    <input type="file" class="photo-input" accept="image/*,video/*" id="custom-item-photo-${itemIndex}-5">
+                </div>
             </div>
+            <div class="dimension-photos-list" style="display:none; margin-top:12px;"></div>
             <label class="form-label" style="margin:0;">Add description <span class="required-text" style="display:inline;">(required)</span></label>
             <input type="text" class="form-input dimension-description" placeholder="Enter Item Description here (Naming the Item name and model will help Transport Provider with what exact item they will be transporting)" maxlength="200" required data-required="true" aria-required="true">
             <div class="dimension-source-floor-wrap" style="margin-top:10px;display:none;">
@@ -18819,6 +20248,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 </select>
             </div>
             <div class="dimension-inputs">
+                <div class="dimension-field-stack">
+                    <span class="dimension-input-label">Quantity</span>
+                    <input type="number" class="form-input dimension-field dimension-quantity" placeholder="Qty" aria-label="Quantity" min="1" step="1" value="1" data-required="true" aria-required="true">
+                </div>
                 <div class="dimension-field-stack">
                     <span class="dimension-input-label">Width</span>
                     <input type="number" class="form-input dimension-field dimension-width" placeholder="Width" aria-label="Width" min="0" step="0.1">
@@ -18854,9 +20287,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
             ${itemIndex === 1 ? '<div class="specialist-value-slot" style="margin-top:12px;"></div>' : ''}
-            <div class="dimension-photos-list" style="margin-top:12px;padding:10px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;display:none;">
-                <div style="font-weight:550;color:#1f2937;margin-bottom:8px;">Uploaded Files</div>
-            </div>
             <button type="button" class="btn-delete-dimension">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -18906,25 +20336,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 photoList.style.display = 'none';
                 return;
             }
-            
-            photoList.innerHTML = '<div style="font-weight:550;color:#1f2937;margin-bottom:8px;">Uploaded Files</div>';
+
+            const formatPhotoSize = (bytes) => {
+                const value = Number(bytes || 0);
+                if (!Number.isFinite(value) || value <= 0) return 'Unknown';
+                if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+                if (value >= 1024) return `${(value / 1024).toFixed(2)} KB`;
+                return `${value} B`;
+            };
+
+            photoList.innerHTML = `
+                <div style="font-weight:700;color:#1f2937;margin-bottom:8px;">Uploaded Files</div>
+                <div class="customized-photo-chip-list" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+            `;
             photoList.style.display = 'block';
+            const chipsWrap = photoList.querySelector('.customized-photo-chip-list');
+            if (!chipsWrap) return;
             
             uploadedPhotos.forEach((entry) => {
-                const fileType = String(entry.type || '').startsWith('video/') ? 'Video' : 'Photo';
                 const fileName = String(entry.name || '').trim() || 'Uploaded media';
-                
-                const row = document.createElement('div');
-                row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;margin-bottom:6px;';
-                
-                const info = document.createElement('div');
-                info.style.cssText = 'display:flex;flex-direction:column;min-width:0;flex:1;cursor:pointer;';
-                info.innerHTML = `
-                    <span style="font-weight:600;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:0.9rem;">${fileType}</span>
-                    <span style="font-size:0.8rem;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${fileName.substring(0,40)}</span>
+                const mediaType = String(entry.type || '').toLowerCase();
+                const icon = mediaType.startsWith('video/') ? '🎥' : '📷';
+                const sizeLabel = entry.file ? formatPhotoSize(entry.file.size) : 'Unknown';
+
+                const chip = document.createElement('div');
+                chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #dbeafe;border-radius:6px;background:#eff6ff;color:#1e3a8a;font-size:0.8rem;font-weight:600;position:relative;cursor:pointer;';
+                chip.title = 'Click to view details';
+                chip.innerHTML = `
+                    <span>${icon} ${fileName.replace(/[<>]/g, '')}</span>
+                    <span style="font-size:0.7rem;color:#3b82f6;">(${sizeLabel})</span>
                 `;
-                info.addEventListener('click', (e) => {
-                    e.stopPropagation();
+
+                chip.addEventListener('click', () => {
                     if (entry.file) {
                         showPhotoPreview(entry.file);
                     } else if (entry.previewDataUrl) {
@@ -18933,44 +20376,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         alert('Preview is unavailable after refresh for this file. Please re-upload if needed.');
                     }
                 });
-                row.appendChild(info);
-                
-                const actionsWrap = document.createElement('div');
-                actionsWrap.style.cssText = 'display:flex;align-items:center;gap:6px;';
-                
-                const inspectBtn = document.createElement('button');
-                inspectBtn.type = 'button';
-                inspectBtn.textContent = 'Inspect';
-                inspectBtn.style.cssText = 'border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;border-radius:5px;padding:4px 8px;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;';
-                inspectBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (entry.file) {
-                        showPhotoPreview(entry.file);
-                    } else if (entry.previewDataUrl) {
-                        showPhotoPreview(entry.previewDataUrl, entry.type, fileName);
-                    } else {
-                        alert('Preview is unavailable after refresh for this file. Please re-upload if needed.');
-                    }
-                });
-                
-                const changeBtn = document.createElement('button');
-                changeBtn.type = 'button';
-                changeBtn.textContent = 'Change';
-                changeBtn.style.cssText = 'border:1px solid #dbeafe;background:#f8fbff;color:#1e40af;border-radius:5px;padding:4px 8px;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;';
-                changeBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    entry.input.value = '';
-                    entry.input.click();
-                });
-                
+ 
                 const removeBtn = document.createElement('button');
                 removeBtn.type = 'button';
-                removeBtn.textContent = 'Remove';
-                removeBtn.style.cssText = 'border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:5px;padding:4px 8px;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;';
+                removeBtn.textContent = '✕';
+                removeBtn.style.cssText = 'background:none;border:none;padding:0;cursor:pointer;color:#ef4444;font-size:1rem;line-height:1;margin-left:4px;';
+                removeBtn.title = 'Delete this file';
                 removeBtn.addEventListener('click', (e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     entry.input.value = '';
                     delete entry.input.dataset.savedName;
                     delete entry.input.dataset.savedType;
@@ -18979,13 +20393,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     updateCustomizedItemsHiddenValue();
                     entry.input.dispatchEvent(new Event('change', { bubbles: true }));
                 });
-                
-                actionsWrap.appendChild(inspectBtn);
-                actionsWrap.appendChild(changeBtn);
-                actionsWrap.appendChild(removeBtn);
-                row.appendChild(actionsWrap);
-                
-                photoList.appendChild(row);
+
+                chip.appendChild(removeBtn);
+                chipsWrap.appendChild(chip);
             });
         };
         
@@ -20809,11 +22219,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const storageModeInput = document.getElementById('service-storage-mode');
+        const storageDateModeInput = document.getElementById('service-storage-date-mode');
         const storageItemsInput = document.getElementById('service-storage-items');
         const storageItemsConfig = document.getElementById('storage-items-config');
         const storageDurationConfig = document.getElementById('storage-duration-config');
         const storageStartInput = document.getElementById('service-storage-start-datetime');
         const storageEndInput = document.getElementById('service-storage-end-datetime');
+        const storageStartApproxFromInput = document.getElementById('service-storage-start-approx-from');
+        const storageStartApproxToInput = document.getElementById('service-storage-start-approx-to');
+        const storageEndApproxFromInput = document.getElementById('service-storage-end-approx-from');
+        const storageEndApproxToInput = document.getElementById('service-storage-end-approx-to');
 
         if (shouldHideStorage) {
             if (storageInput && storageInput.value !== 'no') {
@@ -20821,9 +22236,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 storageInput.dispatchEvent(new Event('change', { bubbles: true }));
             }
             if (storageModeInput) storageModeInput.value = '';
+            if (storageDateModeInput) storageDateModeInput.value = 'exact';
             if (storageItemsInput) storageItemsInput.value = '';
             if (storageStartInput) storageStartInput.value = '';
             if (storageEndInput) storageEndInput.value = '';
+            if (storageStartApproxFromInput) storageStartApproxFromInput.value = '';
+            if (storageStartApproxToInput) storageStartApproxToInput.value = '';
+            if (storageEndApproxFromInput) storageEndApproxFromInput.value = '';
+            if (storageEndApproxToInput) storageEndApproxToInput.value = '';
             if (storageItemsConfig) storageItemsConfig.style.display = 'none';
             if (storageDurationConfig) storageDurationConfig.style.display = 'none';
         }
@@ -20924,6 +22344,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (field.classList?.contains('dimension-description')) {
             return 'Enter The Item Description.';
+        }
+
+        if (field.classList?.contains('dimension-quantity')) {
+            return 'Enter The Quantity.';
         }
 
         if (field.classList?.contains('dimension-width')) {
@@ -21180,6 +22604,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.updateProgressiveFlow = updateProgressiveFlow;
     if (quoteForm) {
+        let explicitQuoteSubmitRequested = false;
+        const getPricesBtn = document.getElementById('get-prices-btn');
+        if (getPricesBtn) {
+            getPricesBtn.addEventListener('click', () => {
+                explicitQuoteSubmitRequested = true;
+            });
+        }
+
         if (isMultiStopMode) {
             initMultiStopMode();
         }
@@ -21346,6 +22778,24 @@ document.addEventListener('DOMContentLoaded', function() {
             updateProgressiveFlow();
             if (typeof window.updateFormSummary === 'function') {
                 window.updateFormSummary();
+            }
+        });
+
+        quoteForm.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+
+            const target = event.target;
+            if (!target || !(target instanceof HTMLElement)) return;
+
+            if (target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+            if (target.tagName === 'INPUT') {
+                const inputType = String(target.getAttribute('type') || target.type || '').toLowerCase();
+                const blockedTypes = ['submit', 'button', 'checkbox', 'radio', 'file', 'range', 'color', 'date', 'datetime-local', 'month', 'time', 'week'];
+                if (!blockedTypes.includes(inputType)) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
             }
         });
 
@@ -21581,6 +23031,25 @@ document.addEventListener('DOMContentLoaded', function() {
         quoteForm.addEventListener('submit', async function(e) {
 
             e.preventDefault();
+
+            // Only allow submission when the user explicitly triggers the submit button.
+            const submitter = e.submitter || null;
+            const activeElement = document.activeElement;
+            const activeType = String(activeElement?.type || '').toLowerCase();
+            const isTextLikeActiveElement = !!activeElement
+                && activeElement
+                && quoteForm.contains(activeElement)
+                && activeElement.tagName === 'INPUT'
+                && !['submit', 'button', 'checkbox', 'radio', 'file'].includes(activeType);
+            const isExplicitSubmit = explicitQuoteSubmitRequested
+                || (submitter && submitter === activeElement)
+                || (submitter && submitter.id === 'get-prices-btn' && activeElement === submitter);
+
+            explicitQuoteSubmitRequested = false;
+
+            if (isTextLikeActiveElement && !isExplicitSubmit) {
+                return;
+            }
 
             const ensureFormErrorSummary = () => {
                 let summary = document.getElementById('form-error-summary');
@@ -27250,7 +28719,8 @@ function getOverviewPickupInventoryEntries() {
                     parsedItems.forEach((item, index) => {
                         const name = String(item?.name || '').trim() || `Custom item ${index + 1}`;
                         const sourceFloor = String(item?.sourceFloor || '').trim() || fallbackFloor;
-                        addEntry(name, sourceFloor, 1);
+                        const quantity = Math.max(1, parseInt(item?.quantity ?? item?.qty ?? 1, 10) || 1);
+                        addEntry(name, sourceFloor, quantity);
                     });
                     hasSerializedItems = true;
                 }
@@ -27266,7 +28736,8 @@ function getOverviewPickupInventoryEntries() {
                 const titleName = String(row.querySelector('.custom-item-title')?.textContent || '').trim();
                 const rowName = typedName || titleName || `Custom item ${index + 1}`;
                 const rowFloor = String(row.querySelector('.dimension-source-floor')?.value || '').trim() || fallbackFloor;
-                addEntry(rowName, rowFloor, 1);
+                const rowQuantity = Math.max(1, parseInt(String(row.querySelector('.dimension-quantity')?.value || '1').trim(), 10) || 1);
+                addEntry(rowName, rowFloor, rowQuantity);
             });
         }
     }
