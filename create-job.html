@@ -1141,44 +1141,143 @@
                         <!-- Office Removals Section -->
                         <div id="office-removal-description-section" data-form-step="2" style="display: none;">
                             <div id="freight-step3-form" class="freight-step3-form" style="display:none;">
-                                <div class="card-section freight-step3-card">
-                                    <h3 class="freight-step3-card-title">Step 3: Freight Shipment Details</h3>
-                                    <p class="freight-step3-subtitle">Add the key shipment details so movers can quote accurately.</p>
-                                    <div class="freight-step3-grid">
-                                        <div class="freight-step3-field">
-                                            <label for="freight3-shipment-type" class="form-label">Shipment type <span class="required-text">(required)</span></label>
-                                            <select id="freight3-shipment-type" class="form-input" data-required="true" aria-required="true">
-                                                <option value="">Select shipment type</option>
-                                                <option value="Palletised">Palletised</option>
-                                                <option value="Boxes / Cartons">Boxes / Cartons</option>
-                                                <option value="Machinery">Machinery</option>
-                                                <option value="Mixed Load">Mixed Load</option>
-                                            </select>
+                                <div class="card-section clearance-customized-shell freight-customized-shell">
+                                    <h3 class="clearance-customized-title freight-customized-title">Freight Shipment Details</h3>
+                                    <p class="clearance-customized-subtitle freight-customized-subtitle">Choose pallet, container, or other unit types and provide dimensions, weight, quantity, and cargo details for accurate quotes.</p>
+
+                                    <div class="dimension-item freight-customized-card">
+                                        <div class="custom-item-title freight-item-title">Freight 1</div>
+
+                                        <div class="clearance-section-label-wrap">
+                                            <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
                                         </div>
-                                        <div class="freight-step3-field">
-                                            <label for="freight3-pallet-count" class="form-label">Number of pallets <span class="required-text">(required)</span></label>
-                                            <input type="number" id="freight3-pallet-count" class="form-input" min="1" step="1" placeholder="e.g. 4" data-required="true" aria-required="true">
+
+                                        <div class="photo-upload-grid" style="margin-bottom: 8px;">
+                                            <label class="photo-upload-area" for="freight-photo-1">
+                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                                </svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                                <input type="file" class="photo-input" id="freight-photo-1" accept="image/*,video/*" data-optional="true">
+                                            </label>
+                                            <label class="photo-upload-area" for="freight-photo-2">
+                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                                </svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                                <input type="file" class="photo-input" id="freight-photo-2" accept="image/*,video/*" data-optional="true">
+                                            </label>
+                                            <label class="photo-upload-area" for="freight-photo-3">
+                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                                </svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                                <input type="file" class="photo-input" id="freight-photo-3" accept="image/*,video/*" data-optional="true">
+                                            </label>
+                                            <label class="photo-upload-area" for="freight-photo-4">
+                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                                </svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                                <input type="file" class="photo-input" id="freight-photo-4" accept="image/*,video/*" data-optional="true">
+                                            </label>
+                                            <label class="photo-upload-area" for="freight-photo-5">
+                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                                </svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                                <input type="file" class="photo-input" id="freight-photo-5" accept="image/*,video/*" data-optional="true">
+                                            </label>
                                         </div>
-                                        <div class="freight-step3-field">
-                                            <label for="freight3-total-weight" class="form-label">Total weight <span class="required-text">(required)</span></label>
-                                            <input type="number" id="freight3-total-weight" class="form-input" min="1" step="0.1" placeholder="e.g. 1200" data-required="true" aria-required="true">
+
+                                        <div class="freight-meta-grid">
+                                            <div class="freight-step3-field">
+                                                <label for="freight3-unit-category" class="form-label">What are you moving? <span class="required-text">(required)</span></label>
+                                                <select id="freight3-unit-category" class="form-input" data-required="true" aria-required="true">
+                                                    <option value="">Select unit category</option>
+                                                    <option value="pallet">Pallet</option>
+                                                    <option value="container">Container</option>
+                                                    <option value="other">Other</option>
+                                                </select>
+                                            </div>
+                                            <div class="freight-step3-field">
+                                                <label for="freight3-unit-type" class="form-label">Type of pallet/container <span class="required-text">(required)</span></label>
+                                                <select id="freight3-unit-type" class="form-input" data-required="true" aria-required="true">
+                                                    <option value="">Select a category first</option>
+                                                </select>
+                                            </div>
                                         </div>
-                                        <div class="freight-step3-field">
-                                            <label for="freight3-weight-unit" class="form-label">Weight unit</label>
-                                            <select id="freight3-weight-unit" class="form-input">
-                                                <option value="kg">kg</option>
-                                                <option value="lb">lb</option>
-                                                <option value="tonne">t</option>
-                                            </select>
+
+                                        <p id="freight-dimension-preset-note" class="freight-dimension-preset-note" style="display:none;"></p>
+
+                                        <label for="freight3-description" class="form-label" style="margin:0;">Add description <span class="required-text">(required)</span></label>
+                                        <textarea id="freight3-description" class="dimension-description form-input" rows="2" placeholder="Enter item description here (what is inside the pallets/containers)" data-required="true" aria-required="true"></textarea>
+
+                                        <div class="dimension-inputs freight-dimension-inputs">
+                                            <div class="dimension-field-stack">
+                                                <label for="freight3-unit-count" id="freight3-unit-count-label" class="dimension-input-label">Quantity <span class="required-text">(required)</span></label>
+                                                <input type="number" id="freight3-unit-count" class="dimension-field form-input" min="1" step="1" placeholder="e.g. 4" data-required="true" aria-required="true">
+                                            </div>
+                                            <div class="dimension-field-stack freight-dimension-manual">
+                                                <label for="freight3-length" class="dimension-input-label">Length <span class="required-text">(required)</span></label>
+                                                <input type="number" id="freight3-length" class="dimension-field form-input" min="0.1" step="0.1" placeholder="Length" data-required="true" aria-required="true">
+                                            </div>
+                                            <div class="dimension-field-stack freight-dimension-manual">
+                                                <label for="freight3-width" class="dimension-input-label">Width <span class="required-text">(required)</span></label>
+                                                <input type="number" id="freight3-width" class="dimension-field form-input" min="0.1" step="0.1" placeholder="Width" data-required="true" aria-required="true">
+                                            </div>
+                                            <div class="dimension-field-stack freight-dimension-manual">
+                                                <label for="freight3-height" class="dimension-input-label">Height <span class="required-text">(required)</span></label>
+                                                <input type="number" id="freight3-height" class="dimension-field form-input" min="0.1" step="0.1" placeholder="Height" data-required="true" aria-required="true">
+                                            </div>
+                                            <div class="dimension-field-stack freight-dimension-manual">
+                                                <label for="freight3-dimension-unit" class="dimension-input-label">Size unit</label>
+                                                <select id="freight3-dimension-unit" class="dimension-unit form-input" data-optional="true">
+                                                    <option value="cm">cm</option>
+                                                    <option value="m">m</option>
+                                                    <option value="in">in</option>
+                                                    <option value="ft">ft</option>
+                                                </select>
+                                            </div>
+                                            <div class="dimension-field-stack">
+                                                <label for="freight3-unit-weight" class="dimension-input-label">Weight <span class="required-text">(required)</span></label>
+                                                <input type="number" id="freight3-unit-weight" class="dimension-field form-input" min="0.1" step="0.1" placeholder="Weight" data-required="true" aria-required="true">
+                                            </div>
                                         </div>
-                                        <div class="freight-step3-field freight-step3-field--wide">
-                                            <label for="freight3-description" class="form-label">What are you moving? <span class="required-text">(required)</span></label>
-                                            <textarea id="freight3-description" class="form-input" rows="4" placeholder="e.g. 4 pallets of kitchen appliances, shrink wrapped and ready for forklift loading" data-required="true" aria-required="true"></textarea>
+
+                                        <div class="freight-weight-unit-row">
+                                            <div class="dimension-field-stack">
+                                                <label for="freight3-weight-unit" class="dimension-input-label">Weight unit</label>
+                                                <select id="freight3-weight-unit" class="dimension-unit form-input" data-optional="true">
+                                                    <option value="kg">kg</option>
+                                                    <option value="lb">lb</option>
+                                                    <option value="tonne">t</option>
+                                                </select>
+                                            </div>
                                         </div>
+
                                         <div class="freight-step3-field freight-step3-field--wide">
                                             <label for="freight3-notes" class="form-label">Access / loading notes (optional)</label>
-                                            <textarea id="freight3-notes" class="form-input" rows="3" placeholder="e.g. Tail-lift required at delivery, loading bay closes at 17:30"></textarea>
+                                            <textarea id="freight3-notes" class="dimension-description form-input" rows="2" placeholder="e.g. Tail-lift required at delivery, loading bay closes at 17:30" data-optional="true"></textarea>
                                         </div>
+
+                                        <button type="button" id="freight-add-item-btn" class="btn-add-dimension">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                            </svg>
+                                            Add Another Item
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -1188,7 +1287,9 @@
                                     <h3 class="clearance-customized-title">Clearance Items <span class="required-text">(required)</span></h3>
                                     <p class="clearance-customized-subtitle">Add photos or videos and details about what needs to be cleared so movers can quote accurately.</p>
 
+                                    <div id="clearance-items-list" class="clearance-items-list">
                                     <div class="dimension-item clearance-customized-card">
+                                        <div class="custom-item-title clearance-item-title">Clearance 1</div>
                                         <div class="clearance-section-label-wrap">
                                             <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
                                         </div>
@@ -1221,13 +1322,31 @@
                                                 <span>Drag photo or video here <strong>upload</strong></span>
                                                 <input type="file" class="photo-input" id="clearance-photo-3" accept="image/*,video/*">
                                             </label>
+                                            <label class="photo-upload-area" for="clearance-photo-4">
+                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                                </svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                                <input type="file" class="photo-input" id="clearance-photo-4" accept="image/*,video/*">
+                                            </label>
+                                            <label class="photo-upload-area" for="clearance-photo-5">
+                                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                                </svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                                <input type="file" class="photo-input" id="clearance-photo-5" accept="image/*,video/*">
+                                            </label>
                                         </div>
 
                                         <label for="clearance3-description" class="form-label" style="margin-top:4px;">Add clearance details <span class="required-text">(required)</span></label>
-                                        <textarea id="clearance3-description" class="dimension-description form-input" rows="2" placeholder="Enter what needs to be cleared (e.g. sofa, old fridge, boxes, loose items)" data-required="true" aria-required="true"></textarea>
+                                        <textarea id="clearance3-description" data-clearance-field="description" class="dimension-description form-input" rows="2" placeholder="Enter what needs to be cleared (e.g. sofa, old fridge, boxes, loose items)" data-required="true" aria-required="true"></textarea>
 
                                         <div class="dimension-inputs clearance-dimension-inputs">
-                                            <select id="clearance3-weight-range" class="dimension-field form-input" data-required="true" aria-required="true">
+                                            <select id="clearance3-weight-range" data-clearance-field="weight" class="dimension-field form-input" data-required="true" aria-required="true">
                                                 <option value="">Weight (required)</option>
                                                 <option value="0-10">0-10</option>
                                                 <option value="10-25">10-25</option>
@@ -1248,11 +1367,42 @@
                                                         <span>No</span>
                                                     </button>
                                                 </div>
-                                                <input type="hidden" id="clearance3-recycling-fee-hidden" name="clearance3-recycling-fee" data-required="true" aria-required="true">
+                                                <input type="hidden" id="clearance3-recycling-fee-hidden" data-clearance-field="recycling" name="clearance3-recycling-fee" data-required="true" aria-required="true">
                                             </div>
                                         </div>
+
                                     </div>
+                                    </div>
+
+                                    <button type="button" id="clearance-select-inventory-btn" class="btn-add-dimension" style="margin-bottom:10px;">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                            <line x1="3" y1="9" x2="21" y2="9"></line>
+                                            <line x1="9" y1="9" x2="9" y2="21"></line>
+                                        </svg>
+                                        Select from House Inventory
+                                    </button>
+
+
                                 </div>
+                                    <button type="button" id="clearance-add-item-btn" class="btn-add-dimension">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                                        </svg>
+                                        Add Another Item
+                                    </button>
+                                    <div id="clearance-selected-items-section" class="card-section" style="margin-top:12px;display:none;padding:12px 14px;border:1px solid #dbeafe;background:#f8fbff;">
+                                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                                            <div>
+                                                <h4 style="margin:0;font-size:0.98rem;color:#0f172a;">Selected Inventory Items</h4>
+                                                <p style="margin:4px 0 0;font-size:0.84rem;color:#475569;">Items chosen from House Inventory and custom entries.</p>
+                                            </div>
+                                            <button type="button" id="clearance-clear-selected-items" style="border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;">Clear list</button>
+                                        </div>
+                                        <div id="clearance-selected-items-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
+                                        <input type="hidden" id="clearance-selected-items-hidden" value="[]">
+                                    </div>
                             </div>
 
                             <div id="office-generic-description-card" class="card-section">
@@ -1671,7 +1821,7 @@
                         <!-- Step 6: Service Requirements Section -->
                         <div id="service-requirements-section" data-form-step="6" class="step-hidden">
                             <h2 class="section-title" style="text-align: center; margin-bottom: 2rem;">Step 6: Service Requirements</h2>
-                            <p style="text-align:center; margin:-1rem 0 1.5rem; color:#64748b; font-size:0.9rem;">All Services are required to be answerered, except for Special Instructions.</p>
+                            <p style="text-align:center; margin:-1rem 0 1.5rem; color:#64748b; font-size:0.9rem;">Please answer all required fields. Additional notes are optional.</p>
                             <div class="card-section">
                                 
                                 <!-- Packing Service -->
@@ -1804,6 +1954,48 @@
                                     </div>
                                 </div>
 
+                                <!-- Freight Loading Method at Pickup -->
+                                <div class="service-requirement-card" id="service-card-pickup-loading-method" style="display:none;">
+                                    <div class="service-requirement-header">
+                                        <label class="service-requirement-label">
+                                            <span>5. Loading Method at Pickup Location <span class="required-text">(required)</span></span>
+                                            <div class="info-tooltip-wrapper">
+                                                <span class="info-icon">i</span>
+                                                <div class="info-tooltip">Choose whether loading at pickup is manual or forklift-assisted.</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div class="service-requirement-input">
+                                        <div id="freight-pickup-loading-options" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                            <button type="button" class="freight-loading-btn" data-target-hidden="service-pickup-loading-method" data-value="manual" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">Manual Loading</button>
+                                            <button type="button" class="freight-loading-btn" data-target-hidden="service-pickup-loading-method" data-value="forklift" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">Forklift Loading</button>
+                                        </div>
+                                        <input type="hidden" id="service-pickup-loading-method" name="service-pickup-loading-method" value="">
+                                        <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Choose the loading method required at pickup.</div>
+                                    </div>
+                                </div>
+
+                                <!-- Freight Loading Method at Delivery -->
+                                <div class="service-requirement-card" id="service-card-delivery-loading-method" style="display:none;">
+                                    <div class="service-requirement-header">
+                                        <label class="service-requirement-label">
+                                            <span>6. Loading Method at Delivery Location <span class="required-text">(required)</span></span>
+                                            <div class="info-tooltip-wrapper">
+                                                <span class="info-icon">i</span>
+                                                <div class="info-tooltip">Choose whether unloading at delivery is manual or forklift-assisted.</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div class="service-requirement-input">
+                                        <div id="freight-delivery-loading-options" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                            <button type="button" class="freight-loading-btn" data-target-hidden="service-delivery-loading-method" data-value="manual" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">Manual Loading</button>
+                                            <button type="button" class="freight-loading-btn" data-target-hidden="service-delivery-loading-method" data-value="forklift" style="border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; white-space:nowrap;">Forklift Loading</button>
+                                        </div>
+                                        <input type="hidden" id="service-delivery-loading-method" name="service-delivery-loading-method" value="">
+                                        <div style="margin-top:6px; font-size:0.82rem; color:#6b7280;">Choose the loading method required at delivery.</div>
+                                    </div>
+                                </div>
+
                                 <!-- Storage Service -->
                                 <div class="service-requirement-card" id="service-card-storage">
                                     <div class="service-requirement-header">
@@ -1877,11 +2069,11 @@
                                     </div>
                                 </div>
 
-                                <!-- Special Instructions -->
+                                <!-- Additional Notes for Services -->
                                 <div class="service-requirement-card" id="service-card-special-instructions">
                                     <div class="service-requirement-header">
                                         <label class="service-requirement-label">
-                                            <span>6. Special Instructions <span style="color:#64748b; font-size:0.9em; font-weight:600;">(optional)</span></span>
+                                            <span>6. Additional Notes for Services <span style="color:#64748b; font-size:0.9em; font-weight:600;">(optional)</span></span>
                                             <div class="info-tooltip-wrapper">
                                                 <span class="info-icon">i</span>
                                                 <div class="info-tooltip">Optional notes for anything important the transport provider should know</div>
@@ -1889,7 +2081,7 @@
                                         </label>
                                     </div>
                                     <div class="service-requirement-input">
-                                        <textarea id="service-special-instructions" name="service-special-instructions" class="form-input" rows="4" data-optional="true" placeholder="Add any important information for the Transport Provider that should be known." style="width:100%; resize:vertical;"></textarea>
+                                        <textarea id="service-special-instructions" name="service-special-instructions" class="form-input" rows="4" data-optional="true" placeholder="Add any additional notes for services that the Transport Provider should know." style="width:100%; resize:vertical;"></textarea>
                                         
                                     </div>
                                 </div>

@@ -217,6 +217,7 @@ window.validateStep1AreaOrEircode = function(markWhenInvalid) {
 
     const isPickupValueSet = hasPickupCombined || hasPickupCityArea || hasPickupPostcode;
     const isDeliveryValueSet = hasDeliveryCombined || hasDeliveryCityArea || hasDeliveryPostcode;
+    const isClearance = typeof isClearanceService === 'function' && isClearanceService(getActiveServiceValue());
 
     if (markWhenInvalid) {
         [pickupCombined || pickupCityArea || pickupPostcode].forEach((field) => {
@@ -226,12 +227,12 @@ window.validateStep1AreaOrEircode = function(markWhenInvalid) {
         });
         [deliveryCombined || deliveryCityArea || deliveryPostcode].forEach((field) => {
             if (field) {
-                field.classList.toggle('input-error', !isDeliveryValueSet);
+                field.classList.toggle('input-error', !isClearance && !isDeliveryValueSet);
             }
         });
     }
 
-    return isPickupValueSet && isDeliveryValueSet;
+    return isClearance ? isPickupValueSet : (isPickupValueSet && isDeliveryValueSet);
 };
 
 function setupCombinedAreaOrEircodeFields() {
@@ -2622,7 +2623,7 @@ function getOptionNavLabels(hiddenId) {
 }
 
 function isNoLiftService(serviceValue) {
-    return isVehicleTransportService(serviceValue) || isFreightService(serviceValue);
+    return isVehicleTransportService(serviceValue);
 }
 
 function isVehicleLikeStepFlowService(serviceValue) {
@@ -3198,12 +3199,16 @@ document.addEventListener('click', function(event) {
     const manageBtn = event.target.closest('.overview-inventory-manage-btn');
     if (manageBtn) {
         event.preventDefault();
-        if (!isInventoryManageService(getActiveServiceValue())) {
+        const activeService = getActiveServiceValue();
+        if (!isInventoryManageService(activeService)) {
             return;
         }
         const currentStep = parseInt(document.body.dataset.formStep || '1', 10);
         if (currentStep === 8) {
             const kind = (manageBtn.getAttribute('data-overview-inventory-kind') || 'pickup').trim().toLowerCase();
+            if (kind === 'delivery' && isClearanceService(activeService)) {
+                return;
+            }
             const targetStep = kind === 'delivery' ? 5 : 3;
             if (typeof window.setFormStep === 'function') {
                 window.setFormStep(targetStep);
@@ -3244,10 +3249,14 @@ document.addEventListener('DOMContentLoaded', function () {
         function updateStickyManageBtnVisibility() {
             const activeService = getActiveServiceValue();
             const canManageInventory = isInventoryManageService(activeService);
+            const isClearance = isClearanceService(activeService);
 
             document.querySelectorAll('.overview-inventory-manage-btn').forEach((btn) => {
-                btn.style.display = canManageInventory ? '' : 'none';
-                btn.disabled = !canManageInventory;
+                const kind = (btn.getAttribute('data-overview-inventory-kind') || 'pickup').trim().toLowerCase();
+                const isDeliveryManage = kind === 'delivery';
+                const canShowThisManage = canManageInventory && !(isClearance && isDeliveryManage);
+                btn.style.display = canShowThisManage ? '' : 'none';
+                btn.disabled = !canShowThisManage;
             });
 
             if (!stickyManageBtn) return;
@@ -3271,6 +3280,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (stickyAssignNewItemsBtn) {
                 const isVehicleService = isVehicleTransportService(activeService);
+                const isFreight = isFreightService(activeService);
                 const hasPendingStep5Assignments = typeof window.hasPendingStep5NewAssignments === 'function'
                     ? window.hasPendingStep5NewAssignments()
                     : !!window.__hasPendingStep5NewAssignments;
@@ -3283,6 +3293,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     : hasIncompleteStep5Assignments;
 
                 const shouldShowAssign = canManageInventory
+                    && !isClearance
+                    && !isFreight
                     && hasVisitedOverview
                     && hasUnassignedStep5Items
                     && step !== 5
@@ -3706,9 +3718,13 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             const requiredFreightFieldIds = [
-                'freight3-shipment-type',
-                'freight3-pallet-count',
-                'freight3-total-weight',
+                'freight3-unit-category',
+                'freight3-unit-type',
+                'freight3-length',
+                'freight3-width',
+                'freight3-height',
+                'freight3-unit-weight',
+                'freight3-unit-count',
                 'freight3-description'
             ];
 
@@ -3741,30 +3757,32 @@ document.addEventListener('DOMContentLoaded', function () {
                 return null;
             }
 
-            const requiredClearanceFieldIds = [
-                'clearance3-weight-range',
-                'clearance3-description',
-                'clearance3-recycling-fee-hidden'
+            const cards = Array.from(section.querySelectorAll('.clearance-customized-card'));
+            const requiredSelectors = [
+                '[data-clearance-field="weight"]',
+                '[data-clearance-field="description"]',
+                '[data-clearance-field="recycling"]'
             ];
 
-            for (const fieldId of requiredClearanceFieldIds) {
-                const field = document.getElementById(fieldId);
-                if (!field) {
-                    continue;
-                }
+            for (const card of cards) {
+                for (const selector of requiredSelectors) {
+                    const field = card.querySelector(selector);
+                    if (!field) {
+                        continue;
+                    }
 
-                if (field.disabled) {
-                    continue;
-                }
+                    if (field.disabled) {
+                        continue;
+                    }
 
-                // For hidden inputs, the section visibility check above is sufficient
-                if (field.type !== 'hidden' && field.offsetParent === null) {
-                    continue;
-                }
+                    if (field.type !== 'hidden' && field.offsetParent === null) {
+                        continue;
+                    }
 
-                const value = typeof field.value === 'string' ? field.value.trim() : String(field.value || '').trim();
-                if (!value) {
-                    return field;
+                    const value = typeof field.value === 'string' ? field.value.trim() : String(field.value || '').trim();
+                    if (!value) {
+                        return field;
+                    }
                 }
             }
 
@@ -3961,6 +3979,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const isVehiclePartsService = serviceValue === 'Vehicle Parts';
             // Step 1: require all visible required fields
             if (step === 1) {
+                const isClearance = isClearanceService(serviceValue);
                 const pickupAddress = document.getElementById('pickup-address');
                 const pickupCity = document.getElementById('pickup-city');
                 const deliveryAddress = document.getElementById('delivery-address');
@@ -3981,10 +4000,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 return pickupAddress && pickupAddress.value.trim() &&
                     pickupCity && pickupCity.value.trim() &&
-                    deliveryAddress && deliveryAddress.value.trim() &&
-                    deliveryCity && deliveryCity.value.trim() &&
+                    (isClearance || (deliveryAddress && deliveryAddress.value.trim())) &&
+                    (isClearance || (deliveryCity && deliveryCity.value.trim())) &&
                     pickupHasAreaOrEircode &&
-                    deliveryHasAreaOrEircode;
+                    (isClearance || deliveryHasAreaOrEircode);
             }
             // Step 2: property type required
             if (step === 2) {
@@ -4204,7 +4223,12 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             // Step 6: all service requirements must be answered
             if (step === 6) {
-                const services = ['service-packing', 'service-storage', 'service-disassembly'];
+                const isFreight = isFreightService(serviceValue);
+                const services = isClearance
+                    ? []
+                    : (isFreight
+                    ? ['service-packing', 'service-disassembly']
+                    : ['service-packing', 'service-storage', 'service-disassembly']);
                 
                 // Check Yes/No services
                 for (const serviceId of services) {
@@ -4221,7 +4245,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const deliveryMoversMode = document.getElementById('service-delivery-movers-mode');
                 const pickupMoversConfirmed = document.getElementById('service-pickup-movers-confirmed');
                 const deliveryMoversConfirmed = document.getElementById('service-delivery-movers-confirmed');
-                
+
                 if (!pickupMovers || ((pickupMoversMode?.value || 'count') !== 'unsure' && pickupMovers.value === '')) {
                     return false;
                 }
@@ -4233,6 +4257,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 if (!isClearance && (deliveryMoversMode?.value || 'count') !== 'unsure' && deliveryMoversConfirmed?.value !== 'yes') {
                     return false;
+                }
+
+                if (isFreight) {
+                    const pickupLoadingMethod = String(document.getElementById('service-pickup-loading-method')?.value || '').trim();
+                    const deliveryLoadingMethod = String(document.getElementById('service-delivery-loading-method')?.value || '').trim();
+                    if (!pickupLoadingMethod || !deliveryLoadingMethod) {
+                        return false;
+                    }
                 }
 
                 return true;
@@ -4635,6 +4667,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 const row = targetField?.closest?.('.dimension-item');
                 if (!row) return '';
                 if (row.closest?.('[data-vehicle-entry-form]')) return '';
+                // Only treat rows inside the customized-items list as customized items.
+                if (!row.closest?.('#dimensions-list')) return '';
 
                 const rows = Array.from(row.parentElement?.querySelectorAll('.dimension-item') || []);
                 const rowIndex = rows.indexOf(row) + 1;
@@ -4696,6 +4730,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 'service-requirements-section': 'Additional services',
                 'service-card-pickup-movers': 'Pickup movers',
                 'service-card-delivery-movers': 'Delivery movers',
+                'freight-pickup-loading-options': 'Pickup loading method',
+                'freight-delivery-loading-options': 'Delivery loading method',
+                'service-card-pickup-loading-method': 'Pickup loading method',
+                'service-card-delivery-loading-method': 'Delivery loading method',
+                'service-pickup-loading-method': 'Pickup loading method',
+                'service-delivery-loading-method': 'Delivery loading method',
                 'service-card-packing': 'Packing service',
                 'service-card-storage': 'Storage service',
                 'service-card-disassembly': 'Disassembly service',
@@ -4927,7 +4967,10 @@ document.addEventListener('DOMContentLoaded', function () {
             const isVehiclePartsService = serviceValue === 'Vehicle Parts';
 
             if (step === 1) {
-                const step1Ids = ['pickup-address', 'pickup-city', 'delivery-address', 'delivery-city'];
+                const isClearance = isClearanceService(serviceValue);
+                const step1Ids = isClearance
+                    ? ['pickup-address', 'pickup-city']
+                    : ['pickup-address', 'pickup-city', 'delivery-address', 'delivery-city'];
                 for (const fieldId of step1Ids) {
                     const field = document.getElementById(fieldId);
                     const value = field && typeof field.value === 'string' ? field.value.trim() : '';
@@ -4944,14 +4987,16 @@ document.addEventListener('DOMContentLoaded', function () {
                     return pickupCityArea || pickupPostcode;
                 }
 
-                const deliveryCityArea = document.getElementById('delivery-city-area');
-                const deliveryPostcode = document.getElementById('delivery-postcode');
-                const deliveryHasAreaOrEircode = !!(
-                    (deliveryCityArea && deliveryCityArea.value && deliveryCityArea.value.trim())
-                    || (deliveryPostcode && deliveryPostcode.value && deliveryPostcode.value.trim())
-                );
-                if (!deliveryHasAreaOrEircode) {
-                    return deliveryCityArea || deliveryPostcode;
+                if (!isClearance) {
+                    const deliveryCityArea = document.getElementById('delivery-city-area');
+                    const deliveryPostcode = document.getElementById('delivery-postcode');
+                    const deliveryHasAreaOrEircode = !!(
+                        (deliveryCityArea && deliveryCityArea.value && deliveryCityArea.value.trim())
+                        || (deliveryPostcode && deliveryPostcode.value && deliveryPostcode.value.trim())
+                    );
+                    if (!deliveryHasAreaOrEircode) {
+                        return deliveryCityArea || deliveryPostcode;
+                    }
                 }
             }
 
@@ -5158,7 +5203,12 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             if (step === 6) {
-                const services = ['service-packing', 'service-storage', 'service-disassembly'];
+                const isFreight = isFreightService(serviceValue);
+                const services = isClearance
+                    ? []
+                    : (isFreight
+                    ? ['service-packing', 'service-disassembly']
+                    : ['service-packing', 'service-storage', 'service-disassembly']);
 
                 const serviceCardByInput = {
                     'service-packing': 'service-card-packing',
@@ -5179,6 +5229,19 @@ document.addEventListener('DOMContentLoaded', function () {
                 const deliveryMoversMode = document.getElementById('service-delivery-movers-mode');
                 const pickupMoversConfirmed = document.getElementById('service-pickup-movers-confirmed');
                 const deliveryMoversConfirmed = document.getElementById('service-delivery-movers-confirmed');
+
+                if (isFreight) {
+                    const pickupLoadingMode = String(document.getElementById('service-pickup-loading-method')?.value || '').trim();
+                    const deliveryLoadingMode = String(document.getElementById('service-delivery-loading-method')?.value || '').trim();
+
+                    if (!pickupLoadingMode) {
+                        return document.getElementById('service-card-pickup-loading-method') || document.getElementById('freight-pickup-loading-options');
+                    }
+                    if (!deliveryLoadingMode) {
+                        return document.getElementById('service-card-delivery-loading-method') || document.getElementById('freight-delivery-loading-options');
+                    }
+                    return null;
+                }
 
                 if (!pickupMovers || ((pickupMoversMode?.value || 'count') !== 'unsure' && pickupMovers.value === '')) {
                     return pickupMovers || document.getElementById('service-card-pickup-movers');
@@ -5663,6 +5726,55 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 if (!shouldReset) return;
 
+                const activeService = typeof getActiveServiceValue === 'function' ? getActiveServiceValue() : '';
+                if (typeof isFreightService === 'function' && isFreightService(activeService)) {
+                    const freightFieldIds = [
+                        'freight3-unit-category',
+                        'freight3-unit-type',
+                        'freight3-description',
+                        'freight3-unit-count',
+                        'freight3-length',
+                        'freight3-width',
+                        'freight3-height',
+                        'freight3-dimension-unit',
+                        'freight3-unit-weight',
+                        'freight3-weight-unit',
+                        'freight3-notes'
+                    ];
+
+                    freightFieldIds.forEach((fieldId) => {
+                        const field = document.getElementById(fieldId);
+                        if (!field) return;
+
+                        if (field.tagName === 'SELECT') {
+                            field.selectedIndex = 0;
+                        } else {
+                            field.value = '';
+                        }
+
+                        field.dispatchEvent(new Event('input', { bubbles: true }));
+                        field.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+
+                    for (let i = 1; i <= 5; i += 1) {
+                        const mediaField = document.getElementById(`freight-photo-${i}`);
+                        if (mediaField) {
+                            mediaField.value = '';
+                        }
+                    }
+
+                    if (typeof refreshFreightUnitTypeOptions === 'function') {
+                        refreshFreightUnitTypeOptions();
+                    }
+                    if (typeof showFreightSection === 'function') {
+                        showFreightSection();
+                    }
+                    if (typeof window.updateNextButtonState === 'function') {
+                        window.updateNextButtonState();
+                    }
+                    return;
+                }
+
                 isUnloadingForm = true;
                 if (typeof window.clearCreateJobProgress === 'function') {
                     window.clearCreateJobProgress();
@@ -5692,7 +5804,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (stickyAssignNewItemsBtn) {
             stickyAssignNewItemsBtn.onclick = function() {
                 if (typeof window.setFormStep === 'function') {
-                    window.setFormStep(5);
+                    const activeService = getActiveServiceValue();
+                    window.setFormStep(isClearanceService(activeService) ? 6 : 5);
                 }
             };
         }
@@ -5785,7 +5898,14 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             // Go back one step (no landing page reload)
             if (step > 1 && typeof window.setFormStep === 'function') {
-                const prevStep = step - 1;
+                const serviceValue = (typeof getActiveServiceValue === 'function' ? getActiveServiceValue() : '').trim();
+                const isClearance = typeof isClearanceService === 'function' && isClearanceService(serviceValue);
+                let prevStep = step - 1;
+                if (isClearance) {
+                    while (prevStep > 1 && (prevStep === 4 || prevStep === 5)) {
+                        prevStep -= 1;
+                    }
+                }
                 window.setFormStep(prevStep);
                 document.body.dataset.formStep = String(prevStep);
                 document.body.dataset.currentStep = String(prevStep);
@@ -5872,11 +5992,12 @@ document.addEventListener('DOMContentLoaded', function () {
         const deliveryMovers = document.getElementById('service-delivery-movers');
         const pickupMoversMode = document.getElementById('service-pickup-movers-mode');
         const deliveryMoversMode = document.getElementById('service-delivery-movers-mode');
+        const isFreight = isFreightService(getActiveServiceValue());
 
-        if (pickupMoversMode && !pickupMoversMode.value) {
+        if (pickupMoversMode && !pickupMoversMode.value && !isFreight) {
             pickupMoversMode.value = 'count';
         }
-        if (deliveryMoversMode && !deliveryMoversMode.value) {
+        if (deliveryMoversMode && !deliveryMoversMode.value && !isFreight) {
             deliveryMoversMode.value = 'count';
         }
         
@@ -5888,6 +6009,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         syncMoversUnsureUi();
+        syncFreightLoadingModeUi();
     });
 
     // Persistent expand state for packing items floor/room tree
@@ -6185,6 +6307,62 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+
+    function syncFreightLoadingModeUi() {
+        const isFreight = isFreightService(getActiveServiceValue());
+        const configs = [
+            {
+                hiddenId: 'service-pickup-loading-method',
+                optionsId: 'freight-pickup-loading-options',
+                cardId: 'service-card-pickup-loading-method'
+            },
+            {
+                hiddenId: 'service-delivery-loading-method',
+                optionsId: 'freight-delivery-loading-options',
+                cardId: 'service-card-delivery-loading-method'
+            }
+        ];
+
+        configs.forEach(({ hiddenId, optionsId, cardId }) => {
+            const card = document.getElementById(cardId);
+            if (!card) return;
+
+            const hiddenInput = document.getElementById(hiddenId);
+            const optionsWrap = document.getElementById(optionsId);
+            const optionButtons = Array.from(card.querySelectorAll('.freight-loading-btn'));
+            const activeMode = String(hiddenInput?.value || '').trim();
+
+            if (isFreight) {
+                card.style.display = '';
+                if (optionsWrap) optionsWrap.style.display = 'flex';
+
+                optionButtons.forEach((btn) => {
+                    const isActive = String(btn.getAttribute('data-value') || '').trim() === activeMode;
+                    btn.style.background = isActive ? '#2563eb' : '#eff6ff';
+                    btn.style.color = isActive ? '#fff' : '#1d4ed8';
+                    btn.style.borderColor = isActive ? '#2563eb' : '#93c5fd';
+                    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                });
+                return;
+            }
+
+            card.style.display = 'none';
+            if (optionsWrap) optionsWrap.style.display = 'none';
+
+            optionButtons.forEach((btn) => {
+                btn.style.background = '#eff6ff';
+                btn.style.color = '#1d4ed8';
+                btn.style.borderColor = '#93c5fd';
+                btn.setAttribute('aria-pressed', 'false');
+            });
+
+            if (hiddenInput) {
+                hiddenInput.value = '';
+            }
+        });
+    }
+
+    window.syncFreightLoadingModeUi = syncFreightLoadingModeUi;
 
     function renderPackingItemsConfig() {
         const isNarrowPackingViewport = window.innerWidth <= 768;
@@ -8580,6 +8758,26 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         });
 
+        document.querySelectorAll('.freight-loading-btn').forEach((button) => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                const hiddenId = this.getAttribute('data-target-hidden');
+                const value = String(this.getAttribute('data-value') || '').trim();
+
+                const hiddenInput = document.getElementById(hiddenId);
+                if (!hiddenInput) return;
+
+                hiddenInput.value = value;
+                hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+                syncFreightLoadingModeUi();
+
+                if (window.updateNextButtonState) {
+                    window.updateNextButtonState();
+                }
+            });
+        });
+
         function syncServiceRequirementNumbering() {
             const cards = Array.from(document.querySelectorAll('#service-requirements-section .service-requirement-card'));
             let visibleIndex = 1;
@@ -8642,11 +8840,12 @@ document.addEventListener('DOMContentLoaded', function () {
             const deliveryMovers = document.getElementById('service-delivery-movers');
             const pickupMoversMode = document.getElementById('service-pickup-movers-mode');
             const deliveryMoversMode = document.getElementById('service-delivery-movers-mode');
+            const isFreight = isFreightService(getActiveServiceValue());
             
-            if (pickupMoversMode && !pickupMoversMode.value) {
+            if (pickupMoversMode && !pickupMoversMode.value && !isFreight) {
                 pickupMoversMode.value = 'count';
             }
-            if (deliveryMoversMode && !deliveryMoversMode.value) {
+            if (deliveryMoversMode && !deliveryMoversMode.value && !isFreight) {
                 deliveryMoversMode.value = 'count';
             }
 
@@ -8684,6 +8883,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             syncMoversUnsureUi();
             syncMoversConfirmUi();
+            syncFreightLoadingModeUi();
             
             // Trigger button state update after a small delay to ensure DOM is ready
             setTimeout(() => {
@@ -9054,6 +9254,10 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
     const applyFreshStartIfRequested = () => {
         if (!hasFreshStartRequest()) return false;
+        if (getNavigationType() === 'reload') {
+            consumeFreshStartRequest();
+            return false;
+        }
         if (typeof window.clearCreateJobProgress !== 'function') return false;
 
         window.clearCreateJobProgress();
@@ -9607,6 +9811,136 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
         });
     };
 
+    const FREIGHT_PHOTO_INPUT_IDS = ['freight-photo-1', 'freight-photo-2', 'freight-photo-3', 'freight-photo-4', 'freight-photo-5'];
+    const getClearancePhotoInputIds = () => {
+        return Array.from(document.querySelectorAll('#clearance-step3-form .photo-input[id^="clearance-photo-"]'))
+            .map((input) => String(input.id || '').trim())
+            .filter(Boolean);
+    };
+
+    const collectFreightPhotoDraft = () => {
+        return FREIGHT_PHOTO_INPUT_IDS.map((inputId) => {
+            const input = document.getElementById(inputId);
+            if (!input) return null;
+
+            const hasRealFile = !!(input.files && input.files.length > 0);
+            const savedName = String(input.dataset.savedName || '').trim();
+            const savedType = String(input.dataset.savedType || '').trim();
+            const savedPreviewDataUrl = String(input.dataset.savedPreview || '').trim();
+
+            if (hasRealFile) {
+                const file = input.files[0];
+                return {
+                    id: inputId,
+                    name: String(file?.name || '').trim(),
+                    type: String(file?.type || '').trim(),
+                    previewDataUrl: savedPreviewDataUrl
+                };
+            }
+
+            if (savedName || savedType || savedPreviewDataUrl) {
+                return {
+                    id: inputId,
+                    name: savedName,
+                    type: savedType,
+                    previewDataUrl: savedPreviewDataUrl
+                };
+            }
+
+            return null;
+        }).filter(Boolean);
+    };
+
+    const restoreFreightPhotoDraft = (entries) => {
+        if (!Array.isArray(entries) || entries.length === 0) return;
+        const byId = new Map(entries
+            .filter((entry) => entry && typeof entry === 'object')
+            .map((entry) => [String(entry.id || '').trim(), entry])
+            .filter(([id]) => !!id));
+
+        FREIGHT_PHOTO_INPUT_IDS.forEach((inputId) => {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+
+            const entry = byId.get(inputId);
+            if (entry) {
+                input.dataset.savedName = String(entry.name || '').trim();
+                input.dataset.savedType = String(entry.type || '').trim();
+                input.dataset.savedPreview = String(entry.previewDataUrl || '').trim();
+            } else {
+                delete input.dataset.savedName;
+                delete input.dataset.savedType;
+                delete input.dataset.savedPreview;
+            }
+
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    };
+
+    const collectClearancePhotoDraft = () => {
+        return getClearancePhotoInputIds().map((inputId) => {
+            const input = document.getElementById(inputId);
+            if (!input) return null;
+
+            const hasRealFile = !!(input.files && input.files.length > 0);
+            const savedName = String(input.dataset.savedName || '').trim();
+            const savedType = String(input.dataset.savedType || '').trim();
+            const savedPreviewDataUrl = String(input.dataset.savedPreview || '').trim();
+
+            if (hasRealFile) {
+                const file = input.files[0];
+                return {
+                    id: inputId,
+                    name: String(file?.name || '').trim(),
+                    type: String(file?.type || '').trim(),
+                    previewDataUrl: savedPreviewDataUrl
+                };
+            }
+
+            if (savedName || savedType || savedPreviewDataUrl) {
+                return {
+                    id: inputId,
+                    name: savedName,
+                    type: savedType,
+                    previewDataUrl: savedPreviewDataUrl
+                };
+            }
+
+            return null;
+        }).filter(Boolean);
+    };
+
+    const restoreClearancePhotoDraft = (entries) => {
+        if (!Array.isArray(entries) || entries.length === 0) return;
+        const byId = new Map(entries
+            .filter((entry) => entry && typeof entry === 'object')
+            .map((entry) => [String(entry.id || '').trim(), entry])
+            .filter(([id]) => !!id));
+
+        const candidateIds = new Set([
+            ...getClearancePhotoInputIds(),
+            ...Array.from(byId.keys())
+        ]);
+
+        candidateIds.forEach((inputId) => {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+
+            const entry = byId.get(inputId);
+            if (entry) {
+                input.dataset.savedName = String(entry.name || '').trim();
+                input.dataset.savedType = String(entry.type || '').trim();
+                input.dataset.savedPreview = String(entry.previewDataUrl || '').trim();
+            } else {
+                delete input.dataset.savedName;
+                delete input.dataset.savedType;
+                delete input.dataset.savedPreview;
+            }
+
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    };
+
     const restoreCustomizedDraftRows = (items) => {
         if (!Array.isArray(items) || items.length === 0) return;
         const dimensionsList = document.getElementById('dimensions-list');
@@ -9920,6 +10254,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             customizedDraftItems: safeClone(collectCustomizedDraftRows(), []),
             customItems: pickObjectStateForSave(window.customItems, 'customItems'),
             customItemPhotos: pickObjectStateForSave(window.customItemPhotos, 'customItemPhotos'),
+            freightPhotoDraft: safeClone(collectFreightPhotoDraft(), []),
+            clearancePhotoDraft: safeClone(collectClearancePhotoDraft(), []),
+            clearanceItemsCount: Math.max(1, document.querySelectorAll('#clearance-items-list .clearance-customized-card').length || 1),
             floorMediaItems: pickObjectStateForSave(window.floorMediaItems, 'floorMediaItems'),
             officeInventoryState: safeClone(window.officeInventoryState || null, null),
             vehicleLiveDraftSnapshot: collectVehicleLiveDraftSnapshot(),
@@ -9938,6 +10275,9 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             selectedDeliveryFloors: commonState.selectedDeliveryFloors,
             step5SelectedItems: commonState.step5SelectedItems,
             customizedDraftItems: commonState.customizedDraftItems,
+            freightPhotoDraft: commonState.freightPhotoDraft,
+            clearancePhotoDraft: commonState.clearancePhotoDraft,
+            clearanceItemsCount: commonState.clearanceItemsCount,
             vehicleLiveDraftSnapshot: commonState.vehicleLiveDraftSnapshot,
             vehicleDraftSnapshot: commonState.vehicleDraftSnapshot,
             vehicleUiSnapshot: commonState.vehicleUiSnapshot
@@ -10017,6 +10357,98 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
         isRestoring = true;
         try {
+            const ensureClearanceCardsForRestore = () => {
+                const desiredCountRaw = parseInt(payload.clearanceItemsCount, 10);
+                const desiredCount = Number.isFinite(desiredCountRaw) && desiredCountRaw > 1 ? desiredCountRaw : 1;
+                if (desiredCount <= 1) return;
+
+                const list = document.getElementById('clearance-items-list');
+                const firstCard = list ? list.querySelector('.clearance-customized-card') : null;
+                if (!list || !firstCard) return;
+
+                while (list.querySelectorAll('.clearance-customized-card').length < desiredCount) {
+                    const nextIndex = list.querySelectorAll('.clearance-customized-card').length + 1;
+                    const clone = firstCard.cloneNode(true);
+
+                    clone.querySelectorAll('[id]').forEach((el) => {
+                        const oldId = String(el.id || '').trim();
+                        if (!oldId) return;
+                        const newId = `${oldId}__${nextIndex}`;
+
+                        clone.querySelectorAll(`[for="${oldId}"]`).forEach((label) => {
+                            label.setAttribute('for', newId);
+                        });
+                        clone.querySelectorAll(`[data-option-nav-for="${oldId}"]`).forEach((nav) => {
+                            nav.setAttribute('data-option-nav-for', newId);
+                        });
+
+                        el.id = newId;
+                    });
+
+                    clone.querySelectorAll('input, textarea, select').forEach((field) => {
+                        const type = String(field.type || '').toLowerCase();
+                        if (type === 'file') {
+                            field.value = '';
+                            delete field.dataset.savedName;
+                            delete field.dataset.savedType;
+                            delete field.dataset.savedPreview;
+                            delete field.dataset.previewObjectUrl;
+                            return;
+                        }
+                        if (field.tagName === 'SELECT') {
+                            field.selectedIndex = 0;
+                        } else if (type === 'checkbox' || type === 'radio') {
+                            field.checked = false;
+                        } else {
+                            field.value = '';
+                        }
+                    });
+
+                    clone.querySelectorAll('.option-nav-btn').forEach((btn) => {
+                        btn.classList.remove('selected', 'is-active');
+                        btn.setAttribute('aria-checked', 'false');
+                        btn.setAttribute('aria-pressed', 'false');
+                    });
+
+                    clone.querySelectorAll('.photo-upload-area').forEach((area) => {
+                        delete area.dataset.photoBound;
+                    });
+
+                    list.appendChild(clone);
+                }
+            };
+
+            const syncRestoredStep3ServiceVisibility = () => {
+                const serviceValue = getActiveServiceValue();
+                if (!isFreightService(serviceValue) && !isClearanceService(serviceValue)) {
+                    return;
+                }
+
+                const domSelectedPickupFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+                    .map((btn) => String(btn.getAttribute('data-floor') || '').trim())
+                    .filter(Boolean);
+                const hiddenPickupFloor = String(document.getElementById('pickup-floor-select')?.value || '').trim();
+                const hasSelectedPickupFloor = !!(
+                    (window.selectedPickupFloors && window.selectedPickupFloors.size > 0)
+                    || domSelectedPickupFloors.length > 0
+                    || hiddenPickupFloor
+                );
+
+                if (window.step3PickupFloorsConfirmed !== true || !hasSelectedPickupFloor) {
+                    setOfficeDescriptionMode(isClearanceService(serviceValue) ? 'clearance' : true);
+                    return;
+                }
+
+                if (isFreightService(serviceValue)) {
+                    showFreightSection();
+                    return;
+                }
+
+                if (isClearanceService(serviceValue)) {
+                    showClearanceSection();
+                }
+            };
+
             const overwriteObjectPreserveReference = (targetRef, sourceObj) => {
                 if (!sourceObj || typeof sourceObj !== 'object') return;
 
@@ -10042,6 +10474,7 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                     syncPickupFloorHiddenFromSelection();
                 }
             }
+            ensureClearanceCardsForRestore();
             window.step3PickupFloorsConfirmed = payload.step3PickupFloorsConfirmed === true;
             if (Array.isArray(payload.selectedDeliveryFloors)) {
                 window.selectedDeliveryFloors = new Set(payload.selectedDeliveryFloors);
@@ -10165,6 +10598,28 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 }
             });
 
+            const restoredFreightCategory = String(
+                (payload.idState && payload.idState['freight3-unit-category'] && payload.idState['freight3-unit-category'].value)
+                || document.getElementById('freight3-unit-category')?.value
+                || ''
+            ).trim();
+            const restoredFreightType = String(
+                (payload.idState && payload.idState['freight3-unit-type'] && payload.idState['freight3-unit-type'].value)
+                || document.getElementById('freight3-unit-type')?.value
+                || ''
+            ).trim();
+            if (restoredFreightCategory && restoredFreightType) {
+                if (!window.__freightUnitTypeByCategory || typeof window.__freightUnitTypeByCategory !== 'object') {
+                    window.__freightUnitTypeByCategory = {};
+                }
+                window.__freightUnitTypeByCategory[restoredFreightCategory] = restoredFreightType;
+
+                const freightTypeField = document.getElementById('freight3-unit-type');
+                if (freightTypeField) {
+                    freightTypeField.dataset.restoreValue = restoredFreightType;
+                }
+            }
+
             const targetStep = Number.isFinite(parseInt(payload.step, 10)) ? parseInt(payload.step, 10) : 1;
             const unlockedStep = Number.isFinite(parseInt(payload.maxReachedStep, 10))
                 ? parseInt(payload.maxReachedStep, 10)
@@ -10181,6 +10636,10 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             }
 
             applyUiState();
+            if (isFreightService(getActiveServiceValue())) {
+                showFreightSection();
+            }
+            syncRestoredStep3ServiceVisibility();
             restoreCustomizedDraftRows(payload.customizedDraftItems);
             applyVehicleLiveDraftSnapshot(payload.vehicleLiveDraftSnapshot);
 
@@ -10201,6 +10660,10 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             controls.forEach((el) => {
                 el.dispatchEvent(new Event('change', { bubbles: true }));
             });
+            syncRestoredStep3ServiceVisibility();
+
+            restoreFreightPhotoDraft(payload.freightPhotoDraft);
+            restoreClearancePhotoDraft(payload.clearancePhotoDraft);
 
             // Media fallback restore path: if media store is still empty, hydrate from
             // hidden field JSON or legacy Step 3 snapshot.
@@ -10255,6 +10718,12 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             // Step 3 inventory render functions before restore-dependent rendering runs.
             setTimeout(() => {
                 applyUiState();
+                if (isFreightService(getActiveServiceValue())) {
+                    showFreightSection();
+                }
+                syncRestoredStep3ServiceVisibility();
+                restoreFreightPhotoDraft(payload.freightPhotoDraft);
+                restoreClearancePhotoDraft(payload.clearancePhotoDraft);
                 restoreCustomizedDraftRows(payload.customizedDraftItems);
                 if (typeof window.placeSpecialistValueInsideBlueForm === 'function') {
                     window.placeSpecialistValueInsideBlueForm();
@@ -10965,6 +11434,9 @@ window.togglePickupFloor = async function(floor) {
 
     // Changing selected floors requires pressing Confirm again.
     window.step3PickupFloorsConfirmed = false;
+    if (isFreightService(getActiveServiceValue())) {
+        setOfficeDescriptionMode(true);
+    }
 
     syncPickupFloorHiddenFromSelection();
     renderPickupFloorSelector();
@@ -11726,6 +12198,12 @@ if (!window.__motorbikeConfirmFloorFallbackBound) {
                 }
                 if (typeof window.syncPianoStep3Visibility === 'function') {
                     window.syncPianoStep3Visibility();
+                }
+                if (isFreightService(serviceValue)) {
+                    showFreightSection();
+                }
+                if (isClearanceService(serviceValue)) {
+                    showClearanceSection();
                 }
 
                 const getVehicleStep3TargetSection = () => {
@@ -17564,11 +18042,68 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             };
 
-            area.addEventListener('click', () => {
+            const isLabelArea = area.tagName === 'LABEL';
+            area.addEventListener('click', (event) => {
+                if (event.target && event.target.closest && event.target.closest('.photo-clear-btn')) {
+                    return;
+                }
+                // Native label behavior already opens the file picker; avoid a second synthetic click.
+                if (isLabelArea) {
+                    return;
+                }
                 input.click();
             });
 
             input.addEventListener('change', () => {
+                const file = input.files && input.files[0];
+                if (file) {
+                    input.dataset.savedName = String(file.name || '').trim();
+                    input.dataset.savedType = String(file.type || '').trim();
+
+                    if (String(file.type || '').startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const img = new Image();
+                            img.onload = () => {
+                                const maxEdge = 720;
+                                const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+                                const canvas = document.createElement('canvas');
+                                canvas.width = Math.max(1, Math.round(img.width * scale));
+                                canvas.height = Math.max(1, Math.round(img.height * scale));
+                                const ctx = canvas.getContext('2d');
+                                if (!ctx) {
+                                    input.dataset.savedPreview = '';
+                                    return;
+                                }
+
+                                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                let preview = canvas.toDataURL('image/jpeg', 0.72);
+                                if (preview.length > 280000) {
+                                    preview = canvas.toDataURL('image/jpeg', 0.55);
+                                }
+                                input.dataset.savedPreview = preview;
+                                updateAreaVisual();
+                                if (typeof window.saveCreateJobProgress === 'function') {
+                                    window.saveCreateJobProgress();
+                                }
+                            };
+                            img.onerror = () => {
+                                input.dataset.savedPreview = '';
+                            };
+                            img.src = String(reader.result || '');
+                        };
+                        reader.onerror = () => {
+                            input.dataset.savedPreview = '';
+                        };
+                        reader.readAsDataURL(file);
+                    } else {
+                        // Keep video metadata lightweight.
+                        input.dataset.savedPreview = '';
+                    }
+                } else if (!input.dataset.savedName && !input.dataset.savedType) {
+                    delete input.dataset.savedPreview;
+                }
+
                 clearPreviewObjectUrl();
                 updateAreaVisual();
                 if (typeof updateCustomizedItemsHiddenValue === 'function') {
@@ -18115,6 +18650,40 @@ document.addEventListener('DOMContentLoaded', function() {
         let currentStep = 1;
         let maxUnlockedStep = 1;
 
+        const getHiddenStepsForService = () => {
+            const serviceValue = getActiveServiceValue();
+            return isClearanceService(serviceValue) ? [4, 5] : [];
+        };
+
+        const isStepHiddenForService = (step) => getHiddenStepsForService().includes(step);
+
+        const getNextAvailableStep = (step) => {
+            let candidate = parseInt(step, 10) + 1;
+            while (candidate <= totalSteps && isStepHiddenForService(candidate)) {
+                candidate += 1;
+            }
+            return Math.min(candidate, totalSteps);
+        };
+
+        const getPrevAvailableStep = (step) => {
+            let candidate = parseInt(step, 10) - 1;
+            while (candidate >= 1 && isStepHiddenForService(candidate)) {
+                candidate -= 1;
+            }
+            return Math.max(candidate, 1);
+        };
+
+        const normalizeStepForService = (step) => {
+            let normalized = parseInt(step, 10);
+            if (!Number.isFinite(normalized)) normalized = 1;
+            normalized = Math.max(1, Math.min(totalSteps, normalized));
+            if (!isStepHiddenForService(normalized)) return normalized;
+
+            const next = getNextAvailableStep(normalized - 1);
+            if (!isStepHiddenForService(next)) return next;
+            return getPrevAvailableStep(normalized + 1);
+        };
+
         const parseStepList = (el) => {
             if (!el) return [];
             const steps = el.getAttribute('data-form-steps') || el.getAttribute('data-form-step') || '';
@@ -18156,8 +18725,20 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         const updateStepperState = (step) => {
+            let visibleOrder = 1;
             stepItems.forEach((item) => {
                 const itemStep = parseInt(item.getAttribute('data-step'), 10);
+                const isHiddenForService = isStepHiddenForService(itemStep);
+                const indexEl = item.querySelector('.stepper-index');
+                item.style.display = isHiddenForService ? 'none' : '';
+                if (isHiddenForService) {
+                    item.classList.remove('is-active', 'is-complete', 'is-locked');
+                    return;
+                }
+                if (indexEl) {
+                    indexEl.textContent = String(visibleOrder);
+                }
+                visibleOrder += 1;
                 item.classList.toggle('is-active', itemStep === step);
                 item.classList.toggle('is-complete', itemStep !== step && itemStep <= maxUnlockedStep);
             });
@@ -18168,6 +18749,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 const targetStep = parseInt(link.getAttribute('data-step'), 10);
                 if (!Number.isFinite(targetStep)) return;
 
+                if (isStepHiddenForService(targetStep)) {
+                    link.classList.add('is-locked');
+                    link.setAttribute('aria-disabled', 'true');
+                    link.tabIndex = -1;
+                    return;
+                }
+
                 const isUnlocked = targetStep <= maxUnlockedStep;
                 link.classList.toggle('is-locked', !isUnlocked);
                 link.setAttribute('aria-disabled', isUnlocked ? 'false' : 'true');
@@ -18177,6 +18765,10 @@ document.addEventListener('DOMContentLoaded', function() {
             stepItems.forEach((item) => {
                 const targetStep = parseInt(item.getAttribute('data-step'), 10);
                 if (!Number.isFinite(targetStep)) return;
+                if (isStepHiddenForService(targetStep)) {
+                    item.classList.add('is-locked');
+                    return;
+                }
                 item.classList.toggle('is-locked', targetStep > maxUnlockedStep);
             });
         };
@@ -18203,7 +18795,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     stepNextBtn.style.display = 'inline-flex';
                     
                     // Get next step label from stepper
-                    const nextStep = currentStep + 1;
+                    const nextStep = getNextAvailableStep(currentStep);
                     const nextStepperItem = document.querySelector(`.stepper-item[data-step="${nextStep}"]`);
                     const nextLabel = nextStepperItem?.querySelector('.stepper-label')?.textContent?.trim() || '';
                     
@@ -18906,25 +19498,26 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         const setFormStep = (step) => {
-            if (step < 1 || step > totalSteps) return;
+            const normalizedStep = normalizeStepForService(step);
+            if (normalizedStep < 1 || normalizedStep > totalSteps) return;
             const previousStep = currentStep;
-            currentStep = step;
-            window.__createJobMaxReachedStep = Math.max(parseInt(window.__createJobMaxReachedStep, 10) || 1, step);
-            if (step === 8) {
+            currentStep = normalizedStep;
+            window.__createJobMaxReachedStep = Math.max(parseInt(window.__createJobMaxReachedStep, 10) || 1, normalizedStep);
+            if (normalizedStep === 8) {
                 window.__overviewStepVisited = true;
             }
-            unlockStep(step);
-            document.body.dataset.formStep = String(step);
-            document.body.dataset.currentStep = String(step);
-            setStepVisibility(step);
-            updateStepSlices(step);
-            updateStepperState(step);
+            unlockStep(normalizedStep);
+            document.body.dataset.formStep = String(normalizedStep);
+            document.body.dataset.currentStep = String(normalizedStep);
+            setStepVisibility(normalizedStep);
+            updateStepSlices(normalizedStep);
+            updateStepperState(normalizedStep);
             updateStepButtons();
             updateSubmitButton();
-            updateMultiStopStepVisibility(step);
+            updateMultiStopStepVisibility(normalizedStep);
             updateFormSummary();
-            ensureStepStartsAtTop(previousStep, step);
-            if (step === 3) {
+            ensureStepStartsAtTop(previousStep, normalizedStep);
+            if (normalizedStep === 3) {
                 updateHouseInventoryVisibility();
                 if (window.multiItemsManager && typeof window.multiItemsManager.syncVehicleDraftUi === 'function') {
                     ['car', 'motorbike', 'trailer'].forEach((vehicleType) => {
@@ -18932,16 +19525,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 }
             }
-            if (step === 6) {
+            if (normalizedStep === 6) {
                 // Initialize step 6 service requirements
                 if (typeof window.initializeStep6 === 'function') {
                     window.initializeStep6();
                 }
             }
-            if (step === 2 && typeof map !== 'undefined' && map && typeof map.resize === 'function') {
+            if (normalizedStep === 2 && typeof map !== 'undefined' && map && typeof map.resize === 'function') {
                 setTimeout(() => map.resize(), 200);
             }
-            if (step === 8) {
+            if (normalizedStep === 8) {
                 initOverviewRouteMap();
                 updateOverviewRouteLabels();
                 setTimeout(() => {
@@ -18994,8 +19587,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
 
-                unlockStep(currentStep + 1);
-                setFormStep(currentStep + 1);
+                const nextStep = getNextAvailableStep(currentStep);
+                unlockStep(nextStep);
+                setFormStep(nextStep);
             });
         }
 
@@ -19006,9 +19600,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 const targetStep = parseInt(link.getAttribute('data-step'), 10);
                 if (!Number.isFinite(targetStep)) return;
+                if (isStepHiddenForService(targetStep)) return;
 
                 if (targetStep > maxUnlockedStep) {
-                    const isAttemptingImmediateNext = targetStep === currentStep + 1;
+                    const isAttemptingImmediateNext = targetStep === getNextAvailableStep(currentStep);
                     if (!isAttemptingImmediateNext) {
                         return;
                     }
@@ -19438,6 +20033,17 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     window.applyServiceSelection = applyServiceSelection;
+
+    if (cjHidden && cjHidden.dataset.serviceSelectionBound !== '1') {
+        cjHidden.dataset.serviceSelectionBound = '1';
+        cjHidden.addEventListener('change', () => {
+            const hiddenValue = String(cjHidden.value || '').trim();
+            if (!hiddenValue) {
+                return;
+            }
+            applyServiceSelection(hiddenValue, getServiceLabel(hiddenValue));
+        });
+    }
 
     const serviceGrid = document.getElementById('service-icon-grid');
     if (serviceGrid && serviceGrid.dataset.listenerBound !== 'true') {
@@ -22222,13 +22828,15 @@ document.addEventListener('DOMContentLoaded', function() {
     function syncVehicleTransportStepRules() {
         const serviceValue = getActiveServiceValue();
         const isVehicleService = isVehicleLikeStepFlowService(serviceValue);
+        const isNoLift = isNoLiftService(serviceValue);
         const isClearance = isClearanceService(serviceValue);
+        const isFreight = isFreightService(serviceValue);
         const isPetsTransportService = isPetsService(serviceValue);
         const isPackagedService = isPackagedParcelsService(serviceValue);
         const isVehiclePartsService = serviceValue === 'Vehicle Parts';
-        const shouldHidePacking = isVehicleService || isPackagedService || isVehiclePartsService || isPetsTransportService;
-        const shouldHideDisassembly = isVehicleService || isPackagedService || isVehiclePartsService || isPetsTransportService;
-        const shouldHideStorage = isPackagedService || isVehiclePartsService;
+        const shouldHidePacking = isVehicleService || isPackagedService || isVehiclePartsService || isPetsTransportService || isClearance;
+        const shouldHideDisassembly = isVehicleService || isPackagedService || isVehiclePartsService || isPetsTransportService || isClearance;
+        const shouldHideStorage = isPackagedService || isVehiclePartsService || isFreight || isClearance;
 
         const pickupPropertySection = document.getElementById('property-type-selection-section');
         const pickupLiftSection = document.getElementById('pickup-lift-section');
@@ -22238,10 +22846,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (pickupPropertySection) pickupPropertySection.style.display = '';
         if (deliveryPropertySection) deliveryPropertySection.style.display = '';
 
-        if (pickupLiftSection && isVehicleService && !isClearance) pickupLiftSection.style.display = 'none';
-        if (deliveryLiftSection && isVehicleService && !isClearance) deliveryLiftSection.style.display = 'none';
+        if (pickupLiftSection && isNoLift && !isClearance) pickupLiftSection.style.display = 'none';
+        if (deliveryLiftSection && isNoLift && !isClearance) deliveryLiftSection.style.display = 'none';
 
-        if (isVehicleService) {
+        if (isNoLift) {
             const pickupLiftInput = document.getElementById('pickup-lift-available');
             const deliveryLiftInput = document.getElementById('delivery-lift-available');
 
@@ -22280,7 +22888,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (disassemblyCard) disassemblyCard.style.display = shouldHideDisassembly ? 'none' : '';
         if (storageCard) storageCard.style.display = shouldHideStorage ? 'none' : '';
         if (deliveryMoversCard) deliveryMoversCard.style.display = isClearance ? 'none' : '';
-        if (specialInstructionsCard) specialInstructionsCard.style.display = isClearance ? 'none' : '';
+        if (specialInstructionsCard) specialInstructionsCard.style.display = '';
 
         if (isClearance) {
             const deliveryMoversInput = document.getElementById('service-delivery-movers');
@@ -22369,6 +22977,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (typeof window.renderVehicleStepParkingSelectors === 'function') {
             window.renderVehicleStepParkingSelectors();
+        }
+        if (typeof window.syncFreightLoadingModeUi === 'function') {
+            window.syncFreightLoadingModeUi();
         }
         if (typeof syncOverviewVehicleVisibility === 'function') {
             syncOverviewVehicleVisibility();
@@ -23672,23 +24283,199 @@ function hideOtherSection() {
     }
 }
 
+const FREIGHT_UNIT_TYPE_OPTIONS = {
+    pallet: [
+        { value: 'eur1', label: 'EUR 1 Pallet (1200 x 800 x 144 mm)', dimensions: { length: 1.2, width: 0.8, height: 0.144, unit: 'm' } },
+        { value: 'eur2', label: 'EUR 2 Pallet (1200 x 1000 x 144 mm)', dimensions: { length: 1.2, width: 1.0, height: 0.144, unit: 'm' } },
+        { value: 'gma', label: 'North American GMA (1219 x 1016 x 152 mm)', dimensions: { length: 1.219, width: 1.016, height: 0.152, unit: 'm' } },
+        { value: 'iso1', label: 'ISO 1 Pallet (1219 x 1016 x 144 mm)', dimensions: { length: 1.219, width: 1.016, height: 0.144, unit: 'm' } },
+        { value: 'custom-pallet', label: 'Other pallet / custom size (enter dimensions)', custom: true }
+    ],
+    container: [
+        { value: '20-dry', label: '20 ft Standard Dry (6058 x 2438 x 2591 mm)', dimensions: { length: 6.058, width: 2.438, height: 2.591, unit: 'm' } },
+        { value: '40-dry', label: '40 ft Standard Dry (12192 x 2438 x 2591 mm)', dimensions: { length: 12.192, width: 2.438, height: 2.591, unit: 'm' } },
+        { value: '40-hc', label: '40 ft High Cube (12192 x 2438 x 2896 mm)', dimensions: { length: 12.192, width: 2.438, height: 2.896, unit: 'm' } },
+        { value: '45-hc', label: '45 ft High Cube (13716 x 2438 x 2896 mm)', dimensions: { length: 13.716, width: 2.438, height: 2.896, unit: 'm' } },
+        { value: 'reefer', label: 'Reefer Container (12192 x 2438 x 2896 mm)', dimensions: { length: 12.192, width: 2.438, height: 2.896, unit: 'm' } },
+        { value: 'open-top', label: 'Open-Top Container (12192 x 2438 x 2591 mm)', dimensions: { length: 12.192, width: 2.438, height: 2.591, unit: 'm' } },
+        { value: 'flat-rack', label: 'Flat Rack Container (12192 x 2438 x 2591 mm)', dimensions: { length: 12.192, width: 2.438, height: 2.591, unit: 'm' } },
+        { value: 'custom-container', label: 'Other container / custom size (enter dimensions)', custom: true }
+    ],
+    other: [
+        { value: 'crate', label: 'Crate (enter dimensions)', custom: true },
+        { value: 'ibc-tote', label: 'IBC Tote (enter dimensions)', custom: true },
+        { value: 'drum-barrel', label: 'Drum / Barrel (enter dimensions)', custom: true },
+        { value: 'machinery-skid', label: 'Machinery Skid (enter dimensions)', custom: true },
+        { value: 'other-freight-unit', label: 'Other freight unit (enter dimensions)', custom: true }
+    ]
+};
+
+function getFreightUnitTypeOptions(unitCategory) {
+    return FREIGHT_UNIT_TYPE_OPTIONS[unitCategory] || [];
+}
+
+function getFreightUnitTypeOptionByValue(unitCategory, unitTypeValue) {
+    if (!unitCategory || !unitTypeValue) {
+        return null;
+    }
+
+    const options = getFreightUnitTypeOptions(unitCategory);
+    return options.find((option) => option.value === unitTypeValue) || null;
+}
+
+function applyFreightDimensionVisibilityAndDefaults() {
+    const categoryField = document.getElementById('freight3-unit-category');
+    const typeField = document.getElementById('freight3-unit-type');
+    const lengthField = document.getElementById('freight3-length');
+    const widthField = document.getElementById('freight3-width');
+    const heightField = document.getElementById('freight3-height');
+    const dimensionUnitField = document.getElementById('freight3-dimension-unit');
+    const presetNote = document.getElementById('freight-dimension-preset-note');
+    const manualDimensionStacks = document.querySelectorAll('#freight-step3-form .freight-dimension-manual');
+
+    if (!categoryField || !typeField || !lengthField || !widthField || !heightField || !dimensionUnitField) {
+        return;
+    }
+
+    const categoryValue = categoryField.value.trim();
+    const typeValue = typeField.value.trim();
+    const selectedType = getFreightUnitTypeOptionByValue(categoryValue, typeValue);
+    const hasPresetDimensions = !!(selectedType && selectedType.dimensions && !selectedType.custom && categoryValue !== 'other');
+    const shouldShowManualDimensions = categoryValue === 'other' || (selectedType ? !!selectedType.custom : false);
+
+    if (hasPresetDimensions) {
+        const dims = selectedType.dimensions;
+        lengthField.value = String(dims.length);
+        widthField.value = String(dims.width);
+        heightField.value = String(dims.height);
+        dimensionUnitField.value = dims.unit || 'm';
+    } else if (shouldShowManualDimensions) {
+        lengthField.value = '';
+        widthField.value = '';
+        heightField.value = '';
+    }
+
+    const hideDimensions = !shouldShowManualDimensions;
+    manualDimensionStacks.forEach((stack) => {
+        stack.style.display = hideDimensions ? 'none' : '';
+    });
+
+    [lengthField, widthField, heightField, dimensionUnitField].forEach((field) => {
+        field.disabled = hideDimensions;
+    });
+
+    if (presetNote) {
+        if (hasPresetDimensions) {
+            const dims = selectedType.dimensions;
+            presetNote.textContent = `Dimensions are preset from selected type: ${dims.length} x ${dims.width} x ${dims.height} ${dims.unit || 'm'}. Select an Other/custom option to enter your own.`;
+            presetNote.style.display = 'block';
+        } else {
+            presetNote.style.display = 'none';
+            presetNote.textContent = '';
+        }
+    }
+}
+
+function getFreightUnitCountLabel(unitCategory) {
+    if (unitCategory === 'pallet') {
+        return 'pallets';
+    }
+    if (unitCategory === 'container') {
+        return 'containers';
+    }
+    return 'units';
+}
+
+function refreshFreightUnitTypeOptions() {
+    const categoryField = document.getElementById('freight3-unit-category');
+    const typeField = document.getElementById('freight3-unit-type');
+    const countLabel = document.getElementById('freight3-unit-count-label');
+    const countInput = document.getElementById('freight3-unit-count');
+
+    if (!categoryField || !typeField) {
+        return;
+    }
+
+    const categoryValue = categoryField.value.trim();
+    const existingTypeValue = typeField.value;
+    const typeOptions = getFreightUnitTypeOptions(categoryValue);
+    const pendingRestoreValue = String(typeField.dataset.restoreValue || '').trim();
+    const rememberedTypeStore = window.__freightUnitTypeByCategory
+        && typeof window.__freightUnitTypeByCategory === 'object'
+        ? window.__freightUnitTypeByCategory
+        : (window.__freightUnitTypeByCategory = {});
+    const rememberedTypeValue = String(rememberedTypeStore[categoryValue] || '').trim();
+
+    typeField.innerHTML = '';
+    const placeholderOption = document.createElement('option');
+    placeholderOption.value = '';
+    placeholderOption.textContent = categoryValue ? 'Select unit type' : 'Select a category first';
+    typeField.appendChild(placeholderOption);
+
+    typeOptions.forEach((optionConfig) => {
+        const option = document.createElement('option');
+        option.value = optionConfig.value;
+        option.textContent = optionConfig.label;
+        typeField.appendChild(option);
+    });
+
+    const preferredTypeValue = existingTypeValue || pendingRestoreValue || rememberedTypeValue;
+    if (preferredTypeValue && typeOptions.some((option) => option.value === preferredTypeValue)) {
+        typeField.value = preferredTypeValue;
+    }
+
+    if (typeField.dataset.restoreValue) {
+        delete typeField.dataset.restoreValue;
+    }
+
+    if (categoryValue) {
+        rememberedTypeStore[categoryValue] = String(typeField.value || '').trim();
+    }
+
+    const countNoun = getFreightUnitCountLabel(categoryValue);
+    if (countLabel) {
+        countLabel.innerHTML = `How many ${countNoun}? <span class="required-text">(required)</span>`;
+    }
+
+    if (countInput) {
+        countInput.placeholder = categoryValue === 'container' ? 'e.g. 2' : 'e.g. 4';
+    }
+
+    applyFreightDimensionVisibilityAndDefaults();
+}
+
 function buildFreightDescriptionSummary() {
-    const shipmentType = document.getElementById('freight3-shipment-type')?.value?.trim() || '';
-    const palletCount = document.getElementById('freight3-pallet-count')?.value?.trim() || '';
-    const totalWeight = document.getElementById('freight3-total-weight')?.value?.trim() || '';
+    const unitCategory = document.getElementById('freight3-unit-category')?.value?.trim() || '';
+    const unitType = document.getElementById('freight3-unit-type')?.value?.trim() || '';
+    const length = document.getElementById('freight3-length')?.value?.trim() || '';
+    const width = document.getElementById('freight3-width')?.value?.trim() || '';
+    const dimensionUnit = document.getElementById('freight3-dimension-unit')?.value?.trim() || 'm';
+    const height = document.getElementById('freight3-height')?.value?.trim() || '';
+    const heightUnit = dimensionUnit;
+    const unitWeight = document.getElementById('freight3-unit-weight')?.value?.trim() || '';
     const weightUnit = document.getElementById('freight3-weight-unit')?.value?.trim() || 'kg';
+    const unitCount = document.getElementById('freight3-unit-count')?.value?.trim() || '';
     const freightDescription = document.getElementById('freight3-description')?.value?.trim() || '';
     const freightNotes = document.getElementById('freight3-notes')?.value?.trim() || '';
 
     const parts = [];
-    if (shipmentType) {
-        parts.push(`Shipment type: ${shipmentType}`);
+    if (unitCategory) {
+        parts.push(`Unit category: ${unitCategory}`);
     }
-    if (palletCount) {
-        parts.push(`Pallet count: ${palletCount}`);
+    if (unitType) {
+        parts.push(`Unit type: ${unitType}`);
     }
-    if (totalWeight) {
-        parts.push(`Total weight: ${totalWeight} ${weightUnit}`);
+    if (length && width) {
+        parts.push(`Dimensions: ${length} x ${width} ${dimensionUnit}`);
+    }
+    if (height) {
+        parts.push(`Height: ${height} ${heightUnit}`);
+    }
+    if (unitWeight) {
+        parts.push(`Weight per unit: ${unitWeight} ${weightUnit}`);
+    }
+    if (unitCount) {
+        parts.push(`Quantity: ${unitCount} ${getFreightUnitCountLabel(unitCategory)}`);
     }
     if (freightDescription) {
         parts.push(`Cargo: ${freightDescription}`);
@@ -23701,20 +24488,43 @@ function buildFreightDescriptionSummary() {
 }
 
 function buildClearanceDescriptionSummary() {
-    const weightRange = document.getElementById('clearance3-weight-range')?.value?.trim() || '';
-    const heavyItems = document.getElementById('clearance3-heavy-items')?.value?.trim() || '';
-    const clearanceDescription = document.getElementById('clearance3-description')?.value?.trim() || '';
-    const clearanceNotes = document.getElementById('clearance3-notes')?.value?.trim() || '';
-    const recyclingFee = document.getElementById('clearance3-recycling-fee-hidden')?.value?.trim() || '';
+    const cards = Array.from(document.querySelectorAll('#clearance-step3-form .clearance-customized-card'));
+    const cardSummaries = cards.map((card, idx) => {
+        const weightRange = String(card.querySelector('[data-clearance-field="weight"]')?.value || '').trim();
+        const heavyItems = String(card.querySelector('[data-clearance-field="heavy-items"]')?.value || '').trim();
+        const clearanceDescription = String(card.querySelector('[data-clearance-field="description"]')?.value || '').trim();
+        const clearanceNotes = String(card.querySelector('[data-clearance-field="notes"]')?.value || '').trim();
+        const recyclingFee = String(card.querySelector('[data-clearance-field="recycling"]')?.value || '').trim();
 
-    const parts = [];
-    if (weightRange) parts.push(`Weight range: ${weightRange}`);
-    if (heavyItems) parts.push(`Heavy items: ${heavyItems}`);
-    if (recyclingFee) parts.push(`Recycling fee: ${recyclingFee === 'yes' ? 'Included' : 'Not included'}`);
-    if (clearanceDescription) parts.push(`Clearance items: ${clearanceDescription}`);
-    if (clearanceNotes) parts.push(`Notes: ${clearanceNotes}`);
+        const parts = [];
+        if (weightRange) parts.push(`Weight range: ${weightRange}`);
+        if (heavyItems) parts.push(`Heavy items: ${heavyItems}`);
+        if (recyclingFee) parts.push(`Recycling fee: ${recyclingFee === 'yes' ? 'Included' : 'Not included'}`);
+        if (clearanceDescription) parts.push(`Clearance items: ${clearanceDescription}`);
+        if (clearanceNotes) parts.push(`Notes: ${clearanceNotes}`);
+        if (!parts.length) return '';
+        return `Item ${idx + 1}: ${parts.join(' | ')}`;
+    }).filter(Boolean);
 
-    return parts.join(' | ');
+    const selectedItemsRaw = String(document.getElementById('clearance-selected-items-hidden')?.value || '').trim();
+    if (selectedItemsRaw) {
+        try {
+            const selectedItems = JSON.parse(selectedItemsRaw);
+            if (Array.isArray(selectedItems) && selectedItems.length > 0) {
+                const selectedLabel = selectedItems
+                    .map((label) => String(label || '').trim())
+                    .filter(Boolean)
+                    .join(', ');
+                if (selectedLabel) {
+                    cardSummaries.push(`Selected inventory: ${selectedLabel}`);
+                }
+            }
+        } catch (_) {
+            // Ignore malformed selected-items payload.
+        }
+    }
+
+    return cardSummaries.join(' || ');
 }
 
 function setOfficeDescriptionMode(modeValue) {
@@ -23726,12 +24536,27 @@ function setOfficeDescriptionMode(modeValue) {
     const clearanceLayout = document.getElementById('clearance-step3-form');
     const genericCard = document.getElementById('office-generic-description-card');
     const descriptionField = document.getElementById('office-removal-description');
+    const domSelectedPickupFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
+        .map((btn) => String(btn.getAttribute('data-floor') || '').trim())
+        .filter(Boolean);
+    const hiddenPickupFloor = (document.getElementById('pickup-floor-select')?.value || '').trim();
+    const hasSelectedPickupFloor = !!(
+        (window.selectedPickupFloors && window.selectedPickupFloors.size > 0)
+        || domSelectedPickupFloors.length > 0
+        || hiddenPickupFloor
+    );
+    const shouldShowFreightForm = mode === 'freight'
+        && window.step3PickupFloorsConfirmed === true
+        && hasSelectedPickupFloor;
+    const shouldShowClearanceForm = mode === 'clearance'
+        && window.step3PickupFloorsConfirmed === true
+        && hasSelectedPickupFloor;
 
     if (freightLayout) {
-        freightLayout.style.display = mode === 'freight' ? 'block' : 'none';
+        freightLayout.style.display = shouldShowFreightForm ? 'block' : 'none';
     }
     if (clearanceLayout) {
-        clearanceLayout.style.display = mode === 'clearance' ? 'block' : 'none';
+        clearanceLayout.style.display = shouldShowClearanceForm ? 'block' : 'none';
     }
     if (genericCard) {
         genericCard.style.display = mode === 'generic' ? 'block' : 'none';
@@ -23761,10 +24586,16 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     const freightFieldIds = [
-        'freight3-shipment-type',
-        'freight3-pallet-count',
-        'freight3-total-weight',
+        'freight3-unit-category',
+        'freight3-unit-type',
+        'freight3-length',
+        'freight3-width',
+        'freight3-dimension-unit',
+        'freight3-height',
+        'freight3-height-unit',
+        'freight3-unit-weight',
         'freight3-weight-unit',
+        'freight3-unit-count',
         'freight3-description',
         'freight3-notes'
     ];
@@ -23777,6 +24608,574 @@ document.addEventListener('DOMContentLoaded', function () {
         field.addEventListener('input', () => syncToHiddenDescription(buildFreightDescriptionSummary));
         field.addEventListener('change', () => syncToHiddenDescription(buildFreightDescriptionSummary));
     });
+
+    const freightCategoryField = document.getElementById('freight3-unit-category');
+    if (freightCategoryField) {
+        freightCategoryField.addEventListener('change', () => {
+            refreshFreightUnitTypeOptions();
+            syncToHiddenDescription(buildFreightDescriptionSummary);
+        });
+    }
+
+    const freightTypeField = document.getElementById('freight3-unit-type');
+    if (freightTypeField) {
+        freightTypeField.addEventListener('change', () => {
+            const categoryValue = String(document.getElementById('freight3-unit-category')?.value || '').trim();
+            const selectedTypeValue = String(freightTypeField.value || '').trim();
+            if (categoryValue) {
+                if (!window.__freightUnitTypeByCategory || typeof window.__freightUnitTypeByCategory !== 'object') {
+                    window.__freightUnitTypeByCategory = {};
+                }
+                window.__freightUnitTypeByCategory[categoryValue] = selectedTypeValue;
+            }
+            applyFreightDimensionVisibilityAndDefaults();
+            syncToHiddenDescription(buildFreightDescriptionSummary);
+        });
+    }
+
+    const freightAddItemBtn = document.getElementById('freight-add-item-btn');
+    const freightUnitCountField = document.getElementById('freight3-unit-count');
+    if (freightAddItemBtn && freightUnitCountField) {
+        freightAddItemBtn.addEventListener('click', () => {
+            const currentValue = parseInt(String(freightUnitCountField.value || '').trim(), 10);
+            const safeValue = Number.isNaN(currentValue) || currentValue < 1 ? 1 : currentValue;
+            freightUnitCountField.value = String(safeValue + 1);
+            freightUnitCountField.dispatchEvent(new Event('input', { bubbles: true }));
+            freightUnitCountField.dispatchEvent(new Event('change', { bubbles: true }));
+            freightUnitCountField.focus();
+        });
+    }
+
+    const clearanceAddItemBtn = document.getElementById('clearance-add-item-btn');
+    const clearanceSelectInventoryBtn = document.getElementById('clearance-select-inventory-btn');
+    const clearanceItemsList = document.getElementById('clearance-items-list');
+    const clearanceSelectedItemsSection = document.getElementById('clearance-selected-items-section');
+    const clearanceSelectedItemsList = document.getElementById('clearance-selected-items-list');
+    const clearanceSelectedItemsHidden = document.getElementById('clearance-selected-items-hidden');
+    const clearanceClearSelectedItemsBtn = document.getElementById('clearance-clear-selected-items');
+
+    const getClearanceSelectedItems = () => {
+        const raw = String(clearanceSelectedItemsHidden?.value || '').trim();
+        if (!raw) return [];
+        try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed)
+                ? parsed.map((item) => String(item || '').trim()).filter(Boolean)
+                : [];
+        } catch (_) {
+            return [];
+        }
+    };
+
+    const setClearanceSelectedItems = (items) => {
+        if (!clearanceSelectedItemsHidden) return;
+        const deduped = [];
+        const seen = new Set();
+        (Array.isArray(items) ? items : []).forEach((item) => {
+            const label = String(item || '').trim();
+            if (!label) return;
+            const key = label.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            deduped.push(label);
+        });
+        clearanceSelectedItemsHidden.value = JSON.stringify(deduped);
+    };
+
+    const renderClearanceSelectedItems = () => {
+        if (!clearanceSelectedItemsSection || !clearanceSelectedItemsList || !clearanceSelectedItemsHidden) {
+            return;
+        }
+
+        const items = getClearanceSelectedItems();
+        clearanceSelectedItemsSection.style.display = items.length > 0 ? 'block' : 'none';
+        clearanceSelectedItemsList.innerHTML = '';
+
+        items.forEach((item) => {
+            const pill = document.createElement('span');
+            pill.textContent = item;
+            pill.style.cssText = 'display:inline-flex;align-items:center;padding:6px 10px;border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:999px;font-size:0.84rem;font-weight:700;';
+            clearanceSelectedItemsList.appendChild(pill);
+        });
+    };
+
+    const appendClearanceSelectedItems = (items) => {
+        if (!clearanceSelectedItemsHidden) return;
+        const merged = [...getClearanceSelectedItems(), ...(Array.isArray(items) ? items : [])];
+        setClearanceSelectedItems(merged);
+        renderClearanceSelectedItems();
+        syncToHiddenDescription(buildClearanceDescriptionSummary);
+    };
+
+    if (clearanceClearSelectedItemsBtn) {
+        clearanceClearSelectedItemsBtn.addEventListener('click', () => {
+            setClearanceSelectedItems([]);
+            renderClearanceSelectedItems();
+            syncToHiddenDescription(buildClearanceDescriptionSummary);
+        });
+    }
+
+    if (clearanceSelectedItemsHidden) {
+        clearanceSelectedItemsHidden.addEventListener('change', renderClearanceSelectedItems);
+        clearanceSelectedItemsHidden.addEventListener('input', renderClearanceSelectedItems);
+        clearanceSelectedItemsHidden.addEventListener('change', () => syncToHiddenDescription(buildClearanceDescriptionSummary));
+        clearanceSelectedItemsHidden.addEventListener('input', () => syncToHiddenDescription(buildClearanceDescriptionSummary));
+    }
+
+    renderClearanceSelectedItems();
+    const bindClearanceOptionNavs = (root) => {
+        const navs = Array.from((root || document).querySelectorAll('.option-nav[data-option-nav-for]'));
+        navs.forEach((nav) => {
+            if (nav.dataset.clearanceNavBound === 'true') return;
+            const hiddenId = String(nav.getAttribute('data-option-nav-for') || '').trim();
+            const hidden = hiddenId ? document.getElementById(hiddenId) : null;
+            if (!hidden) return;
+
+            const syncNavState = (value) => {
+                const normalized = String(value || '').trim();
+                nav.querySelectorAll('.option-nav-btn').forEach((btn) => {
+                    const selected = String(btn.getAttribute('data-value') || '').trim() === normalized;
+                    btn.classList.toggle('selected', selected);
+                    btn.classList.toggle('is-active', selected);
+                    btn.setAttribute('aria-checked', selected ? 'true' : 'false');
+                    btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+                });
+            };
+
+            nav.addEventListener('click', (event) => {
+                const btn = event.target.closest('.option-nav-btn');
+                if (!btn) return;
+                const value = String(btn.getAttribute('data-value') || '').trim();
+                if (!value) return;
+                hidden.value = value;
+                hidden.dispatchEvent(new Event('input', { bubbles: true }));
+                hidden.dispatchEvent(new Event('change', { bubbles: true }));
+                syncNavState(value);
+            });
+
+            hidden.addEventListener('change', () => {
+                syncNavState(hidden.value);
+            });
+
+            syncNavState(hidden.value);
+            nav.dataset.clearanceNavBound = 'true';
+        });
+    };
+
+    const syncClearanceCardTitles = () => {
+        const cards = Array.from(document.querySelectorAll('#clearance-items-list .clearance-customized-card'));
+        cards.forEach((card, index) => {
+            let title = card.querySelector('.clearance-item-title');
+            if (!title) {
+                title = document.createElement('div');
+                title.className = 'custom-item-title clearance-item-title';
+                card.insertBefore(title, card.firstChild);
+            }
+            title.textContent = `Clearance ${index + 1}`;
+
+            let removeBtn = card.querySelector('.clearance-remove-item-btn');
+            if (index === 0) {
+                if (removeBtn) removeBtn.remove();
+                return;
+            }
+
+            if (!removeBtn) {
+                removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'clearance-remove-item-btn';
+                removeBtn.textContent = 'Remove Item';
+                removeBtn.style.cssText = 'margin: 10px 0 0; border: 1px solid #fecaca; background: #fff1f2; color: #b91c1c; border-radius: 8px; padding: 8px 12px; font-weight: 700; cursor: pointer;';
+                removeBtn.addEventListener('click', () => {
+                    card.remove();
+                    syncClearanceCardTitles();
+                    syncToHiddenDescription(buildClearanceDescriptionSummary);
+                });
+                card.appendChild(removeBtn);
+            }
+        });
+    };
+
+    const isClearanceCardEmpty = (card) => {
+        if (!card) return true;
+        const description = String(card.querySelector('[data-clearance-field="description"]')?.value || '').trim();
+        const weight = String(card.querySelector('[data-clearance-field="weight"]')?.value || '').trim();
+        const recycling = String(card.querySelector('[data-clearance-field="recycling"]')?.value || '').trim();
+        const hasMedia = Array.from(card.querySelectorAll('.photo-input')).some((input) => {
+            const hasFiles = !!(input.files && input.files.length > 0);
+            const hasSaved = !!(String(input.dataset.savedName || '').trim() || String(input.dataset.savedType || '').trim() || String(input.dataset.savedPreview || '').trim());
+            return hasFiles || hasSaved;
+        });
+        return !description && !weight && !recycling && !hasMedia;
+    };
+
+    const setClearanceCardDescription = (card, textValue) => {
+        const field = card ? card.querySelector('[data-clearance-field="description"]') : null;
+        if (!field) return;
+        field.value = String(textValue || '');
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    const appendClearanceCard = () => {
+        if (!clearanceItemsList) return null;
+        const firstCard = clearanceItemsList.querySelector('.clearance-customized-card');
+        if (!firstCard) return null;
+
+        const nextIndex = clearanceItemsList.querySelectorAll('.clearance-customized-card').length + 1;
+        const clone = firstCard.cloneNode(true);
+
+        clone.querySelectorAll('[id]').forEach((el) => {
+            const oldId = String(el.id || '').trim();
+            if (!oldId) return;
+            const newId = `${oldId}__${nextIndex}`;
+
+            clone.querySelectorAll(`[for="${oldId}"]`).forEach((label) => {
+                label.setAttribute('for', newId);
+            });
+            clone.querySelectorAll(`[data-option-nav-for="${oldId}"]`).forEach((nav) => {
+                nav.setAttribute('data-option-nav-for', newId);
+            });
+
+            el.id = newId;
+        });
+
+        clone.querySelectorAll('input, textarea, select').forEach((field) => {
+            const type = String(field.type || '').toLowerCase();
+            if (type === 'file') {
+                field.value = '';
+                delete field.dataset.savedName;
+                delete field.dataset.savedType;
+                delete field.dataset.savedPreview;
+                delete field.dataset.previewObjectUrl;
+                return;
+            }
+            if (field.tagName === 'SELECT') {
+                field.selectedIndex = 0;
+            } else if (type === 'checkbox' || type === 'radio') {
+                field.checked = false;
+            } else {
+                field.value = '';
+            }
+        });
+
+        clone.querySelectorAll('.option-nav-btn').forEach((btn) => {
+            btn.classList.remove('selected', 'is-active');
+            btn.setAttribute('aria-checked', 'false');
+            btn.setAttribute('aria-pressed', 'false');
+        });
+        clone.querySelectorAll('.option-nav[data-option-nav-for]').forEach((nav) => {
+            delete nav.dataset.optionNavReady;
+        });
+
+        clone.querySelectorAll('.photo-clear-btn').forEach((btn) => btn.remove());
+        clone.querySelectorAll('.photo-upload-area').forEach((area) => {
+            delete area.dataset.photoBound;
+            area.style.backgroundImage = '';
+            area.style.backgroundColor = '#eff6ff';
+            area.style.borderColor = '#bfdbfe';
+            const span = area.querySelector('span');
+            const svg = area.querySelector('svg');
+            if (span) {
+                span.style.display = '';
+                span.innerHTML = 'Drag photo or video here <strong>upload</strong>';
+            }
+            if (svg) {
+                svg.style.display = '';
+            }
+        });
+
+        clearanceItemsList.appendChild(clone);
+        if (typeof bindPhotoUploadHandlers === 'function') {
+            bindPhotoUploadHandlers(clone);
+        }
+        bindClearanceOptionNavs(clone);
+
+        clone.querySelectorAll('[data-clearance-field="description"], [data-clearance-field="weight"], [data-clearance-field="recycling"]').forEach((field) => {
+            field.addEventListener('input', () => syncToHiddenDescription(buildClearanceDescriptionSummary));
+            field.addEventListener('change', () => syncToHiddenDescription(buildClearanceDescriptionSummary));
+        });
+
+        syncClearanceCardTitles();
+        syncToHiddenDescription(buildClearanceDescriptionSummary);
+        return clone;
+    };
+
+    const getHouseInventoryItemsByRoom = () => {
+        const roomItems = (window.ROOM_ITEMS && typeof window.ROOM_ITEMS === 'object') ? window.ROOM_ITEMS : null;
+        if (!roomItems) return [];
+
+        const roomNames = (window.ROOM_CATEGORIES && typeof window.ROOM_CATEGORIES === 'object')
+            ? window.ROOM_CATEGORIES
+            : {};
+
+        return Object.keys(roomItems).map((roomKey) => {
+            const roomLabel = String(roomNames[roomKey]?.name || roomKey)
+                .replace(/\b\w/g, (ch) => ch.toUpperCase());
+            const items = Array.isArray(roomItems[roomKey])
+                ? roomItems[roomKey].map((item) => String(item || '').trim()).filter(Boolean)
+                : [];
+            return { roomKey, roomLabel, items };
+        }).filter((entry) => entry.items.length > 0);
+    };
+
+    const showClearanceInventoryPickerModal = () => {
+        const roomEntries = getHouseInventoryItemsByRoom();
+        if (roomEntries.length === 0) {
+            alert('No house inventory list is available to import items from.');
+            return;
+        }
+
+        let modal = document.getElementById('clearance-inventory-picker-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'clearance-inventory-picker-modal';
+            modal.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:10120;display:none;align-items:center;justify-content:center;padding:18px;';
+            document.body.appendChild(modal);
+        }
+
+        const roomSections = roomEntries.map((entry) => {
+            const itemRows = entry.items.map((itemName) => {
+                const value = `${entry.roomKey}||${itemName}`;
+                const id = `clearance-pick-${value.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
+                return `
+                    <label for="${id}" style="display:flex;align-items:flex-start;gap:10px;padding:9px 10px;cursor:pointer;border:1px solid #e5e7eb;border-radius:8px;background:#fff;min-height:46px;">
+                        <input type="checkbox" class="clearance-inventory-item" data-room="${entry.roomKey}" id="${id}" value="${value}" style="margin-top:1px;width:18px;height:18px;accent-color:#2563eb;cursor:pointer;">
+                        <span style="line-height:1.35;color:#0f172a;">${itemName}</span>
+                    </label>
+                `;
+            }).join('');
+
+            return `
+                <section style="border:1px solid #dbeafe;border-radius:12px;padding:12px;background:#f8fbff;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+                        <div style="font-weight:800;color:#0f172a;font-size:1rem;">${entry.roomLabel}</div>
+                        <label style="display:inline-flex;align-items:center;gap:8px;font-weight:700;color:#1e3a8a;cursor:pointer;white-space:nowrap;">
+                            <input type="checkbox" class="clearance-room-toggle" data-room-toggle="${entry.roomKey}" style="width:15px;height:15px;accent-color:#2563eb;cursor:pointer;">
+                            Select room
+                        </label>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;">${itemRows}</div>
+                </section>
+            `;
+        }).join('');
+
+        modal.innerHTML = `
+            <div style="width:min(1020px,96vw);max-height:88vh;display:flex;flex-direction:column;background:#fff;border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,0.25);overflow:hidden;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid #e5e7eb;background:#fff;">
+                    <div>
+                        <h3 style="margin:0;font-size:1.2rem;color:#0f172a;">Select Items To Be Cleared</h3>
+                        <div id="clearance-inventory-selected-count" style="margin-top:2px;font-size:0.88rem;color:#475569;font-weight:600;">0 selected</div>
+                    </div>
+                    <button type="button" data-action="close" style="border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer;">Close</button>
+                </div>
+                <div style="padding:12px 16px 0;background:#fff;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                        <label style="display:inline-flex;align-items:center;gap:8px;font-weight:700;color:#1e3a8a;cursor:pointer;">
+                        <input type="checkbox" id="clearance-inventory-select-all" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
+                        Select all rooms and items
+                        </label>
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <input type="text" id="clearance-custom-item-input" placeholder="Custom item name" style="border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;min-width:220px;max-width:280px;font-size:0.93rem;">
+                            <button type="button" id="clearance-custom-item-add" style="border:1px solid #2563eb;background:#eff6ff;color:#1d4ed8;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer;">Add custom item</button>
+                        </div>
+                    </div>
+                </div>
+                <div style="padding:12px 16px 14px;overflow:auto;display:flex;flex-direction:column;gap:10px;background:#fff;">
+                    <section id="clearance-custom-items-section" style="border:1px dashed #bfdbfe;border-radius:12px;padding:12px;background:#f8fbff;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+                            <div style="font-weight:800;color:#0f172a;font-size:1rem;">Custom items</div>
+                            <span style="font-size:0.82rem;color:#64748b;">User added</span>
+                        </div>
+                        <div id="clearance-custom-items-list" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;">
+                            <div id="clearance-custom-empty" style="font-size:0.9rem;color:#64748b;grid-column:1 / -1;">No custom items yet.</div>
+                        </div>
+                    </section>
+                    ${roomSections}
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:10px;padding:12px 16px;border-top:1px solid #e5e7eb;background:#fff;">
+                    <button type="button" data-action="cancel" style="border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:9px 14px;font-weight:700;cursor:pointer;">Cancel</button>
+                    <button type="button" data-action="apply" style="border:0;background:#2563eb;color:#fff;border-radius:8px;padding:9px 14px;font-weight:700;cursor:pointer;">Add Selected Items</button>
+                </div>
+            </div>
+        `;
+
+        const closeModal = () => {
+            modal.style.display = 'none';
+        };
+
+        const allToggle = modal.querySelector('#clearance-inventory-select-all');
+        const selectedCountEl = modal.querySelector('#clearance-inventory-selected-count');
+        const roomToggles = Array.from(modal.querySelectorAll('.clearance-room-toggle'));
+        const customItemsList = modal.querySelector('#clearance-custom-items-list');
+        const customEmptyState = modal.querySelector('#clearance-custom-empty');
+        const customItemInput = modal.querySelector('#clearance-custom-item-input');
+        const customItemAddBtn = modal.querySelector('#clearance-custom-item-add');
+        const getItemChecks = () => Array.from(modal.querySelectorAll('.clearance-inventory-item'));
+        let customItemSeed = 0;
+
+        const syncToggleStates = () => {
+            const itemChecks = getItemChecks();
+            roomToggles.forEach((roomToggle) => {
+                const roomKey = roomToggle.getAttribute('data-room-toggle');
+                const roomItems = itemChecks.filter((el) => el.getAttribute('data-room') === roomKey);
+                const selectedCount = roomItems.filter((el) => el.checked).length;
+                roomToggle.checked = selectedCount > 0 && selectedCount === roomItems.length;
+                roomToggle.indeterminate = selectedCount > 0 && selectedCount < roomItems.length;
+            });
+
+            const selectedTotal = itemChecks.filter((el) => el.checked).length;
+            allToggle.checked = itemChecks.length > 0 && selectedTotal === itemChecks.length;
+            allToggle.indeterminate = selectedTotal > 0 && selectedTotal < itemChecks.length;
+            if (selectedCountEl) {
+                selectedCountEl.textContent = `${selectedTotal} selected`;
+            }
+        };
+
+        allToggle.addEventListener('change', () => {
+            const itemChecks = getItemChecks();
+            itemChecks.forEach((el) => {
+                el.checked = allToggle.checked;
+            });
+            syncToggleStates();
+        });
+
+        roomToggles.forEach((roomToggle) => {
+            roomToggle.addEventListener('change', () => {
+                const roomKey = roomToggle.getAttribute('data-room-toggle');
+                const itemChecks = getItemChecks();
+                itemChecks
+                    .filter((el) => el.getAttribute('data-room') === roomKey)
+                    .forEach((el) => {
+                        el.checked = roomToggle.checked;
+                    });
+                syncToggleStates();
+            });
+        });
+
+        getItemChecks().forEach((itemCheck) => {
+            itemCheck.addEventListener('change', syncToggleStates);
+        });
+
+        const addCustomItem = () => {
+            const rawValue = String(customItemInput?.value || '').trim();
+            if (!rawValue) {
+                if (customItemInput && typeof customItemInput.focus === 'function') {
+                    customItemInput.focus();
+                }
+                return;
+            }
+
+            const normalized = rawValue.toLowerCase();
+            const existingCustomChecks = getItemChecks().filter((el) => String(el.getAttribute('data-room') || '') === 'custom');
+            const duplicate = existingCustomChecks.find((el) => {
+                const value = String(el.value || '');
+                const [, itemName] = value.split('||');
+                return String(itemName || '').trim().toLowerCase() === normalized;
+            });
+
+            if (duplicate) {
+                duplicate.checked = true;
+                if (customItemInput) {
+                    customItemInput.value = '';
+                }
+                syncToggleStates();
+                return;
+            }
+
+            customItemSeed += 1;
+            const safeId = `clearance-custom-item-${customItemSeed}`;
+            const encodedValue = `custom||${rawValue}`;
+
+            if (customEmptyState) {
+                customEmptyState.remove();
+            }
+
+            const wrapper = document.createElement('label');
+            wrapper.setAttribute('for', safeId);
+            wrapper.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:9px 10px;cursor:pointer;border:1px solid #e5e7eb;border-radius:8px;background:#fff;min-height:46px;';
+            wrapper.innerHTML = `
+                <input type="checkbox" class="clearance-inventory-item" data-room="custom" id="${safeId}" value="${encodedValue}" checked style="margin-top:1px;width:18px;height:18px;accent-color:#2563eb;cursor:pointer;">
+                <span style="line-height:1.35;color:#0f172a;">${rawValue}</span>
+            `;
+
+            customItemsList?.appendChild(wrapper);
+            const newInput = wrapper.querySelector('input.clearance-inventory-item');
+            if (newInput) {
+                newInput.addEventListener('change', syncToggleStates);
+            }
+
+            if (customItemInput) {
+                customItemInput.value = '';
+                customItemInput.focus();
+            }
+            syncToggleStates();
+        };
+
+        if (customItemAddBtn) {
+            customItemAddBtn.addEventListener('click', addCustomItem);
+        }
+        if (customItemInput) {
+            customItemInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    addCustomItem();
+                }
+            });
+        }
+
+        modal.querySelector('[data-action="close"]').addEventListener('click', closeModal);
+        modal.querySelector('[data-action="cancel"]').addEventListener('click', closeModal);
+
+        modal.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                closeModal();
+            }
+        });
+
+        modal.querySelector('[data-action="apply"]').addEventListener('click', () => {
+            const selectedValues = getItemChecks()
+                .filter((el) => el.checked)
+                .map((el) => String(el.value || '').trim())
+                .filter(Boolean);
+
+            if (selectedValues.length === 0) {
+                alert('Select at least one inventory item to add.');
+                return;
+            }
+
+            const selectedLabels = selectedValues.map((raw) => {
+                const [roomKey, itemName] = raw.split('||');
+                if (roomKey === 'custom') {
+                    return `Custom: ${itemName}`;
+                }
+                const roomName = roomEntries.find((entry) => entry.roomKey === roomKey)?.roomLabel || roomKey;
+                return `${roomName}: ${itemName}`;
+            });
+
+            appendClearanceSelectedItems(selectedLabels);
+            closeModal();
+        });
+
+        syncToggleStates();
+        modal.style.display = 'flex';
+    };
+
+    if (clearanceAddItemBtn && clearanceItemsList) {
+        clearanceAddItemBtn.addEventListener('click', () => {
+            const clone = appendClearanceCard();
+            if (!clone) return;
+            const firstField = clone.querySelector('[data-clearance-field="description"]');
+            if (firstField && typeof firstField.focus === 'function') {
+                firstField.focus();
+            }
+        });
+    }
+
+    if (clearanceSelectInventoryBtn && clearanceItemsList) {
+        clearanceSelectInventoryBtn.addEventListener('click', showClearanceInventoryPickerModal);
+    }
+
+    refreshFreightUnitTypeOptions();
 
     const clearanceFieldIds = [
         'clearance3-weight-range',
@@ -23794,6 +25193,9 @@ document.addEventListener('DOMContentLoaded', function () {
         field.addEventListener('input', () => syncToHiddenDescription(buildClearanceDescriptionSummary));
         field.addEventListener('change', () => syncToHiddenDescription(buildClearanceDescriptionSummary));
     });
+
+    syncClearanceCardTitles();
+    bindClearanceOptionNavs(document.getElementById('clearance-step3-form') || document);
 });
 
 function showOfficeRemovalSection() {
@@ -23936,7 +25338,11 @@ function showClearanceSection() {
         clearanceSection.style.display = 'block';
     }
     if (deliveryLocationCol) {
-        deliveryLocationCol.style.display = '';
+        deliveryLocationCol.style.display = 'none';
+    }
+
+    if (typeof window.syncClearanceDeliveryFromPickup === 'function') {
+        window.syncClearanceDeliveryFromPickup();
     }
 }
 
@@ -26416,8 +27822,10 @@ function setupRouteListeners() {
     if (pickupInput) {
         setupAddressAutocomplete(pickupInput, 'pickup');
         pickupInput.addEventListener('input', syncHiddenCityFromPrimaryInputs);
+        pickupInput.addEventListener('input', syncClearanceDeliveryFromPickup);
         pickupInput.addEventListener('blur', updateRouteIfReady);
         pickupInput.addEventListener('change', updateRouteIfReady);
+        pickupInput.addEventListener('change', syncClearanceDeliveryFromPickup);
     }
     if (deliveryInput) {
         setupAddressAutocomplete(deliveryInput, 'delivery');
@@ -26431,6 +27839,8 @@ function setupRouteListeners() {
         setupPostcodeAutocomplete(pickupPostcode, 'pickup');
         pickupPostcode.addEventListener('blur', () => handleEircodeLookup(pickupPostcode, 'pickup'));
         pickupPostcode.addEventListener('change', () => handleEircodeLookup(pickupPostcode, 'pickup'));
+        pickupPostcode.addEventListener('input', syncClearanceDeliveryFromPickup);
+        pickupPostcode.addEventListener('change', syncClearanceDeliveryFromPickup);
     }
     if (deliveryPostcode) {
         setupPostcodeAutocomplete(deliveryPostcode, 'delivery');
@@ -26439,7 +27849,32 @@ function setupRouteListeners() {
     }
 
     syncHiddenCityFromPrimaryInputs();
+    syncClearanceDeliveryFromPickup();
 }
+
+function syncClearanceDeliveryFromPickup() {
+    if (!isClearanceService(getActiveServiceValue())) return;
+
+    const pickupAddress = document.getElementById('pickup-address');
+    const pickupCity = document.getElementById('pickup-city');
+    const pickupPostcode = document.getElementById('pickup-postcode');
+    const pickupCityArea = document.getElementById('pickup-city-area');
+    const pickupAreaEircode = document.getElementById('pickup-area-eircode');
+
+    const deliveryAddress = document.getElementById('delivery-address');
+    const deliveryCity = document.getElementById('delivery-city');
+    const deliveryPostcode = document.getElementById('delivery-postcode');
+    const deliveryCityArea = document.getElementById('delivery-city-area');
+    const deliveryAreaEircode = document.getElementById('delivery-area-eircode');
+
+    if (deliveryAddress && pickupAddress) deliveryAddress.value = String(pickupAddress.value || '').trim();
+    if (deliveryCity && pickupCity) deliveryCity.value = String(pickupCity.value || '').trim();
+    if (deliveryPostcode && pickupPostcode) deliveryPostcode.value = String(pickupPostcode.value || '').trim();
+    if (deliveryCityArea && pickupCityArea) deliveryCityArea.value = String(pickupCityArea.value || '').trim();
+    if (deliveryAreaEircode && pickupAreaEircode) deliveryAreaEircode.value = String(pickupAreaEircode.value || '').trim();
+}
+
+window.syncClearanceDeliveryFromPickup = syncClearanceDeliveryFromPickup;
 
 function setupMultiStopRouteListeners() {
     const stopList = document.getElementById('multi-stop-list');
@@ -28015,6 +29450,64 @@ function buildOverviewFloorInventoryMarkup(kind) {
     const selectedDelivery = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || []));
     const serviceValue = getActiveServiceValue();
 
+    if (isClearanceService(serviceValue)) {
+        if (kind !== 'pickup') {
+            return 'No delivery floor assignments yet.';
+        }
+
+        const cards = Array.from(document.querySelectorAll('#clearance-step3-form .clearance-customized-card'));
+        const targetFloor = selectedPickup[0]
+            || (document.getElementById('pickup-floor-select')?.value || '').trim()
+            || 'Ground';
+
+        const cardRows = cards.map((card, index) => {
+            const description = String(card.querySelector('[data-clearance-field="description"]')?.value || '').trim();
+            const weight = String(card.querySelector('[data-clearance-field="weight"]')?.value || '').trim();
+            const recyclingRaw = String(card.querySelector('[data-clearance-field="recycling"]')?.value || '').trim();
+            const recycling = recyclingRaw === 'yes'
+                ? 'Recycling: Included'
+                : (recyclingRaw === 'no' ? 'Recycling: Not included' : '');
+
+            const parts = [];
+            if (description) parts.push(description);
+            if (weight) parts.push(`Weight: ${weight}`);
+            if (recycling) parts.push(recycling);
+
+            const line = parts.join(' | ');
+            if (!line) return '';
+            return `<li>${escapeOverviewHtml(`Item ${index + 1}: ${line}`)}</li>`;
+        }).filter(Boolean);
+
+        let selectedRows = [];
+        const selectedItemsRaw = String(document.getElementById('clearance-selected-items-hidden')?.value || '').trim();
+        if (selectedItemsRaw) {
+            try {
+                const parsedSelected = JSON.parse(selectedItemsRaw);
+                if (Array.isArray(parsedSelected) && parsedSelected.length > 0) {
+                    selectedRows = parsedSelected
+                        .map((item) => String(item || '').trim())
+                        .filter(Boolean)
+                        .map((item, idx) => `<li>${escapeOverviewHtml(`Selected ${idx + 1}: ${item}`)}</li>`);
+                }
+            } catch (_) {
+                // Ignore malformed selected-items payload.
+            }
+        }
+
+        const rows = [...cardRows, ...selectedRows];
+
+        if (rows.length === 0) {
+            return 'No pickup inventory selected yet.';
+        }
+
+        return `
+            <div class="overview-floor-block">
+                <div class="overview-floor-title">${escapeOverviewHtml(targetFloor)} Floor</div>
+                <ul class="overview-floor-items">${rows.join('')}</ul>
+            </div>
+        `;
+    }
+
     if (isVehicleTransportService(serviceValue)) {
         const detailRows = getVehicleOverviewDetailRows(serviceValue);
         if (detailRows.length === 0) {
@@ -29583,25 +31076,45 @@ function updateOverviewMoversDisplay() {
     const pickupMoversMode = document.getElementById('service-pickup-movers-mode');
     const deliveryMoversInput = document.getElementById('service-delivery-movers');
     const deliveryMoversMode = document.getElementById('service-delivery-movers-mode');
+    const pickupLoadingMethod = String(document.getElementById('service-pickup-loading-method')?.value || '').trim();
+    const deliveryLoadingMethod = String(document.getElementById('service-delivery-loading-method')?.value || '').trim();
+    const isFreight = isFreightService(getActiveServiceValue());
+
+    const formatFreightLoadingMethod = (value) => {
+        if (value === 'manual') return 'Manual Loading';
+        if (value === 'forklift') return 'Forklift Loading';
+        return '';
+    };
+
+    const buildMoverSummaryText = (moversInput, moversMode, loadingMethodValue) => {
+        let baseText = '—';
+
+        if (moversMode?.value === 'unsure') {
+            baseText = 'Not Sure';
+        } else if (moversInput?.value) {
+            baseText = `${moversInput.value} Mover${moversInput.value !== '1' ? 's' : ''}`;
+        }
+
+        if (!isFreight) {
+            return baseText;
+        }
+
+        const loadingLabel = formatFreightLoadingMethod(loadingMethodValue);
+        if (!loadingLabel) {
+            return baseText;
+        }
+        if (baseText === '—') {
+            return loadingLabel;
+        }
+        return `${baseText} | ${loadingLabel}`;
+    };
 
     if (pickupMoversEl) {
-        if (pickupMoversMode?.value === 'unsure') {
-            pickupMoversEl.textContent = 'Not Sure';
-        } else if (pickupMoversInput?.value) {
-            pickupMoversEl.textContent = `${pickupMoversInput.value} Mover${pickupMoversInput.value !== '1' ? 's' : ''}`;
-        } else {
-            pickupMoversEl.textContent = '—';
-        }
+        pickupMoversEl.textContent = buildMoverSummaryText(pickupMoversInput, pickupMoversMode, pickupLoadingMethod);
     }
 
     if (deliveryMoversEl) {
-        if (deliveryMoversMode?.value === 'unsure') {
-            deliveryMoversEl.textContent = 'Not Sure';
-        } else if (deliveryMoversInput?.value) {
-            deliveryMoversEl.textContent = `${deliveryMoversInput.value} Mover${deliveryMoversInput.value !== '1' ? 's' : ''}`;
-        } else {
-            deliveryMoversEl.textContent = '—';
-        }
+        deliveryMoversEl.textContent = buildMoverSummaryText(deliveryMoversInput, deliveryMoversMode, deliveryLoadingMethod);
     }
 }
 
@@ -29853,24 +31366,76 @@ function openOverviewMoveEditModal(kind) {
 }
 
 function syncOverviewVehicleVisibility() {
-    const isVehicleLikeService = isVehicleLikeStepFlowService(getActiveServiceValue());
-    const isVehicleTransport = isVehicleTransportService(getActiveServiceValue());
+    const serviceValue = getActiveServiceValue();
+    const isVehicleLikeService = isVehicleLikeStepFlowService(serviceValue);
+    const isVehicleTransport = isVehicleTransportService(serviceValue);
+    const isClearance = isClearanceService(serviceValue);
+    const shouldHideStorage = isPackagedParcelsService(serviceValue) || serviceValue === 'Vehicle Parts' || isFreightService(serviceValue);
     const serviceSummaryCard = document.getElementById('summary-service')?.closest('.overview-item');
     const inventoryGrid = document.querySelector('.overview-inventory-grid');
+    const deliveryTypeCard = document.getElementById('summary-delivery-type')?.closest('.overview-item');
     const pickupLiftCard = document.getElementById('summary-pickup-elevator')?.closest('.overview-item');
     const deliveryLiftCard = document.getElementById('summary-delivery-elevator')?.closest('.overview-item');
+    const deliveryFloorsCard = document.getElementById('summary-delivery-floors')?.closest('.overview-item');
+    const deliveryMoversCard = document.getElementById('summary-delivery-movers')?.closest('.overview-item');
+    const deliveryAddressCard = document.getElementById('summary-delivery-address')?.closest('.overview-item');
+    const routeDistanceCard = document.getElementById('summary-route-distance')?.closest('.overview-item');
+    const routeDurationCard = document.getElementById('summary-route-duration')?.closest('.overview-item');
+    const deliveryInventoryCard = document.getElementById('summary-delivery-inventory')?.closest('.overview-inventory-card');
+    const routeDeliveryLine = document.getElementById('overview-point-b')?.closest('.overview-route-line');
+    const routeAddressesEditBtn = document.querySelector('.overview-route-card [data-overview-edit="addresses"]');
+    const routeCities = document.getElementById('overview-route-cities');
+    const pickupCity = document.getElementById('pickup-city')?.value?.trim() || 'Pickup';
+    const storageDatesCard = document.getElementById('summary-storage-dates')?.closest('.overview-item');
 
     if (serviceSummaryCard) {
         serviceSummaryCard.style.display = isVehicleLikeService ? 'none' : '';
     }
     if (inventoryGrid) {
-        inventoryGrid.style.display = isVehicleLikeService && !isVehicleTransport ? 'none' : '';
+        inventoryGrid.style.display = (isVehicleLikeService && !isVehicleTransport && !isClearance) ? 'none' : '';
     }
     if (pickupLiftCard) {
         pickupLiftCard.style.display = isVehicleTransport ? 'none' : '';
     }
     if (deliveryLiftCard) {
         deliveryLiftCard.style.display = isVehicleTransport ? 'none' : '';
+    }
+    if (storageDatesCard) {
+        storageDatesCard.style.display = shouldHideStorage ? 'none' : '';
+    }
+
+    if (deliveryTypeCard) {
+        deliveryTypeCard.style.display = isClearance ? 'none' : '';
+    }
+    if (deliveryLiftCard) {
+        deliveryLiftCard.style.display = isVehicleTransport || isClearance ? 'none' : '';
+    }
+    if (deliveryFloorsCard) {
+        deliveryFloorsCard.style.display = isClearance ? 'none' : '';
+    }
+    if (deliveryMoversCard) {
+        deliveryMoversCard.style.display = isClearance ? 'none' : '';
+    }
+    if (deliveryAddressCard) {
+        deliveryAddressCard.style.display = isClearance ? 'none' : '';
+    }
+    if (routeDistanceCard) {
+        routeDistanceCard.style.display = isClearance ? 'none' : '';
+    }
+    if (routeDurationCard) {
+        routeDurationCard.style.display = isClearance ? 'none' : '';
+    }
+    if (deliveryInventoryCard) {
+        deliveryInventoryCard.style.display = isClearance ? 'none' : '';
+    }
+    if (routeDeliveryLine) {
+        routeDeliveryLine.style.display = isClearance ? 'none' : '';
+    }
+    if (routeAddressesEditBtn) {
+        routeAddressesEditBtn.style.display = isClearance ? 'none' : '';
+    }
+    if (routeCities && isClearance) {
+        routeCities.textContent = pickupCity;
     }
 }
 

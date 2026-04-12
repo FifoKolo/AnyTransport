@@ -3726,27 +3726,65 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     width: 100%;
 }
 
-.freight-step3-card {
-    margin: 0;
+.freight-customized-shell {
+    padding: var(--spacing-xl);
 }
 
-.freight-step3-card-title {
-    margin: 0 0 0.9rem;
+.freight-customized-title {
+    margin: 0 0 10px;
     color: var(--text-primary);
-    font-size: 1.65rem;
+    font-size: 1.6rem;
     font-weight: 700;
 }
 
-.freight-step3-subtitle {
-    margin: 0 0 1rem;
-    color: #4b5563;
-    font-size: 0.98rem;
+.freight-customized-subtitle {
+    margin: 0 0 14px;
+    color: #64748b;
+    font-size: 0.92rem;
+}
+
+.freight-customized-card {
+    margin-top: 8px;
+    gap: 0.95rem;
+}
+
+.freight-item-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 4px;
+}
+
+.freight-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.8rem;
+}
+
+.freight-dimension-inputs {
+    grid-template-columns: 0.9fr 1fr 1fr 1fr 0.95fr 0.9fr;
+}
+
+.freight-weight-unit-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 220px);
+}
+
+.freight-dimension-preset-note {
+    margin: 2px 0 0;
+    padding: 10px 12px;
+    border: 1px solid #93c5fd;
+    border-radius: 8px;
+    background: #dbeafe;
+    color: #1e3a8a;
+    font-size: 0.86rem;
+    font-weight: 600;
 }
 
 .freight-step3-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.9rem;
     align-items: start;
 }
 
@@ -3761,8 +3799,9 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
 }
 
 .freight-step3-form .form-input {
-    min-height: 52px;
-    border-color: #d1d5db;
+    min-height: 50px;
+    border-color: #60a5fa;
+    background: #ffffff;
     font-size: 1.02rem;
 }
 
@@ -3845,6 +3884,22 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     .freight-step3-grid {
         grid-template-columns: 1fr 1fr;
     }
+
+    .freight-meta-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .freight-dimension-inputs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .freight-customized-title {
+        font-size: 1.45rem;
+    }
+
+    .freight-customized-subtitle {
+        font-size: 0.9rem;
+    }
 }
 
 @media (max-width: 700px) {
@@ -3852,8 +3907,12 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
         grid-template-columns: 1fr;
     }
 
-    .freight-step3-card-title {
-        font-size: 1.45rem;
+    .freight-dimension-inputs {
+        grid-template-columns: 1fr;
+    }
+
+    .freight-weight-unit-row {
+        grid-template-columns: 1fr;
     }
 }
 
