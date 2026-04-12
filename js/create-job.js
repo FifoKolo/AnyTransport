@@ -5206,6 +5206,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const customizedSection = document.getElementById('customized-items-inventory-section');
             const customizedItemsField = document.getElementById('customized-items-hidden');
             const dimensionsList = document.getElementById('dimensions-list');
+            const isSpecialistService = String(getActiveServiceValue() || '').trim().toLowerCase() === 'specialist & antiques';
 
             if (!customizedSection || customizedSection.offsetParent === null) {
                 return null;
@@ -5266,6 +5267,22 @@ document.addEventListener('DOMContentLoaded', function () {
                         const fieldName = fieldNameMap[selector] || selector;
                         console.warn(`Missing required field in custom item ${rowIndex + 1}: ${selector}`);
                         return field;
+                    }
+                }
+
+                if (isSpecialistService) {
+                    const specialistHidden = row.querySelector('.specialist-item-value-hidden');
+                    const specialistValue = String(specialistHidden?.value || '').trim();
+                    if (!specialistValue) {
+                        return row.querySelector('.specialist-item-value-nav .option-nav-btn') || row;
+                    }
+
+                    if (specialistValue === 'other') {
+                        const customValueField = row.querySelector('.specialist-item-custom-value');
+                        const customValue = String(customValueField?.value || '').trim();
+                        if (!customValue) {
+                            return customValueField || row;
+                        }
                     }
                 }
             }
@@ -9532,6 +9549,8 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             const sourceFloor = String(row.querySelector('.dimension-source-floor')?.value || '').trim();
             const sizeUnit = String(row.querySelector('.dimension-size-unit')?.value || 'cm').trim() || 'cm';
             const weightUnit = String(row.querySelector('.dimension-weight-unit')?.value || 'kg').trim() || 'kg';
+            const specialistValueRange = String(row.querySelector('.specialist-item-value-hidden')?.value || '').trim();
+            const specialistCustomValue = String(row.querySelector('.specialist-item-custom-value')?.value || '').trim();
             const photos = Array.from(row.querySelectorAll('.photo-input')).map((input) => {
                 const hasRealFile = !!(input.files && input.files.length > 0);
                 const savedName = String(input.dataset.savedName || '').trim();
@@ -9568,10 +9587,23 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 sourceFloor,
                 sizeUnit,
                 weightUnit,
+                specialistValueRange,
+                specialistCustomValue,
                 photos
             };
         }).filter((item) => {
-            return !!(item.name || item.quantity || item.width || item.depth || item.height || item.weight || item.sourceFloor || (Array.isArray(item.photos) && item.photos.length > 0));
+            return !!(
+                item.name
+                || item.quantity
+                || item.width
+                || item.depth
+                || item.height
+                || item.weight
+                || item.sourceFloor
+                || item.specialistValueRange
+                || item.specialistCustomValue
+                || (Array.isArray(item.photos) && item.photos.length > 0)
+            );
         });
     };
 
@@ -9614,6 +9646,22 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             setFieldValue('.dimension-size-unit', data.sizeUnit || 'cm');
             setFieldValue('.dimension-weight-unit', data.weightUnit || 'kg');
             setFieldValue('.dimension-source-floor', data.sourceFloor);
+            setFieldValue('.specialist-item-value-hidden', data.specialistValueRange || data.estimatedValueRange);
+            setFieldValue('.specialist-item-custom-value', data.specialistCustomValue || data.estimatedCustomValue);
+
+            const specialistButtons = Array.from(row.querySelectorAll('.specialist-item-value-nav .option-nav-btn'));
+            const specialistValue = String(data.specialistValueRange || data.estimatedValueRange || '').trim();
+            specialistButtons.forEach((btn) => {
+                const selected = String(btn.getAttribute('data-value') || '').trim() === specialistValue;
+                btn.classList.toggle('selected', selected);
+                btn.classList.toggle('is-active', selected);
+                btn.setAttribute('aria-checked', selected ? 'true' : 'false');
+                btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+            });
+
+            if (typeof syncSpecialistItemValueUi === 'function') {
+                syncSpecialistItemValueUi(row);
+            }
 
             const photoInputs = Array.from(row.querySelectorAll('.photo-input'));
             const photoDrafts = Array.isArray(data.photos) ? data.photos : [];
@@ -17555,6 +17603,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const availablePickupFloors = getEffectiveCustomizedPickupFloors();
         const requiresSourceFloor = availablePickupFloors.length > 1;
+        const isSpecialistService = String(getActiveServiceValue() || '').trim().toLowerCase() === 'specialist & antiques';
 
         const rows = Array.from(dimensionsList.querySelectorAll('.dimension-item'));
         const parsedItems = rows.map((row) => {
@@ -17570,6 +17619,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const selectedSourceFloor = (row.querySelector('.dimension-source-floor')?.value || '').trim();
             const sourceFloor = selectedSourceFloor || (availablePickupFloors.length === 1 ? availablePickupFloors[0] : '');
             const photos = Array.from(row.querySelectorAll('.photo-input')).filter((input) => input.files && input.files.length > 0).length;
+            const estimatedValueRange = (row.querySelector('.specialist-item-value-hidden')?.value || '').trim();
+            const estimatedCustomValue = (row.querySelector('.specialist-item-custom-value')?.value || '').trim();
+            const specialistValueValid = !isSpecialistService
+                || (!!estimatedValueRange && (estimatedValueRange !== 'other' || !!estimatedCustomValue));
 
             return {
                 name,
@@ -17582,7 +17635,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 weightUnit,
                 sourceFloor,
                 photos,
-                valid: !!name && quantity > 0 && !!width && !!depth && !!height && !!weight && (!requiresSourceFloor || !!sourceFloor)
+                estimatedValueRange,
+                estimatedCustomValue,
+                valid: !!name
+                    && quantity > 0
+                    && !!width
+                    && !!depth
+                    && !!height
+                    && !!weight
+                    && (!requiresSourceFloor || !!sourceFloor)
+                    && specialistValueValid
             };
         });
 
@@ -17669,76 +17731,100 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.syncCustomizedItemFloorFields = syncCustomizedItemFloorFields;
 
+    const syncSpecialistItemValueUi = (row) => {
+        if (!row) return;
+
+        const section = row.querySelector('.specialist-item-value-section');
+        const hidden = row.querySelector('.specialist-item-value-hidden');
+        const customWrap = row.querySelector('.specialist-item-custom-wrap');
+        const customInput = row.querySelector('.specialist-item-custom-value');
+        const buttons = Array.from(row.querySelectorAll('.specialist-item-value-nav .option-nav-btn'));
+
+        if (!section || !hidden || !customWrap || !customInput || !buttons.length) return;
+
+        const isSpecialistService = String(getActiveServiceValue() || '').trim().toLowerCase() === 'specialist & antiques';
+        section.style.display = isSpecialistService ? 'block' : 'none';
+
+        if (!isSpecialistService) {
+            hidden.value = '';
+            customInput.value = '';
+            customWrap.style.display = 'none';
+            buttons.forEach((btn) => {
+                btn.classList.remove('selected', 'is-active');
+                btn.setAttribute('aria-checked', 'false');
+                btn.setAttribute('aria-pressed', 'false');
+            });
+            return;
+        }
+
+        const setSelection = (value) => {
+            const normalizedValue = String(value || '').trim();
+            hidden.value = normalizedValue;
+            hidden.dispatchEvent(new Event('change', { bubbles: true }));
+
+            buttons.forEach((btn) => {
+                const selected = String(btn.getAttribute('data-value') || '').trim() === normalizedValue;
+                btn.classList.toggle('selected', selected);
+                btn.classList.toggle('is-active', selected);
+                btn.setAttribute('aria-checked', selected ? 'true' : 'false');
+                btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+            });
+
+            const showCustom = normalizedValue === 'other';
+            customWrap.style.display = showCustom ? 'block' : 'none';
+            if (!showCustom) {
+                customInput.value = '';
+                customInput.removeAttribute('data-required');
+                customInput.setAttribute('aria-required', 'false');
+            } else {
+                customInput.setAttribute('data-required', 'true');
+                customInput.setAttribute('aria-required', 'true');
+            }
+        };
+
+        buttons.forEach((btn) => {
+            if (btn.dataset.specialistItemBound === 'true') return;
+            btn.dataset.specialistItemBound = 'true';
+            btn.addEventListener('click', () => {
+                setSelection(btn.getAttribute('data-value') || '');
+                updateCustomizedItemsHiddenValue();
+                if (typeof window.updateNextButtonState === 'function') {
+                    window.updateNextButtonState();
+                }
+            });
+        });
+
+        if (customInput.dataset.specialistCustomBound !== 'true') {
+            customInput.dataset.specialistCustomBound = 'true';
+            ['input', 'change', 'blur'].forEach((evtName) => {
+                customInput.addEventListener(evtName, () => {
+                    updateCustomizedItemsHiddenValue();
+                    if (typeof window.updateNextButtonState === 'function') {
+                        window.updateNextButtonState();
+                    }
+                });
+            });
+        }
+
+        setSelection(hidden.value || '');
+    };
+
+    const syncSpecialistItemValueFields = () => {
+        if (!dimensionsList) return;
+        const rows = Array.from(dimensionsList.querySelectorAll('.dimension-item'));
+        rows.forEach((row) => syncSpecialistItemValueUi(row));
+    };
+
+    window.syncSpecialistItemValueFields = syncSpecialistItemValueFields;
+
     function placeSpecialistValueInsideBlueForm() {
         const customSection = document.getElementById('customized-items-inventory-section');
         const valueSection = document.getElementById('specialist-antiques-value-section');
-        const hiddenAnchor = document.getElementById('customized-items-hidden');
-        const titleNode = document.getElementById('customized-items-heading-text');
-        const valueHidden = document.getElementById('specialist-value-hidden');
         if (!customSection || !valueSection || !dimensionsList) return;
 
-        const normalizeLabel = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
-        const activeServiceValue = (
-            document.getElementById('item-description-hidden')?.value
-            || document.getElementById('create-job-hidden')?.value
-            || decodeURIComponent(new URLSearchParams(window.location.search).get('service') || '')
-            || ''
-        ).trim();
-        const headingText = normalizeLabel(titleNode?.textContent || '');
-        const hasSpecialistHeading = headingText.includes('specialist') && headingText.includes('antiques');
-        const hasSpecialistSelection = !!(
-            String(valueHidden?.value || '').trim()
-            || valueSection.querySelector('.option-nav-btn.selected, .option-nav-btn[aria-checked="true"]')
-        );
-        const isSpecialist = normalizeLabel(activeServiceValue) === 'specialist & antiques'
-            || hasSpecialistHeading
-            || hasSpecialistSelection;
-        const firstItem = dimensionsList.querySelector('.dimension-item');
-
-        if (!isSpecialist) {
-            valueSection.style.display = 'none';
-            if (valueSection.parentElement !== customSection) {
-                if (hiddenAnchor && hiddenAnchor.parentElement === customSection) {
-                    customSection.insertBefore(valueSection, hiddenAnchor);
-                } else {
-                    customSection.prepend(valueSection);
-                }
-            }
-            return;
-        }
-
-        if (!firstItem) {
-            // During refresh/restore, items can be rendered a tick later; keep section visible and anchored.
-            if (valueSection.parentElement !== customSection) {
-                if (hiddenAnchor && hiddenAnchor.parentElement === customSection) {
-                    customSection.insertBefore(valueSection, hiddenAnchor);
-                } else {
-                    customSection.prepend(valueSection);
-                }
-            }
-            valueSection.style.display = 'block';
-            return;
-        }
-
-        const dimensionsInputs = firstItem.querySelector('.dimension-inputs');
-        const valueSlot = firstItem.querySelector('.specialist-value-slot');
-        const isAlreadyPlacedAfterDimensions = (
-            valueSection.parentElement === firstItem
-            && valueSection.previousElementSibling === dimensionsInputs
-        );
-
-        if (!isAlreadyPlacedAfterDimensions) {
-            if (valueSlot && valueSlot.parentElement === firstItem) {
-                valueSlot.replaceWith(valueSection);
-            } else if (dimensionsInputs && dimensionsInputs.parentElement === firstItem) {
-                dimensionsInputs.insertAdjacentElement('afterend', valueSection);
-            } else if (valueSection.parentElement !== firstItem) {
-                firstItem.appendChild(valueSection);
-            }
-        }
-        valueSection.style.marginTop = '12px';
-        valueSection.style.marginBottom = '8px';
-        valueSection.style.display = 'block';
+        // Keep legacy global specialist value block hidden; each item owns its own value controls.
+        valueSection.style.display = 'none';
+        syncSpecialistItemValueFields();
     }
 
     if (dimensionsList) {
@@ -20286,7 +20372,30 @@ document.addEventListener('DOMContentLoaded', function() {
                     </select>
                 </div>
             </div>
-            ${itemIndex === 1 ? '<div class="specialist-value-slot" style="margin-top:12px;"></div>' : ''}
+            <div class="specialist-item-value-section" style="display:none; margin-top:12px; padding:14px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff;">
+                <h4 style="margin:0 0 10px; color: var(--text-primary); font-size:1rem;">Estimated Value</h4>
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label class="form-label">What is the estimated value of this item? <span class="required-text">(required)</span></label>
+                    <div class="custom-dropdown-wrapper has-option-nav">
+                        <div class="option-nav option-nav--compact specialist-item-value-nav" role="radiogroup" aria-label="Estimated value range for this item">
+                            <button type="button" class="option-nav-btn" data-value="under-500" role="radio" aria-checked="false"><span>Under €500</span></button>
+                            <button type="button" class="option-nav-btn" data-value="500-1000" role="radio" aria-checked="false"><span>€500 - €1,000</span></button>
+                            <button type="button" class="option-nav-btn" data-value="1000-5000" role="radio" aria-checked="false"><span>€1,000 - €5,000</span></button>
+                            <button type="button" class="option-nav-btn" data-value="5000-10000" role="radio" aria-checked="false"><span>€5,000 - €10,000</span></button>
+                            <button type="button" class="option-nav-btn" data-value="10000-plus" role="radio" aria-checked="false"><span>Over €10,000</span></button>
+                            <button type="button" class="option-nav-btn" data-value="other" role="radio" aria-checked="false"><span>Other</span></button>
+                        </div>
+                        <input type="hidden" class="specialist-item-value-hidden" value="">
+                    </div>
+                </div>
+                <div class="specialist-item-custom-wrap" style="display:none; margin-bottom:0;">
+                    <label class="form-label">Enter custom value <span class="required-text">(required)</span></label>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <span style="font-weight:600; color:#1e293b;">€</span>
+                        <input type="number" class="form-input specialist-item-custom-value" placeholder="e.g. 7500" min="0" step="100" style="flex:1;">
+                    </div>
+                </div>
+            </div>
             <button type="button" class="btn-delete-dimension">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -20492,6 +20601,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         renderPhotosForItem();
         syncCustomizedItemFloorField(item, true);
+        syncSpecialistItemValueUi(item);
         
         bindPhotoUploadHandlers(item);
         
