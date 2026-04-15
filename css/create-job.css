@@ -2623,6 +2623,11 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     word-break: break-word;
 }
 
+.overview-item-value.summary-placeholder {
+    color: #94a3b8;
+    font-style: italic;
+}
+
 .overview-edit-btn {
     align-self: flex-start;
     border: 1px solid #93c5fd;
@@ -2691,6 +2696,11 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     color: #334155;
     font-size: 0.9rem;
     line-height: 1.45;
+}
+
+.overview-inventory-list.summary-placeholder {
+    color: #94a3b8;
+    font-style: italic;
 }
 
 .overview-floor-block {

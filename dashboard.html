@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260322-1">
     <link rel="stylesheet" href="css/dashboard.css?v=20260322-1">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js"></script>
 </head>
 <body>
     <!-- Navigation Bar -->
@@ -51,10 +53,13 @@
                 <div class="user-avatar" id="user-avatar">U</div>
                 <h3 id="user-name">User Name</h3>
                 <p id="user-email">user@example.com</p>
+                <span class="role-pill" id="dashboard-role-badge">Customer</span>
             </div>
 
             <nav class="dashboard-nav">
                 <a href="#" class="nav-item active" data-tab="my-quotes">My Quotes</a>
+                <a href="#" class="nav-item" data-tab="provider-board">Provider Board</a>
+                <a href="#" class="nav-item" data-tab="my-bids">My Bids</a>
                 <a href="#" class="nav-item" data-tab="profile">Profile Settings</a>
             </nav>
         </aside>
@@ -70,7 +75,81 @@
                 <div id="my-quotes-list" class="quotes-list">
                     <!-- Quote requests will be loaded here -->
                 </div>
+            </div>
+
+            <!-- Provider Board Tab -->
+            <div id="provider-board" class="tab-content">
+                <div class="tab-header provider-board-header">
+                    <div>
+                        <h2>Transport Provider Board</h2>
+                        <p class="muted-text">View all customer listings, inspect step-by-step details, and place bids.</p>
+                    </div>
+                    <div class="provider-kpis">
+                        <div class="kpi-card">
+                            <div class="kpi-label">Open listings</div>
+                            <div class="kpi-value" id="kpi-open-listings">0</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">My active bids</div>
+                            <div class="kpi-value" id="kpi-my-bids">0</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Avg. route distance</div>
+                            <div class="kpi-value" id="kpi-avg-distance">0 km</div>
+                        </div>
+                    </div>
                 </div>
+
+                <div class="provider-toolbar">
+                    <div class="provider-filter-tabs" id="provider-filter-tabs">
+                        <button type="button" class="provider-filter-btn active" data-status="all">All</button>
+                        <button type="button" class="provider-filter-btn" data-status="pending">Open</button>
+                        <button type="button" class="provider-filter-btn" data-status="with-my-bid">With My Bid</button>
+                    </div>
+                    <div class="provider-search-wrap">
+                        <label for="provider-search" class="sr-only">Search listings</label>
+                        <input type="search" id="provider-search" class="form-input provider-search" placeholder="Search by listing ID, city, or service type">
+                    </div>
+                </div>
+
+                <div class="provider-advanced-filters">
+                    <div class="filter-group">
+                        <label>Services</label>
+                        <div class="service-filter-toggles" id="service-filter-toggles">
+                            <button type="button" class="service-toggle-btn" data-service="house removal">House Removal</button>
+                            <button type="button" class="service-toggle-btn" data-service="office relocation">Office Relocation</button>
+                            <button type="button" class="service-toggle-btn" data-service="apartment move">Apartment Move</button>
+                            <button type="button" class="service-toggle-btn" data-service="man and van">Man & Van</button>
+                            <button type="button" class="service-toggle-btn" data-service="single room move">Single Room Move</button>
+                        </div>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="filter-distance">Distance (km)</label>
+                        <div class="distance-input-group">
+                            <input type="number" id="filter-distance-min" class="form-input distance-input" placeholder="Min" min="0" value="">
+                            <span class="distance-separator">-</span>
+                            <input type="number" id="filter-distance-max" class="form-input distance-input" placeholder="Max" min="0" value="">
+                        </div>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="filter-date">Move Date From</label>
+                        <input type="date" id="filter-date" class="form-input filter-date">
+                    </div>
+
+                    <button type="button" id="filter-reset-btn" class="btn btn-outline">Reset Filters</button>
+                </div>
+
+                <div id="provider-listings" class="provider-listings" aria-live="polite"></div>
+            </div>
+
+            <!-- My Bids Tab -->
+            <div id="my-bids" class="tab-content">
+                <div class="tab-header">
+                    <h2>My Submitted Bids</h2>
+                </div>
+                <div id="my-bids-list" class="quotes-list"></div>
             </div>
 
             <!-- Profile Settings Tab -->
@@ -83,8 +162,23 @@
                     </div>
 
                     <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="profile-username" placeholder="Display name shown on bids">
+                    </div>
+
+                    <div class="form-group">
                         <label>Email</label>
                         <input type="email" id="profile-email" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="tel" id="profile-phone" placeholder="Enter phone number">
+                    </div>
+
+                    <div class="form-group">
+                        <label>City</label>
+                        <input type="text" id="profile-city" placeholder="Enter city">
                     </div>
 
                     <button type="submit" class="btn btn-primary">Save Changes</button>

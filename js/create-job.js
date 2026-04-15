@@ -18848,7 +18848,35 @@ document.addEventListener('DOMContentLoaded', function() {
         const setSummaryValue = (targetId, value) => {
             const target = document.getElementById(targetId);
             if (!target) return;
-            target.textContent = value && value.trim().length > 0 ? value : '—';
+            if (value && String(value).trim().length > 0) {
+                target.textContent = value;
+                target.classList.remove('summary-placeholder');
+                return;
+            }
+
+            const placeholderMap = {
+                'summary-service': 'Example: House Removals',
+                'summary-pickup-type': 'Example: House',
+                'summary-delivery-type': 'Example: Apartment',
+                'summary-pickup-elevator': 'Example: Yes',
+                'summary-delivery-elevator': 'Example: No',
+                'summary-floors': 'Example: Ground, 1st, Attic',
+                'summary-pickup-floors': 'Example: Ground, 1st',
+                'summary-delivery-floors': 'Example: Ground, 2nd',
+                'summary-pickup-movers': 'Example: 2 Movers',
+                'summary-delivery-movers': 'Example: 1 Mover',
+                'summary-pickup-address': 'Example: 14 Main Street, Dublin, D02',
+                'summary-delivery-address': 'Example: 7 Harbour View, Cork, T12',
+                'summary-date': 'Example: 22 Apr 2026',
+                'summary-storage-dates': 'Example: 22 Apr 2026 - 29 Apr 2026',
+                'summary-notes': 'Example: Please call 30 minutes before arrival',
+                'summary-route-distance': 'Example: 48.6 km',
+                'summary-route-duration': 'Example: 42 mins',
+                'summary-items': 'Example: Sofas, boxes, wardrobe'
+            };
+
+            target.textContent = placeholderMap[targetId] || 'Example pending';
+            target.classList.add('summary-placeholder');
         };
 
         const formatAddress = (addressId, cityId, postcodeId) => {
@@ -29141,8 +29169,8 @@ function updateOverviewRouteLabels() {
         const pointA = document.getElementById('overview-point-a');
         const pointB = document.getElementById('overview-point-b');
         const cityRoute = document.getElementById('overview-route-cities');
-        if (pointA) pointA.textContent = firstAddress || '—';
-        if (pointB) pointB.textContent = lastAddress || '—';
+        if (pointA) pointA.textContent = firstAddress || 'Example pickup address';
+        if (pointB) pointB.textContent = lastAddress || 'Example delivery address';
         if (cityRoute) cityRoute.textContent = stops.length > 1 ? 'Stop 1 → Final Stop' : 'Pickup → Delivery';
         return;
     }
@@ -29166,9 +29194,9 @@ function updateOverviewRouteLabels() {
     const pointB = document.getElementById('overview-point-b');
     const cityRoute = document.getElementById('overview-route-cities');
 
-    if (pointA) pointA.textContent = pickupAddress || '—';
-    if (pointB) pointB.textContent = deliveryAddress || '—';
-    if (cityRoute) cityRoute.textContent = `${pickupCity} → ${deliveryCity}`;
+    if (pointA) pointA.textContent = pickupAddress || 'Example pickup address, city, postcode';
+    if (pointB) pointB.textContent = deliveryAddress || 'Example delivery address, city, postcode';
+    if (cityRoute) cityRoute.textContent = `${pickupCity || 'Pickup'} → ${deliveryCity || 'Delivery'}`;
 }
 
 function escapeOverviewHtml(value) {
@@ -31046,8 +31074,8 @@ function getOverviewFloorSummaryText(kind) {
 }
 
 function updateOverviewFloorAndInventorySummary() {
-    const pickupText = getOverviewFloorSummaryText('pickup') || '—';
-    const deliveryText = getOverviewFloorSummaryText('delivery') || '—';
+    const pickupText = getOverviewFloorSummaryText('pickup') || 'Example: Ground, 1st, Attic';
+    const deliveryText = getOverviewFloorSummaryText('delivery') || 'Example: Ground, 2nd';
 
     const pickupFloorsEl = document.getElementById('summary-pickup-floors');
     const deliveryFloorsEl = document.getElementById('summary-delivery-floors');
@@ -31090,13 +31118,13 @@ function updateOverviewMoversDisplay() {
         let baseText = '—';
 
         if (moversMode?.value === 'unsure') {
-            baseText = 'Not Sure';
+            baseText = 'Not sure yet';
         } else if (moversInput?.value) {
             baseText = `${moversInput.value} Mover${moversInput.value !== '1' ? 's' : ''}`;
         }
 
         if (!isFreight) {
-            return baseText;
+            return baseText === '—' ? 'Example: 1 mover' : baseText;
         }
 
         const loadingLabel = formatFreightLoadingMethod(loadingMethodValue);
@@ -31104,7 +31132,7 @@ function updateOverviewMoversDisplay() {
             return baseText;
         }
         if (baseText === '—') {
-            return loadingLabel;
+            return loadingLabel || 'Example: Manual Loading';
         }
         return `${baseText} | ${loadingLabel}`;
     };

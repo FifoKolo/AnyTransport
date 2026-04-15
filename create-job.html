@@ -81,8 +81,16 @@
                     <input type="text" name="name" required placeholder="John Doe">
                 </div>
                 <div class="form-group">
-                    <label>Nickname <span style="color: #666; font-size: 0.9em;">(Will be shown to the Transport Provider)</span></label>
-                    <input type="text" name="nickname" required placeholder="Johnny">
+                    <label>Username <span style="color: #666; font-size: 0.9em;">(Will be shown to the Transport Provider)</span></label>
+                    <input type="text" name="username" required placeholder="Johnny">
+                </div>
+                <div class="form-group">
+                    <label>Account Type</label>
+                    <div class="signup-role-toggle" role="group" aria-label="Select account type">
+                        <button type="button" class="signup-role-btn active" data-signup-role="customer" aria-pressed="true">Customer</button>
+                        <button type="button" class="signup-role-btn" data-signup-role="provider" aria-pressed="false">Transport Provider</button>
+                    </div>
+                    <input type="hidden" id="signup-role" name="role" value="customer">
                 </div>
                 <div class="form-group">
                     <label>Email</label>

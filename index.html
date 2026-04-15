@@ -78,8 +78,16 @@
                     <input type="text" name="name" required placeholder="John Doe">
                 </div>
                 <div class="form-group">
-                    <label>Nickname <span style="color: #666; font-size: 0.9em;">(Will be shown to the Transport Provider)</span></label>
-                    <input type="text" name="nickname" required placeholder="Johnny">
+                    <label>Username <span style="color: #666; font-size: 0.9em;">(Will be shown to the Transport Provider)</span></label>
+                    <input type="text" name="username" required placeholder="Johnny">
+                </div>
+                <div class="form-group">
+                    <label>Account Type</label>
+                    <div class="signup-role-toggle" role="group" aria-label="Select account type">
+                        <button type="button" class="signup-role-btn active" data-signup-role="customer" aria-pressed="true">Customer</button>
+                        <button type="button" class="signup-role-btn" data-signup-role="provider" aria-pressed="false">Transport Provider</button>
+                    </div>
+                    <input type="hidden" id="signup-role" name="role" value="customer">
                 </div>
                 <div class="form-group">
                     <label>Email</label>
@@ -125,11 +133,11 @@
                         <p class="hero-subtitle">Get quotes from local transport companies and save up to 75%!</p>
                         
                         <div class="hero-cta-group">
-                            <button class="btn btn-cta btn-hero-cta" onclick="scrollToServicesSection()">
-                                A To B Move
+                            <button class="btn btn-cta btn-hero-cta" onclick="scrollToServiceExamplesSection()">
+                                View Form Examples
                             </button>
                             <button class="btn btn-cta btn-hero-cta" onclick="scrollToServicesSection()">
-                                Multiple Stops Move
+                                Start a Quote
                             </button>
                         </div>
                     </div>
@@ -141,6 +149,20 @@
             </div>
         </section>
 
+        </section>
+
+        <section class="service-examples-section" id="service-examples">
+            <div class="section-container">
+                <div class="service-examples-header">
+                    <div>
+                        <p class="service-examples-eyebrow">Preview mode</p>
+                        <h2>What each service form looks like</h2>
+                        <p class="service-examples-subtitle">Fake examples that mimic the real provider-facing form, so customers can see the structure before starting.</p>
+                    </div>
+                    <div class="service-examples-note">Example values only. Nothing here is submitted.</div>
+                </div>
+                <div id="service-examples-grid" class="service-examples-grid" aria-live="polite"></div>
+            </div>
         </section>
 
         <!-- How We Work Section -->
@@ -557,6 +579,13 @@ function scrollToServicesSection() {
         section.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 }
+
+function scrollToServiceExamplesSection() {
+    const section = document.getElementById('service-examples');
+    if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
 </script>
 </body>
 <script>
@@ -623,6 +652,55 @@ function scrollToServicesSection() {
             });
         }
     })();
+</script>
+<script>
+(function () {
+    const serviceExamples = [
+        { service: 'House Removals', icon: '🏠', accent: 'family', fields: [['Route', 'Blanchardstown, Dublin → Donacarney, Meath'], ['Pickup floors', 'Ground, 1st, Attic'], ['Lift availability', 'Yes at pickup / No at delivery'], ['Special instructions', 'Call before arrival, fragile boxes only']] },
+        { service: 'Customized Items', icon: '🧩', accent: 'creative', fields: [['Route', 'Dublin City → Sandyford'], ['Item example', '3 custom boxes, 1 oversized frame'], ['Dimensions', '120 x 80 x 60 cm'], ['Photos', '3 uploaded reference photos']] },
+        { service: 'Car/Campervan Transport', icon: '🚗', accent: 'vehicle', fields: [['Route', 'Cork → Galway'], ['Vehicle example', '2019 Ford Focus'], ['Running condition', 'Starts and rolls'], ['Collection notes', 'Keys available, flexible dates']] },
+        { service: 'Piano Transport', icon: '🎹', accent: 'music', fields: [['Route', 'Dublin 8 → Blackrock'], ['Piano type', 'Upright piano'], ['Access', 'Ground floor to ground floor'], ['Extra notes', 'Stairs are narrow, two movers preferred']] },
+        { service: 'Caravan/Trailer Transport', icon: '🚐', accent: 'road', fields: [['Route', 'Limerick → Waterford'], ['Trailer type', 'Caravan / twin axle'], ['Length', '7.2 m'], ['Collection notes', 'Needs winch, must be moved this week']] },
+        { service: 'Motorbike Transport', icon: '🏍️', accent: 'speed', fields: [['Route', 'Swords → Bray'], ['Bike example', 'Harley Davidson Sportster'], ['Condition', 'Not running, needs secure loading'], ['Extras', 'Loading ramp required']] },
+        { service: 'Specialist & Antiques', icon: '🖼️', accent: 'premium', fields: [['Route', 'Kilkenny → Cork'], ['Item example', 'Antique cabinet and mirror'], ['Value range', '€5,000 - €10,000'], ['Protection', 'Blankets, straps, white-glove handling']] },
+        { service: 'Vehicle Parts', icon: '⚙️', accent: 'industrial', fields: [['Route', 'Galway → Drogheda'], ['Items example', 'Bumpers, engine block, pallet of parts'], ['Loading', 'Forklift available at pickup'], ['Notes', 'Heavy items, palletized freight']] },
+        { service: 'Freight', icon: '📦', accent: 'freight', fields: [['Route', 'Dublin Port → Cork Depot'], ['Unit type', '2 pallets / 1 container'], ['Dimensions', '120 x 100 x 180 cm'], ['Loading', 'Forklift at both ends']] },
+        { service: 'Clearance', icon: '🧹', accent: 'clearance', fields: [['Route', 'Tallaght → Recycling Centre'], ['Clearance example', 'Sofa, fridge, boxes, loose items'], ['Recycling fee', 'Yes'], ['Photos', 'Before/after photos requested']] },
+        { service: 'Boats', icon: '⛵', accent: 'water', fields: [['Route', 'Cobh → Wexford'], ['Boat example', 'Small sailing boat'], ['Length', '5.8 m'], ['Transport notes', 'Trailer or cradle required']] },
+        { service: 'Office Removals', icon: '🏢', accent: 'office', fields: [['Route', 'Dublin 2 → Sandyford'], ['Office size', '12 desks, 8 chairs, 2 cabinets'], ['Lift access', 'Yes at both ends'], ['Planning notes', 'After-hours move preferred']] },
+        { service: 'Industrial', icon: '🏭', accent: 'heavy', fields: [['Route', 'Louth → Naas'], ['Load example', 'Machine parts, 1.5 tonne total'], ['Equipment', 'Forklift and tail lift needed'], ['Bay access', 'Loading dock available']] },
+        { service: 'Man Power Only', icon: '💪', accent: 'support', fields: [['Route', 'Maynooth → Lucan'], ['Job example', 'Move 2 wardrobes and 1 sofa upstairs'], ['People required', '2 movers'], ['Duration', '2 to 3 hours']] },
+        { service: 'Pets', icon: '🐾', accent: 'friendly', fields: [['Route', 'Dublin → Galway'], ['Pet example', '1 dog, 2 cats'], ['Crate type', 'Medium travel crate'], ['Notes', 'Water stops and vet paperwork included']] },
+        { service: 'Other', icon: '✳️', accent: 'other', fields: [['Route', 'Any pickup → any drop-off'], ['Description', 'Custom transport request'], ['Item type', 'Unusual / one-off item'], ['Notes', 'Please describe exactly what is needed']] }
+    ];
+
+    const grid = document.getElementById('service-examples-grid');
+    if (!grid) return;
+
+    grid.innerHTML = serviceExamples.map((example) => `
+        <article class="service-example-card service-example-${example.accent}">
+            <div class="service-example-top">
+                <div class="service-example-icon">${example.icon}</div>
+                <div>
+                    <h3>${example.service}</h3>
+                    <p>Sample provider-facing form</p>
+                </div>
+            </div>
+            <div class="service-example-form">
+                ${example.fields.map(([label, value]) => `
+                    <div class="service-example-field">
+                        <div class="service-example-label">${label}</div>
+                        <div class="service-example-value">${value}</div>
+                    </div>
+                `).join('')}
+                <div class="service-example-actions">
+                    <span class="service-example-chip">Preview only</span>
+                    <span class="service-example-button">Next</span>
+                </div>
+            </div>
+        </article>
+    `).join('');
+})();
 </script>
 <script src="js/cache-maintenance.js?v=20260322-2"></script>
 <script src="js/house-removal.js?v=20260322-1"></script>

@@ -1,8 +1,108 @@
 // Authentication Management
 class AuthManager {
     constructor() {
+        this.usersStorageKey = 'anytransport_users';
         this.currentUser = this.loadUser();
+        this.migrateStoredUsers();
         this.initAuth();
+    }
+
+    normalizeUsername(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    getUsernameCandidate(user) {
+        return String(
+            user?.username ||
+            user?.nickname ||
+            user?.displayName ||
+            user?.handle ||
+            user?.name ||
+            user?.email ||
+            'User'
+        ).trim();
+    }
+
+    makeUniqueUsername(baseUsername, users, excludeUserId = null) {
+        const existingUsers = Array.isArray(users) ? users : [];
+        const sanitizedBase = String(baseUsername || 'User')
+            .trim()
+            .replace(/\s+/g, '')
+            .replace(/[^a-zA-Z0-9._-]/g, '') || 'User';
+
+        let candidate = sanitizedBase;
+        let suffix = 1;
+
+        while (existingUsers.some((entry) => {
+            if (excludeUserId && entry.id === excludeUserId) return false;
+            return this.normalizeUsername(entry.username) === this.normalizeUsername(candidate);
+        })) {
+            candidate = sanitizedBase + suffix;
+            suffix += 1;
+        }
+
+        return candidate;
+    }
+
+    normalizeUserRecord(user, users = []) {
+        const normalized = { ...user };
+        const fallbackUsername = this.getUsernameCandidate(normalized);
+
+        if (!normalized.username) {
+            normalized.username = this.makeUniqueUsername(fallbackUsername, users, normalized.id || null);
+        }
+
+        if (!normalized.nickname) {
+            normalized.nickname = normalized.username;
+        }
+
+        return normalized;
+    }
+
+    migrateStoredUsers() {
+        const migratedKey = 'anytransport_users_migrated_username';
+        if (localStorage.getItem(migratedKey) === 'true') {
+            return;
+        }
+
+        const users = this.loadUsers();
+        let changed = false;
+
+        const migratedUsers = users.map((user) => {
+            const normalizedUser = { ...user };
+            if (!normalizedUser.username && normalizedUser.nickname) {
+                normalizedUser.username = this.makeUniqueUsername(normalizedUser.nickname, users, normalizedUser.id || null);
+                changed = true;
+            }
+
+            if (!normalizedUser.nickname && normalizedUser.username) {
+                normalizedUser.nickname = normalizedUser.username;
+                changed = true;
+            }
+
+            return normalizedUser;
+        });
+
+        if (changed) {
+            this.saveUsers(migratedUsers);
+        }
+
+        if (this.currentUser) {
+            this.currentUser = this.normalizeUserRecord(this.currentUser, migratedUsers);
+            localStorage.setItem('anytransport_user', JSON.stringify(this.currentUser));
+        }
+
+        localStorage.setItem(migratedKey, 'true');
+    }
+
+    isUsernameTaken(username, excludeUserId = null) {
+        const normalizedUsername = this.normalizeUsername(username);
+        if (!normalizedUsername) return false;
+
+        return this.loadUsers().some((entry) => {
+            if (excludeUserId && entry.id === excludeUserId) return false;
+            return this.normalizeUsername(entry.username) === normalizedUsername;
+        });
     }
 
     // Initialize authentication UI based on login state
@@ -26,28 +126,46 @@ class AuthManager {
         const userEmail = document.getElementById('user-email');
         const navbarUserName = document.getElementById('navbar-user-name');
         const navbarUserAvatar = document.getElementById('navbar-user-avatar');
+        const displayName = this.currentUser?.username || this.currentUser?.nickname || this.currentUser?.displayName || this.currentUser?.name || 'User';
 
-        if (userName) userName.textContent = this.currentUser.name || 'User';
+        if (userName) userName.textContent = displayName;
         if (userEmail) userEmail.textContent = this.currentUser.email || '';
-        if (navbarUserName) navbarUserName.textContent = this.currentUser.name || 'Profile';
-        if (navbarUserAvatar && this.currentUser.name) {
-            navbarUserAvatar.textContent = this.currentUser.name.charAt(0).toUpperCase();
+        if (navbarUserName) navbarUserName.textContent = displayName || 'Profile';
+        if (navbarUserAvatar && displayName) {
+            navbarUserAvatar.textContent = displayName.charAt(0).toUpperCase();
         }
     }
 
     // Login user
     login(email, password) {
-        // Mock authentication - in production, this would call a backend API
-        const user = {
-            id: Math.random().toString(36).substr(2, 9),
-            email: email,
-            password: password, // Should NOT be stored client-side in production
-            name: email.split('@')[0],
-            role: 'customer',
-            phone: '',
-            city: '',
-            createdAt: new Date()
-        };
+        const users = this.loadUsers();
+        const normalizedEmail = String(email || '').trim().toLowerCase();
+        const existingUser = users.find((entry) => {
+            return String(entry.email || '').trim().toLowerCase() === normalizedEmail
+                && String(entry.password || '') === String(password || '');
+        });
+
+        let user;
+        if (existingUser) {
+            user = this.normalizeUserRecord(existingUser, users);
+        } else {
+            // Keep backward-compatible login behavior if no account exists yet.
+            const derivedUsername = this.makeUniqueUsername(String(email || '').split('@')[0] || 'User', users);
+            user = {
+                id: Math.random().toString(36).substr(2, 9),
+                email: String(email || '').trim(),
+                password: password,
+                name: String(email || '').split('@')[0] || 'User',
+                username: derivedUsername,
+                nickname: derivedUsername,
+                role: 'customer',
+                phone: '',
+                city: '',
+                createdAt: new Date().toISOString()
+            };
+            users.push(user);
+            this.saveUsers(users);
+        }
 
         this.currentUser = user;
         this.saveUser(user);
@@ -57,17 +175,38 @@ class AuthManager {
 
     // Sign up user
     signup(formData) {
+        const users = this.loadUsers();
+        const normalizedEmail = String(formData.email || '').trim().toLowerCase();
+        const emailExists = users.some((entry) => String(entry.email || '').trim().toLowerCase() === normalizedEmail);
+        if (emailExists) {
+            throw new Error('An account with this email already exists. Please log in instead.');
+        }
+
+        const requestedUsername = String(formData.username || formData.nickname || formData.name || '').trim();
+        if (!requestedUsername) {
+            throw new Error('Please enter a username.');
+        }
+
+        if (this.isUsernameTaken(requestedUsername)) {
+            throw new Error('That username is already in use. Please choose another one.');
+        }
+
         const user = {
             id: Math.random().toString(36).substr(2, 9),
             name: formData.name,
+            username: requestedUsername,
+            nickname: requestedUsername,
             email: formData.email,
             password: formData.password, // Should NOT be stored client-side in production
             phone: formData.contact || formData.phone || '',
             contact: formData.contact || formData.phone || '',
-            city: formData.city,
-            role: formData.role,
-            createdAt: new Date()
+            city: formData.city || '',
+            role: formData.role || 'customer',
+            createdAt: new Date().toISOString()
         };
+
+        users.push(user);
+        this.saveUsers(users);
 
         this.currentUser = user;
         this.saveUser(user);
@@ -85,13 +224,61 @@ class AuthManager {
 
     // Save user to localStorage
     saveUser(user) {
-        localStorage.setItem('anytransport_user', JSON.stringify(user));
+        const users = this.loadUsers();
+        const targetEmail = String(user.email || '').trim().toLowerCase();
+        const targetId = user.id;
+        const normalizedUser = this.normalizeUserRecord(user, users);
+
+        if (this.isUsernameTaken(normalizedUser.username, targetId)) {
+            throw new Error('That username is already in use. Please choose another one.');
+        }
+
+        const index = users.findIndex((entry) => {
+            if (targetId && entry.id === targetId) return true;
+            return String(entry.email || '').trim().toLowerCase() === targetEmail;
+        });
+
+        if (index >= 0) {
+            users[index] = { ...users[index], ...normalizedUser };
+        } else {
+            users.push({ ...normalizedUser });
+        }
+
+        this.saveUsers(users);
+        this.currentUser = normalizedUser;
+        localStorage.setItem('anytransport_user', JSON.stringify(normalizedUser));
+        this.initAuth();
     }
 
     // Load user from localStorage
     loadUser() {
         const userData = localStorage.getItem('anytransport_user');
-        return userData ? JSON.parse(userData) : null;
+        if (!userData) return null;
+
+        try {
+            return this.normalizeUserRecord(JSON.parse(userData), this.loadUsers());
+        } catch (_error) {
+            return null;
+        }
+    }
+
+    loadUsers() {
+        try {
+            const raw = JSON.parse(localStorage.getItem(this.usersStorageKey) || '[]');
+            if (!Array.isArray(raw)) return [];
+
+            const users = [];
+            raw.forEach((user) => {
+                users.push(this.normalizeUserRecord(user, users));
+            });
+            return users;
+        } catch (_error) {
+            return [];
+        }
+    }
+
+    saveUsers(users) {
+        localStorage.setItem(this.usersStorageKey, JSON.stringify(users));
     }
 
     // Check if user is logged in
@@ -204,6 +391,8 @@ if (signupForm) {
         const contactInput = this.querySelector('#signup-contact');
         const passwordInput = this.querySelector('#signup-password');
         const passwordConfirmInput = this.querySelector('#signup-password-confirm');
+        const roleInput = this.querySelector('#signup-role');
+        const usernameInput = this.querySelector('input[name="username"]');
         
         const formData = {
             name: nameInput.value,
@@ -214,7 +403,9 @@ if (signupForm) {
             confirmPassword: passwordConfirmInput.value,
             phone: contactInput.value,
             city: '',
-            role: 'customer'
+            role: roleInput ? roleInput.value : 'customer',
+            username: usernameInput ? usernameInput.value : '',
+            nickname: usernameInput ? usernameInput.value : ''
         };
 
         // Validate emails match
@@ -230,7 +421,12 @@ if (signupForm) {
         }
 
         if (formData.name && formData.email && formData.contact && formData.password) {
-            auth.signup(formData);
+            try {
+                auth.signup(formData);
+            } catch (error) {
+                alert(error && error.message ? error.message : 'Unable to sign up with this email.');
+                return;
+            }
             closeSignupModal();
             
             // Check if we're redirecting after form submission
@@ -252,6 +448,38 @@ if (signupForm) {
             alert('Please fill in all fields');
         }
     });
+}
+
+function initSignupRoleSelector() {
+    const roleHidden = document.getElementById('signup-role');
+    if (!roleHidden) return;
+
+    const roleButtons = Array.from(document.querySelectorAll('[data-signup-role]'));
+    if (!roleButtons.length) return;
+
+    const applyRole = (value) => {
+        const selected = value === 'provider' ? 'provider' : 'customer';
+        roleHidden.value = selected;
+        roleButtons.forEach((btn) => {
+            const isActive = btn.getAttribute('data-signup-role') === selected;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    };
+
+    roleButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            applyRole(btn.getAttribute('data-signup-role') || 'customer');
+        });
+    });
+
+    applyRole(roleHidden.value || 'customer');
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initSignupRoleSelector, { once: true });
+} else {
+    initSignupRoleSelector();
 }
 
 // Logout function
