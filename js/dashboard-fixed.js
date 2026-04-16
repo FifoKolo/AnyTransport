@@ -369,12 +369,20 @@
 
     function wireDashboardActions(user) {
         document.addEventListener('click', (event) => {
-            const toggleBtn = event.target.closest('.toggle-details-btn');
-            if (toggleBtn) {
-                const listing = toggleBtn.closest('.provider-listing');
+            const getDetailsBtn = event.target.closest('.get-details-btn');
+            if (getDetailsBtn) {
+                const quoteId = String(getDetailsBtn.getAttribute('data-quote-id') || '').trim();
+                if (!quoteId) return;
+                window.location.href = 'listing-details.html?quoteId=' + encodeURIComponent(quoteId);
+                return;
+            }
+
+            const rowToggle = event.target.closest('.listing-row-toggle');
+            if (rowToggle && !event.target.closest('.listing-cell.actions')) {
+                const listing = rowToggle.closest('.provider-listing');
                 if (!listing) return;
                 const isExpanded = listing.classList.toggle('expanded');
-                toggleBtn.textContent = isExpanded ? 'Hide' : 'View';
+                rowToggle.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
                 const quoteId = listing.getAttribute('data-quote-id');
                 if (quoteId) {
                     if (isExpanded) state.expandedQuoteIds.add(quoteId);
@@ -408,6 +416,14 @@
             if (quoteEditBtn) {
                 editQuote(quoteEditBtn.getAttribute('data-quote-id'));
             }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            const rowToggle = event.target.closest('.listing-row-toggle');
+            if (!rowToggle) return;
+            event.preventDefault();
+            rowToggle.click();
         });
 
         document.addEventListener('change', (event) => {
@@ -608,9 +624,11 @@
             const quoteId = listing.getAttribute('data-quote-id');
             const shouldExpand = quoteId && state.expandedQuoteIds && state.expandedQuoteIds.has(quoteId);
             listing.classList.toggle('expanded', !!shouldExpand);
-            const toggleBtn = listing.querySelector('.toggle-details-btn');
-            if (toggleBtn) toggleBtn.textContent = shouldExpand ? 'Hide' : 'View';
-            if (shouldExpand) initializeMapsInScope(listing);
+            const rowToggle = listing.querySelector('.listing-row-toggle');
+            if (rowToggle) rowToggle.setAttribute('aria-expanded', shouldExpand ? 'true' : 'false');
+            if (shouldExpand) {
+                initializeMapsInScope(listing);
+            }
         });
     }
 
@@ -622,7 +640,7 @@
 
         return [
             '<article class="provider-listing provider-listing-preview" data-quote-id="' + escapeHtml(previewQuote.id) + '" aria-label="Transport provider form preview">',
-            '<div class="listing-row body">',
+            '<div class="listing-row body listing-row-toggle" role="button" tabindex="0" aria-expanded="false">',
             '<div class="listing-cell">Preview</div>',
             '<div class="listing-cell">',
             '<div class="listing-title">' + escapeHtml(getQuoteTitle(previewQuote)) + '</div>',
@@ -633,14 +651,10 @@
             '<div class="listing-cell">' + escapeHtml(getPickupLabel(previewQuote)) + '</div>',
             '<div class="listing-cell">' + previewBids.length + '</div>',
             '<div class="listing-cell"><span class="listing-amount">' + escapeHtml(myBidText) + '</span></div>',
-            '<div class="listing-cell actions"><button type="button" class="toggle-details-btn">View</button></div>',
+            '<div class="listing-cell actions"><button type="button" class="get-details-btn" data-quote-id="' + escapeHtml(previewQuote.id) + '">Get Details</button></div>',
             '</div>',
             '<div class="listing-details">',
-            '<div class="details-layout">',
-            createReferenceStyleDemoForm(previewQuote),
-            '</div>',
-            createBidPanel(previewQuote, previewBids, myBid, myBidText),
-            '</div>',
+            createQuickInfoPanel(previewQuote),
             '</div>',
             '</article>'
         ].join('');
@@ -656,7 +670,7 @@
 
         return [
             '<article class="provider-listing" data-quote-id="' + escapeHtml(quote.id) + '">',
-            '<div class="listing-row body">',
+            '<div class="listing-row body listing-row-toggle" role="button" tabindex="0" aria-expanded="false">',
             '<div class="listing-cell">' + escapeHtml(timeAgoLabel(quote.submittedAt)) + '</div>',
             '<div class="listing-cell">',
             '<div class="listing-title">' + escapeHtml(getQuoteTitle(quote)) + '</div>',
@@ -667,17 +681,94 @@
             '<div class="listing-cell">' + escapeHtml(getPickupLabel(quote)) + '</div>',
             '<div class="listing-cell">' + quoteBids.length + '</div>',
             '<div class="listing-cell"><span class="listing-amount">' + escapeHtml(quickQuoteText) + '</span></div>',
-            '<div class="listing-cell actions"><button type="button" class="toggle-details-btn">View</button></div>',
+            '<div class="listing-cell actions"><button type="button" class="get-details-btn" data-quote-id="' + escapeHtml(quote.id) + '">Get Details</button></div>',
             '</div>',
             '<div class="listing-details">',
-            '<div class="details-layout">',
-            createReferenceStyleDemoForm(quote),
-            '</div>',
-            createBidPanel(quote, quoteBids, myBid, myBidText),
-            '</div>',
+            createQuickInfoPanel(quote),
             '</div>',
             '</article>'
         ].join('');
+    }
+
+    function createQuickInfoPanel(quote) {
+        const pickupCity = firstText(quote.pickupCity, quote.pickupAddress, quote.pickupLocation, quote.pickupTown) || 'Not provided';
+        const deliveryCity = firstText(quote.deliveryCity, quote.deliveryAddress, quote.deliveryLocation, quote.deliveryTown) || 'Not provided';
+        const pickupPostcode = firstText(quote.pickupPostcode, quote.pickupEircode, quote.pickupAreaEircode, quote.pickupArea) || '';
+        const deliveryPostcode = firstText(quote.deliveryPostcode, quote.deliveryEircode, quote.deliveryAreaEircode, quote.deliveryArea) || '';
+        const distance = getRouteDistanceLabel(quote);
+        const duration = getRouteDurationLabel(quote);
+        const moversLabel = getMoversRequiredLabel(quote);
+        const dateLabel = getMoveDateLabel(quote);
+        
+        // Build full pickup address
+        const pickupFull = pickupCity + (pickupPostcode ? ', ' + pickupPostcode : '');
+        // Build full delivery address
+        const deliveryFull = deliveryCity + (deliveryPostcode ? ', ' + deliveryPostcode : '');
+
+        return [
+            '<section class="quick-info-panel-expanded" aria-label="Listing quick information">',
+            '<div class="quick-info-wrapper">',
+            
+            '<div class="quick-info-section quick-info-locations">',
+            '<h4>Route Information</h4>',
+            '<div class="quick-info-route-map-wrap">',
+            '<div class="route-map route-mapbox quick-info-route-map" data-from="' + escapeHtml(pickupFull) + '" data-to="' + escapeHtml(deliveryFull) + '">',
+            '<div class="map-footer">',
+            '<span class="map-badge">Distance: ' + escapeHtml(distance) + '</span>',
+            '<span class="map-badge">ETA: ' + escapeHtml(duration) + '</span>',
+            '</div>',
+            '</div>',
+            '</div>',
+            '</div>',
+            
+            '<div class="quick-info-section quick-info-metrics">',
+            '<div class="metric-item">',
+            '<span class="metric-label">Distance</span>',
+            '<span class="metric-value">' + escapeHtml(distance) + '</span>',
+            '</div>',
+            '<div class="metric-item">',
+            '<span class="metric-label">Duration</span>',
+            '<span class="metric-value">' + escapeHtml(duration) + '</span>',
+            '</div>',
+            '</div>',
+            
+            '<div class="quick-info-section quick-info-requirements">',
+            '<h4>Details</h4>',
+            '<div class="requirements-grid">',
+            '<div class="requirement-item">',
+            '<span class="requirement-label">Movers</span>',
+            '<span class="requirement-value">' + escapeHtml(moversLabel) + '</span>',
+            '</div>',
+            '<div class="requirement-item">',
+            '<span class="requirement-label">Date Required</span>',
+            '<span class="requirement-value">' + escapeHtml(dateLabel) + '</span>',
+            '</div>',
+            '<div class="requirement-item">',
+            '<span class="requirement-label">Space Required</span>',
+            '<span class="requirement-value requirement-placeholder">—</span>',
+            '</div>',
+            '</div>',
+            '</div>',
+            
+            '<p class="quick-info-hint">Click "Get Details" button above to view the complete transport form with all submitted information.</p>',
+            '</div>',
+            '</section>'
+        ].join('');
+    }
+
+    function getMoversRequiredLabel(quote) {
+        const pickupMode = firstText(quote.servicePickupMoversMode, quote['service-pickup-movers-mode']);
+        const deliveryMode = firstText(quote.serviceDeliveryMoversMode, quote['service-delivery-movers-mode']);
+
+        const pickup = pickupMode === 'unsure'
+            ? 'Pickup: Movers decide'
+            : 'Pickup: ' + (firstText(quote.servicePickupMovers, quote['service-pickup-movers'], quote.pickupMovers, quote.moversPickup) || 'Not provided');
+
+        const delivery = deliveryMode === 'unsure'
+            ? 'Delivery: Movers decide'
+            : 'Delivery: ' + (firstText(quote.serviceDeliveryMovers, quote['service-delivery-movers'], quote.deliveryMovers, quote.moversDelivery) || 'Not provided');
+
+        return pickup + ' | ' + delivery;
     }
 
     function createStepCard(title, pairs) {
@@ -1069,36 +1160,7 @@
                 .setPopup(new mapboxgl.Popup().setText('Delivery'))
                 .addTo(map);
 
-            const routeGeoJson = await fetchDirectionsGeometry(fromCoords, toCoords);
-            const drawRouteAndFit = () => {
-                if (routeGeoJson) {
-                    if (map.getSource('route')) map.removeSource('route');
-                    if (map.getLayer('route-line')) map.removeLayer('route-line');
-
-                    map.addSource('route', {
-                        type: 'geojson',
-                        data: {
-                            type: 'Feature',
-                            geometry: routeGeoJson
-                        }
-                    });
-
-                    map.addLayer({
-                        id: 'route-line',
-                        type: 'line',
-                        source: 'route',
-                        layout: {
-                            'line-cap': 'round',
-                            'line-join': 'round'
-                        },
-                        paint: {
-                            'line-color': '#2f8ed8',
-                            'line-width': 4,
-                            'line-opacity': 0.9
-                        }
-                    });
-                }
-
+            const drawAndFit = () => {
                 const bounds = new mapboxgl.LngLatBounds();
                 bounds.extend(fromCoords);
                 bounds.extend(toCoords);
@@ -1106,9 +1168,9 @@
             };
 
             if (map.isStyleLoaded()) {
-                drawRouteAndFit();
+                drawAndFit();
             } else {
-                map.on('load', drawRouteAndFit);
+                map.on('load', drawAndFit);
             }
         } catch (error) {
             console.warn('Mapbox preview failed to render', error);
@@ -1540,8 +1602,7 @@
     }
 
     function getQuoteTitle(quote) {
-        const base = (quote.itemDescription || quote.itemType || 'Transport request').trim();
-        return base.charAt(0).toUpperCase() + base.slice(1);
+        return resolveServiceTypeTitle(quote, 'Transport request');
     }
 
     function getFromLabel(quote) {
@@ -1599,15 +1660,42 @@
     }
 
     function getServiceLabel(quote) {
-        return firstText(
-            quote.itemDescription,
-            quote.itemType,
+        return resolveServiceTypeTitle(quote, 'General');
+    }
+
+    function resolveServiceTypeTitle(quote, fallback) {
+        const raw = firstText(
             quote.serviceType,
             quote.service,
+            quote.selectedService,
+            quote.serviceName,
+            quote.transportType,
+            quote.itemType,
+            quote.itemDescription,
             quote.title,
-            quote.summary,
-            quote.category
-        ) || 'General';
+            quote.category,
+            fallback
+        );
+
+        const normalized = String(raw || '').trim().toLowerCase();
+        const known = {
+            'house removals': 'House Removal',
+            'house removal': 'House Removal',
+            'office removals': 'Office Relocation',
+            'office relocation': 'Office Relocation',
+            'apartment move': 'Apartment Move',
+            'single room move': 'Single Room Move',
+            'man and van': 'Man & Van',
+            'man with van': 'Man & Van'
+        };
+
+        if (known[normalized]) return known[normalized];
+        if (!raw) return fallback;
+        return String(raw)
+            .trim()
+            .replace(/[-_]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .replace(/\b\w/g, function (char) { return char.toUpperCase(); });
     }
 
     function getPropertyTypeLabel(quote) {

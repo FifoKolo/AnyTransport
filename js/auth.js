@@ -420,7 +420,7 @@ if (signupForm) {
             return;
         }
 
-        if (formData.name && formData.email && formData.contact && formData.password) {
+        if (formData.name && formData.email && formData.password) {
             try {
                 auth.signup(formData);
             } catch (error) {
@@ -445,7 +445,7 @@ if (signupForm) {
                 window.location.href = 'dashboard.html';
             }
         } else {
-            alert('Please fill in all fields');
+            alert('Please fill in all required fields');
         }
     });
 }

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Listing Details - AnyTransport</title>
+    <link rel="stylesheet" href="css/style.css?v=20260322-1">
+    <link rel="stylesheet" href="css/navbar.css?v=20260322-1">
+    <link rel="stylesheet" href="css/listing-details.css?v=20260417-10">
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js'></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a class="navbar-logo" href="index.html" aria-label="Go to landing page">
+                <img src="assets/logo.jpeg" alt="AnyTransport Logo" class="logo-img">
+                <span class="logo-text">AnyTransport</span>
+            </a>
+            <div class="navbar-menu">
+                <a href="index.html#about" class="nav-link">About Us</a>
+                <a href="index.html#services" class="nav-link">Our Services</a>
+                <a href="index.html#how-it-works" class="nav-link">How it Works</a>
+                <a href="index.html#pricing" class="nav-link">Pricing</a>
+                <a href="index.html#faq" class="nav-link">FAQ</a>
+                <a href="index.html#contact" class="nav-link">Contact Us</a>
+            </div>
+            <div class="navbar-right">
+                <div id="auth-menu" style="display: flex;">
+                    <button class="btn btn-outline" onclick="openLoginModal()">Login</button>
+                </div>
+                <div id="user-menu" style="display: none;">
+                    <a href="dashboard.html" style="text-decoration: none;">
+                        <div class="navbar-avatar" id="navbar-user-avatar">U</div>
+                    </a>
+                    <button class="btn btn-primary" onclick="logout()" style="margin-left: 10px;">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="details-page">
+        <a class="back-to-listings-btn" href="dashboard.html#provider-board">Back to Listings</a>
+
+        <header class="details-hero">
+            <div>
+                <p class="eyebrow">Transport Provider</p>
+                <h1 id="details-title">Listing details</h1>
+                <p id="details-subtitle" class="subtitle">Loading listing information...</p>
+            </div>
+            <a class="back-btn" href="dashboard.html#provider-board">Back to Listings</a>
+        </header>
+
+        <section id="details-quick" class="quick-grid" aria-label="Quick information"></section>
+
+        <section class="details-card">
+            <h2>Form Submission Details</h2>
+            <p class="muted">All submitted customer form data shown in a provider-friendly format.</p>
+            <div id="details-form-sections" class="form-sections-grid"></div>
+        </section>
+
+        <!-- Inventory Section -->
+        <section class="details-card">
+            <h2>Items & Inventory</h2>
+            <div id="details-inventory" class="inventory-list"></div>
+        </section>
+
+        <!-- Bids Section -->
+        <section class="details-card">
+            <h2>Place Your Bid</h2>
+            <p id="bid-user-context" class="muted"></p>
+            <div id="bids-section">
+                <div id="bid-history" class="bid-history-section"></div>
+                <div id="bid-form-section" class="bid-form-section">
+                    <h3>Submit Your Bid</h3>
+                    <form id="bid-form" class="bid-entry-form">
+                        <div class="form-group">
+                            <label for="bid-amount">Your Bid (€)</label>
+                            <input type="number" id="bid-amount" class="form-input" placeholder="Enter your bid amount" min="0" step="0.01" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="bid-message">Message (Optional)</label>
+                            <textarea id="bid-message" class="form-input" placeholder="Add any notes about your bid..." rows="3"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Submit Bid</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script src="js/auth.js?v=20260409-3"></script>
+    <script src="js/listing-details.js?v=20260417-10"></script>
+</body>
+</html>
