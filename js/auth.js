@@ -562,6 +562,28 @@ function showConfirmationModal() {
                 emailSpan.textContent = auth.currentUser.email;
             }
         }
+
+        const formIdText = String(window.anytransportLastSubmittedFormId || localStorage.getItem('pending_quote_form_id') || '').trim();
+        const formIdLabel = document.getElementById('confirmation-form-id');
+        if (formIdLabel) {
+            if (formIdText) {
+                formIdLabel.textContent = 'Form ID: ' + formIdText;
+                formIdLabel.style.display = 'block';
+            } else {
+                formIdLabel.textContent = '';
+                formIdLabel.style.display = 'none';
+            }
+        }
+
+        const dashboardBtn = document.getElementById('confirmation-view-dashboard-btn');
+        if (dashboardBtn) {
+            const rolePath = auth.isProvider && auth.isProvider() ? '#provider-board' : '#my-quotes';
+            const target = formIdText ? ('dashboard.html?newFormId=' + encodeURIComponent(formIdText) + rolePath) : ('dashboard.html' + rolePath);
+            dashboardBtn.onclick = function () {
+                window.location.href = target;
+            };
+        }
+
         modal.classList.add('show');
     }
 }
@@ -572,4 +594,5 @@ function closeConfirmationModal() {
         modal.classList.remove('show');
     }
     window.anytransportQuoteContactEmail = '';
+    window.anytransportLastSubmittedFormId = '';
 }

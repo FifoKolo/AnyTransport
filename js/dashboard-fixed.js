@@ -18,7 +18,8 @@
         distanceMin: '',
         distanceMax: '',
         dateFilter: '',
-        expandedQuoteIds: new Set()
+        expandedQuoteIds: new Set(),
+        focusedFormId: ''
     };
 
     document.addEventListener('DOMContentLoaded', initDashboard);
@@ -43,6 +44,7 @@
         wireDashboardActions(user);
         loadProfileForm(user);
         ensureDemoListingsExist();
+        applyFocusedFormContext();
         renderAll(user);
 
         if (auth.isProvider && auth.isProvider()) {
@@ -51,6 +53,56 @@
             showTab('my-quotes');
             hideProviderOnlyTabs();
         }
+
+        if (state.focusedFormId && auth.isProvider && auth.isProvider()) {
+            requestAnimationFrame(() => focusHighlightedProviderListing());
+        }
+    }
+
+    function applyFocusedFormContext() {
+        let focused = '';
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            focused = String(params.get('newFormId') || '').trim();
+        } catch (_error) {
+            focused = '';
+        }
+
+        if (!/^\d{5}$/.test(focused)) {
+            focused = String(localStorage.getItem('pending_quote_form_id') || '').trim();
+        }
+
+        if (!/^\d{5}$/.test(focused)) {
+            state.focusedFormId = '';
+            return;
+        }
+
+        state.focusedFormId = focused;
+        state.activeStatus = 'all';
+        state.serviceFilters = [];
+        state.distanceMin = '';
+        state.distanceMax = '';
+        state.dateFilter = '';
+        state.search = focused;
+
+        const searchInput = document.getElementById('provider-search');
+        if (searchInput) searchInput.value = focused;
+
+        try {
+            localStorage.removeItem('pending_quote_form_id');
+            localStorage.removeItem('pending_quote_id');
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.delete('newFormId');
+            window.history.replaceState({}, document.title, currentUrl.toString());
+        } catch (_error) {
+            // Ignore URL/storage update failures in restrictive environments.
+        }
+    }
+
+    function focusHighlightedProviderListing() {
+        const highlighted = document.querySelector('.provider-listing.is-focused-form');
+        if (!highlighted) return;
+        highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
     function hideProviderOnlyTabs() {
@@ -371,6 +423,12 @@
         document.addEventListener('click', (event) => {
             const getDetailsBtn = event.target.closest('.get-details-btn');
             if (getDetailsBtn) {
+                const formId = String(getDetailsBtn.getAttribute('data-form-id') || '').trim();
+                if (formId) {
+                    window.location.href = 'listing-details.html?id=' + encodeURIComponent(formId);
+                    return;
+                }
+
                 const quoteId = String(getDetailsBtn.getAttribute('data-quote-id') || '').trim();
                 if (!quoteId) return;
                 window.location.href = 'listing-details.html?quoteId=' + encodeURIComponent(quoteId);
@@ -521,8 +579,8 @@
             '<div>',
             '<h3 class="job-title">' + escapeHtml(getQuoteTitle(quote)) + '</h3>',
             '<div class="job-meta">',
-            '<span class="job-meta-item">ID ' + escapeHtml(quote.id) + '</span>',
-            quote.transportDate ? '<span class="job-meta-item">Date ' + escapeHtml(formatDate(quote.transportDate)) + '</span>' : '',
+            '<span class="job-meta-item">ID ' + escapeHtml(getFormIdLabel(quote)) + '</span>',
+            getPrimaryTransportDateValue(quote) ? '<span class="job-meta-item">Date ' + escapeHtml(formatDate(getPrimaryTransportDateValue(quote))) + '</span>' : '',
             '<span class="job-meta-item">Bids ' + quoteBids.length + '</span>',
             lowest ? '<span class="job-meta-item">Lowest €' + Number(lowest.amount).toFixed(2) + '</span>' : '',
             '</div>',
@@ -554,6 +612,8 @@
             if (state.search) {
                 const haystack = [
                     quote.id,
+                    quote.formId,
+                    getFormIdLabel(quote),
                     getQuoteTitle(quote),
                     getFromLabel(quote),
                     getToLabel(quote),
@@ -578,9 +638,10 @@
 
             // Date filter
             if (state.dateFilter) {
-                const quoteDate = String(quote.transportDate || '').trim();
-                const filterDate = String(state.dateFilter).trim();
-                if (quoteDate < filterDate) return false;
+                const quoteDate = normalizeDateKey(getPrimaryTransportDateValue(quote) || getSecondaryTransportDateValue(quote));
+                const filterDate = normalizeDateKey(state.dateFilter);
+                if (filterDate && quoteDate && quoteDate < filterDate) return false;
+                if (filterDate && !quoteDate) return false;
             }
 
             return true;
@@ -644,14 +705,14 @@
             '<div class="listing-cell">Preview</div>',
             '<div class="listing-cell">',
             '<div class="listing-title">' + escapeHtml(getQuoteTitle(previewQuote)) + '</div>',
-            '<div class="listing-sub">Listing ' + escapeHtml(previewQuote.id) + ' • ' + escapeHtml(previewQuote.itemDescription || 'General move') + '</div>',
+            '<div class="listing-sub">Listing ' + escapeHtml(getFormIdLabel(previewQuote)) + ' • ' + escapeHtml(previewQuote.itemDescription || 'General move') + '</div>',
             '</div>',
             '<div class="listing-cell">' + escapeHtml(getFromLabel(previewQuote)) + '</div>',
             '<div class="listing-cell">' + escapeHtml(getToLabel(previewQuote)) + '</div>',
             '<div class="listing-cell">' + escapeHtml(getPickupLabel(previewQuote)) + '</div>',
             '<div class="listing-cell">' + previewBids.length + '</div>',
             '<div class="listing-cell"><span class="listing-amount">' + escapeHtml(myBidText) + '</span></div>',
-            '<div class="listing-cell actions"><button type="button" class="get-details-btn" data-quote-id="' + escapeHtml(previewQuote.id) + '">Get Details</button></div>',
+            '<div class="listing-cell actions"><button type="button" class="get-details-btn" data-quote-id="' + escapeHtml(previewQuote.id) + '" data-form-id="' + escapeHtml(getFormIdLabel(previewQuote)) + '">Get Details</button></div>',
             '</div>',
             '<div class="listing-details">',
             createQuickInfoPanel(previewQuote),
@@ -664,24 +725,26 @@
         const quoteBids = bids.filter((bid) => bid.quoteId === quote.id && bid.status === 'active');
         const myBid = getLowestBidForProvider(quoteBids, user.id);
         const lowest = getLowestBid(quoteBids);
+        const formId = String(getFormIdLabel(quote) || '').trim();
+        const isFocused = !!state.focusedFormId && formId === state.focusedFormId;
 
         const quickQuoteText = lowest ? ('€' + Number(lowest.amount).toFixed(2)) : 'No bids';
         const myBidText = myBid ? ('Your bid €' + Number(myBid.amount).toFixed(2)) : 'Not bid yet';
 
         return [
-            '<article class="provider-listing" data-quote-id="' + escapeHtml(quote.id) + '">',
+            '<article class="provider-listing' + (isFocused ? ' is-focused-form' : '') + '" data-quote-id="' + escapeHtml(quote.id) + '" data-form-id="' + escapeHtml(formId) + '">',
             '<div class="listing-row body listing-row-toggle" role="button" tabindex="0" aria-expanded="false">',
             '<div class="listing-cell">' + escapeHtml(timeAgoLabel(quote.submittedAt)) + '</div>',
             '<div class="listing-cell">',
             '<div class="listing-title">' + escapeHtml(getQuoteTitle(quote)) + '</div>',
-            '<div class="listing-sub">Listing ' + escapeHtml(quote.id) + ' • ' + escapeHtml(quote.itemDescription || 'General move') + '</div>',
+            '<div class="listing-sub">Listing ' + escapeHtml(getFormIdLabel(quote)) + ' • ' + escapeHtml(quote.itemDescription || 'General move') + '</div>',
             '</div>',
             '<div class="listing-cell">' + escapeHtml(getFromLabel(quote)) + '</div>',
             '<div class="listing-cell">' + escapeHtml(getToLabel(quote)) + '</div>',
             '<div class="listing-cell">' + escapeHtml(getPickupLabel(quote)) + '</div>',
             '<div class="listing-cell">' + quoteBids.length + '</div>',
             '<div class="listing-cell"><span class="listing-amount">' + escapeHtml(quickQuoteText) + '</span></div>',
-            '<div class="listing-cell actions"><button type="button" class="get-details-btn" data-quote-id="' + escapeHtml(quote.id) + '">Get Details</button></div>',
+            '<div class="listing-cell actions"><button type="button" class="get-details-btn" data-quote-id="' + escapeHtml(quote.id) + '" data-form-id="' + escapeHtml(getFormIdLabel(quote)) + '">Get Details</button></div>',
             '</div>',
             '<div class="listing-details">',
             createQuickInfoPanel(quote),
@@ -697,8 +760,8 @@
         const deliveryPostcode = firstText(quote.deliveryPostcode, quote.deliveryEircode, quote.deliveryAreaEircode, quote.deliveryArea) || '';
         const distance = getRouteDistanceLabel(quote);
         const duration = getRouteDurationLabel(quote);
-        const moversLabel = getMoversRequiredLabel(quote);
-        const dateLabel = getMoveDateLabel(quote);
+        const moversLines = getMoversRequiredLines(quote);
+        const dateLines = getMoveDateLines(quote);
         
         // Build full pickup address
         const pickupFull = pickupCity + (pickupPostcode ? ', ' + pickupPostcode : '');
@@ -721,27 +784,16 @@
             '</div>',
             '</div>',
             
-            '<div class="quick-info-section quick-info-metrics">',
-            '<div class="metric-item">',
-            '<span class="metric-label">Distance</span>',
-            '<span class="metric-value">' + escapeHtml(distance) + '</span>',
-            '</div>',
-            '<div class="metric-item">',
-            '<span class="metric-label">Duration</span>',
-            '<span class="metric-value">' + escapeHtml(duration) + '</span>',
-            '</div>',
-            '</div>',
-            
             '<div class="quick-info-section quick-info-requirements">',
             '<h4>Details</h4>',
             '<div class="requirements-grid">',
             '<div class="requirement-item">',
             '<span class="requirement-label">Movers</span>',
-            '<span class="requirement-value">' + escapeHtml(moversLabel) + '</span>',
+            '<span class="requirement-value">' + renderRequirementLines(moversLines) + '</span>',
             '</div>',
             '<div class="requirement-item">',
             '<span class="requirement-label">Date Required</span>',
-            '<span class="requirement-value">' + escapeHtml(dateLabel) + '</span>',
+            '<span class="requirement-value">' + renderRequirementLines(dateLines) + '</span>',
             '</div>',
             '<div class="requirement-item">',
             '<span class="requirement-label">Space Required</span>',
@@ -756,7 +808,7 @@
         ].join('');
     }
 
-    function getMoversRequiredLabel(quote) {
+    function getMoversRequiredLines(quote) {
         const pickupMode = firstText(quote.servicePickupMoversMode, quote['service-pickup-movers-mode']);
         const deliveryMode = firstText(quote.serviceDeliveryMoversMode, quote['service-delivery-movers-mode']);
 
@@ -768,7 +820,40 @@
             ? 'Delivery: Movers decide'
             : 'Delivery: ' + (firstText(quote.serviceDeliveryMovers, quote['service-delivery-movers'], quote.deliveryMovers, quote.moversDelivery) || 'Not provided');
 
-        return pickup + ' | ' + delivery;
+        return [pickup, delivery];
+    }
+
+    function getMoveDateLines(quote) {
+        const pickupRaw = getPrimaryTransportDateValue(quote);
+        const deliveryRaw = getSecondaryTransportDateValue(quote);
+        const pickupTime = firstText(
+            quote.preferredPickupTime,
+            quote.preferredTimePickup,
+            quote.pickupTime,
+            quote.timeWindowPickup
+        ) || 'Time not specified';
+        const deliveryTime = firstText(
+            quote.preferredDeliveryTime,
+            quote.preferredTimeDelivery,
+            quote.deliveryTime,
+            quote.timeWindowDelivery
+        ) || 'Time not specified';
+
+        const pickup = pickupRaw ? formatDate(pickupRaw) : 'Not provided';
+        const delivery = deliveryRaw ? formatDate(deliveryRaw) : 'Not provided';
+
+        return [
+            'Pickup: ' + pickup + ' - ' + pickupTime,
+            'Delivery: ' + delivery + ' - ' + deliveryTime
+        ];
+    }
+
+    function renderRequirementLines(lines) {
+        if (!Array.isArray(lines) || !lines.length) return escapeHtml('Not provided');
+        return lines
+            .filter((line) => String(line || '').trim())
+            .map((line) => '<span class="requirement-line">' + escapeHtml(line) + '</span>')
+            .join('');
     }
 
     function createStepCard(title, pairs) {
@@ -1160,6 +1245,19 @@
                 .setPopup(new mapboxgl.Popup().setText('Delivery'))
                 .addTo(map);
 
+            const routeGeometry = await fetchDirectionsGeometry(fromCoords, toCoords);
+            if (routeGeometry) {
+                const drawRoute = () => {
+                    renderOverviewRouteGeometry(map, routeGeometry);
+                };
+
+                if (typeof map.isStyleLoaded === 'function' && map.isStyleLoaded()) {
+                    drawRoute();
+                } else {
+                    map.once('load', drawRoute);
+                }
+            }
+
             const drawAndFit = () => {
                 const bounds = new mapboxgl.LngLatBounds();
                 bounds.extend(fromCoords);
@@ -1194,6 +1292,40 @@
         } catch (error) {
             return null;
         }
+    }
+
+    function renderOverviewRouteGeometry(map, geometry) {
+        if (!map || !geometry) return;
+
+        const sourceId = 'provider-overview-route-source';
+        const layerId = 'provider-overview-route-layer';
+
+        if (map.getLayer(layerId)) map.removeLayer(layerId);
+        if (map.getSource(sourceId)) map.removeSource(sourceId);
+
+        map.addSource(sourceId, {
+            type: 'geojson',
+            data: {
+                type: 'Feature',
+                geometry,
+                properties: {}
+            }
+        });
+
+        map.addLayer({
+            id: layerId,
+            type: 'line',
+            source: sourceId,
+            layout: {
+                'line-join': 'round',
+                'line-cap': 'round'
+            },
+            paint: {
+                'line-color': '#2f8ed8',
+                'line-width': 4,
+                'line-opacity': 0.85
+            }
+        });
     }
 
     async function fetchDirectionsGeometry(fromCoords, toCoords) {
@@ -1369,7 +1501,7 @@
                 '<article class="my-bid-card">',
                 '<h3>' + escapeHtml(title) + '</h3>',
                 '<div class="my-bid-meta">',
-                '<div>Listing ID: ' + escapeHtml(bid.quoteId) + '</div>',
+                '<div>Listing ID: ' + escapeHtml(getFormIdByQuoteId(bid.quoteId, quotesById)) + '</div>',
                 '<div>Amount: €' + Number(bid.amount).toFixed(2) + ' • Status: ' + escapeHtml(statusLabel) + '</div>',
                 '<div>Expires: ' + escapeHtml(formatDateTime(bid.expiresAt)) + '</div>',
                 '</div>',
@@ -1574,10 +1706,62 @@
     function getAllQuotes() {
         try {
             const raw = JSON.parse(localStorage.getItem(LISTING_STORAGE_KEY) || '[]');
-            return Array.isArray(raw) ? raw : [];
+            if (!Array.isArray(raw)) return [];
+
+            let changed = false;
+            const usedFormIds = new Set();
+            raw.forEach((quote) => {
+                if (!quote || typeof quote !== 'object') return;
+                const existing = String(quote.formId || '').trim();
+                if (/^\d{5}$/.test(existing)) {
+                    usedFormIds.add(existing);
+                }
+            });
+
+            raw.forEach((quote) => {
+                if (!quote || typeof quote !== 'object') return;
+                const existing = String(quote.formId || '').trim();
+                if (/^\d{5}$/.test(existing)) return;
+                quote.formId = generateUniqueFormId(usedFormIds);
+                changed = true;
+            });
+
+            if (changed) {
+                localStorage.setItem(LISTING_STORAGE_KEY, JSON.stringify(raw));
+            }
+
+            return raw;
         } catch (_error) {
             return [];
         }
+    }
+
+    function generateUniqueFormId(usedSet) {
+        const maxAttempts = 5000;
+        for (let i = 0; i < maxAttempts; i += 1) {
+            const next = String(Math.floor(10000 + Math.random() * 90000));
+            if (!usedSet.has(next)) {
+                usedSet.add(next);
+                return next;
+            }
+        }
+
+        const fallbackBase = Date.now() % 90000;
+        let fallback = String(10000 + fallbackBase).slice(-5);
+        while (usedSet.has(fallback)) {
+            fallback = String((Number(fallback) + 1) % 100000).padStart(5, '0');
+        }
+        usedSet.add(fallback);
+        return fallback;
+    }
+
+    function getFormIdLabel(quote) {
+        return firstText(quote && quote.formId, quote && quote.id, quote && quote.quoteId, quote && quote.requestId, 'Not provided');
+    }
+
+    function getFormIdByQuoteId(quoteId, quotesById) {
+        const quote = quotesById && quotesById[quoteId] ? quotesById[quoteId] : null;
+        return getFormIdLabel(quote || { id: quoteId });
     }
 
     function getAllBids() {
@@ -1642,9 +1826,64 @@
     }
 
     function getPickupLabel(quote) {
-        return quote.transportDate
-            ? formatDate(quote.transportDate)
-            : (quote.preferredDate ? formatDate(quote.preferredDate) : 'Flexible');
+        const value = getPrimaryTransportDateValue(quote);
+        return value ? formatDate(value) : 'Flexible';
+    }
+
+    function getPrimaryTransportDateValue(quote) {
+        const detailsDate = firstText(
+            quote.transportDate,
+            quote.preferredDate,
+            quote.moveDate,
+            quote.date
+        );
+
+        return firstText(
+            detailsDate,
+            quote.serviceTransportDate,
+            quote['service-transport-date'],
+            quote.requestedDate,
+            quote.pickupDate,
+            quote.pickupTransportDate,
+            quote.pickupPreferredDate,
+            quote.serviceStorageStartDatetime,
+            quote['service-storage-start-datetime'],
+            quote.serviceStorageStartApproxFrom,
+            quote['service-storage-start-approx-from'],
+            quote.serviceStorageStartApproxTo,
+            quote['service-storage-start-approx-to']
+        );
+    }
+
+    function getSecondaryTransportDateValue(quote) {
+        const detailsDate = firstText(
+            quote.transportDate,
+            quote.preferredDate,
+            quote.moveDate,
+            quote.date
+        );
+
+        return firstText(
+            detailsDate,
+            quote.serviceTransportDate,
+            quote['service-transport-date'],
+            quote.requestedDate,
+            quote.deliveryDate,
+            quote.deliveryTransportDate,
+            quote.deliveryPreferredDate,
+            quote.serviceStorageEndDatetime,
+            quote['service-storage-end-datetime'],
+            quote.serviceStorageEndApproxFrom,
+            quote['service-storage-end-approx-from'],
+            quote.serviceStorageEndApproxTo,
+            quote['service-storage-end-approx-to'],
+            quote.serviceStorageStartDatetime,
+            quote['service-storage-start-datetime'],
+            quote.serviceStorageStartApproxFrom,
+            quote['service-storage-start-approx-from'],
+            quote.serviceStorageStartApproxTo,
+            quote['service-storage-start-approx-to']
+        );
     }
 
     function getRouteDistanceLabel(quote) {
@@ -2091,9 +2330,31 @@
     }
 
     function getMoveDateLabel(quote) {
-        const value = firstText(quote.transportDate, quote.preferredDate, quote.moveDate, quote.date);
+        const value = getPrimaryTransportDateValue(quote);
         if (!value) return 'Not provided';
         return formatDate(value);
+    }
+
+    function normalizeDateKey(rawValue) {
+        const text = String(rawValue || '').trim();
+        if (!text) return '';
+
+        const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (isoMatch) {
+            return isoMatch[1] + '-' + isoMatch[2] + '-' + isoMatch[3];
+        }
+
+        const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (slashMatch) {
+            const day = String(slashMatch[1]).padStart(2, '0');
+            const month = String(slashMatch[2]).padStart(2, '0');
+            const year = String(slashMatch[3]);
+            return year + '-' + month + '-' + day;
+        }
+
+        const date = new Date(text);
+        if (!Number.isFinite(date.getTime())) return '';
+        return date.toISOString().slice(0, 10);
     }
 
     function getOverviewNotesLabel(quote) {
@@ -2325,8 +2586,21 @@
     }
 
     function formatDate(rawDate) {
-        const date = new Date(rawDate);
-        if (!Number.isFinite(date.getTime())) return 'Not provided';
+        const value = String(rawDate || '').trim();
+        if (!value) return 'Not provided';
+
+        let date = new Date(value);
+        if (!Number.isFinite(date.getTime())) {
+            const slashMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (slashMatch) {
+                const day = String(slashMatch[1]).padStart(2, '0');
+                const month = String(slashMatch[2]).padStart(2, '0');
+                const year = String(slashMatch[3]);
+                date = new Date(year + '-' + month + '-' + day + 'T00:00:00');
+            }
+        }
+
+        if (!Number.isFinite(date.getTime())) return value;
         return date.toLocaleDateString('en-IE', { day: '2-digit', month: 'short', year: 'numeric' });
     }
 

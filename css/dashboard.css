@@ -268,6 +268,10 @@
     border-radius: 10px;
     padding: 10px 12px;
 }
+.provider-listing.is-focused-form {
+    border-color: #1d4ed8;
+    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.18);
+}
 
 .kpi-label {
     font-size: 0.76rem;
@@ -850,6 +854,15 @@
     font-size: 0.95rem;
     color: #1b3342;
     font-weight: 600;
+}
+
+.requirement-line {
+    display: block;
+    line-height: 1.32;
+}
+
+.requirement-line + .requirement-line {
+    margin-top: 2px;
 }
 
 .requirement-placeholder {

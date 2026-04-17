@@ -2369,16 +2369,20 @@
                 <p style="font-size: 16px; color: #666; margin-bottom: 24px;">
                     You will receive pricing details via email at <strong id="confirmation-email"></strong> within the next 24 hours.
                 </p>
-                <button onclick="window.location.href='index.html'" class="btn btn-primary" style="width: 100%;">Back to Home</button>
+                <p id="confirmation-form-id" style="font-size: 14px; color: #2f4f66; margin-bottom: 16px; font-weight: 600; display: none;"></p>
+                <div style="display: grid; gap: 10px;">
+                    <button id="confirmation-view-dashboard-btn" type="button" class="btn btn-primary" style="width: 100%;">View In Dashboard</button>
+                    <button onclick="closeConfirmationModal()" class="btn btn-outline" style="width: 100%;">Stay On This Page</button>
+                </div>
             </div>
         </div>
     </div>
 
     <script src="js/cache-maintenance.js?v=20260322-2"></script>
-    <script src="js/auth.js?v=20260409-3"></script>
+    <script src="js/auth.js?v=20260417-5"></script>
     <script src="js/house-removal.js?v=20260322-1"></script>
     <script src="js/multi-items-handler.js?v=20260328-44"></script>
-    <script src="js/create-job.js?v=20260410-5"></script>
+    <script src="js/create-job.js?v=20260417-22"></script>
 
 <script>
 function updateStep3TitleVisibility() {

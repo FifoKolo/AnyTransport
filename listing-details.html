@@ -9,7 +9,7 @@
     <title>Listing Details - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260322-1">
-    <link rel="stylesheet" href="css/listing-details.css?v=20260417-10">
+    <link rel="stylesheet" href="css/listing-details.css?v=20260417-32">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js'></script>
 </head>
@@ -54,46 +54,79 @@
             <a class="back-btn" href="dashboard.html#provider-board">Back to Listings</a>
         </header>
 
-        <section id="details-quick" class="quick-grid" aria-label="Quick information"></section>
+        <div class="details-workspace">
+            <div class="details-main-column">
+                <section id="details-quick" class="quick-grid" aria-label="Quick information"></section>
 
-        <section class="details-card">
-            <h2>Form Submission Details</h2>
-            <p class="muted">All submitted customer form data shown in a provider-friendly format.</p>
-            <div id="details-form-sections" class="form-sections-grid"></div>
-        </section>
-
-        <!-- Inventory Section -->
-        <section class="details-card">
-            <h2>Items & Inventory</h2>
-            <div id="details-inventory" class="inventory-list"></div>
-        </section>
-
-        <!-- Bids Section -->
-        <section class="details-card">
-            <h2>Place Your Bid</h2>
-            <p id="bid-user-context" class="muted"></p>
-            <div id="bids-section">
-                <div id="bid-history" class="bid-history-section"></div>
-                <div id="bid-form-section" class="bid-form-section">
-                    <h3>Submit Your Bid</h3>
-                    <form id="bid-form" class="bid-entry-form">
-                        <div class="form-group">
-                            <label for="bid-amount">Your Bid (€)</label>
-                            <input type="number" id="bid-amount" class="form-input" placeholder="Enter your bid amount" min="0" step="0.01" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="bid-message">Message (Optional)</label>
-                            <textarea id="bid-message" class="form-input" placeholder="Add any notes about your bid..." rows="3"></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Submit Bid</button>
-                    </form>
-                </div>
             </div>
-        </section>
+
+            <aside class="bid-sidebar" aria-label="Bid tools">
+                <section id="bid-form-section" class="bid-form-panel">
+                    <h3 class="bid-form-panel-title">▼ Make A Bid (total you receive)</h3>
+                    <div class="bid-form-body">
+                        <p class="bid-warning">You are entitled to place a maximum of 1 bids on this job. Please ensure your bids are realistic.</p>
+                        <p id="bid-user-context" class="bid-user-context"></p>
+
+                        <form id="bid-form" class="bid-entry-form">
+                            <div class="form-group">
+                                <label for="bid-amount">Bid</label>
+                                <div class="currency-input">
+                                    <span>€</span>
+                                    <input type="number" id="bid-amount" class="form-input" min="0" step="0.01" required>
+                                </div>
+                                <small class="helper-text">The amount you receive</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="bid-expire-date">Bid expires:</label>
+                                <div class="expiry-row">
+                                    <input type="text" id="bid-expire-date" class="form-input" placeholder="17/04/2026" inputmode="numeric">
+                                    <span class="at-separator">at</span>
+                                    <select id="bid-expire-time" class="form-input">
+                                        <option value="23:59">23:59</option>
+                                        <option value="23:00">23:00</option>
+                                        <option value="22:00">22:00</option>
+                                        <option value="21:00">21:00</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="bid-template">Bid message:</label>
+                                <select id="bid-template" class="form-input">
+                                    <option value="Check availability">Check availability</option>
+                                    <option value="Check availability 2" selected>Check availability 2</option>
+                                    <option value="Can collect today and deliver same day">Can collect today and deliver same day</option>
+                                </select>
+                                <textarea id="bid-message" class="form-input" rows="5">If you are happy with our quote and you don't have any questions, please accept our bid as soon as possible to avoid disappointment from being us not available on your preferred date and time as we are working on the first come first serve basis.</textarea>
+                                <div class="save-template-row">
+                                    <input type="checkbox" id="bid-save-template">
+                                    <label for="bid-save-template">Save Bid Message</label>
+                                </div>
+                            </div>
+
+                            <div class="bid-date-lines">
+                                <div><strong>Pickup date:</strong> <span id="bid-pickup-date">Tomorrow (fixed)</span></div>
+                                <div><strong>Delivery date:</strong> <span id="bid-delivery-date">Same day (fixed)</span></div>
+                            </div>
+
+                            <div class="included-price-row">
+                                <span>Included in Price</span>
+                                <button type="button" class="expand-btn">(Expand) <strong>+</strong></button>
+                            </div>
+
+                            <button type="submit" class="btn bid-submit-btn">Bid</button>
+
+                            <p class="bid-note">Your bid is binding. Your bid is incl <strong>VAT</strong>. There are no added extras. This is the flat fee for the job.</p>
+                        </form>
+                    </div>
+                </section>
+            </aside>
+        </div>
 
     </main>
 
     <script src="js/auth.js?v=20260409-3"></script>
-    <script src="js/listing-details.js?v=20260417-10"></script>
+    <script src="js/listing-details.js?v=20260417-40"></script>
 </body>
 </html>
