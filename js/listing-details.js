@@ -32,13 +32,14 @@
         subtitleEl.textContent = 'Listing ' + listingId + ' • Full submitted form details';
 
         renderQuickInfo(quote);
+        renderWatchToggle(quote);
         renderMap(quote);
         renderInventory(quote);
         renderMediaGallery(quote);
         renderServices(quote);
         renderBidUserContext();
         renderSidebarQuickInfo(quote);
-        renderBids(quoteId);
+        renderBids(quoteId, quote);
         initializeBidFormDefaults(quote);
         setupBidForm(quoteId, quote);
         renderFormSections(quote);
@@ -197,6 +198,61 @@
         return firstText(quote && quote.formId, quote && quote.id, quote && quote.quoteId, quote && quote.requestId, 'Not provided');
     }
 
+    function getWatchlistStorageKey(providerId) {
+        return 'anytransport_provider_watchlist_' + String(providerId || 'guest').trim();
+    }
+
+    function getWatchedQuoteIds(providerId) {
+        try {
+            const parsed = JSON.parse(localStorage.getItem(getWatchlistStorageKey(providerId)) || '[]');
+            return Array.isArray(parsed) ? parsed.map((entry) => String(entry || '').trim()).filter(Boolean) : [];
+        } catch (_error) {
+            return [];
+        }
+    }
+
+    function saveWatchedQuoteIds(providerId, quoteIds) {
+        const uniqueIds = Array.from(new Set((Array.isArray(quoteIds) ? quoteIds : []).map((entry) => String(entry || '').trim()).filter(Boolean)));
+        localStorage.setItem(getWatchlistStorageKey(providerId), JSON.stringify(uniqueIds));
+    }
+
+    function renderWatchToggle(quote) {
+        const button = document.getElementById('watch-toggle-btn');
+        if (!button) return;
+
+        const user = getActiveUser();
+        const providerId = user && user.id ? String(user.id).trim() : '';
+        const quoteId = String(getFormIdLabel(quote) || '').trim();
+        if (!providerId || !quoteId) {
+            button.textContent = 'Watch';
+            button.disabled = true;
+            return;
+        }
+
+        const syncLabel = () => {
+            const watchedIds = getWatchedQuoteIds(providerId);
+            const isWatched = watchedIds.includes(quoteId);
+            button.textContent = isWatched ? 'Unwatch' : 'Watch';
+            button.setAttribute('aria-pressed', isWatched ? 'true' : 'false');
+        };
+
+        syncLabel();
+
+        button.onclick = function () {
+            const watchedIds = getWatchedQuoteIds(providerId);
+            const isWatched = watchedIds.includes(quoteId);
+
+            if (isWatched) {
+                saveWatchedQuoteIds(providerId, watchedIds.filter((entry) => entry !== quoteId));
+            } else {
+                watchedIds.push(quoteId);
+                saveWatchedQuoteIds(providerId, watchedIds);
+            }
+
+            syncLabel();
+        };
+    }
+
     function renderMissingState(message) {
         const quick = document.getElementById('details-quick');
         const inventory = document.getElementById('details-inventory');
@@ -252,7 +308,7 @@
             '</div>',
             '<div id="details-map" class="modern-map"></div>',
             '<div class="modern-map-links">',
-            '<button type="button">Watch</button>',
+            '<button type="button" id="watch-toggle-btn" data-quote-id="' + escapeHtml(listingId) + '">Watch</button>',
             '</div>',
             '<button type="button" id="inventory-toggle-btn" class="inventory-open-btn" aria-expanded="false">Open Inventory</button>',
             '<button type="button" id="media-toggle-btn" class="inventory-open-btn" aria-expanded="false" style="margin-top:10px;">Open Photos</button>',
@@ -467,7 +523,7 @@
         closeInventoryModal();
         toggleBtn.setAttribute('aria-expanded', 'false');
         toggleBtn.textContent = 'Open Inventory';
-        toggleBtn.onclick = openInventoryModal;
+        toggleBtn.onclick = toggleInventoryModal;
         closeBtn.onclick = closeInventoryModal;
         resetBtn.onclick = function () {
             setDefaultInventoryWindowPosition();
@@ -494,10 +550,20 @@
 
         document.addEventListener('keydown', modalEl._inventoryEscapeHandler);
 
+        function toggleInventoryModal() {
+            if (modalEl.classList.contains('is-open')) {
+                closeInventoryModal();
+                return;
+            }
+
+            openInventoryModal();
+        }
+
         function openInventoryModal() {
             modalEl.classList.add('is-open');
             modalEl.setAttribute('aria-hidden', 'false');
             toggleBtn.setAttribute('aria-expanded', 'true');
+            toggleBtn.textContent = 'Close Inventory';
             if (dialogEl.dataset.userPositioned !== 'true') {
                 setDefaultInventoryWindowPosition();
             }
@@ -507,6 +573,7 @@
             modalEl.classList.remove('is-open');
             modalEl.setAttribute('aria-hidden', 'true');
             toggleBtn.setAttribute('aria-expanded', 'false');
+            toggleBtn.textContent = 'Open Inventory';
         }
 
         function setDefaultInventoryWindowPosition() {
@@ -569,7 +636,7 @@
         closeMediaModal();
         toggleBtn.setAttribute('aria-expanded', 'false');
         toggleBtn.textContent = 'Open Photos';
-        toggleBtn.onclick = openMediaModal;
+        toggleBtn.onclick = toggleMediaModal;
         closeBtn.onclick = closeMediaModal;
         resetBtn.onclick = function () {
             setDefaultMediaWindowPosition();
@@ -596,10 +663,20 @@
 
         document.addEventListener('keydown', modalEl._mediaEscapeHandler);
 
+        function toggleMediaModal() {
+            if (modalEl.classList.contains('is-open')) {
+                closeMediaModal();
+                return;
+            }
+
+            openMediaModal();
+        }
+
         function openMediaModal() {
             modalEl.classList.add('is-open');
             modalEl.setAttribute('aria-hidden', 'false');
             toggleBtn.setAttribute('aria-expanded', 'true');
+            toggleBtn.textContent = 'Close Photos';
             if (dialogEl.dataset.userPositioned !== 'true') {
                 setDefaultMediaWindowPosition();
             }
@@ -609,6 +686,7 @@
             modalEl.classList.remove('is-open');
             modalEl.setAttribute('aria-hidden', 'true');
             toggleBtn.setAttribute('aria-expanded', 'false');
+            toggleBtn.textContent = 'Open Photos';
         }
 
         function setDefaultMediaWindowPosition() {
@@ -644,7 +722,7 @@
         closeServicesModal();
         toggleBtn.setAttribute('aria-expanded', 'false');
         toggleBtn.textContent = 'Open Services';
-        toggleBtn.onclick = openServicesModal;
+        toggleBtn.onclick = toggleServicesModal;
         closeBtn.onclick = closeServicesModal;
         resetBtn.onclick = function () {
             setDefaultServicesWindowPosition();
@@ -671,10 +749,20 @@
 
         document.addEventListener('keydown', modalEl._servicesEscapeHandler);
 
+        function toggleServicesModal() {
+            if (modalEl.classList.contains('is-open')) {
+                closeServicesModal();
+                return;
+            }
+
+            openServicesModal();
+        }
+
         function openServicesModal() {
             modalEl.classList.add('is-open');
             modalEl.setAttribute('aria-hidden', 'false');
             toggleBtn.setAttribute('aria-expanded', 'true');
+            toggleBtn.textContent = 'Close Services';
             if (dialogEl.dataset.userPositioned !== 'true') {
                 setDefaultServicesWindowPosition();
             }
@@ -684,6 +772,7 @@
             modalEl.classList.remove('is-open');
             modalEl.setAttribute('aria-hidden', 'true');
             toggleBtn.setAttribute('aria-expanded', 'false');
+            toggleBtn.textContent = 'Open Services';
         }
 
         function setDefaultServicesWindowPosition() {
@@ -1573,7 +1662,7 @@
         return items;
     }
 
-    function renderBids(quoteId) {
+    function renderBids(quoteId, quote) {
         const historyEl = document.getElementById('bid-history');
         if (!historyEl) return;
 
@@ -1595,13 +1684,14 @@
 
         updateSidebarBidCount(quoteBids.length);
 
+        const dateLabel = firstText(getMoveDate(quote), 'Not provided');
+
         if (!quoteBids.length) {
             historyEl.innerHTML = '<div class="empty-bids">No bids yet. Be the first to bid.</div>';
             return;
         }
 
-        historyEl.innerHTML = '<h3 class="bid-history-header">Current Bids (' + quoteBids.length + ')</h3>' +
-            '<table class="legacy-bids-table"><thead><tr><th>Bidder</th><th>Amount</th><th>When</th><th>Expires</th></tr></thead><tbody>' +
+        historyEl.innerHTML = '<table class="legacy-bids-table legacy-bids-table-bottom"><thead><tr><th>Bidder</th><th>Amount</th><th>When</th><th>Dates</th><th>Expires</th><th></th></tr></thead><tbody>' +
             quoteBids.map(function (bid) {
                 const bidder = firstText(
                     bid.providerUsername,
@@ -1615,10 +1705,12 @@
                 const amount = Number(bid.amount || 0).toFixed(2);
                 const expiry = firstText(bid.bidExpiryDate, 'N/A') + (bid.bidExpiryTime ? ' ' + bid.bidExpiryTime : '');
                 return '<tr>' +
-                    '<td>' + escapeHtml(bidder) + '</td>' +
+                    '<td class="legacy-bidder-cell"><span class="legacy-bidder-icon">+</span>' + escapeHtml(bidder) + '</td>' +
                     '<td>€' + amount + '</td>' +
                     '<td>' + escapeHtml(when) + '</td>' +
+                    '<td><strong>P:</strong> ' + escapeHtml(dateLabel) + '<br><strong>D:</strong> ' + escapeHtml(dateLabel) + '</td>' +
                     '<td>' + escapeHtml(expiry) + '</td>' +
+                    '<td><button type="button" class="legacy-bids-view-btn">VIEW</button></td>' +
                     '</tr>';
             }).join('') +
             '</tbody></table>';
@@ -1687,8 +1779,7 @@
             localStorage.setItem(BID_STORAGE_KEY, JSON.stringify(allBids));
             if (form) form.reset();
             initializeBidFormDefaults(quote);
-            renderBids(quoteId);
-            alert('Bid submitted successfully.');
+            renderBids(quoteId, quote);
         });
     }
 

@@ -9,7 +9,7 @@
     <title>My Dashboard - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260322-1">
-    <link rel="stylesheet" href="css/dashboard.css?v=20260417-8">
+    <link rel="stylesheet" href="css/dashboard.css?v=20260418-3">
     <link href="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css" rel="stylesheet">
     <script src="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js"></script>
 </head>
@@ -50,85 +50,87 @@
         <!-- Main Content -->
         <section class="dashboard-content">
             <nav class="dashboard-inline-nav" aria-label="Dashboard navigation">
-                <a href="#" class="nav-item active" data-tab="my-quotes">My Quotes</a>
-                <a href="#" class="nav-item" data-tab="provider-board">Provider Board</a>
+                <a href="#" class="nav-item active" data-tab="provider-board">Provider Board</a>
                 <a href="#" class="nav-item" data-tab="my-bids">My Bids</a>
             </nav>
 
-            <!-- My Quotes Tab -->
-            <div id="my-quotes" class="tab-content active">
-                <div class="tab-header">
-                    <h2>My Quote Requests</h2>
-                    <a href="index.html" class="btn btn-primary">Get a Quote</a>
-                </div>
-                <div id="my-quotes-list" class="quotes-list">
-                    <!-- Quote requests will be loaded here -->
-                </div>
-            </div>
-
             <!-- Provider Board Tab -->
-            <div id="provider-board" class="tab-content">
+            <div id="provider-board" class="tab-content active">
                 <div class="tab-header provider-board-header">
                     <div>
                         <h2>Transport Provider Board</h2>
                         <p class="muted-text">View all customer listings, inspect step-by-step details, and place bids.</p>
                     </div>
-                    <div class="provider-kpis">
-                        <div class="kpi-card">
-                            <div class="kpi-label">Open listings</div>
-                            <div class="kpi-value" id="kpi-open-listings">0</div>
-                        </div>
-                        <div class="kpi-card">
-                            <div class="kpi-label">My active bids</div>
-                            <div class="kpi-value" id="kpi-my-bids">0</div>
-                        </div>
-                        <div class="kpi-card">
-                            <div class="kpi-label">Avg. route distance</div>
-                            <div class="kpi-value" id="kpi-avg-distance">0 km</div>
-                        </div>
-                    </div>
                 </div>
 
-                <div class="provider-toolbar">
-                    <div class="provider-filter-tabs" id="provider-filter-tabs">
-                        <button type="button" class="provider-filter-btn active" data-status="all">All</button>
-                        <button type="button" class="provider-filter-btn" data-status="pending">Open</button>
-                        <button type="button" class="provider-filter-btn" data-status="with-my-bid">With My Bid</button>
-                    </div>
-                    <div class="provider-search-wrap">
-                        <label for="provider-search" class="sr-only">Search listings</label>
-                        <input type="search" id="provider-search" class="form-input provider-search" placeholder="Search by listing ID, city, or service type">
-                    </div>
-                </div>
+                <section class="provider-mode-switch" id="provider-mode-switch" aria-label="Provider board mode">
+                    <button type="button" class="provider-mode-btn active" data-mode="dashboard">Dashboard</button>
+                    <button type="button" class="provider-mode-btn" data-mode="search">Search</button>
+                </section>
 
-                <div class="provider-advanced-filters">
-                    <div class="filter-group">
-                        <label>Services</label>
-                        <div class="service-filter-toggles" id="service-filter-toggles">
-                            <button type="button" class="service-toggle-btn" data-service="house removal">House Removal</button>
-                            <button type="button" class="service-toggle-btn" data-service="office relocation">Office Relocation</button>
-                            <button type="button" class="service-toggle-btn" data-service="apartment move">Apartment Move</button>
-                            <button type="button" class="service-toggle-btn" data-service="man and van">Man & Van</button>
-                            <button type="button" class="service-toggle-btn" data-service="single room move">Single Room Move</button>
+                <section id="provider-dashboard-panel" class="provider-mode-panel active" aria-label="Dashboard listings">
+                    <div class="provider-dashboard-tabs" id="provider-dashboard-tabs" role="tablist" aria-label="Dashboard listing tabs">
+                        <button type="button" class="provider-dashboard-tab active" data-scope="watching" role="tab" aria-selected="true">Watching (<span id="count-watching">0</span>)</button>
+                        <button type="button" class="provider-dashboard-tab" data-scope="bidding" role="tab" aria-selected="false">Bidding (<span id="count-bidding">0</span>)</button>
+                        <button type="button" class="provider-dashboard-tab" data-scope="won" role="tab" aria-selected="false">Won (<span id="count-won">0</span>)</button>
+                    </div>
+
+                    <div class="provider-dashboard-toolbar">
+                        <label for="dashboard-id-search">Search listing by ID</label>
+                        <input type="search" id="dashboard-id-search" class="form-input provider-search" placeholder="e.g. 9360218">
+                        <button type="button" id="dashboard-id-search-btn" class="btn btn-primary">Search</button>
+                        <button type="button" id="dashboard-id-reset-btn" class="btn btn-outline">Refresh</button>
+                    </div>
+                </section>
+
+                <section id="provider-search-panel" class="provider-mode-panel" aria-label="Search listings">
+                    <div class="provider-search-grid">
+                        <div class="filter-group">
+                            <label for="search-listing-id">Listing ID</label>
+                            <input type="search" id="search-listing-id" class="form-input" placeholder="ID ">
+                        </div>
+
+                        <div class="filter-group">
+                            <label for="search-category">Category</label>
+                            <select id="search-category" class="form-input filter-select">
+                                <option value="">All categories</option>
+                                <option value="house removal">House Removal</option>
+                                <option value="office relocation">Office Relocation</option>
+                                <option value="apartment move">Apartment Move</option>
+                                <option value="single room move">Single Room Move</option>
+                                <option value="man and van">Man &amp; Van</option>
+                            </select>
+                        </div>
+
+                        <div class="filter-group">
+                            <label for="search-city">City</label>
+                            <input type="search" id="search-city" class="form-input" placeholder="Pickup or delivery city">
+                        </div>
+
+                        <div class="filter-group">
+                            <label for="search-keyword">Keyword</label>
+                            <input type="search" id="search-keyword" class="form-input" placeholder="Service type, address, notes...">
+                        </div>
+
+                        <div class="filter-group">
+                            <label for="filter-distance-min">Distance (km)</label>
+                            <div class="distance-input-group">
+                                <input type="number" id="filter-distance-min" class="form-input distance-input" placeholder="Min" min="0" value="">
+                                <span class="distance-separator">-</span>
+                                <input type="number" id="filter-distance-max" class="form-input distance-input" placeholder="Max" min="0" value="">
+                            </div>
+                        </div>
+
+                        <div class="filter-group">
+                            <label for="filter-date">Move Date From</label>
+                            <input type="date" id="filter-date" class="form-input filter-date">
                         </div>
                     </div>
 
-                    <div class="filter-group">
-                        <label for="filter-distance">Distance (km)</label>
-                        <div class="distance-input-group">
-                            <input type="number" id="filter-distance-min" class="form-input distance-input" placeholder="Min" min="0" value="">
-                            <span class="distance-separator">-</span>
-                            <input type="number" id="filter-distance-max" class="form-input distance-input" placeholder="Max" min="0" value="">
-                        </div>
+                    <div class="provider-search-actions">
+                        <button type="button" id="filter-reset-btn" class="btn btn-outline">Reset Filters</button>
                     </div>
-
-                    <div class="filter-group">
-                        <label for="filter-date">Move Date From</label>
-                        <input type="date" id="filter-date" class="form-input filter-date">
-                    </div>
-
-                    <button type="button" id="filter-reset-btn" class="btn btn-outline">Reset Filters</button>
-                </div>
+                </section>
 
                 <div id="provider-listings" class="provider-listings" aria-live="polite"></div>
             </div>
@@ -146,6 +148,6 @@
 
     <script src="js/cache-maintenance.js?v=20260322-2"></script>
     <script src="js/auth.js?v=20260417-5"></script>
-    <script src="js/dashboard-fixed.js?v=20260417-9"></script>
+    <script src="js/dashboard-fixed.js?v=20260417-14"></script>
 </body>
 </html>

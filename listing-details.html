@@ -9,7 +9,7 @@
     <title>Listing Details - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260322-1">
-    <link rel="stylesheet" href="css/listing-details.css?v=20260417-32">
+    <link rel="stylesheet" href="css/listing-details.css?v=20260417-33">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js'></script>
 </head>
@@ -57,6 +57,11 @@
         <div class="details-workspace">
             <div class="details-main-column">
                 <section id="details-quick" class="quick-grid" aria-label="Quick information"></section>
+
+                <section class="details-card legacy-bids-panel" aria-label="Current bids">
+                    <h3 class="legacy-bids-title">▼ Bids</h3>
+                    <div id="bid-history" class="legacy-bids-body"></div>
+                </section>
 
             </div>
 
@@ -127,6 +132,6 @@
     </main>
 
     <script src="js/auth.js?v=20260409-3"></script>
-    <script src="js/listing-details.js?v=20260417-41"></script>
+    <script src="js/listing-details.js?v=20260418-1"></script>
 </body>
 </html>

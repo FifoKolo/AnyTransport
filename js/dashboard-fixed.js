@@ -12,9 +12,13 @@
     };
 
     const state = {
-        activeStatus: 'all',
-        search: '',
-        serviceFilters: [],
+        activeProviderMode: 'dashboard',
+        dashboardScope: 'watching',
+        dashboardListingId: '',
+        searchListingId: '',
+        searchKeyword: '',
+        searchCategory: '',
+        searchCity: '',
         distanceMin: '',
         distanceMax: '',
         dateFilter: '',
@@ -50,7 +54,7 @@
         if (auth.isProvider && auth.isProvider()) {
             showTab('provider-board');
         } else {
-            showTab('my-quotes');
+            showTab('provider-board');
             hideProviderOnlyTabs();
         }
 
@@ -78,15 +82,19 @@
         }
 
         state.focusedFormId = focused;
-        state.activeStatus = 'all';
-        state.serviceFilters = [];
+        state.activeProviderMode = 'dashboard';
+        state.dashboardScope = 'watching';
         state.distanceMin = '';
         state.distanceMax = '';
         state.dateFilter = '';
-        state.search = focused;
+        state.dashboardListingId = focused;
+        state.searchListingId = focused;
 
-        const searchInput = document.getElementById('provider-search');
-        if (searchInput) searchInput.value = focused;
+        const dashboardIdSearch = document.getElementById('dashboard-id-search');
+        if (dashboardIdSearch) dashboardIdSearch.value = focused;
+
+        const searchListingId = document.getElementById('search-listing-id');
+        if (searchListingId) searchListingId.value = focused;
 
         try {
             localStorage.removeItem('pending_quote_form_id');
@@ -336,84 +344,154 @@
     }
 
     function wireProviderControls(user) {
-        const searchInput = document.getElementById('provider-search');
-        if (searchInput) {
-            searchInput.addEventListener('input', () => {
-                state.search = String(searchInput.value || '').trim().toLowerCase();
+        const renderSearchModeIfActive = () => {
+            if (state.activeProviderMode === 'search') {
+                renderProviderListings(user);
+            }
+        };
+
+        const modeSwitch = document.getElementById('provider-mode-switch');
+        const dashboardPanel = document.getElementById('provider-dashboard-panel');
+        const searchPanel = document.getElementById('provider-search-panel');
+        if (modeSwitch) {
+            modeSwitch.addEventListener('click', (event) => {
+                const btn = event.target.closest('.provider-mode-btn');
+                if (!btn) return;
+                const mode = btn.getAttribute('data-mode') === 'search' ? 'search' : 'dashboard';
+                state.activeProviderMode = mode;
+
+                modeSwitch.querySelectorAll('.provider-mode-btn').forEach((node) => {
+                    node.classList.toggle('active', node === btn);
+                });
+
+                if (dashboardPanel) dashboardPanel.classList.toggle('active', mode === 'dashboard');
+                if (searchPanel) searchPanel.classList.toggle('active', mode === 'search');
                 renderProviderListings(user);
             });
         }
 
-        const filterTabs = document.getElementById('provider-filter-tabs');
-        if (filterTabs) {
-            filterTabs.addEventListener('click', (event) => {
-                const btn = event.target.closest('.provider-filter-btn');
+        const dashboardTabs = document.getElementById('provider-dashboard-tabs');
+        if (dashboardTabs) {
+            dashboardTabs.addEventListener('click', (event) => {
+                const btn = event.target.closest('.provider-dashboard-tab');
                 if (!btn) return;
-                state.activeStatus = btn.getAttribute('data-status') || 'all';
-                filterTabs.querySelectorAll('.provider-filter-btn').forEach((node) => {
-                    node.classList.toggle('active', node === btn);
+                state.dashboardScope = btn.getAttribute('data-scope') || 'watching';
+                dashboardTabs.querySelectorAll('.provider-dashboard-tab').forEach((node) => {
+                    const active = node === btn;
+                    node.classList.toggle('active', active);
+                    node.setAttribute('aria-selected', active ? 'true' : 'false');
                 });
                 renderProviderListings(user);
             });
         }
 
-        const serviceToggles = document.getElementById('service-filter-toggles');
-        if (serviceToggles) {
-            serviceToggles.addEventListener('click', (event) => {
-                const btn = event.target.closest('.service-toggle-btn');
-                if (!btn) return;
-                const service = btn.getAttribute('data-service') || '';
-                if (state.serviceFilters.includes(service)) {
-                    state.serviceFilters = state.serviceFilters.filter((s) => s !== service);
-                } else {
-                    state.serviceFilters.push(service);
-                }
-                btn.classList.toggle('active');
+        const dashboardIdSearch = document.getElementById('dashboard-id-search');
+        if (dashboardIdSearch) {
+            dashboardIdSearch.addEventListener('input', () => {
+                state.dashboardListingId = String(dashboardIdSearch.value || '').trim();
+            });
+            dashboardIdSearch.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
                 renderProviderListings(user);
             });
         }
 
+        const dashboardSearchBtn = document.getElementById('dashboard-id-search-btn');
+        if (dashboardSearchBtn) {
+            dashboardSearchBtn.addEventListener('click', () => {
+                if (dashboardIdSearch) {
+                    state.dashboardListingId = String(dashboardIdSearch.value || '').trim();
+                }
+                renderProviderListings(user);
+            });
+        }
+
+        const dashboardResetBtn = document.getElementById('dashboard-id-reset-btn');
+        if (dashboardResetBtn) {
+            dashboardResetBtn.addEventListener('click', () => {
+                state.dashboardListingId = '';
+                if (dashboardIdSearch) dashboardIdSearch.value = '';
+                renderProviderListings(user);
+            });
+        }
+
+        const searchListingIdInput = document.getElementById('search-listing-id');
+        const searchCityInput = document.getElementById('search-city');
+        const searchKeywordInput = document.getElementById('search-keyword');
+        const searchCategoryInput = document.getElementById('search-category');
         const distanceMinInput = document.getElementById('filter-distance-min');
+        const distanceMaxInput = document.getElementById('filter-distance-max');
+        const dateFilterInput = document.getElementById('filter-date');
+
+        if (searchListingIdInput) {
+            searchListingIdInput.addEventListener('input', () => {
+                state.searchListingId = String(searchListingIdInput.value || '').trim();
+                renderSearchModeIfActive();
+            });
+        }
+
+        if (searchCityInput) {
+            searchCityInput.addEventListener('input', () => {
+                state.searchCity = String(searchCityInput.value || '').trim().toLowerCase();
+                renderSearchModeIfActive();
+            });
+        }
+
+        if (searchKeywordInput) {
+            searchKeywordInput.addEventListener('input', () => {
+                state.searchKeyword = String(searchKeywordInput.value || '').trim().toLowerCase();
+                renderSearchModeIfActive();
+            });
+        }
+
+        if (searchCategoryInput) {
+            searchCategoryInput.addEventListener('change', () => {
+                state.searchCategory = String(searchCategoryInput.value || '').trim().toLowerCase();
+                renderSearchModeIfActive();
+            });
+        }
+
         if (distanceMinInput) {
             distanceMinInput.addEventListener('input', () => {
                 state.distanceMin = distanceMinInput.value ? Number(distanceMinInput.value) : '';
-                renderProviderListings(user);
+                renderSearchModeIfActive();
             });
         }
 
-        const distanceMaxInput = document.getElementById('filter-distance-max');
         if (distanceMaxInput) {
             distanceMaxInput.addEventListener('input', () => {
                 state.distanceMax = distanceMaxInput.value ? Number(distanceMaxInput.value) : '';
-                renderProviderListings(user);
+                renderSearchModeIfActive();
             });
         }
 
-        const dateFilter = document.getElementById('filter-date');
-        if (dateFilter) {
-            dateFilter.addEventListener('change', () => {
-                state.dateFilter = String(dateFilter.value || '').trim();
-                renderProviderListings(user);
+        if (dateFilterInput) {
+            dateFilterInput.addEventListener('change', () => {
+                state.dateFilter = String(dateFilterInput.value || '').trim();
+                renderSearchModeIfActive();
             });
         }
 
         const resetBtn = document.getElementById('filter-reset-btn');
         if (resetBtn) {
             resetBtn.addEventListener('click', () => {
-                state.serviceFilters = [];
+                state.searchListingId = '';
+                state.searchCity = '';
+                state.searchKeyword = '';
+                state.searchCategory = '';
                 state.distanceMin = '';
                 state.distanceMax = '';
                 state.dateFilter = '';
-                if (searchInput) searchInput.value = '';
-                state.search = '';
-                if (serviceToggles) {
-                    serviceToggles.querySelectorAll('.service-toggle-btn').forEach((btn) => {
-                        btn.classList.remove('active');
-                    });
-                }
+
+                if (searchListingIdInput) searchListingIdInput.value = '';
+                if (searchCityInput) searchCityInput.value = '';
+                if (searchKeywordInput) searchKeywordInput.value = '';
+                if (searchCategoryInput) searchCategoryInput.value = '';
                 if (distanceMinInput) distanceMinInput.value = '';
                 if (distanceMaxInput) distanceMaxInput.value = '';
-                if (dateFilter) dateFilter.value = '';
+                if (dateFilterInput) dateFilterInput.value = '';
+
                 renderProviderListings(user);
             });
         }
@@ -517,7 +595,6 @@
     }
 
     function renderAll(user) {
-        renderMyQuotes(user.id);
         renderProviderListings(user);
         renderMyBids(user);
     }
@@ -539,77 +616,43 @@
         }
     }
 
-    function renderMyQuotes(userId) {
-        const quotes = getAllQuotes().filter((quote) => quote.userId === userId || quote.createdBy === userId);
-        const container = document.getElementById('my-quotes-list');
-        if (!container) return;
-
-        if (!quotes.length) {
-            container.innerHTML = [
-                '<div class="empty-state">',
-                '<h3>No quotes requested yet</h3>',
-                '<p>Request your first quote to get started.</p>',
-                '<a href="create-job.html" class="btn btn-primary">Get a Quote</a>',
-                '</div>'
-            ].join('');
-            return;
-        }
-
-        const bids = getAllBids();
-        container.innerHTML = quotes
-            .sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0))
-            .map((quote) => createCustomerQuoteCard(quote, bids, userId))
-            .join('');
-    }
-
-    function createCustomerQuoteCard(quote, bids, userId) {
-        const quoteBids = bids.filter((bid) => bid.quoteId === quote.id && bid.status === 'active');
-        const lowest = getLowestBid(quoteBids);
-        const statusLabel = quote.status === 'claimed' ? 'CLAIMED' : 'PENDING';
-        const statusClass = quote.status === 'claimed' ? 'claimed' : 'pending';
-
-        const actions = [
-            '<button class="btn btn-secondary quote-edit-btn" data-quote-id="' + escapeHtml(quote.id) + '">Edit</button>',
-            '<button class="btn btn-outline quote-delete-btn" data-quote-id="' + escapeHtml(quote.id) + '">Delete</button>'
-        ].join('');
-
-        return [
-            '<article class="job-card ' + statusClass + '">',
-            '<div class="job-header">',
-            '<div>',
-            '<h3 class="job-title">' + escapeHtml(getQuoteTitle(quote)) + '</h3>',
-            '<div class="job-meta">',
-            '<span class="job-meta-item">ID ' + escapeHtml(getFormIdLabel(quote)) + '</span>',
-            getPrimaryTransportDateValue(quote) ? '<span class="job-meta-item">Date ' + escapeHtml(formatDate(getPrimaryTransportDateValue(quote))) + '</span>' : '',
-            '<span class="job-meta-item">Bids ' + quoteBids.length + '</span>',
-            lowest ? '<span class="job-meta-item">Lowest €' + Number(lowest.amount).toFixed(2) + '</span>' : '',
-            '</div>',
-            '</div>',
-            '<span class="job-status ' + statusClass + '">' + statusLabel + '</span>',
-            '</div>',
-            '<div class="job-locations">',
-            '<div class="location-item"><div class="location-label">From</div><div class="location-value">' + escapeHtml(getFromLabel(quote)) + '</div></div>',
-            '<div class="location-item"><div class="location-label">To</div><div class="location-value">' + escapeHtml(getToLabel(quote)) + '</div></div>',
-            '</div>',
-            '<div class="job-footer"><div class="job-actions">' + actions + '</div></div>',
-            '</article>'
-        ].join('');
-    }
-
     function renderProviderListings(user) {
         const container = document.getElementById('provider-listings');
         if (!container) return;
 
         const quotes = getAllQuotes();
         const bids = getAllBids();
-        const myBids = bids.filter((bid) => bid.providerId === user.id && bid.status === 'active');
+        const watchedQuoteIds = new Set(getWatchedQuoteIdsForProvider(user.id));
+        const myBids = bids.filter((bid) => isBidOwnedByUser(bid, user) && isActiveBid(bid));
+        const myBidQuoteIds = new Set(myBids.map((bid) => normalizeIdValue(bid.quoteId)).filter(Boolean));
+        const wonQuoteIds = getWonQuoteIdsForProvider(user.id, quotes, bids);
+        const quotesById = {};
+        quotes.forEach((quote) => {
+            const key = normalizeIdValue(quote && quote.id);
+            if (key) quotesById[key] = quote;
+        });
 
-        const filtered = quotes.filter((quote) => {
-            if (state.activeStatus === 'pending' && quote.status !== 'pending') return false;
-            if (state.activeStatus === 'with-my-bid' && !myBids.find((bid) => bid.quoteId === quote.id)) return false;
+        updateDashboardScopeCounts(watchedQuoteIds.size, myBidQuoteIds.size, wonQuoteIds.size);
 
-            // Text search filter
-            if (state.search) {
+        const searchFilteredQuotes = quotes.filter((quote) => {
+            if (state.searchListingId && !matchesListingIdFilter(quote, state.searchListingId)) return false;
+
+            if (state.searchCategory) {
+                const quoteService = String(getQuoteTitle(quote) || quote.itemDescription || '').toLowerCase();
+                if (!quoteService.includes(state.searchCategory)) return false;
+            }
+
+            if (state.searchCity) {
+                const cityHaystack = [
+                    quote.pickupCity,
+                    quote.deliveryCity,
+                    getFromLabel(quote),
+                    getToLabel(quote)
+                ].join(' ').toLowerCase();
+                if (!cityHaystack.includes(state.searchCity)) return false;
+            }
+
+            if (state.searchKeyword) {
                 const haystack = [
                     quote.id,
                     quote.formId,
@@ -619,24 +662,18 @@
                     getToLabel(quote),
                     quote.itemDescription,
                     quote.pickupCity,
-                    quote.deliveryCity
+                    quote.deliveryCity,
+                    quote.overviewNotes,
+                    quote.summaryNotes,
+                    quote.notes
                 ].join(' ').toLowerCase();
-                if (!haystack.includes(state.search)) return false;
+                if (!haystack.includes(state.searchKeyword)) return false;
             }
 
-            // Service filter (multi-select)
-            if (state.serviceFilters.length > 0) {
-                const quoteService = String(getQuoteTitle(quote) || quote.itemDescription || '').toLowerCase();
-                const matchesService = state.serviceFilters.some((service) => quoteService.includes(service));
-                if (!matchesService) return false;
-            }
-
-            // Distance filter
             const distance = Number(quote.routeDistanceKm) || 0;
             if (state.distanceMin !== '' && distance < Number(state.distanceMin)) return false;
             if (state.distanceMax !== '' && distance > Number(state.distanceMax)) return false;
 
-            // Date filter
             if (state.dateFilter) {
                 const quoteDate = normalizeDateKey(getPrimaryTransportDateValue(quote) || getSecondaryTransportDateValue(quote));
                 const filterDate = normalizeDateKey(state.dateFilter);
@@ -647,9 +684,10 @@
             return true;
         }).sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
 
-        updateProviderKpis(filtered, quotes, myBids);
-
-        const previewListing = createProviderPreviewListing(user, bids);
+        const dashboardWatchingQuotes = quotes.filter((quote) => watchedQuoteIds.has(normalizeIdValue(quote && quote.id)))
+            .sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
+        const dashboardWonQuotes = quotes.filter((quote) => wonQuoteIds.has(normalizeIdValue(quote && quote.id)))
+            .sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
 
         const header = [
             '<div class="provider-listing">',
@@ -666,20 +704,76 @@
             '</div>'
         ].join('');
 
-        if (!filtered.length) {
+        if (state.activeProviderMode === 'dashboard') {
+            if (state.dashboardScope === 'bidding') {
+                const filteredBids = myBids.filter((bid) => {
+                    if (!state.dashboardListingId) return true;
+
+                    const quote = quotesById[normalizeIdValue(bid && bid.quoteId)] || null;
+                    if (quote && matchesListingIdFilter(quote, state.dashboardListingId)) return true;
+
+                    return normalizeIdValue(bid && bid.quoteId).toLowerCase().includes(String(state.dashboardListingId || '').trim().toLowerCase());
+                }).sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
+
+                if (!filteredBids.length) {
+                    container.innerHTML = [
+                        header,
+                        '<div class="empty-state">',
+                        '<h3>No current bids right now</h3>',
+                        '<p>Place a bid in Get Details and it will appear here.</p>',
+                        '</div>'
+                    ].join('');
+                    return;
+                }
+
+                const rows = filteredBids.map((bid) => {
+                    const quote = quotesById[normalizeIdValue(bid && bid.quoteId)] || null;
+                    return createProviderCurrentBidCard(bid, quote, bids);
+                }).join('');
+
+                container.innerHTML = header + rows;
+                return;
+            }
+
+            const scopeQuotes = state.dashboardScope === 'watching' ? dashboardWatchingQuotes : dashboardWonQuotes;
+            const filteredDashboardQuotes = scopeQuotes.filter((quote) => {
+                if (!state.dashboardListingId) return true;
+                return matchesListingIdFilter(quote, state.dashboardListingId);
+            });
+
+            if (!filteredDashboardQuotes.length) {
+                const dashboardLabel = state.dashboardScope === 'watching' ? 'watched' : 'won';
+                container.innerHTML = [
+                    header,
+                    '<div class="empty-state">',
+                    '<h3>No ' + escapeHtml(dashboardLabel) + ' listings right now</h3>',
+                    '<p>Use Watch in Get Details or win a bid to populate this section.</p>',
+                    '</div>'
+                ].join('');
+                return;
+            }
+
+            const rows = filteredDashboardQuotes.map((quote) => createProviderListingCard(quote, bids, user)).join('');
+            container.innerHTML = header + rows;
+            return;
+        }
+
+        if (!searchFilteredQuotes.length) {
+            const modeLabel = state.activeProviderMode === 'dashboard'
+                ? ('No listings in ' + state.dashboardScope + ' right now')
+                : 'No listings match your search filters';
             container.innerHTML = [
                 header,
-                previewListing,
                 '<div class="empty-state">',
-                '<h3>No listings match your current filters</h3>',
-                '<p>Try another status or search keyword.</p>',
+                '<h3>' + escapeHtml(modeLabel) + '</h3>',
+                '<p>Try a different tab or adjust your filters.</p>',
                 '</div>'
             ].join('');
             return;
         }
 
-        const rows = filtered.map((quote) => createProviderListingCard(quote, bids, user)).join('');
-        container.innerHTML = header + previewListing + rows;
+        const rows = searchFilteredQuotes.map((quote) => createProviderListingCard(quote, bids, user)).join('');
+        container.innerHTML = header + rows;
 
         container.querySelectorAll('.provider-listing[data-quote-id]').forEach((listing) => {
             const quoteId = listing.getAttribute('data-quote-id');
@@ -722,15 +816,12 @@
     }
 
     function createProviderListingCard(quote, bids, user) {
-        const quoteBids = bids.filter((bid) => bid.quoteId === quote.id && bid.status === 'active');
-        const myBid = getLowestBidForProvider(quoteBids, user.id);
+        const quoteBids = bids.filter((bid) => idsEqual(bid && bid.quoteId, quote && quote.id) && isActiveBid(bid));
         const lowest = getLowestBid(quoteBids);
         const formId = String(getFormIdLabel(quote) || '').trim();
         const isFocused = !!state.focusedFormId && formId === state.focusedFormId;
 
         const quickQuoteText = lowest ? ('€' + Number(lowest.amount).toFixed(2)) : 'No bids';
-        const myBidText = myBid ? ('Your bid €' + Number(myBid.amount).toFixed(2)) : 'Not bid yet';
-
         return [
             '<article class="provider-listing' + (isFocused ? ' is-focused-form' : '') + '" data-quote-id="' + escapeHtml(quote.id) + '" data-form-id="' + escapeHtml(formId) + '">',
             '<div class="listing-row body listing-row-toggle" role="button" tabindex="0" aria-expanded="false">',
@@ -747,7 +838,9 @@
             '<div class="listing-cell actions"><button type="button" class="get-details-btn" data-quote-id="' + escapeHtml(quote.id) + '" data-form-id="' + escapeHtml(getFormIdLabel(quote)) + '">Get Details</button></div>',
             '</div>',
             '<div class="listing-details">',
+            '<div class="details-layout">',
             createQuickInfoPanel(quote),
+            '</div>',
             '</div>',
             '</article>'
         ].join('');
@@ -802,7 +895,7 @@
             '</div>',
             '</div>',
             
-            '<p class="quick-info-hint">Click "Get Details" button above to view the complete transport form with all submitted information.</p>',
+            '<p class="quick-info-hint">Click "Get Details" to open the full form, including the complete bidding section.</p>',
             '</div>',
             '</section>'
         ].join('');
@@ -1450,23 +1543,94 @@
 
     function getLowestBidForProvider(bids, providerId) {
         const providerBids = Array.isArray(bids)
-            ? bids.filter((bid) => bid.providerId === providerId && bid.status === 'active')
+            ? bids.filter((bid) => idsEqual(bid && bid.providerId, providerId) && isActiveBid(bid))
             : [];
         return getLowestBid(providerBids);
     }
 
-    function updateProviderKpis(filteredQuotes, allQuotes, myBids) {
-        const openEl = document.getElementById('kpi-open-listings');
-        const bidEl = document.getElementById('kpi-my-bids');
-        const distEl = document.getElementById('kpi-avg-distance');
+    function updateDashboardScopeCounts(watchingCount, biddingCount, wonCount) {
+        const watchingEl = document.getElementById('count-watching');
+        const biddingEl = document.getElementById('count-bidding');
+        const wonEl = document.getElementById('count-won');
 
-        const openCount = allQuotes.filter((quote) => quote.status === 'pending').length;
-        const distances = filteredQuotes.map((quote) => Number(quote.routeDistanceKm)).filter((value) => Number.isFinite(value) && value > 0);
-        const avgDistance = distances.length ? (distances.reduce((sum, value) => sum + value, 0) / distances.length) : 0;
+        if (watchingEl) watchingEl.textContent = String(Number(watchingCount) || 0);
+        if (biddingEl) biddingEl.textContent = String(Number(biddingCount) || 0);
+        if (wonEl) wonEl.textContent = String(Number(wonCount) || 0);
+    }
 
-        if (openEl) openEl.textContent = String(openCount);
-        if (bidEl) bidEl.textContent = String(myBids.length);
-        if (distEl) distEl.textContent = avgDistance ? (avgDistance.toFixed(1) + ' km') : '0 km';
+    function matchesListingIdFilter(quote, filterValue) {
+        const needle = String(filterValue || '').trim().toLowerCase();
+        if (!needle) return true;
+
+        const candidates = [
+            quote && quote.id,
+            quote && quote.formId,
+            quote && quote.quoteId,
+            quote && quote.requestId,
+            getFormIdLabel(quote)
+        ];
+
+        return candidates.some((value) => String(value || '').toLowerCase().includes(needle));
+    }
+
+    function getWonQuoteIdsForProvider(providerId, quotes, bids) {
+        const wonIds = new Set();
+        const targetProvider = normalizeIdValue(providerId);
+        if (!targetProvider) return wonIds;
+
+        const quoteList = Array.isArray(quotes) ? quotes : [];
+        const bidList = Array.isArray(bids) ? bids : [];
+
+        quoteList.forEach((quote) => {
+            const quoteId = normalizeIdValue(quote && quote.id);
+            if (!quoteId) return;
+
+            const explicitWinner = firstText(
+                quote.winningProviderId,
+                quote.awardedProviderId,
+                quote.selectedProviderId,
+                quote.acceptedProviderId
+            );
+            if (String(explicitWinner || '').trim() === targetProvider) {
+                wonIds.add(quoteId);
+                return;
+            }
+
+            const quoteBids = bidList.filter((bid) => idsEqual(bid && bid.quoteId, quoteId));
+            const hasAcceptedBid = quoteBids.some((bid) => {
+                const providerMatch = idsEqual(bid && bid.providerId, targetProvider);
+                if (!providerMatch) return false;
+                const status = String(bid.status || '').toLowerCase();
+                return status === 'won' || status === 'accepted' || bid.accepted === true;
+            });
+            if (hasAcceptedBid) {
+                wonIds.add(quoteId);
+                return;
+            }
+
+            if (String(quote.status || '').toLowerCase() !== 'claimed') return;
+            const activeBids = quoteBids.filter((bid) => isActiveBid(bid));
+            const lowest = getLowestBid(activeBids);
+            if (lowest && idsEqual(lowest.providerId, targetProvider)) {
+                wonIds.add(quoteId);
+            }
+        });
+
+        return wonIds;
+    }
+
+    function getWatchedQuoteIdsForProvider(providerId) {
+        const targetProvider = normalizeIdValue(providerId);
+        if (!targetProvider) return [];
+
+        try {
+            const parsed = JSON.parse(localStorage.getItem('anytransport_provider_watchlist_' + targetProvider) || '[]');
+            return Array.isArray(parsed)
+                ? parsed.map((entry) => normalizeIdValue(entry)).filter(Boolean)
+                : [];
+        } catch (_error) {
+            return [];
+        }
     }
 
     function renderMyBids(user) {
@@ -1474,7 +1638,7 @@
         if (!container) return;
 
         const bids = getAllBids()
-            .filter((bid) => bid.providerId === user.id)
+            .filter((bid) => isBidOwnedByUser(bid, user))
             .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
 
         if (!bids.length) {
@@ -1514,6 +1678,43 @@
         }).join('');
     }
 
+    function createProviderCurrentBidCard(bid, quote, allBids) {
+        const quoteId = normalizeIdValue(bid && bid.quoteId);
+        const quoteBids = Array.isArray(allBids)
+            ? allBids.filter((entry) => idsEqual(entry && entry.quoteId, quoteId) && isActiveBid(entry))
+            : [];
+        const amountValue = Number(bid && bid.amount);
+        const amountText = Number.isFinite(amountValue) ? ('€' + amountValue.toFixed(2)) : '€0.00';
+
+        const title = quote ? getQuoteTitle(quote) : ('Listing ' + quoteId);
+        const formLabel = quote ? getFormIdLabel(quote) : quoteId;
+        const fromLabel = quote ? getFromLabel(quote) : 'Not provided';
+        const toLabel = quote ? getToLabel(quote) : 'Not provided';
+        const pickupLabel = quote ? getPickupLabel(quote) : 'Flexible';
+
+        const actionHtml = quote
+            ? '<button type="button" class="get-details-btn" data-quote-id="' + escapeHtml(quoteId) + '" data-form-id="' + escapeHtml(formLabel) + '">Get Details</button>'
+            : '<button type="button" class="get-details-btn" disabled>Unavailable</button>';
+
+        return [
+            '<article class="provider-listing" data-quote-id="' + escapeHtml(quoteId) + '">',
+            '<div class="listing-row body">',
+            '<div class="listing-cell">' + escapeHtml(timeAgoLabel((bid && (bid.updatedAt || bid.createdAt)) || '')) + '</div>',
+            '<div class="listing-cell">',
+            '<div class="listing-title">' + escapeHtml(title) + '</div>',
+            '<div class="listing-sub">Listing ' + escapeHtml(formLabel) + ' • Your current bid</div>',
+            '</div>',
+            '<div class="listing-cell">' + escapeHtml(fromLabel) + '</div>',
+            '<div class="listing-cell">' + escapeHtml(toLabel) + '</div>',
+            '<div class="listing-cell">' + escapeHtml(pickupLabel) + '</div>',
+            '<div class="listing-cell">' + quoteBids.length + '</div>',
+            '<div class="listing-cell"><span class="listing-amount">' + escapeHtml(amountText) + '</span></div>',
+            '<div class="listing-cell actions">' + actionHtml + '</div>',
+            '</div>',
+            '</article>'
+        ].join('');
+    }
+
     function placeBid(quoteId, user) {
         const isDemoListing = quoteId === DEMO_PROVIDER_LISTING_ID;
         const quote = getAllQuotes().find((entry) => entry.id === quoteId) || (isDemoListing ? getDemoProviderListingQuote() : null);
@@ -1544,7 +1745,7 @@
 
         const bids = getAllBids();
         const now = new Date().toISOString();
-        const myActiveBids = bids.filter((bid) => bid.quoteId === quoteId && bid.providerId === user.id && bid.status === 'active');
+        const myActiveBids = bids.filter((bid) => idsEqual(bid && bid.quoteId, quoteId) && isBidOwnedByUser(bid, user) && isActiveBid(bid));
         const lowestMyActiveBid = getLowestBid(myActiveBids);
 
         if (lowestMyActiveBid && amount > Number(lowestMyActiveBid.amount)) {
@@ -1572,7 +1773,6 @@
         saveAllBids(bids);
         renderProviderListings(user);
         renderMyBids(user);
-        renderMyQuotes(user.id);
     }
 
     function getDemoProviderListingQuote() {
@@ -1623,7 +1823,7 @@
     function withdrawBid(bidId, user) {
         if (!bidId) return;
         const bids = getAllBids();
-        const target = bids.find((bid) => bid.id === bidId && bid.providerId === user.id);
+        const target = bids.find((bid) => idsEqual(bid && bid.id, bidId) && isBidOwnedByUser(bid, user));
         if (!target) return;
 
         if (!confirm('Withdraw this bid?')) return;
@@ -1633,7 +1833,6 @@
 
         renderProviderListings(user);
         renderMyBids(user);
-        renderMyQuotes(user.id);
     }
 
     function editQuote(_quoteId) {
@@ -1734,6 +1933,23 @@
         } catch (_error) {
             return [];
         }
+    }
+
+    function normalizeIdValue(value) {
+        return String(value == null ? '' : value).trim();
+    }
+
+    function idsEqual(left, right) {
+        return normalizeIdValue(left) === normalizeIdValue(right);
+    }
+
+    function isActiveBid(bid) {
+        return String((bid && bid.status) || 'active').trim().toLowerCase() === 'active';
+    }
+
+    function isBidOwnedByUser(bid, user) {
+        if (!bid || !user) return false;
+        return idsEqual(bid.providerId, user.id);
     }
 
     function generateUniqueFormId(usedSet) {
