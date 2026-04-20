@@ -8,7 +8,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Request a Quote - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
-    <link rel="stylesheet" href="css/navbar.css?v=20260322-1">
+    <link rel="stylesheet" href="css/navbar.css?v=20260420-4">
     <link rel="stylesheet" href="css/create-job.css?v=20260329-1">
     <link rel="stylesheet" href="css/house-removal.css?v=20260409-2">
     <link rel="stylesheet" href="css/sticky-next-btn.css?v=20260322-1">
@@ -39,6 +39,24 @@
                 </div>
                 <!-- User menu (shown when logged in) -->
                 <div id="user-menu" style="display: none;">
+                    <div class="navbar-notification-bell">
+                        <button class="notification-bell-btn" id="notification-bell" title="View notifications">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                            </svg>
+                            <span class="notification-badge" id="notification-badge" style="display: none;">0</span>
+                        </button>
+                        <div class="notification-dropdown" id="notification-dropdown" style="display: none;">
+                            <div class="notification-header">
+                                <h3>Notifications</h3>
+                                <button class="notification-close" id="notification-close">&times;</button>
+                            </div>
+                            <div class="notification-list" id="notification-list">
+                                <div class="notification-empty">No notifications yet</div>
+                            </div>
+                        </div>
+                    </div>
                     <a href="dashboard.html" style="text-decoration: none;">
                         <div class="navbar-avatar" id="navbar-user-avatar">U</div>
                     </a>
@@ -2170,16 +2188,27 @@
                                         <div>
                                             <label class="form-label" for="preferred-time-pickup" style="display:block; margin-bottom:6px; font-weight:600; color:#334155; font-size:0.9rem;">Preferred pickup time</label>
                                             <input type="hidden" id="preferred-time-pickup" name="preferred-time-pickup" data-optional="true">
+                                            <input type="hidden" id="pickup-time-flexibility" name="pickup-time-flexibility" value="mandatory">
                                             <div id="pickup-time-preference" style="display:flex; flex-direction:column; gap:8px;">
-                                                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                                                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
                                                     <label style="display:flex; align-items:center; gap:6px; font-weight:600; color:#334155; font-size:0.88rem; cursor:pointer;">
-                                                        <input type="radio" name="pickup-time-mode" value="exact" checked>
+                                                        <input type="radio" name="pickup-time-mode" value="exact">
                                                         Exact time
                                                     </label>
                                                     <label style="display:flex; align-items:center; gap:6px; font-weight:600; color:#334155; font-size:0.88rem; cursor:pointer;">
                                                         <input type="radio" name="pickup-time-mode" value="range">
                                                         Time range
                                                     </label>
+                                                    <div id="pickup-time-flexibility-wrap" style="margin-left:auto; display:flex; align-items:center; gap:6px; display:none;">
+                                                        <label style="display:flex; align-items:center; gap:6px; font-weight:600; color:#334155; font-size:0.88rem; cursor:pointer; margin:0;">
+                                                            <input type="radio" name="pickup-time-flexibility-mode" value="flexible">
+                                                            <span style="padding:4px 10px; border-radius:4px; background:#e0f2fe; color:#0369a1; font-weight:700; font-size:0.8rem;">Flexible time</span>
+                                                        </label>
+                                                        <label style="display:flex; align-items:center; gap:6px; font-weight:600; color:#334155; font-size:0.88rem; cursor:pointer; margin:0;">
+                                                            <input type="radio" name="pickup-time-flexibility-mode" value="mandatory" checked>
+                                                            <span style="padding:4px 10px; border-radius:4px; background:#fee2e2; color:#991b1b; font-weight:700; font-size:0.8rem;">Mandatory time</span>
+                                                        </label>
+                                                    </div>
                                                 </div>
                                                 <div id="pickup-time-exact-wrap">
                                                     <input type="time" id="pickup-time-exact" step="900" style="width:100%; padding:10px 12px; border:1px solid #bfdbfe; border-radius:8px; background:#fff; color:#1f2937; font-weight:600;">
@@ -2196,16 +2225,27 @@
                                         <div>
                                             <label class="form-label" for="preferred-time-delivery" style="display:block; margin-bottom:6px; font-weight:600; color:#334155; font-size:0.9rem;">Preferred delivery time</label>
                                             <input type="hidden" id="preferred-time-delivery" name="preferred-time-delivery" data-optional="true">
+                                            <input type="hidden" id="delivery-time-flexibility" name="delivery-time-flexibility" value="mandatory">
                                             <div id="delivery-time-preference" style="display:flex; flex-direction:column; gap:8px;">
-                                                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                                                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
                                                     <label style="display:flex; align-items:center; gap:6px; font-weight:600; color:#334155; font-size:0.88rem; cursor:pointer;">
-                                                        <input type="radio" name="delivery-time-mode" value="exact" checked>
+                                                        <input type="radio" name="delivery-time-mode" value="exact">
                                                         Exact time
                                                     </label>
                                                     <label style="display:flex; align-items:center; gap:6px; font-weight:600; color:#334155; font-size:0.88rem; cursor:pointer;">
                                                         <input type="radio" name="delivery-time-mode" value="range">
                                                         Time range
                                                     </label>
+                                                    <div id="delivery-time-flexibility-wrap" style="margin-left:auto; display:flex; align-items:center; gap:6px; display:none;">
+                                                        <label style="display:flex; align-items:center; gap:6px; font-weight:600; color:#334155; font-size:0.88rem; cursor:pointer; margin:0;">
+                                                            <input type="radio" name="delivery-time-flexibility-mode" value="flexible">
+                                                            <span style="padding:4px 10px; border-radius:4px; background:#e0f2fe; color:#0369a1; font-weight:700; font-size:0.8rem;">Flexible time</span>
+                                                        </label>
+                                                        <label style="display:flex; align-items:center; gap:6px; font-weight:600; color:#334155; font-size:0.88rem; cursor:pointer; margin:0;">
+                                                            <input type="radio" name="delivery-time-flexibility-mode" value="mandatory" checked>
+                                                            <span style="padding:4px 10px; border-radius:4px; background:#fee2e2; color:#991b1b; font-weight:700; font-size:0.8rem;">Mandatory time</span>
+                                                        </label>
+                                                    </div>
                                                 </div>
                                                 <div id="delivery-time-exact-wrap">
                                                     <input type="time" id="delivery-time-exact" step="900" style="width:100%; padding:10px 12px; border:1px solid #bfdbfe; border-radius:8px; background:#fff; color:#1f2937; font-weight:600;">
@@ -2287,7 +2327,7 @@
                                         <button type="button" class="overview-edit-btn" data-edit-step="7">Edit</button>
                                     </div>
                                     <div class="overview-item">
-                                        <div class="overview-item-label">Storage Dates</div>
+                                        <div class="overview-item-label">Storage</div>
                                         <div class="overview-item-value" id="summary-storage-dates">—</div>
                                         <button type="button" class="overview-edit-btn" data-edit-step="6">Edit</button>
                                     </div>
@@ -2380,11 +2420,13 @@
 
     <script src="js/cache-maintenance.js?v=20260322-2"></script>
     <script src="js/auth.js?v=20260417-5"></script>
+    <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/house-removal.js?v=20260322-1"></script>
     <script src="js/multi-items-handler.js?v=20260328-44"></script>
     <script src="js/create-job.js?v=20260417-22"></script>
 
 <script>
+// Consolidated initialization for better performance
 function updateStep3TitleVisibility() {
     var body = document.body;
     var step = body.getAttribute('data-current-step') || body.getAttribute('data-form-step');
@@ -2394,38 +2436,34 @@ function updateStep3TitleVisibility() {
     }
 }
 
-function observeStepAttribute() {
+function updateFloorsImageVisibility() {
+    var step = document.body.getAttribute('data-current-step') || document.body.getAttribute('data-form-step');
+    var imgDiv = document.getElementById('pickup-floors-image');
+    if (imgDiv) {
+        if (step === '3') {
+            imgDiv.style.display = 'block';
+        } else {
+            imgDiv.style.display = 'none';
+        }
+    }
+}
+
+function initMutationObservers() {
     var body = document.body;
     var observer = new MutationObserver(function() {
         updateStep3TitleVisibility();
+        updateFloorsImageVisibility();
     });
     observer.observe(body, { attributes: true, attributeFilter: ['data-current-step', 'data-form-step'] });
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(function() {
-        updateStep3TitleVisibility();
-        observeStepAttribute();
-    }, 200);
-    document.addEventListener('stepChanged', updateStep3TitleVisibility);
-});
-</script>
-
-<!-- Image Fullscreen Modal -->
-<div id="image-fullscreen-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.95); z-index: 10000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;">
-    <button id="modal-close-btn" type="button" style="position: absolute; top: 20px; right: 20px; background: #fff; border: none; width: 40px; height: 40px; border-radius: 50%; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-weight: bold;">×</button>
-    <img id="modal-image" src="" alt="Fullscreen" style="max-width: 90%; max-height: 90%; object-fit: contain;">
-</div>
-
-<script>
-// Image fullscreen modal functionality
-document.addEventListener('DOMContentLoaded', function() {
-    const modal = document.getElementById('image-fullscreen-modal');
-    const modalImage = document.getElementById('modal-image');
-    const closeBtn = document.getElementById('modal-close-btn');
+function setupImageModal() {
+    var modal = document.getElementById('image-fullscreen-modal');
+    var modalImage = document.getElementById('modal-image');
+    var closeBtn = document.getElementById('modal-close-btn');
     
     // Open modal when clicking any clickable image
-    document.querySelectorAll('.clickable-image').forEach(img => {
+    document.querySelectorAll('.clickable-image').forEach(function(img) {
         img.addEventListener('click', function(e) {
             e.stopPropagation();
             modalImage.src = this.src;
@@ -2451,22 +2489,34 @@ document.addEventListener('DOMContentLoaded', function() {
             modal.style.display = 'none';
         }
     });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Execute immediately without setTimeout delay
+    updateStep3TitleVisibility();
+    updateFloorsImageVisibility();
+    initMutationObservers();
+    setupImageModal();
+    
+    // Register for custom events
+    document.addEventListener('stepChanged', updateStep3TitleVisibility);
+    document.addEventListener('stepChanged', updateFloorsImageVisibility);
 });
 
-// Show/hide floors image only in step 3
-function updateFloorsImageVisibility() {
-    var step = document.body.getAttribute('data-current-step') || document.body.getAttribute('data-form-step');
-    var imgDiv = document.getElementById('pickup-floors-image');
-    if (imgDiv) {
-        if (step === '3') {
-            imgDiv.style.display = 'block';
-        } else {
-            imgDiv.style.display = 'none';
-        }
+// Initialize notification bell after page is interactive (deferred for better performance)
+if (typeof window.notificationSystem === 'object' && window.notificationSystem.initBell) {
+    if (typeof requestIdleCallback === 'function') {
+        // Use requestIdleCallback if available (prioritizes user interaction)
+        requestIdleCallback(function() {
+            window.notificationSystem.initBell();
+        }, { timeout: 2000 });
+    } else {
+        // Fallback to DOMContentLoaded for older browsers
+        document.addEventListener('DOMContentLoaded', function() {
+            window.notificationSystem.initBell();
+        }, { once: true });
     }
 }
-document.addEventListener('DOMContentLoaded', updateFloorsImageVisibility);
-document.addEventListener('stepChanged', updateFloorsImageVisibility);
 </script>
 </body>
 </html>

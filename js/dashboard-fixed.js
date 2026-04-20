@@ -855,6 +855,9 @@
         const duration = getRouteDurationLabel(quote);
         const moversLines = getMoversRequiredLines(quote);
         const dateLines = getMoveDateLines(quote);
+        const timeLines = getPreferredTimesLines(quote);
+        const storageLines = getStorageLines(quote);
+        const spaceRequiredLines = getSpaceRequiredLines(quote);
         
         // Build full pickup address
         const pickupFull = pickupCity + (pickupPostcode ? ', ' + pickupPostcode : '');
@@ -889,8 +892,16 @@
             '<span class="requirement-value">' + renderRequirementLines(dateLines) + '</span>',
             '</div>',
             '<div class="requirement-item">',
+            '<span class="requirement-label">Preferred Times</span>',
+            '<span class="requirement-value">' + renderRequirementLines(timeLines) + '</span>',
+            '</div>',
+            '<div class="requirement-item">',
+            '<span class="requirement-label">Storage</span>',
+            '<span class="requirement-value">' + renderRequirementLines(storageLines) + '</span>',
+            '</div>',
+            '<div class="requirement-item">',
             '<span class="requirement-label">Space Required</span>',
-            '<span class="requirement-value requirement-placeholder">—</span>',
+            '<span class="requirement-value">' + renderRequirementLines(spaceRequiredLines) + '</span>',
             '</div>',
             '</div>',
             '</div>',
@@ -941,11 +952,240 @@
         ];
     }
 
+    function getPreferredTimesLines(quote) {
+        const pickupTime = firstText(quote.preferredPickupTime, quote.pickupTime, '—');
+        const pickupFlexibility = String(quote.preferredPickupTimeFlexibility || 'flexible').toLowerCase();
+        const pickupBadge = pickupFlexibility === 'mandatory' ? ' <span style="display:inline-block; margin-left:4px; padding:1px 6px; background:#fee2e2; color:#991b1b; border-radius:3px; font-weight:700; font-size:0.7rem; text-decoration:none;">Mandatory time</span>' : ' <span style="display:inline-block; margin-left:4px; padding:1px 6px; background:#e0f2fe; color:#0369a1; border-radius:3px; font-weight:700; font-size:0.7rem; text-decoration:none;">Flexible time</span>';
+
+        const deliveryTime = firstText(quote.preferredDeliveryTime, quote.deliveryTime, '—');
+        const deliveryFlexibility = String(quote.preferredDeliveryTimeFlexibility || 'flexible').toLowerCase();
+        const deliveryBadge = deliveryFlexibility === 'mandatory' ? ' <span style="display:inline-block; margin-left:4px; padding:1px 6px; background:#fee2e2; color:#991b1b; border-radius:3px; font-weight:700; font-size:0.7rem; text-decoration:none;">Mandatory time</span>' : ' <span style="display:inline-block; margin-left:4px; padding:1px 6px; background:#e0f2fe; color:#0369a1; border-radius:3px; font-weight:700; font-size:0.7rem; text-decoration:none;">Flexible time</span>';
+
+        return [
+            'Pickup: ' + pickupTime + pickupBadge,
+            'Delivery: ' + deliveryTime + deliveryBadge
+        ];
+    }
+
+    function getStorageLines(quote) {
+        const storageValue = firstText(quote.serviceStorage, quote['service-storage'], quote.storage);
+        const storageStatus = String(storageValue || '').trim().toLowerCase();
+        if (storageStatus === 'no') return ['No storage'];
+        if (storageStatus !== 'yes') return ['Storage not selected'];
+
+        const storageDateMode = String(firstText(quote.serviceStorageDateMode, quote['service-storage-date-mode']) || 'exact').trim().toLowerCase();
+        const parseDateValue = (raw) => {
+            const value = String(raw || '').trim();
+            const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (!match) return null;
+            return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+        };
+        const formatDurationLabel = (startDate, endDate) => {
+            if (!startDate || !endDate) return '';
+            const differenceMs = endDate.getTime() - startDate.getTime();
+            if (!Number.isFinite(differenceMs) || differenceMs < 0) return '';
+            const days = Math.max(1, Math.round(differenceMs / 86400000));
+            if (days % 7 === 0) {
+                const weeks = days / 7;
+                return weeks === 1 ? '1 week' : weeks + ' weeks';
+            }
+            return days === 1 ? '1 day' : days + ' days';
+        };
+
+        if (storageDateMode === 'approx') {
+            const approxStartFrom = parseDateValue(firstText(quote.serviceStorageStartApproxFrom, quote['service-storage-start-approx-from']));
+            const approxEndTo = parseDateValue(firstText(quote.serviceStorageEndApproxTo, quote['service-storage-end-approx-to']));
+            const durationLabel = formatDurationLabel(approxStartFrom, approxEndTo);
+            return [durationLabel ? 'Yes, approx. for ' + durationLabel : 'Yes, duration pending'];
+        }
+
+        const startDate = parseDateValue(firstText(quote.serviceStorageStartDatetime, quote['service-storage-start-datetime']));
+        const endDate = parseDateValue(firstText(quote.serviceStorageEndDatetime, quote['service-storage-end-datetime']));
+        const durationLabel = formatDurationLabel(startDate, endDate);
+        return [durationLabel ? 'Yes, for ' + durationLabel : 'Yes, duration pending'];
+    }
+
+    function getSpaceRequiredLines(quote) {
+        const summary = calculateSpaceRequiredSummary(quote);
+        if (!summary) return ['Not provided'];
+        return ['Estimated: ' + summary.totalVolume.toFixed(2) + ' m³ total'];
+    }
+
+    function calculateSpaceRequiredSummary(quote) {
+        const entries = [];
+
+        const addEntry = function (name, qty, roomName) {
+            const itemName = String(name || '').trim();
+            const quantity = Math.max(1, parseInt(String(qty || 1), 10) || 1);
+            if (!itemName) return;
+            const volume = getHouseRemovalItemVolumeEstimate(itemName, roomName);
+            if (!(volume > 0)) return;
+            entries.push({ quantity: quantity, volume: volume });
+        };
+
+        const collectMap = function (map, roomName) {
+            if (!map || typeof map !== 'object') return;
+            Object.keys(map).forEach(function (itemName) {
+                addEntry(itemName, map[itemName], roomName);
+            });
+        };
+
+        const collectSource = function (source, roomName) {
+            if (!source || typeof source !== 'object') return;
+            collectMap(source.items, roomName);
+            collectMap(source.itemQuantities, roomName);
+
+            if (source.subRoomQuantities && typeof source.subRoomQuantities === 'object') {
+                Object.keys(source.subRoomQuantities).forEach(function (subRoom) {
+                    collectMap(source.subRoomQuantities[subRoom], subRoom);
+                });
+            }
+
+            appendTextAsVolumeEntries(source.customItems, roomName);
+            appendTextAsVolumeEntries(source.extraItems, roomName);
+        };
+
+        const appendTextAsVolumeEntries = function (value, roomName) {
+            if (!value) return;
+            if (Array.isArray(value)) {
+                value.forEach(function (entry) { appendTextAsVolumeEntries(entry, roomName); });
+                return;
+            }
+            if (typeof value === 'object') {
+                Object.values(value).forEach(function (entry) { appendTextAsVolumeEntries(entry, roomName); });
+                return;
+            }
+
+            String(value).split(/[\n,;|]+/).map(function (entry) {
+                return String(entry || '').trim();
+            }).filter(Boolean).forEach(function (entry) {
+                addEntry(entry, 1, roomName);
+            });
+        };
+
+        if (Array.isArray(quote.floorBlocks)) {
+            quote.floorBlocks.forEach(function (block) {
+                if (!block || typeof block !== 'object') return;
+                collectSource(block.houseInventory, block.floor || block.pickupFloor || block.floorLabel);
+            });
+        }
+
+        collectSource(quote.houseInventory, quote.pickupFloorSelect);
+        collectSource(quote.house_removal_inventory, quote.pickupFloorSelect);
+        collectSource(quote.houseRemovalInventory, quote.pickupFloorSelect);
+        collectMap(quote.itemQuantities, quote.pickupFloorSelect);
+        collectMap(quote.multiFloorInventory && typeof quote.multiFloorInventory === 'object' ? flattenMultiFloorInventory(quote.multiFloorInventory) : null, quote.pickupFloorSelect);
+
+        if (!entries.length) return null;
+
+        const totalVolume = entries.reduce(function (sum, entry) {
+            return sum + (entry.volume * entry.quantity);
+        }, 0);
+        const totalQuantity = entries.reduce(function (sum, entry) {
+            return sum + entry.quantity;
+        }, 0);
+
+        if (!(totalVolume > 0) || !(totalQuantity > 0)) return null;
+        return {
+            totalVolume: totalVolume,
+            totalQuantity: totalQuantity
+        };
+    }
+
+    function flattenMultiFloorInventory(multiFloorInventory) {
+        const flattened = {};
+        Object.keys(multiFloorInventory || {}).forEach(function (floorName) {
+            const floorItems = multiFloorInventory[floorName];
+            if (!floorItems || typeof floorItems !== 'object') return;
+            Object.keys(floorItems).forEach(function (itemName) {
+                flattened[itemName] = (parseInt(flattened[itemName], 10) || 0) + (parseInt(floorItems[itemName], 10) || 0);
+            });
+        });
+        return flattened;
+    }
+
+    function getHouseRemovalItemVolumeEstimate(itemName, roomName) {
+        const normalized = String(itemName || '').trim().toLowerCase();
+        if (!normalized) return 0;
+
+        if (/^small\s+boxes?$/.test(normalized)) return 0.08;
+        if (/^medium\s+boxes?$/.test(normalized)) return 0.12;
+        if (/^large\s+boxes?$/.test(normalized)) return 0.18;
+        if (/^xl\s+boxes?$/.test(normalized) || /wardrobe\s+boxes?$/.test(normalized)) return 0.24;
+
+        if (normalized.includes('2 seater sofa') || normalized.includes('two seater sofa')) return 1.8;
+        if (normalized.includes('3 seater sofa')) return 2.3;
+        if (normalized.includes('armchair')) return 0.6;
+        if (normalized.includes('coffee table')) return 0.35;
+        if (normalized.includes('dining table')) return 1.2;
+        if (normalized.includes('dining chair')) return 0.15;
+        if (normalized.includes('side table')) return 0.18;
+        if (normalized.includes('book case') || normalized.includes('bookcase')) return 0.9;
+        if (normalized.includes('wardrobe')) return 1.6;
+        if (normalized.includes('chest of drawers') || normalized.includes('dresser')) return 1.1;
+        if (normalized.includes('display unit') || normalized.includes('side board')) return 0.9;
+        if (normalized.includes('desk')) return 1.0;
+        if (normalized.includes('chair')) return 0.18;
+        if (normalized.includes('pedestal')) return 0.2;
+        if (normalized.includes('filing cabinet')) return 0.45;
+        if (normalized.includes('desktop computer')) return 0.12;
+        if (normalized.includes('photocopier')) return 0.95;
+        if (normalized.includes('printer')) return 0.15;
+        if (normalized.includes('board room table')) return 1.8;
+        if (normalized.includes('crates')) return 0.35;
+        if (normalized.includes('fridge freezer')) return 1.6;
+        if (normalized.includes('fridge')) return 1.2;
+        if (normalized.includes('tumble dryer')) return 0.6;
+        if (normalized.includes('washing machine')) return 0.6;
+        if (normalized.includes('oven')) return 0.7;
+        if (normalized.includes('microwave')) return 0.08;
+        if (normalized.includes('shelving unit')) return 0.8;
+        if (normalized.includes('bin')) return 0.12;
+        if (normalized.includes('vacuum cleaner')) return 0.12;
+        if (normalized.includes('kingsize bed') || normalized.includes('king size bed')) return 2.0;
+        if (normalized.includes('double bed')) return 1.6;
+        if (normalized.includes('single bed')) return 1.2;
+        if (normalized.includes('bedside tables')) return 0.18;
+        if (normalized.includes('mirror')) return 0.12;
+        if (normalized.includes('artwork')) return 0.1;
+        if (normalized.includes('lamp')) return 0.05;
+        if (normalized.includes('bath')) return 2.2;
+        if (normalized.includes('sink')) return 0.55;
+        if (normalized.includes('rug')) return 0.2;
+        if (normalized.includes('bicycle') || normalized.includes('bike')) return 0.45;
+        if (normalized.includes('suitcase')) return 0.14;
+        if (normalized.includes('tool chest')) return 0.7;
+        if (normalized.includes('workbench')) return 1.2;
+        if (normalized.includes('lawn mower')) return 0.6;
+        if (normalized.includes('barbecue')) return 0.7;
+        if (normalized.includes('garden table')) return 0.9;
+        if (normalized.includes('parasol')) return 0.25;
+        if (normalized.includes('laundry basket')) return 0.15;
+        if (normalized.includes('storage boxes')) return 0.3;
+        if (normalized.includes('fish tank') || normalized.includes('aquarium')) return 0.25;
+        if (normalized.includes('umbrella stand')) return 0.1;
+        if (normalized.includes('storage bench')) return 0.45;
+
+        const roomNormalized = String(roomName || '').trim().toLowerCase();
+        if (roomNormalized === 'kitchen') return 0.35;
+        if (roomNormalized === 'bathrooms') return 0.25;
+        if (roomNormalized === 'living') return 0.6;
+        if (roomNormalized === 'dining') return 0.7;
+        if (roomNormalized === 'bedrooms') return 0.8;
+        if (roomNormalized === 'hallway') return 0.2;
+        if (roomNormalized === 'garden') return 0.5;
+        if (roomNormalized === 'utility') return 0.4;
+        if (roomNormalized === 'shed') return 0.4;
+        if (roomNormalized === 'office') return 0.55;
+
+        return 0.35;
+    }
+
     function renderRequirementLines(lines) {
         if (!Array.isArray(lines) || !lines.length) return escapeHtml('Not provided');
         return lines
             .filter((line) => String(line || '').trim())
-            .map((line) => '<span class="requirement-line">' + escapeHtml(line) + '</span>')
+            .map((line) => '<span class="requirement-line">' + line + '</span>')
             .join('');
     }
 
@@ -1266,6 +1506,13 @@
         ].join('');
     }
 
+    function createRouteMarkerElement(label, variant) {
+        const element = document.createElement('div');
+        element.className = 'route-marker route-marker--' + String(variant || '').trim();
+        element.textContent = String(label || '').trim();
+        return element;
+    }
+
     function ensureMapboxAccessToken() {
         if (!window.mapboxgl) return false;
 
@@ -1316,24 +1563,24 @@
 
             if (!fromCoords || !toCoords) {
                 if (fromCoords) {
-                    new mapboxgl.Marker({ color: '#2f8ed8' }).setLngLat(fromCoords).addTo(map);
+                    new mapboxgl.Marker({ element: createRouteMarkerElement('A', 'pickup') }).setLngLat(fromCoords).addTo(map);
                     map.setCenter(fromCoords);
                     map.setZoom(10);
                 }
                 if (toCoords) {
-                    new mapboxgl.Marker({ color: '#e62f7a' }).setLngLat(toCoords).addTo(map);
+                    new mapboxgl.Marker({ element: createRouteMarkerElement('B', 'delivery') }).setLngLat(toCoords).addTo(map);
                     map.setCenter(toCoords);
                     map.setZoom(10);
                 }
                 return;
             }
 
-            new mapboxgl.Marker({ color: '#2f8ed8' })
+            new mapboxgl.Marker({ element: createRouteMarkerElement('A', 'pickup') })
                 .setLngLat(fromCoords)
                 .setPopup(new mapboxgl.Popup().setText('Pickup'))
                 .addTo(map);
 
-            new mapboxgl.Marker({ color: '#e62f7a' })
+            new mapboxgl.Marker({ element: createRouteMarkerElement('B', 'delivery') })
                 .setLngLat(toCoords)
                 .setPopup(new mapboxgl.Popup().setText('Delivery'))
                 .addTo(map);
@@ -2868,4 +3115,11 @@
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
     }
+
+    // Initialize notification bell
+    document.addEventListener('DOMContentLoaded', function () {
+        if (typeof window.notificationSystem === 'object' && window.notificationSystem.initBell) {
+            window.notificationSystem.initBell();
+        }
+    }, { once: true });
 })();

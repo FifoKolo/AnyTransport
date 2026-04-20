@@ -657,8 +657,14 @@ window.multiItemsManager = {
         // Add preview based on file type
         if (isVideo && item.dataUrl) {
             contentHTML += `
-                <video controls style="max-width: 100%; max-height: 500px; border-radius: 4px;">
-                    <source src="${item.dataUrl}" type="${item.type}">
+                <video 
+                    controls 
+                    autoplay 
+                    playsInline 
+                    preload="metadata"
+                    width="100%" 
+                    style="max-width: 100%; max-height: 500px; border-radius: 4px; background: #000; display: block;">
+                    <source src="${item.dataUrl}" type="${item.type || 'video/mp4'}">
                     Your browser does not support the video tag.
                 </video>
             `;

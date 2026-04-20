@@ -968,6 +968,43 @@
     display: none;
 }
 
+.route-marker {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    border: 2px solid rgba(255, 255, 255, 0.95);
+    box-shadow: 0 8px 16px rgba(15, 23, 42, 0.18);
+    transform: translateY(-2px);
+}
+
+.route-marker::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -6px;
+    width: 9px;
+    height: 9px;
+    background: inherit;
+    transform: translateX(-50%) rotate(45deg);
+    border-radius: 2px;
+    z-index: -1;
+}
+
+.route-marker--pickup {
+    background: linear-gradient(180deg, #3a8dd1 0%, #246da8 100%);
+}
+
+.route-marker--delivery {
+    background: linear-gradient(180deg, #ff4f95 0%, #d91f68 100%);
+}
+
 .route-map::before {
     content: '';
     position: absolute;

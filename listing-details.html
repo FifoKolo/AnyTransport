@@ -8,8 +8,8 @@
     <meta http-equiv="Expires" content="0">
     <title>Listing Details - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
-    <link rel="stylesheet" href="css/navbar.css?v=20260322-1">
-    <link rel="stylesheet" href="css/listing-details.css?v=20260417-33">
+    <link rel="stylesheet" href="css/navbar.css?v=20260420-4">
+    <link rel="stylesheet" href="css/listing-details.css?v=20260420-9">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js'></script>
 </head>
@@ -33,6 +33,24 @@
                     <button class="btn btn-outline" onclick="openLoginModal()">Login</button>
                 </div>
                 <div id="user-menu" style="display: none;">
+                    <div class="navbar-notification-bell">
+                        <button class="notification-bell-btn" id="notification-bell" title="View notifications">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                            </svg>
+                            <span class="notification-badge" id="notification-badge" style="display: none;">0</span>
+                        </button>
+                        <div class="notification-dropdown" id="notification-dropdown" style="display: none;">
+                            <div class="notification-header">
+                                <h3>Notifications</h3>
+                                <button class="notification-close" id="notification-close">&times;</button>
+                            </div>
+                            <div class="notification-list" id="notification-list">
+                                <div class="notification-empty">No notifications yet</div>
+                            </div>
+                        </div>
+                    </div>
                     <a href="dashboard.html" style="text-decoration: none;">
                         <div class="navbar-avatar" id="navbar-user-avatar">U</div>
                     </a>
@@ -58,23 +76,23 @@
             <div class="details-main-column">
                 <section id="details-quick" class="quick-grid" aria-label="Quick information"></section>
 
-                <section class="details-card legacy-bids-panel" aria-label="Current bids">
-                    <h3 class="legacy-bids-title">▼ Bids</h3>
+                <section class="details-card legacy-bids-panel" aria-label="Current quotes">
+                    <h3 class="legacy-bids-title">▼ Quotes</h3>
                     <div id="bid-history" class="legacy-bids-body"></div>
                 </section>
 
             </div>
 
-            <aside class="bid-sidebar" aria-label="Bid tools">
+            <aside class="bid-sidebar" aria-label="Quote tools">
                 <section id="bid-form-section" class="bid-form-panel">
-                    <h3 class="bid-form-panel-title">▼ Make A Bid (total you receive)</h3>
+                    <h3 class="bid-form-panel-title">▼ Make A Quote (total you receive)</h3>
                     <div class="bid-form-body">
-                        <p class="bid-warning">You are entitled to place a maximum of 1 bids on this job. Please ensure your bids are realistic.</p>
+                        <p class="bid-warning">You are entitled to place a maximum of 1 quote on this job. Please ensure your quotes are realistic.</p>
                         <p id="bid-user-context" class="bid-user-context"></p>
 
                         <form id="bid-form" class="bid-entry-form">
                             <div class="form-group">
-                                <label for="bid-amount">Bid</label>
+                                <label for="bid-amount">Quote</label>
                                 <div class="currency-input">
                                     <span>€</span>
                                     <input type="number" id="bid-amount" class="form-input" min="0" step="0.01" required>
@@ -83,8 +101,12 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="bid-expire-date">Bid expires:</label>
-                                <div class="expiry-row">
+                                <label for="bid-expiry-mode">Quote expires:</label>
+                                <select id="bid-expiry-mode" class="form-input">
+                                    <option value="listingEnds" selected>When listing ends</option>
+                                    <option value="custom">Enter date / time</option>
+                                </select>
+                                <div id="bid-custom-expiry-group" class="expiry-row" hidden>
                                     <input type="text" id="bid-expire-date" class="form-input" placeholder="17/04/2026" inputmode="numeric">
                                     <span class="at-separator">at</span>
                                     <select id="bid-expire-time" class="form-input">
@@ -94,19 +116,25 @@
                                         <option value="21:00">21:00</option>
                                     </select>
                                 </div>
+                                <small class="helper-text">Choose the listing end or set your own expiry time.</small>
                             </div>
 
                             <div class="form-group">
-                                <label for="bid-template">Bid message:</label>
+                                <label for="bid-template">Quote message:</label>
                                 <select id="bid-template" class="form-input">
-                                    <option value="Check availability">Check availability</option>
-                                    <option value="Check availability 2" selected>Check availability 2</option>
-                                    <option value="Can collect today and deliver same day">Can collect today and deliver same day</option>
                                 </select>
                                 <textarea id="bid-message" class="form-input" rows="5">If you are happy with our quote and you don't have any questions, please accept our bid as soon as possible to avoid disappointment from being us not available on your preferred date and time as we are working on the first come first serve basis.</textarea>
                                 <div class="save-template-row">
                                     <input type="checkbox" id="bid-save-template">
-                                    <label for="bid-save-template">Save Bid Message</label>
+                                    <label for="bid-save-template">Save Quote Message</label>
+                                </div>
+                                <div id="save-message-title-group" class="save-message-title-group" hidden>
+                                    <input type="text" id="bid-message-title" class="form-input" placeholder="E.g., Same Day Delivery, Check Availability, etc." maxlength="100">
+                                    <small class="helper-text">Give this message a title so you can easily find it later</small>
+                                </div>
+                                <div id="saved-messages-info" class="saved-messages-info" style="display: none;">
+                                    <small>You have <span id="saved-messages-count">0</span> saved message(s). They appear in the dropdown above.</small>
+                                    <button type="button" class="clear-saved-btn" id="btn-clear-saved-messages">Clear All</button>
                                 </div>
                             </div>
 
@@ -120,9 +148,9 @@
                                 <button type="button" class="expand-btn">(Expand) <strong>+</strong></button>
                             </div>
 
-                            <button type="submit" class="btn bid-submit-btn">Bid</button>
+                            <button type="submit" class="btn bid-submit-btn">Quote</button>
 
-                            <p class="bid-note">Your bid is binding. Your bid is incl <strong>VAT</strong>. There are no added extras. This is the flat fee for the job.</p>
+                            <p class="bid-note">Your quote is binding. Your quote is incl <strong>VAT</strong>. There are no added extras. This is the flat fee for the job.</p>
                         </form>
                     </div>
                 </section>
@@ -131,7 +159,8 @@
 
     </main>
 
-    <script src="js/auth.js?v=20260409-3"></script>
-    <script src="js/listing-details.js?v=20260418-1"></script>
+    <script src="js/auth.js?v=20260417-5"></script>
+    <script src="js/notifications.js?v=20260420-4"></script>
+    <script src="js/listing-details.js?v=20260420-11"></script>
 </body>
 </html>

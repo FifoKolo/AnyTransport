@@ -1,6 +1,8 @@
 (function () {
     const LISTING_STORAGE_KEY = 'anytransport_quote_requests';
     const BID_STORAGE_KEY = 'anytransport_provider_bids';
+    const SAVED_MESSAGES_STORAGE_KEY = 'anytransport_provider_saved_messages';
+    const NOTIFICATIONS_STORAGE_KEY = 'anytransport_notifications';
     const ANYTRANSPORT_MAPBOX_TOKEN = 'pk.eyJ1IjoiZmlsa28iLCJhIjoiY2x6dmdlODUwMDZsMjJqcGcxY2U2b290dCJ9.9DRj6-luEwljI3xea5ATHQ';
 
     document.addEventListener('DOMContentLoaded', initListingDetailsPage);
@@ -43,6 +45,7 @@
         initializeBidFormDefaults(quote);
         setupBidForm(quoteId, quote);
         renderFormSections(quote);
+        initNotificationBell();
     }
 
     function getActiveUser() {
@@ -59,6 +62,180 @@
         }
 
         return null;
+    }
+
+    function isTransportProviderUser() {
+        if (typeof auth !== 'undefined' && auth && typeof auth.isProvider === 'function') {
+            try {
+                return !!auth.isProvider();
+            } catch (_error) {
+                return false;
+            }
+        }
+
+        const user = getActiveUser();
+        const roles = user && Array.isArray(user.roles) ? user.roles : [user && user.role];
+        return roles.some(function (role) {
+            return String(role || '').trim().toLowerCase() === 'provider';
+        });
+    }
+
+    function getProviderStorageKey(user) {
+        if (!user || !user.id) return null;
+        return SAVED_MESSAGES_STORAGE_KEY + '_' + String(user.id).trim();
+    }
+
+    function getSavedMessages(user) {
+        const key = getProviderStorageKey(user);
+        if (!key) return [];
+
+        try {
+            const stored = JSON.parse(localStorage.getItem(key) || '[]');
+            return Array.isArray(stored) ? stored.filter(function (msg) {
+                return String(msg && msg.text || '').trim().length > 0;
+            }) : [];
+        } catch (_error) {
+            return [];
+        }
+    }
+
+    function addSavedMessage(user, messageText, title) {
+        if (!user || !user.id) return false;
+        const key = getProviderStorageKey(user);
+        if (!key) return false;
+
+        const text = String(messageText || '').trim();
+        if (!text) return false;
+
+        let messages = getSavedMessages(user);
+
+        // Check if message already exists (prevent duplicates)
+        if (messages.some(function (msg) {
+            return String(msg.text || '').trim() === text;
+        })) {
+            return false;
+        }
+
+        const msgTitle = String(title || '').trim() || text.substring(0, 50);
+
+        messages.unshift({
+            id: 'msg-' + Date.now(),
+            text: text,
+            title: msgTitle,
+            createdAt: new Date().toISOString()
+        });
+
+        // Keep only last 20 messages
+        if (messages.length > 20) {
+            messages = messages.slice(0, 20);
+        }
+
+        try {
+            localStorage.setItem(key, JSON.stringify(messages));
+            return true;
+        } catch (_error) {
+            return false;
+        }
+    }
+
+    function deleteSavedMessage(user, messageId) {
+        if (!user || !user.id) return false;
+        const key = getProviderStorageKey(user);
+        if (!key) return false;
+
+        let messages = getSavedMessages(user);
+        const filtered = messages.filter(function (msg) {
+            return String(msg.id || '') !== String(messageId || '');
+        });
+
+        if (filtered.length === messages.length) {
+            return false; // Message not found
+        }
+
+        try {
+            localStorage.setItem(key, JSON.stringify(filtered));
+            return true;
+        } catch (_error) {
+            return false;
+        }
+    }
+
+    function populateSavedMessagesDropdown() {
+        const templateEl = document.getElementById('bid-template');
+        if (!templateEl) return;
+
+        const user = getActiveUser();
+        if (!user) return;
+
+        const savedMessages = getSavedMessages(user);
+        const currentOptions = Array.from(templateEl.querySelectorAll('option'));
+        const baseOptions = currentOptions.slice(0, 3); // Keep first 3 hardcoded options
+
+        // Remove any existing saved message options
+        currentOptions.slice(3).forEach(function (option) {
+            option.remove();
+        });
+
+        if (savedMessages.length > 0) {
+            // Add a separator (optgroup or just a disabled option)
+            const separatorOption = document.createElement('option');
+            separatorOption.disabled = true;
+            separatorOption.textContent = '— Your Saved Messages —';
+            templateEl.appendChild(separatorOption);
+
+            // Add saved messages
+            savedMessages.forEach(function (msg) {
+                const option = document.createElement('option');
+                option.value = msg.text;
+                const displayTitle = msg.title || msg.text.substring(0, 50);
+                option.textContent = displayTitle + (displayTitle.length > 50 ? '...' : '');
+                option.title = msg.title || msg.text;
+                option.dataset.saved = 'true';
+                option.dataset.messageId = msg.id;
+                templateEl.appendChild(option);
+            });
+        }
+    }
+
+    function updateSavedMessagesInfo() {
+        const user = getActiveUser();
+        if (!user) return;
+
+        const savedMessages = getSavedMessages(user);
+        const infoEl = document.getElementById('saved-messages-info');
+        const countEl = document.getElementById('saved-messages-count');
+
+        if (infoEl && countEl) {
+            countEl.textContent = String(savedMessages.length);
+            if (savedMessages.length > 0) {
+                infoEl.style.display = 'flex';
+            } else {
+                infoEl.style.display = 'none';
+            }
+        }
+    }
+
+    function clearAllSavedMessages() {
+        const user = getActiveUser();
+        if (!user) {
+            alert('You must be logged in to clear saved messages.');
+            return;
+        }
+
+        const confirmed = confirm('Are you sure you want to delete all ' + getSavedMessages(user).length + ' saved messages? This cannot be undone.');
+        if (!confirmed) return;
+
+        const key = getProviderStorageKey(user);
+        if (key) {
+            try {
+                localStorage.removeItem(key);
+                populateSavedMessagesDropdown();
+                updateSavedMessagesInfo();
+                alert('All saved messages have been cleared.');
+            } catch (_error) {
+                alert('Failed to clear saved messages. Please try again.');
+            }
+        }
     }
 
     function renderBidUserContext() {
@@ -109,7 +286,16 @@
         if (legacyCountEl) legacyCountEl.textContent = String(Number(count) || 0);
     }
 
+    // Initialize Notification Bell (uses shared notification system from notifications.js)
+    function initNotificationBell() {
+        if (typeof window.notificationSystem === 'object' && window.notificationSystem.initBell) {
+            window.notificationSystem.initBell();
+        }
+    }
+
     function initializeBidFormDefaults(quote) {
+        const modeEl = document.getElementById('bid-expiry-mode');
+        const customExpiryGroup = document.getElementById('bid-custom-expiry-group');
         const dateEl = document.getElementById('bid-expire-date');
         const timeEl = document.getElementById('bid-expire-time');
         const templateEl = document.getElementById('bid-template');
@@ -118,6 +304,12 @@
         const deliveryDateEl = document.getElementById('bid-delivery-date');
         const defaultTemplate = 'Check availability 2';
         const defaultMessage = 'If you are happy with our quote and you don\'t have any questions, please accept our bid as soon as possible to avoid disappointment from being us not available on your preferred date and time as we are working on the first come first serve basis.';
+
+        if (modeEl && !modeEl.value) {
+            modeEl.value = 'listingEnds';
+        }
+
+        updateBidExpiryModeVisibility();
 
         if (dateEl && !dateEl.value) {
             const tomorrow = new Date();
@@ -140,6 +332,22 @@
         const moveDate = firstText(getMoveDate(quote), 'Not provided');
         if (pickupDateEl) pickupDateEl.textContent = moveDate + ' (fixed)';
         if (deliveryDateEl) deliveryDateEl.textContent = moveDate + ' (fixed)';
+
+        if (customExpiryGroup) {
+            customExpiryGroup.hidden = !modeEl || modeEl.value !== 'custom';
+        }
+    }
+
+    function updateBidExpiryModeVisibility() {
+        const modeEl = document.getElementById('bid-expiry-mode');
+        const customExpiryGroup = document.getElementById('bid-custom-expiry-group');
+        const dateEl = document.getElementById('bid-expire-date');
+        const timeEl = document.getElementById('bid-expire-time');
+        const isCustom = String(modeEl && modeEl.value || 'listingEnds') === 'custom';
+
+        if (customExpiryGroup) customExpiryGroup.hidden = !isCustom;
+        if (dateEl) dateEl.disabled = !isCustom;
+        if (timeEl) timeEl.disabled = !isCustom;
     }
 
     function formatIsoDate(value) {
@@ -269,6 +477,7 @@
         const quick = document.getElementById('details-quick');
         if (!quick) return;
 
+        const isProvider = isTransportProviderUser();
         const listingId = getFormIdLabel(quote);
         const collection = getPickupDisplayLabel(quote);
         const delivery = getDeliveryDisplayLabel(quote);
@@ -279,6 +488,26 @@
         const distance = firstText(formatDistance(quote), 'Not provided');
         const duration = firstText(quote.routeDurationText, quote.routeDuration, quote.durationText, 'Not provided');
         const moveDate = getMoveDate(quote);
+        const preferredTimeSummary = getPreferredTimeSummary(quote);
+        const storageSummary = getStorageSummary(quote);
+        const averageVolumeSummary = isProvider ? getAverageVolumeSummary(quote) : '';
+        const stats = [
+            buildModernStat('Collection', collection),
+            buildModernStat('Delivery', delivery),
+            buildModernStat('Distance', distance),
+            buildModernStat('Time', duration),
+            buildModernStat('Pickup date', moveDate),
+            buildModernStat('Delivery date', moveDate),
+            buildModernStat('Preferred time', preferredTimeSummary, 'modern-stat-card--span-2'),
+            buildModernStat('Pickup movers', pickupMovers),
+            buildModernStat('Delivery movers', deliveryMovers),
+            buildModernStat('Storage', storageSummary),
+            buildModernStat('User', username)
+        ];
+
+        if (isProvider) {
+            stats.push(buildModernStat('Estimated cubic metres', averageVolumeSummary, 'modern-stat-card--span-2 modern-stat-card--accent'));
+        }
 
         quick.className = 'modern-overview';
         quick.innerHTML = [
@@ -290,15 +519,7 @@
             '<strong id="legacy-bid-count">0</strong>',
             '</div>',
             '<div class="modern-stat-grid modern-stat-grid-top">',
-            buildModernStat('Collection', collection),
-            buildModernStat('Delivery', delivery),
-            buildModernStat('Distance', distance),
-            buildModernStat('Time', duration),
-            buildModernStat('Pickup date', moveDate),
-            buildModernStat('Delivery date', moveDate),
-            buildModernStat('Pickup movers', pickupMovers),
-            buildModernStat('Delivery movers', deliveryMovers),
-            buildModernStat('User', username),
+            stats.join(''),
             '</div>',
             '</div>',
             '<div class="modern-hero-map">',
@@ -367,11 +588,395 @@
         ].join('');
     }
 
-    function buildModernStat(label, value) {
-        return '<div class="modern-stat-card">' +
+    function buildModernStat(label, value, extraClass) {
+        const className = ['modern-stat-card', extraClass].filter(Boolean).join(' ');
+        return '<div class="' + className + '">' +
             '<span>' + escapeHtml(label) + '</span>' +
             '<strong>' + escapeHtml(value) + '</strong>' +
             '</div>';
+    }
+
+    function getAverageVolumeSummary(quote) {
+        const summary = calculateAverageItemVolume(quote);
+        if (!summary) return 'Not provided';
+        return summary.totalVolume.toFixed(2) + ' m³ total (' + summary.averageVolume.toFixed(2) + ' m³/item avg)';
+    }
+
+    function calculateAverageItemVolume(quote) {
+        const entries = collectVolumeItems(quote);
+        if (!entries.length) return null;
+
+        let totalVolume = 0;
+        let totalQuantity = 0;
+
+        entries.forEach(function (entry) {
+            const quantity = Math.max(1, parseInt(String(entry.quantity || 1), 10) || 1);
+            let volume = Number(entry.estimatedVolume) || 0;
+
+            if (!(volume > 0)) {
+                const width = parseDimensionValue(entry.width);
+                const depth = parseDimensionValue(entry.depth);
+                const height = parseDimensionValue(entry.height);
+                if (!(width > 0 && depth > 0 && height > 0)) return;
+
+                const unitMultiplier = getSizeUnitMultiplier(entry.sizeUnit);
+                volume = width * depth * height * Math.pow(unitMultiplier, 3);
+            }
+
+            totalVolume += volume * quantity;
+            totalQuantity += quantity;
+        });
+
+        if (!totalQuantity || totalVolume <= 0) return null;
+
+        return {
+            averageVolume: totalVolume / totalQuantity,
+            totalVolume: totalVolume,
+            totalQuantity: totalQuantity
+        };
+    }
+
+    function collectVolumeItems(quote) {
+        const entries = [];
+        const sources = [
+            quote && quote.customizedDraftItems,
+            quote && quote.customizedItems,
+            quote && quote.customizedItemsHidden,
+            quote && quote.items,
+            quote && quote.quoteData,
+            quote && quote.stepData,
+            quote && quote.formData
+        ];
+
+        sources.forEach(function (source) {
+            collectVolumeItemsFromSource(source, entries, 0);
+        });
+
+        if (!entries.length) {
+            collectHouseRemovalVolumeItems(quote, entries);
+        }
+
+        return entries;
+    }
+
+    function collectHouseRemovalVolumeItems(quote, entries) {
+        const sources = [
+            quote && quote.houseInventory,
+            quote && quote.house_removal_inventory,
+            quote && quote.houseRemovalInventory
+        ];
+
+        if (Array.isArray(quote && quote.floorBlocks)) {
+            quote.floorBlocks.forEach(function (block) {
+                if (block && block.houseInventory) {
+                    sources.push(block.houseInventory);
+                }
+            });
+        }
+
+        sources.forEach(function (source) {
+            if (!source || typeof source !== 'object') return;
+
+            if (source.items && typeof source.items === 'object') {
+                Object.keys(source.items).forEach(function (itemName) {
+                    const quantity = Math.max(0, parseInt(source.items[itemName], 10) || 0);
+                    if (quantity <= 0) return;
+                    entries.push({
+                        name: itemName,
+                        quantity: quantity,
+                        estimatedVolume: getHouseRemovalItemVolumeEstimate(itemName)
+                    });
+                });
+            }
+
+            if (source.subRoomQuantities && typeof source.subRoomQuantities === 'object') {
+                Object.keys(source.subRoomQuantities).forEach(function (roomName) {
+                    const roomMap = source.subRoomQuantities[roomName];
+                    if (!roomMap || typeof roomMap !== 'object') return;
+                    Object.keys(roomMap).forEach(function (itemName) {
+                        const quantity = Math.max(0, parseInt(roomMap[itemName], 10) || 0);
+                        if (quantity <= 0) return;
+                        entries.push({
+                            name: itemName,
+                            quantity: quantity,
+                            estimatedVolume: getHouseRemovalItemVolumeEstimate(itemName, roomName)
+                        });
+                    });
+                });
+            }
+
+            if (typeof source.customItems === 'string') {
+                source.customItems.split(/[;,\n]+/).forEach(function (part) {
+                    const label = String(part || '').trim();
+                    if (!label) return;
+                    entries.push({
+                        name: label,
+                        quantity: 1,
+                        estimatedVolume: getHouseRemovalItemVolumeEstimate(label)
+                    });
+                });
+            }
+
+            if (Array.isArray(source.customItems)) {
+                source.customItems.forEach(function (itemName) {
+                    const label = String(itemName || '').trim();
+                    if (!label) return;
+                    entries.push({
+                        name: label,
+                        quantity: 1,
+                        estimatedVolume: getHouseRemovalItemVolumeEstimate(label)
+                    });
+                });
+            }
+
+            if (typeof source.extraItems === 'string') {
+                source.extraItems.split(/[;,\n]+/).forEach(function (part) {
+                    const label = String(part || '').trim();
+                    if (!label) return;
+                    entries.push({
+                        name: label,
+                        quantity: 1,
+                        estimatedVolume: getHouseRemovalItemVolumeEstimate(label)
+                    });
+                });
+            }
+        });
+
+        if (entries.length) return;
+
+        const directSources = [
+            quote,
+            quote && quote.houseInventory,
+            quote && quote.house_removal_inventory,
+            quote && quote.houseRemovalInventory
+        ];
+
+        directSources.forEach(function (source) {
+            if (!source || typeof source !== 'object') return;
+
+            if (source.itemQuantities && typeof source.itemQuantities === 'object') {
+                Object.keys(source.itemQuantities).forEach(function (itemName) {
+                    const quantity = Math.max(0, parseInt(source.itemQuantities[itemName], 10) || 0);
+                    if (quantity <= 0) return;
+                    entries.push({
+                        name: itemName,
+                        quantity: quantity,
+                        estimatedVolume: getHouseRemovalItemVolumeEstimate(itemName)
+                    });
+                });
+            }
+
+            if (source.multiFloorInventory && typeof source.multiFloorInventory === 'object') {
+                Object.keys(source.multiFloorInventory).forEach(function (floorName) {
+                    const floorItems = source.multiFloorInventory[floorName];
+                    if (!floorItems || typeof floorItems !== 'object') return;
+                    Object.keys(floorItems).forEach(function (itemName) {
+                        const quantity = Math.max(0, parseInt(floorItems[itemName], 10) || 0);
+                        if (quantity <= 0) return;
+                        entries.push({
+                            name: itemName,
+                            quantity: quantity,
+                            estimatedVolume: getHouseRemovalItemVolumeEstimate(itemName, floorName)
+                        });
+                    });
+                });
+            }
+
+            if (typeof source.customItems === 'string') {
+                source.customItems.split(/[;,\n]+/).forEach(function (part) {
+                    const label = String(part || '').trim();
+                    if (!label) return;
+                    entries.push({
+                        name: label,
+                        quantity: 1,
+                        estimatedVolume: getHouseRemovalItemVolumeEstimate(label)
+                    });
+                });
+            }
+
+            if (typeof source.extraItems === 'string') {
+                source.extraItems.split(/[;,\n]+/).forEach(function (part) {
+                    const label = String(part || '').trim();
+                    if (!label) return;
+                    entries.push({
+                        name: label,
+                        quantity: 1,
+                        estimatedVolume: getHouseRemovalItemVolumeEstimate(label)
+                    });
+                });
+            }
+
+            if (Array.isArray(source.items)) {
+                source.items.forEach(function (item) {
+                    const label = String(item && (item.name || item.label || item.description) || '').trim();
+                    const quantity = Math.max(0, parseInt(item && item.quantity, 10) || 0);
+                    if (!label || quantity <= 0) return;
+                    entries.push({
+                        name: label,
+                        quantity: quantity,
+                        estimatedVolume: getHouseRemovalItemVolumeEstimate(label)
+                    });
+                });
+            }
+        });
+    }
+
+    function collectVolumeItemsFromSource(source, entries, depth) {
+        if (!source || depth > 3) return;
+
+        if (typeof source === 'string') {
+            try {
+                const parsed = JSON.parse(source);
+                if (Array.isArray(parsed)) {
+                    parsed.forEach(function (item) {
+                        collectVolumeItemsFromSource(item, entries, depth + 1);
+                    });
+                }
+            } catch (_error) {
+                // Ignore malformed JSON payloads.
+            }
+            return;
+        }
+
+        if (Array.isArray(source)) {
+            source.forEach(function (item) {
+                collectVolumeItemsFromSource(item, entries, depth + 1);
+            });
+            return;
+        }
+
+        if (typeof source !== 'object') return;
+
+        if (hasVolumeDimensions(source)) {
+            entries.push(source);
+            return;
+        }
+
+        ['customizedDraftItems', 'customizedItems', 'items', 'rows', 'data', 'quoteData', 'stepData', 'formData'].forEach(function (key) {
+            if (source[key] !== undefined && source[key] !== null) {
+                collectVolumeItemsFromSource(source[key], entries, depth + 1);
+            }
+        });
+    }
+
+    function hasVolumeDimensions(item) {
+        if (!item || typeof item !== 'object') return false;
+        return hasRenderableValue(item.width) && hasRenderableValue(item.depth) && hasRenderableValue(item.height);
+    }
+
+    function parseDimensionValue(value) {
+        const normalized = String(value || '').trim().replace(',', '.');
+        const parsed = Number(normalized);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function getHouseRemovalItemVolumeEstimate(itemName, roomName) {
+        const normalized = String(itemName || '').trim().toLowerCase();
+        if (!normalized) return 0;
+
+        if (/^small\s+boxes?$/.test(normalized)) return 0.08;
+        if (/^medium\s+boxes?$/.test(normalized)) return 0.12;
+        if (/^large\s+boxes?$/.test(normalized)) return 0.18;
+        if (/^xl\s+boxes?$/.test(normalized) || /wardrobe\s+boxes?$/.test(normalized)) return 0.24;
+
+        if (normalized.includes('2 seater sofa') || normalized.includes('two seater sofa')) return 1.8;
+        if (normalized.includes('3 seater sofa')) return 2.3;
+        if (normalized.includes('armchair')) return 0.6;
+        if (normalized.includes('coffee table')) return 0.35;
+        if (normalized.includes('dining table')) return 1.2;
+        if (normalized.includes('dining chair')) return 0.15;
+        if (normalized.includes('side table')) return 0.18;
+        if (normalized.includes('book case') || normalized.includes('bookcase')) return 0.9;
+        if (normalized.includes('wardrobe')) return 1.6;
+        if (normalized.includes('chest of drawers') || normalized.includes('dresser')) return 1.1;
+        if (normalized.includes('display unit') || normalized.includes('side board')) return 0.9;
+        if (normalized.includes('desk')) return 1.0;
+        if (normalized.includes('chair')) return 0.18;
+        if (normalized.includes('pedestal')) return 0.2;
+        if (normalized.includes('filing cabinet')) return 0.45;
+        if (normalized.includes('desktop computer')) return 0.12;
+        if (normalized.includes('photocopier')) return 0.95;
+        if (normalized.includes('printer')) return 0.15;
+        if (normalized.includes('board room table')) return 1.8;
+        if (normalized.includes('crates')) return 0.35;
+        if (normalized.includes('fridge freezer')) return 1.6;
+        if (normalized.includes('fridge')) return 1.2;
+        if (normalized.includes('tumble dryer')) return 0.6;
+        if (normalized.includes('washing machine')) return 0.6;
+        if (normalized.includes('oven')) return 0.7;
+        if (normalized.includes('microwave')) return 0.08;
+        if (normalized.includes('shelving unit')) return 0.8;
+        if (normalized.includes('bin')) return 0.12;
+        if (normalized.includes('vacuum cleaner')) return 0.12;
+        if (normalized.includes('kingsize bed') || normalized.includes('king size bed')) return 2.0;
+        if (normalized.includes('double bed')) return 1.6;
+        if (normalized.includes('single bed')) return 1.2;
+        if (normalized.includes('bedside tables')) return 0.18;
+        if (normalized.includes('mirror')) return 0.12;
+        if (normalized.includes('artwork')) return 0.1;
+        if (normalized.includes('lamp')) return 0.05;
+        if (normalized.includes('bath')) return 2.2;
+        if (normalized.includes('sink')) return 0.55;
+        if (normalized.includes('rug')) return 0.2;
+        if (normalized.includes('bicycle') || normalized.includes('bike')) return 0.45;
+        if (normalized.includes('suitcase')) return 0.14;
+        if (normalized.includes('tool chest')) return 0.7;
+        if (normalized.includes('workbench')) return 1.2;
+        if (normalized.includes('lawn mower')) return 0.6;
+        if (normalized.includes('barbecue')) return 0.7;
+        if (normalized.includes('garden table')) return 0.9;
+        if (normalized.includes('parasol')) return 0.25;
+        if (normalized.includes('laundry basket')) return 0.15;
+        if (normalized.includes('storage boxes')) return 0.3;
+        if (normalized.includes('fish tank') || normalized.includes('aquarium')) return 0.25;
+        if (normalized.includes('umbrella stand')) return 0.1;
+        if (normalized.includes('storage bench')) return 0.45;
+
+        const roomNormalized = String(roomName || '').trim().toLowerCase();
+        if (roomNormalized === 'kitchen') return 0.35;
+        if (roomNormalized === 'bathrooms') return 0.25;
+        if (roomNormalized === 'living') return 0.6;
+        if (roomNormalized === 'dining') return 0.7;
+        if (roomNormalized === 'bedrooms') return 0.8;
+        if (roomNormalized === 'hallway') return 0.2;
+        if (roomNormalized === 'garden') return 0.5;
+        if (roomNormalized === 'utility') return 0.4;
+        if (roomNormalized === 'shed') return 0.4;
+        if (roomNormalized === 'office') return 0.55;
+
+        return 0.35;
+    }
+
+    function formatItemVolumeSummary(itemName, quantity) {
+        const qty = Math.max(1, parseInt(String(quantity || 1), 10) || 1);
+        const itemVolume = Number(getHouseRemovalItemVolumeEstimate(itemName));
+
+        if (!(itemVolume > 0)) {
+            return 'm³ not available';
+        }
+
+        const totalVolume = itemVolume * qty;
+        if (qty > 1) {
+            return totalVolume.toFixed(2) + ' m³ total (' + itemVolume.toFixed(2) + ' m³ each)';
+        }
+
+        return itemVolume.toFixed(2) + ' m³';
+    }
+
+    function getSizeUnitMultiplier(unit) {
+        const normalized = String(unit || 'cm').trim().toLowerCase();
+        if (normalized === 'm' || normalized === 'meter' || normalized === 'metre' || normalized === 'meters' || normalized === 'metres') return 1;
+        if (normalized === 'mm') return 0.001;
+        if (normalized === 'ft' || normalized === 'feet' || normalized === 'foot') return 0.3048;
+        if (normalized === 'in' || normalized === 'inch' || normalized === 'inches') return 0.0254;
+        return 0.01;
+    }
+
+    function createRouteMarkerElement(label, variant) {
+        const element = document.createElement('div');
+        element.className = 'route-marker route-marker--' + String(variant || '').trim();
+        element.textContent = String(label || '').trim();
+        return element;
     }
 
     async function renderMap(quote) {
@@ -408,7 +1013,7 @@
             const bounds = new mapboxgl.LngLatBounds();
 
             if (pickupCoord) {
-                new mapboxgl.Marker({ color: '#22a06b' })
+                new mapboxgl.Marker({ element: createRouteMarkerElement('A', 'pickup') })
                     .setLngLat(pickupCoord)
                     .setPopup(new mapboxgl.Popup({ offset: 22 }).setText('Pickup: ' + pickupAddress))
                     .addTo(map);
@@ -416,7 +1021,7 @@
             }
 
             if (deliveryCoord) {
-                new mapboxgl.Marker({ color: '#e62f7a' })
+                new mapboxgl.Marker({ element: createRouteMarkerElement('B', 'delivery') })
                     .setLngLat(deliveryCoord)
                     .setPopup(new mapboxgl.Popup({ offset: 22 }).setText('Delivery: ' + deliveryAddress))
                     .addTo(map);
@@ -500,8 +1105,10 @@
                     const roomBlocks = group.rooms.map(function (roomGroup) {
                         const itemsHtml = roomGroup.items.map(function (entry) {
                             const qtyLabel = Number(entry.qty) > 0 ? 'x' + String(entry.qty) + ' ' : '';
+                            const volumeText = formatItemVolumeSummary(entry.item, entry.qty);
                             return '<li class="inventory-detail-item">' +
                                 '<span class="inventory-detail-name">' + escapeHtml(qtyLabel + entry.item) + '</span>' +
+                                '<span class="inventory-detail-volume">' + escapeHtml(volumeText) + '</span>' +
                                 '<span class="inventory-detail-delivery">Deliver: ' + escapeHtml(entry.deliveryFloor) + '</span>' +
                                 '</li>';
                         }).join('');
@@ -717,7 +1324,16 @@
         const inventoryData = collectOverviewStyleInventory(quote);
         const services = buildServiceSelections(quote);
 
-        servicesEl.innerHTML = renderServicesMarkup(inventoryData, services);
+        modalEl._servicesInventoryData = inventoryData;
+        modalEl._servicesData = services;
+        modalEl._servicesFilteredTypes = new Set();
+
+        function rerenderServices() {
+            servicesEl.innerHTML = renderServicesMarkup(inventoryData, services, modalEl._servicesFilteredTypes);
+            setupServiceFilterButtons(servicesEl, modalEl);
+        }
+
+        rerenderServices();
 
         closeServicesModal();
         toggleBtn.setAttribute('aria-expanded', 'false');
@@ -790,6 +1406,31 @@
         }
     }
 
+    function setupServiceFilterButtons(servicesEl, modalEl) {
+        const buttons = servicesEl.querySelectorAll('.service-badge-filter');
+        buttons.forEach(function (btn) {
+            btn.onclick = function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const badgeType = btn.getAttribute('data-service-type');
+                if (!badgeType) return;
+
+                if (modalEl._servicesFilteredTypes.has(badgeType)) {
+                    modalEl._servicesFilteredTypes.delete(badgeType);
+                } else {
+                    modalEl._servicesFilteredTypes.add(badgeType);
+                }
+
+                const servicesContent = document.getElementById('details-services');
+                if (servicesContent) {
+                    servicesContent.innerHTML = renderServicesMarkup(modalEl._servicesInventoryData, modalEl._servicesData, modalEl._servicesFilteredTypes);
+                    setupServiceFilterButtons(servicesContent, modalEl);
+                }
+            };
+        });
+    }
+
     function buildServiceSelections(quote) {
         const packingItems = parseServiceSelectionMap(quote.servicePackingItems);
         const disassemblyItems = parseServiceSelectionMap(quote.serviceDisassemblyItems);
@@ -809,7 +1450,7 @@
         };
     }
 
-    function renderServicesMarkup(inventoryData, services) {
+    function renderServicesMarkup(inventoryData, services, filteredTypes) {
         if (!inventoryData || !inventoryData.pickup || !Object.keys(inventoryData.pickup).length) {
             return '<div class="empty-inventory">No inventory items available to map services yet.</div>';
         }
@@ -819,17 +1460,13 @@
             return '<div class="empty-inventory">No pickup inventory available for services.</div>';
         }
 
-        const legend = '<div class="services-legend">' +
-            renderServiceBadge('packing') +
-            renderServiceBadge('disassemble') +
-            renderServiceBadge('assemble') +
-            renderServiceBadge('both') +
-            renderServiceBadge('storage') +
-            '</div>';
-
         const quantityContext = {
             remainingPackingQtyByItem: new Map(services.packingQtyByItem || [])
         };
+
+        const isFiltered = filteredTypes && filteredTypes.size > 0;
+
+        const badgeTypes = new Set();
 
         const floorBlocks = floorNames.map(function (floorName) {
             const floorItems = Object.entries(inventoryData.pickup[floorName] || {})
@@ -841,14 +1478,29 @@
                 const qty = parseInt(entry[1], 10) || 0;
                 const badges = getItemServiceBadges(floorName, itemLabel, qty, services, quantityContext);
 
+                badges.forEach(function (badge) {
+                    if (badge && badge.type) badgeTypes.add(badge.type);
+                });
+
+                if (!badges.length) return '';
+
+                if (isFiltered) {
+                    const hasFilteredBadge = badges.some(function (badge) {
+                        return filteredTypes.has(badge.type);
+                    });
+                    if (!hasFilteredBadge) return '';
+                }
+
                 return '<li class="services-item-row">' +
                     '<div class="services-item-main">' +
                         '<span class="services-item-name">' + escapeHtml(itemLabel) + '</span>' +
                         '<span class="services-item-qty">x' + escapeHtml(String(qty)) + '</span>' +
                     '</div>' +
-                    '<div class="services-item-tags">' + (badges.length ? badges.map(renderServiceBadge).join('') : '<span class="service-badge service-badge-none">No service</span>') + '</div>' +
+                    '<div class="services-item-tags">' + badges.map(renderServiceBadge).join('') + '</div>' +
                 '</li>';
-            }).join('');
+            }).filter(function (rowHtml) { return rowHtml; }).join('');
+
+            if (!rows) return '';
 
             return '<section class="services-floor-block">' +
                 '<h4 class="services-floor-title">' + escapeHtml(floorName) + ' Floor</h4>' +
@@ -856,7 +1508,40 @@
             '</section>';
         }).join('');
 
+        if (!floorBlocks) {
+            return '<div class="empty-inventory">No item-level services selected for this listing.</div>';
+        }
+
+        const legendTypes = Array.from(badgeTypes);
+        const legend = legendTypes.length
+            ? '<div class="services-legend">' + legendTypes.map(function (type) { return renderServiceBadgeFilter(type, filteredTypes); }).join('') + '</div>'
+            : '';
+
         return '<div class="services-modal-wrap">' + legend + floorBlocks + '</div>';
+    }
+
+    function renderServiceBadgeFilter(badgeType, filteredTypes) {
+        const configValue = { type: String(badgeType || '') };
+        const type = String(configValue.type || '').trim();
+
+        const map = {
+            packing: { icon: '📦', label: 'Pack' },
+            disassemble: { icon: '🛠', label: 'Disassemble' },
+            assemble: { icon: '🔩', label: 'Assemble' },
+            both: { icon: '🔁', label: 'Disassemble + Assemble' },
+            storage: { icon: '🗄', label: 'Storage' }
+        };
+
+        const config = map[type];
+        if (!config) return '';
+
+        const isActive = filteredTypes && filteredTypes.has(type);
+        const activeClass = isActive ? ' service-badge-active' : '';
+
+        return '<button type="button" class="service-badge service-badge-filter service-badge-' + escapeAttribute(type) + activeClass + '" data-service-type="' + escapeAttribute(type) + '" aria-pressed="' + (isActive ? 'true' : 'false') + '">' +
+            '<span class="service-badge-icon" aria-hidden="true">' + escapeHtml(config.icon) + '</span>' +
+            '<span class="service-badge-text">' + escapeHtml(config.label) + '</span>' +
+        '</button>';
     }
 
     function getItemServiceBadges(floorName, itemLabel, itemQty, services, quantityContext) {
@@ -1150,7 +1835,11 @@
 
                 const rows = items.length
                     ? items.map(function (entry) {
-                        return '<li>' + escapeHtml(formatItemLabel(entry[0])) + ' x' + escapeHtml(String(parseInt(entry[1], 10) || 0)) + '</li>';
+                        const itemName = formatItemLabel(entry[0]);
+                        const quantity = parseInt(entry[1], 10) || 0;
+                        const volumeText = formatItemVolumeSummary(itemName, quantity);
+                        return '<li><span class="inventory-overview-item-name">' + escapeHtml(itemName) + '</span>' +
+                            '<span class="inventory-overview-item-meta">x' + escapeHtml(String(quantity)) + ' · ' + escapeHtml(volumeText) + '</span></li>';
                     }).join('')
                     : '<li>No items</li>';
 
@@ -1687,11 +2376,11 @@
         const dateLabel = firstText(getMoveDate(quote), 'Not provided');
 
         if (!quoteBids.length) {
-            historyEl.innerHTML = '<div class="empty-bids">No bids yet. Be the first to bid.</div>';
+            historyEl.innerHTML = '<div class="empty-bids">No quotes yet. Be the first to quote.</div>';
             return;
         }
 
-        historyEl.innerHTML = '<table class="legacy-bids-table legacy-bids-table-bottom"><thead><tr><th>Bidder</th><th>Amount</th><th>When</th><th>Dates</th><th>Expires</th><th></th></tr></thead><tbody>' +
+        historyEl.innerHTML = '<table class="legacy-bids-table legacy-bids-table-bottom"><thead><tr><th>Quoter</th><th>Amount</th><th>When</th><th>Dates</th><th>Expires</th><th>Comment</th><th></th></tr></thead><tbody>' +
             quoteBids.map(function (bid) {
                 const bidder = firstText(
                     bid.providerUsername,
@@ -1703,13 +2392,15 @@
                 );
                 const when = bid.createdAt ? formatDateTime(bid.createdAt) : 'Unknown';
                 const amount = Number(bid.amount || 0).toFixed(2);
-                const expiry = firstText(bid.bidExpiryDate, 'N/A') + (bid.bidExpiryTime ? ' ' + bid.bidExpiryTime : '');
+                const expiry = getBidExpiryLabel(bid);
+                const comment = getBidCommentLabel(bid);
                 return '<tr>' +
                     '<td class="legacy-bidder-cell"><span class="legacy-bidder-icon">+</span>' + escapeHtml(bidder) + '</td>' +
                     '<td>€' + amount + '</td>' +
                     '<td>' + escapeHtml(when) + '</td>' +
                     '<td><strong>P:</strong> ' + escapeHtml(dateLabel) + '<br><strong>D:</strong> ' + escapeHtml(dateLabel) + '</td>' +
                     '<td>' + escapeHtml(expiry) + '</td>' +
+                    '<td class="legacy-bid-comment">' + escapeHtml(comment) + '</td>' +
                     '<td><button type="button" class="legacy-bids-view-btn">VIEW</button></td>' +
                     '</tr>';
             }).join('') +
@@ -1720,13 +2411,53 @@
         const form = document.getElementById('bid-form');
         if (!form) return;
 
+        const expiryModeEl = document.getElementById('bid-expiry-mode');
+        const customExpiryGroup = document.getElementById('bid-custom-expiry-group');
         const templateEl = document.getElementById('bid-template');
         const messageEl = document.getElementById('bid-message');
+        const dateEl = document.getElementById('bid-expire-date');
+        const timeEl = document.getElementById('bid-expire-time');
+
+        // Load saved messages into dropdown
+        populateSavedMessagesDropdown();
+        updateSavedMessagesInfo();
+
+        // Attach clear saved messages button
+        const clearBtn = document.getElementById('btn-clear-saved-messages');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function (evt) {
+                evt.preventDefault();
+                clearAllSavedMessages();
+            });
+        }
+
+        // Handle save message checkbox toggle
+        const saveCheckbox = document.getElementById('bid-save-template');
+        const titleGroup = document.getElementById('save-message-title-group');
+        if (saveCheckbox && titleGroup) {
+            saveCheckbox.addEventListener('change', function () {
+                if (this.checked) {
+                    titleGroup.hidden = false;
+                } else {
+                    titleGroup.hidden = true;
+                }
+            });
+        }
+
+        if (expiryModeEl) {
+            expiryModeEl.addEventListener('change', updateBidExpiryModeVisibility);
+            updateBidExpiryModeVisibility();
+        }
 
         if (templateEl && messageEl) {
             templateEl.addEventListener('change', function () {
-                if (!String(messageEl.value || '').trim() && String(templateEl.value || '').trim()) {
-                    messageEl.value = templateEl.value;
+                const selectedValue = String(templateEl.value || '').trim();
+                // Always update textarea when a value is selected (including saved messages)
+                if (selectedValue) {
+                    messageEl.value = selectedValue;
+                    // Clear the title input when user selects a message from dropdown
+                    const titleInput = document.getElementById('bid-message-title');
+                    if (titleInput) titleInput.value = '';
                 }
             });
         }
@@ -1735,6 +2466,7 @@
             evt.preventDefault();
 
             const amountEl = document.getElementById('bid-amount');
+            const expiryModeValue = String((expiryModeEl && expiryModeEl.value) || 'listingEnds').trim();
             const expireDateEl = document.getElementById('bid-expire-date');
             const expireTimeEl = document.getElementById('bid-expire-time');
             const amount = Number((amountEl && amountEl.value) || 0);
@@ -1758,6 +2490,8 @@
                 allBids = [];
             }
 
+            const messageText = messageEl ? String(messageEl.value || '') : '';
+
             allBids.push({
                 id: 'bid-' + Date.now(),
                 quoteId: quoteId,
@@ -1767,20 +2501,97 @@
                 providerName: firstText(user.name, user.email, 'Provider'),
                 providerEmail: firstText(user.email),
                 amount: amount,
-                message: messageEl ? String(messageEl.value || '') : '',
+                message: messageText,
                 messageTemplate: templateEl ? String(templateEl.value || '') : '',
-                bidExpiryDate: expireDateEl ? String(expireDateEl.value || '') : '',
-                bidExpiryTime: expireTimeEl ? String(expireTimeEl.value || '') : '',
+                bidExpiryMode: expiryModeValue || 'listingEnds',
+                bidExpiryDate: expiryModeValue === 'custom' && expireDateEl ? String(expireDateEl.value || '') : '',
+                bidExpiryTime: expiryModeValue === 'custom' && expireTimeEl ? String(expireTimeEl.value || '') : '',
                 status: 'active',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             });
 
             localStorage.setItem(BID_STORAGE_KEY, JSON.stringify(allBids));
+
+            // Add notifications for bid submission
+            const providerName = firstText(user.username, user.nickname, user.name, 'Provider');
+            const quoterName = firstText(quote.customerName, quote.name, 'Customer');
+
+            // Notification for provider (bid submitted)
+            if (typeof window.notificationSystem === 'object' && window.notificationSystem.addNotification) {
+                window.notificationSystem.addNotification(user, 'quote-added', 'Quote Submitted', 
+                    'Your quote of €' + Number(amount).toFixed(2) + ' has been submitted for ' + (quote.title || 'a job'),
+                    { quoteId: quoteId, bidAmount: amount, quoteName: quote.title }
+                );
+            }
+
+            // Notification for customer (new bid received)
+            const quoteCreator = quote.createdBy ? { id: quote.createdBy } : null;
+            if (quoteCreator && quoteCreator.id) {
+                try {
+                    // Get all users to find the quote creator if needed
+                    const allUsers = JSON.parse(localStorage.getItem('anytransport_users') || '[]');
+                    const creatorUser = allUsers.find(function(u) { return String(u.id) === String(quoteCreator.id); });
+                    if (!creatorUser) quoteCreator.id = quote.createdBy; // Use stored ID as fallback
+                    
+                    if (typeof window.notificationSystem === 'object' && window.notificationSystem.addNotification) {
+                        window.notificationSystem.addNotification(quoteCreator, 'quote-added',
+                            'New Quote from ' + providerName,
+                            'You received a quote of €' + Number(amount).toFixed(2) + ' for ' + (quote.title || 'your job'),
+                            { quoteId: quoteId, bidderId: user.id, bidAmount: amount }
+                        );
+                    }
+                } catch (_error) {
+                    // Silently fail if we can't create notification for customer
+                }
+            }
+
+            // Save message if checkbox is checked
+            const saveTemplateCheckbox = document.getElementById('bid-save-template');
+            if (saveTemplateCheckbox && saveTemplateCheckbox.checked && messageText.trim()) {
+                const titleInput = document.getElementById('bid-message-title');
+                const messageTitle = titleInput ? String(titleInput.value || '').trim() : '';
+                const saved = addSavedMessage(user, messageText, messageTitle);
+                if (saved) {
+                    // Refresh dropdown with new saved message
+                    populateSavedMessagesDropdown();
+                    updateSavedMessagesInfo();
+                    // Clear the title input after save
+                    if (titleInput) titleInput.value = '';
+                }
+            }
+
             if (form) form.reset();
             initializeBidFormDefaults(quote);
             renderBids(quoteId, quote);
         });
+    }
+
+    function getBidExpiryLabel(bid) {
+        const mode = String(bid && bid.bidExpiryMode || '').trim().toLowerCase();
+        const date = firstText(bid && bid.bidExpiryDate, '');
+        const time = firstText(bid && bid.bidExpiryTime, '');
+
+        if (!mode && (date || time)) {
+            return date + (time ? ' ' + time : '');
+        }
+
+        if (!mode || mode === 'listingends' || mode === 'listing ends' || mode === 'formends' || mode === 'form ends') {
+            return 'When listing ends';
+        }
+        if (!date && !time) return 'When listing ends';
+        return date + (time ? ' ' + time : '');
+    }
+
+    function getBidCommentLabel(bid) {
+        const message = firstText(
+            bid && bid.message,
+            bid && bid.bidMessage,
+            bid && bid.comment,
+            bid && bid.notes,
+            ''
+        );
+        return message || 'No comment';
     }
 
     function renderFormSections(quote) {
@@ -1793,8 +2604,8 @@
             ['Service', getServiceLabel(quote)],
             ['Distance', formatDistance(quote)],
             ['Time', firstText(quote.routeDurationText, quote.routeDuration, quote.durationText, 'Not provided')],
-            ['Pickup time', getPickupTime(quote)],
-            ['Delivery time', getDeliveryTime(quote)],
+            ['Pickup time', getPickupTime(quote), true],
+            ['Delivery time', getDeliveryTime(quote), true],
             ['Date', getMoveDate(quote)],
             ['Movers', getMoversRequired(quote)],
             ['Special instructions', firstText(quote.serviceSpecialInstructions, quote.instructions, quote.notes, 'None')],
@@ -1804,7 +2615,8 @@
         root.innerHTML = '<section class="form-section-card compact-form-section">' +
             '<h3 class="form-section-title">Key Details</h3>' +
             '<div class="compact-details-table">' + fields.map(function (pair) {
-                return '<div class="compact-detail-row"><span class="compact-detail-label">' + escapeHtml(pair[0]) + ':</span><span class="compact-detail-value">' + escapeHtml(pair[1]) + '</span></div>';
+                const isHtml = pair[2] === true;
+                return '<div class="compact-detail-row"><span class="compact-detail-label">' + escapeHtml(pair[0]) + ':</span><span class="compact-detail-value">' + (isHtml ? pair[1] : escapeHtml(pair[1])) + '</span></div>';
             }).join('') + '</div>' +
             '</section>';
     }
@@ -1849,12 +2661,12 @@
                     const bounds = new mapboxgl.LngLatBounds();
 
                     if (pickupCoord) {
-                        new mapboxgl.Marker({ color: '#22a06b' }).setLngLat(pickupCoord).addTo(map);
+                        new mapboxgl.Marker({ element: createRouteMarkerElement('A', 'pickup') }).setLngLat(pickupCoord).addTo(map);
                         bounds.extend(pickupCoord);
                     }
 
                     if (deliveryCoord) {
-                        new mapboxgl.Marker({ color: '#e62f7a' }).setLngLat(deliveryCoord).addTo(map);
+                        new mapboxgl.Marker({ element: createRouteMarkerElement('B', 'delivery') }).setLngLat(deliveryCoord).addTo(map);
                         bounds.extend(deliveryCoord);
                     }
 
@@ -2194,11 +3006,67 @@
     }
 
     function getPickupTime(quote) {
-        return firstText(quote.preferredPickupTime, quote.pickupTime, quote.timeWindowPickup, 'Flexible');
+        const time = firstText(quote.preferredPickupTime, quote.pickupTime, quote.timeWindowPickup, 'Flexible');
+        const flexibility = String(quote.preferredPickupTimeFlexibility || 'mandatory').toLowerCase();
+        const badge = flexibility === 'mandatory' 
+            ? '<span style="display:inline-block; margin-left:8px; padding:2px 8px; background:#fee2e2; color:#991b1b; border-radius:4px; font-weight:700; font-size:0.75rem;">Mandatory time</span>'
+            : '<span style="display:inline-block; margin-left:8px; padding:2px 8px; background:#e0f2fe; color:#0369a1; border-radius:4px; font-weight:700; font-size:0.75rem;">Flexible time</span>';
+        return time ? time + badge : 'Flexible' + badge;
     }
 
     function getDeliveryTime(quote) {
-        return firstText(quote.preferredDeliveryTime, quote.deliveryTime, quote.timeWindowDelivery, 'Flexible');
+        const time = firstText(quote.preferredDeliveryTime, quote.deliveryTime, quote.timeWindowDelivery, 'Flexible');
+        const flexibility = String(quote.preferredDeliveryTimeFlexibility || 'mandatory').toLowerCase();
+        const badge = flexibility === 'mandatory'
+            ? '<span style="display:inline-block; margin-left:8px; padding:2px 8px; background:#fee2e2; color:#991b1b; border-radius:4px; font-weight:700; font-size:0.75rem;">Mandatory time</span>'
+            : '<span style="display:inline-block; margin-left:8px; padding:2px 8px; background:#e0f2fe; color:#0369a1; border-radius:4px; font-weight:700; font-size:0.75rem;">Flexible time</span>';
+        return time ? time + badge : 'Flexible' + badge;
+    }
+
+    function getPreferredTimeSummary(quote) {
+        const pickupTime = firstText(quote.preferredPickupTime, quote.pickupTime, quote.timeWindowPickup, 'Not set');
+        const deliveryTime = firstText(quote.preferredDeliveryTime, quote.deliveryTime, quote.timeWindowDelivery, 'Not set');
+        const pickupFlexibility = String(quote.preferredPickupTimeFlexibility || 'mandatory').toLowerCase() === 'mandatory' ? 'M' : 'F';
+        const deliveryFlexibility = String(quote.preferredDeliveryTimeFlexibility || 'mandatory').toLowerCase() === 'mandatory' ? 'M' : 'F';
+        return 'Pickup: ' + pickupTime + ' (' + pickupFlexibility + ') | Delivery: ' + deliveryTime + ' (' + deliveryFlexibility + ')';
+    }
+
+    function getStorageSummary(quote) {
+        const storageValue = firstText(quote.serviceStorage, quote['service-storage'], quote.storage);
+        const storageStatus = String(storageValue || '').trim().toLowerCase();
+        if (storageStatus === 'no') return 'No storage';
+        if (storageStatus !== 'yes') return 'Storage not selected';
+
+        const storageDateMode = String(firstText(quote.serviceStorageDateMode, quote['service-storage-date-mode']) || 'exact').trim().toLowerCase();
+        const parseDateValue = (raw) => {
+            const value = String(raw || '').trim();
+            const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (!match) return null;
+            return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+        };
+        const formatDurationLabel = (startDate, endDate) => {
+            if (!startDate || !endDate) return '';
+            const differenceMs = endDate.getTime() - startDate.getTime();
+            if (!Number.isFinite(differenceMs) || differenceMs < 0) return '';
+            const days = Math.max(1, Math.round(differenceMs / 86400000));
+            if (days % 7 === 0) {
+                const weeks = days / 7;
+                return weeks === 1 ? '1 week' : weeks + ' weeks';
+            }
+            return days === 1 ? '1 day' : days + ' days';
+        };
+
+        if (storageDateMode === 'approx') {
+            const approxStartFrom = parseDateValue(firstText(quote.serviceStorageStartApproxFrom, quote['service-storage-start-approx-from']));
+            const approxEndTo = parseDateValue(firstText(quote.serviceStorageEndApproxTo, quote['service-storage-end-approx-to']));
+            const durationLabel = formatDurationLabel(approxStartFrom, approxEndTo);
+            return durationLabel ? 'Yes, approx. for ' + durationLabel : 'Yes, duration pending';
+        }
+
+        const startDate = parseDateValue(firstText(quote.serviceStorageStartDatetime, quote['service-storage-start-datetime']));
+        const endDate = parseDateValue(firstText(quote.serviceStorageEndDatetime, quote['service-storage-end-datetime']));
+        const durationLabel = formatDurationLabel(startDate, endDate);
+        return durationLabel ? 'Yes, for ' + durationLabel : 'Yes, duration pending';
     }
 
     function getMoveDate(quote) {

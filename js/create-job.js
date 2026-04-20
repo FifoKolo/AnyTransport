@@ -289,6 +289,75 @@ document.addEventListener('DOMContentLoaded', setupCombinedAreaOrEircodeFields);
 
 // === END CRITICAL FUNCTIONS ===
 
+function getPreferredTimeFlexibilityValue(radioName, hiddenFieldId) {
+    const selectedRadio = document.querySelector(`input[name="${radioName}"]:checked`);
+    if (selectedRadio && selectedRadio.value) {
+        return selectedRadio.value.trim().toLowerCase();
+    }
+
+    const hiddenField = document.getElementById(hiddenFieldId);
+    if (hiddenField && hiddenField.value) {
+        return hiddenField.value.trim().toLowerCase();
+    }
+
+    return 'mandatory';
+}
+
+function getStorageSummaryText() {
+    const storageInput = document.getElementById('service-storage');
+    const storageValue = String(storageInput?.value || '').trim().toLowerCase();
+    if (storageValue === 'no') return 'No storage';
+    if (storageValue !== 'yes') return 'Storage not selected';
+
+    const storageDateModeInput = document.getElementById('service-storage-date-mode');
+    const storageStartInput = document.getElementById('service-storage-start-datetime');
+    const storageEndInput = document.getElementById('service-storage-end-datetime');
+    const storageStartApproxFromInput = document.getElementById('service-storage-start-approx-from');
+    const storageStartApproxToInput = document.getElementById('service-storage-start-approx-to');
+    const storageEndApproxFromInput = document.getElementById('service-storage-end-approx-from');
+    const storageEndApproxToInput = document.getElementById('service-storage-end-approx-to');
+
+    if (!storageDateModeInput || !storageStartInput || !storageEndInput || !storageStartApproxFromInput || !storageStartApproxToInput || !storageEndApproxFromInput || !storageEndApproxToInput) {
+        return 'Yes, duration pending';
+    }
+
+    const parseDateValue = (raw) => {
+        const value = String(raw || '').trim();
+        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return null;
+        const year = parseInt(match[1], 10);
+        const monthIndex = parseInt(match[2], 10) - 1;
+        const day = parseInt(match[3], 10);
+        if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || !Number.isFinite(day)) return null;
+        return new Date(year, monthIndex, day);
+    };
+
+    const formatDurationLabel = (startDate, endDate) => {
+        if (!startDate || !endDate) return '';
+        const differenceMs = endDate.getTime() - startDate.getTime();
+        if (!Number.isFinite(differenceMs) || differenceMs < 0) return '';
+        const days = Math.max(1, Math.round(differenceMs / 86400000));
+        if (days % 7 === 0) {
+            const weeks = days / 7;
+            return weeks === 1 ? '1 week' : `${weeks} weeks`;
+        }
+        return days === 1 ? '1 day' : `${days} days`;
+    };
+
+    const isApproxMode = String(storageDateModeInput.value || 'exact').trim().toLowerCase() === 'approx';
+    if (isApproxMode) {
+        const approxStartFrom = parseDateValue(storageStartApproxFromInput.value);
+        const approxEndTo = parseDateValue(storageEndApproxToInput.value);
+        const durationLabel = formatDurationLabel(approxStartFrom, approxEndTo);
+        return durationLabel ? `Yes, approx. for ${durationLabel}` : 'Yes, duration pending';
+    }
+
+    const startDate = parseDateValue(storageStartInput.value);
+    const endDate = parseDateValue(storageEndInput.value);
+    const durationLabel = formatDurationLabel(startDate, endDate);
+    return durationLabel ? `Yes, for ${durationLabel}` : 'Yes, duration pending';
+}
+
 function initTransportDatePicker() {
     const hiddenInput = document.getElementById('service-transport-date');
     const trigger = document.getElementById('transport-date-trigger');
@@ -320,12 +389,14 @@ function initTransportDatePicker() {
     const pickupExactWrap = document.getElementById('pickup-time-exact-wrap');
     const pickupRangeWrap = document.getElementById('pickup-time-range-wrap');
     const pickupModeRadios = Array.from(document.querySelectorAll('input[name="pickup-time-mode"]'));
+    const pickupFlexibilityWrap = document.getElementById('pickup-time-flexibility-wrap');
     const deliveryExactInput = document.getElementById('delivery-time-exact');
     const deliveryStartInput = document.getElementById('delivery-time-start');
     const deliveryEndInput = document.getElementById('delivery-time-end');
     const deliveryExactWrap = document.getElementById('delivery-time-exact-wrap');
     const deliveryRangeWrap = document.getElementById('delivery-time-range-wrap');
     const deliveryModeRadios = Array.from(document.querySelectorAll('input[name="delivery-time-mode"]'));
+    const deliveryFlexibilityWrap = document.getElementById('delivery-time-flexibility-wrap');
 
     if (!hiddenInput || !trigger || !panel || !display) return;
     if (hiddenInput.dataset.customDatePickerInit === '1') return;
@@ -668,13 +739,12 @@ function initTransportDatePicker() {
                 syncEnabledState() {}
             };
         }
-
         let updatingFromUi = false;
         let updatingFromHidden = false;
 
         function getSelectedMode() {
             const selected = modeRadios.find((radio) => radio.checked);
-            return selected ? selected.value : 'exact';
+            return selected ? selected.value : '';
         }
 
         function setSelectedMode(mode) {
@@ -688,6 +758,7 @@ function initTransportDatePicker() {
 
         function buildHiddenValueFromUi() {
             const mode = getSelectedMode();
+            if (!mode) return '';
             if (mode === 'range') {
                 const start = (startInput.value || '').trim();
                 const end = (endInput.value || '').trim();
@@ -709,9 +780,18 @@ function initTransportDatePicker() {
                 startInput.value = rangeMatch[1];
                 endInput.value = rangeMatch[2];
                 exactInput.value = '';
-            } else {
+            } else if (raw) {
                 setSelectedMode('exact');
                 exactInput.value = raw;
+                startInput.value = '';
+                endInput.value = '';
+            } else {
+                modeRadios.forEach((radio) => {
+                    radio.checked = false;
+                });
+                exactWrap.style.display = 'none';
+                rangeWrap.style.display = 'none';
+                exactInput.value = '';
                 startInput.value = '';
                 endInput.value = '';
             }
@@ -740,7 +820,11 @@ function initTransportDatePicker() {
             });
 
             if (!hasConcreteDate) {
-                setSelectedMode('exact');
+                modeRadios.forEach((radio) => {
+                    radio.checked = false;
+                });
+                exactWrap.style.display = 'none';
+                rangeWrap.style.display = 'none';
                 exactInput.value = '';
                 startInput.value = '';
                 endInput.value = '';
@@ -790,6 +874,55 @@ function initTransportDatePicker() {
         rangeWrap: deliveryRangeWrap,
         modeRadios: deliveryModeRadios
     });
+
+    // Setup flexibility toggle listeners for pickup time
+    const pickupFlexibilityRadios = Array.from(document.querySelectorAll('input[name="pickup-time-flexibility-mode"]'));
+    const pickupFlexibilityInput = document.getElementById('pickup-time-flexibility');
+    pickupFlexibilityRadios.forEach((radio) => {
+        radio.addEventListener('change', () => {
+            if (pickupFlexibilityInput) {
+                pickupFlexibilityInput.value = radio.value;
+                pickupFlexibilityInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
+        });
+    });
+
+    // Setup flexibility toggle listeners for delivery time
+    const deliveryFlexibilityRadios = Array.from(document.querySelectorAll('input[name="delivery-time-flexibility-mode"]'));
+    const deliveryFlexibilityInput = document.getElementById('delivery-time-flexibility');
+    deliveryFlexibilityRadios.forEach((radio) => {
+        radio.addEventListener('change', () => {
+            if (deliveryFlexibilityInput) {
+                deliveryFlexibilityInput.value = radio.value;
+                deliveryFlexibilityInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
+        });
+    });
+
+    function syncTimeFlexibilityVisibility() {
+        if (pickupFlexibilityWrap) {
+            const hasPickupMode = pickupModeRadios.some((radio) => radio.checked);
+            pickupFlexibilityWrap.style.display = hasPickupMode ? 'flex' : 'none';
+        }
+        if (deliveryFlexibilityWrap) {
+            const hasDeliveryMode = deliveryModeRadios.some((radio) => radio.checked);
+            deliveryFlexibilityWrap.style.display = hasDeliveryMode ? 'flex' : 'none';
+        }
+    }
+
+    pickupModeRadios.forEach((radio) => {
+        radio.addEventListener('change', syncTimeFlexibilityVisibility);
+    });
+    deliveryModeRadios.forEach((radio) => {
+        radio.addEventListener('change', syncTimeFlexibilityVisibility);
+    });
+    syncTimeFlexibilityVisibility();
 
     function syncPreferredTimeState() {
         const selectedDateText = (hiddenInput.value || '').trim().toLowerCase();
@@ -4283,16 +4416,6 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!Number.isFinite(step)) {
                 step = 1;
             }
-
-            const pickupStepVisible = !!(document.getElementById('pickup-room-list-wrapper') && document.getElementById('pickup-room-list-wrapper').offsetParent !== null);
-
-            // Only correct obvious stale state from Step 1/2 to Step 3.
-            // Do not infer Step 4 from visibility, because overlapping containers can
-            // temporarily be visible and would incorrectly block the Step 3 Next button.
-            if (step < 3 && pickupStepVisible) {
-                return 3;
-            }
-
             return step;
         }
 
@@ -8865,21 +8988,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 deliveryMovers.setAttribute('data-confirmed-value', deliveryMovers.value || '1');
             }
 
-            // Partial Packing should always start unticked; user explicitly selects items.
-            const packingInput = document.getElementById('service-packing');
-            const packingModeInput = document.getElementById('service-packing-mode');
-            const packingItemsInput = document.getElementById('service-packing-items');
-            if (
-                packingInput
-                && packingInput.value === 'yes'
-                && packingModeInput
-                && packingModeInput.value === 'selected'
-                && packingItemsInput
-                && packingItemsInput.value
-            ) {
-                packingItemsInput.value = '';
-                packingItemsInput.dispatchEvent(new Event('change', { bubbles: true }));
-            }
+            // Do not clear restored Step 6 selections during init.
+            // Partial-packing reset is already handled only when the user switches mode.
             syncMoversUnsureUi();
             syncMoversConfirmUi();
             syncFreightLoadingModeUi();
@@ -16297,9 +16407,10 @@ document.addEventListener('DOMContentLoaded', function () {
                                 <div style="position:relative;max-width:90vw;max-height:90vh;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.25);">
                                     <button type="button" aria-label="Close preview" style="position:absolute;top:10px;right:10px;z-index:1;border:none;background:rgba(0,0,0,0.7);color:#fff;border-radius:999px;width:32px;height:32px;cursor:pointer;font-size:18px;line-height:1;">×</button>
                                     ${previewDataUrl.startsWith('data:video/')
-                                        ? `<video src="${previewDataUrl}" controls autoplay style="display:block;max-width:90vw;max-height:90vh;background:#000;"></video>`
+                                        ? `<video controls autoplay playsInline preload="metadata" width="100%" style="display:block;max-width:90vw;max-height:90vh;background:#000;"><source src="${previewDataUrl}" type="video/mp4">Your browser does not support the video tag.</video>`
                                         : `<img src="${previewDataUrl}" alt="Item preview" style="display:block;max-width:90vw;max-height:90vh;object-fit:contain;background:#fff;">`}
                                 </div>`;
+
                             const closeBtn = viewModal.querySelector('button[aria-label="Close preview"]');
                             const dismiss = () => viewModal.remove();
                             closeBtn.addEventListener('click', dismiss);
@@ -18861,7 +18972,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 'summary-pickup-address': 'Example: 14 Main Street, Dublin, D02',
                 'summary-delivery-address': 'Example: 7 Harbour View, Cork, T12',
                 'summary-date': 'Example: 22 Apr 2026',
-                'summary-storage-dates': 'Example: 22 Apr 2026 - 29 Apr 2026',
+                'summary-storage-dates': 'Example: Yes, for 1 week',
                 'summary-notes': 'Example: Please call 30 minutes before arrival',
                 'summary-route-distance': 'Example: 48.6 km',
                 'summary-route-duration': 'Example: 42 mins',
@@ -19016,13 +19127,17 @@ document.addEventListener('DOMContentLoaded', function() {
             const moveDate = getInputValue('service-transport-date') || getInputValue('office-move-date');
             const pickupTimeWindow = getInputValue('preferred-time-pickup');
             const deliveryTimeWindow = getInputValue('preferred-time-delivery');
+            const pickupTimeFlexibility = getPreferredTimeFlexibilityValue('pickup-time-flexibility-mode', 'pickup-time-flexibility');
+            const deliveryTimeFlexibility = getPreferredTimeFlexibilityValue('delivery-time-flexibility-mode', 'delivery-time-flexibility');
+            const pickupTimeMarker = pickupTimeFlexibility === 'mandatory' ? 'M' : 'F';
+            const deliveryTimeMarker = deliveryTimeFlexibility === 'mandatory' ? 'M' : 'F';
             const timeParts = [];
-            if (pickupTimeWindow) timeParts.push(`Pickup: ${pickupTimeWindow}`);
-            if (deliveryTimeWindow) timeParts.push(`Delivery: ${deliveryTimeWindow}`);
+            if (pickupTimeWindow) timeParts.push(`Pickup: ${pickupTimeWindow} (${pickupTimeMarker})`);
+            if (deliveryTimeWindow) timeParts.push(`Delivery: ${deliveryTimeWindow} (${deliveryTimeMarker})`);
             const moveDateSummary = moveDate
                 ? (timeParts.length > 0 ? `${moveDate} (${timeParts.join(' | ')})` : moveDate)
                 : '';
-            const storageDatesSummary = typeof window.getStorageDatesSummaryText === 'function' ? window.getStorageDatesSummaryText() : '';
+            const storageSummary = typeof getStorageSummaryText === 'function' ? getStorageSummaryText() : '';
             const specialInstructions = getInputValue('service-special-instructions') || getInputValue('generic-special-instructions');
 
             let itemsSummary = '';
@@ -19215,7 +19330,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setSummaryValue('summary-delivery-address', deliveryAddress || '—');
             setSummaryValue('summary-items', itemsSummary || '—');
             setSummaryValue('summary-date', moveDateSummary || '—');
-            setSummaryValue('summary-storage-dates', storageDatesSummary || '—');
+            setSummaryValue('summary-storage-dates', storageSummary || '—');
             setSummaryValue('summary-notes', specialInstructions || '—');
             updateOverviewFloorAndInventorySummary();
             
@@ -24036,6 +24151,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 ].filter(Boolean).join(' | '),
                 preferredPickupTime: getElementValue('preferred-time-pickup'),
                 preferredDeliveryTime: getElementValue('preferred-time-delivery'),
+                preferredPickupTimeFlexibility: getPreferredTimeFlexibilityValue('pickup-time-flexibility-mode', 'pickup-time-flexibility'),
+                preferredDeliveryTimeFlexibility: getPreferredTimeFlexibilityValue('delivery-time-flexibility-mode', 'delivery-time-flexibility'),
                 timeFlexibility: getElementValue('time-flexibility'),
                 instructions: getElementValue('instructions'),
                 customerName: getElementValue('customer-name'),
@@ -28818,6 +28935,13 @@ function updateRouteIfReady() {
 
     const origin = pickupPlaceName || pickupQuery;
     const destination = deliveryPlaceName || deliveryQuery;
+
+// Initialize notification bell
+document.addEventListener('DOMContentLoaded', function () {
+    if (typeof window.notificationSystem === 'object' && window.notificationSystem.initBell) {
+        window.notificationSystem.initBell();
+    }
+}, { once: true });
     
     updateRouteLabels();
     calculateAndRenderRoute(origin, destination);
