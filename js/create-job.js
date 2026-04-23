@@ -24445,33 +24445,7 @@ document.addEventListener('DOMContentLoaded', function() {
             quoteData.customerEmail = selectedQuoteEmail;
             quoteData.customerPhone = currentUser.phone || '';
 
-            // Save request to localStorage (in production, this would send to server)
-            const requests = JSON.parse(localStorage.getItem('anytransport_quote_requests') || '[]');
-            const usedFormIds = new Set(
-                requests
-                    .map((entry) => String(entry && entry.formId ? entry.formId : '').trim())
-                    .filter((value) => /^\d{5}$/.test(value))
-            );
-            const generateFormId = () => {
-                const maxAttempts = 5000;
-                for (let i = 0; i < maxAttempts; i += 1) {
-                    const next = String(Math.floor(10000 + Math.random() * 90000));
-                    if (!usedFormIds.has(next)) {
-                        usedFormIds.add(next);
-                        return next;
-                    }
-                }
-
-                let fallback = String((Date.now() % 90000) + 10000).slice(-5);
-                while (usedFormIds.has(fallback)) {
-                    fallback = String((Number(fallback) + 1) % 100000).padStart(5, '0');
-                }
-                usedFormIds.add(fallback);
-                return fallback;
-            };
-
             quoteData.id = Math.random().toString(36).substr(2, 9);
-            quoteData.formId = generateFormId();
             quoteData.status = 'pending'; // Awaiting quote from AnyTransport
             quoteData.userId = currentUser.id; // Link to user
 
@@ -24529,68 +24503,70 @@ document.addEventListener('DOMContentLoaded', function() {
                 return copy;
             };
 
-            const appendQuoteWithQuotaFallback = (existingRequests, baseRecord) => {
-                const variants = [
-                    { name: 'full', record: baseRecord },
-                    { name: 'trim-previews', record: buildStorageVariant(baseRecord, 'trim-previews') },
-                    { name: 'drop-media', record: buildStorageVariant(baseRecord, 'drop-media') }
-                ];
+            const LISTING_STORAGE_KEY = 'anytransport_quote_requests';
+            const createLocalFormId = () => String(Math.floor(10000 + Math.random() * 90000));
+            const createLocalQuoteId = () => 'quote_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
 
-                for (let i = 0; i < variants.length; i += 1) {
-                    const variant = variants[i];
-                    const next = existingRequests.slice();
-                    next.push(variant.record);
+            const saveQuoteLocally = (quote) => {
+                const allQuotes = JSON.parse(localStorage.getItem(LISTING_STORAGE_KEY) || '[]');
+                const list = Array.isArray(allQuotes) ? allQuotes : [];
+                const usedFormIds = new Set(
+                    list
+                        .map((entry) => String(entry && entry.formId ? entry.formId : '').trim())
+                        .filter((value) => /^\d{5}$/.test(value))
+                );
 
-                    try {
-                        localStorage.setItem('anytransport_quote_requests', JSON.stringify(next));
-                        return {
-                            ok: true,
-                            variant: variant.name,
-                            storedRecord: variant.record
-                        };
-                    } catch (error) {
-                        const quotaError = error && (
-                            error.name === 'QuotaExceededError'
-                            || error.code === 22
-                            || error.code === 1014
-                        );
-
-                        if (!quotaError) {
-                            throw error;
-                        }
-                    }
+                let formId = String(quote.formId || '').trim();
+                if (!/^\d{5}$/.test(formId)) {
+                    do {
+                        formId = createLocalFormId();
+                    } while (usedFormIds.has(formId));
                 }
 
-                return {
-                    ok: false,
-                    variant: 'none',
-                    storedRecord: null
+                const saved = {
+                    ...quote,
+                    id: String(quote.id || createLocalQuoteId()),
+                    formId: formId
                 };
+
+                list.push(saved);
+                localStorage.setItem(LISTING_STORAGE_KEY, JSON.stringify(list));
+                return saved;
             };
 
-            const storageSaveResult = appendQuoteWithQuotaFallback(requests, quoteData);
-            if (!storageSaveResult.ok) {
-                alert('Unable to save this form because browser storage is full. Please clear old listings/media and try again.');
-                return;
+            let savedQuote = null;
+            if (window.anytransportApi && typeof window.anytransportApi.saveQuote === 'function') {
+                try {
+                    savedQuote = window.anytransportApi.saveQuote(quoteData);
+                } catch (_error) {
+                    savedQuote = null;
+                }
             }
 
-            if (storageSaveResult.variant !== 'full') {
-                console.warn('[QUOTE FORM] Saved with reduced payload due to storage limits:', storageSaveResult.variant);
+            if (!savedQuote || !savedQuote.id) {
+                try {
+                    savedQuote = saveQuoteLocally(quoteData);
+                } catch (error) {
+                    alert(error && error.message ? error.message : 'Unable to save this form. Please try again.');
+                    return;
+                }
             }
 
-            localStorage.setItem('pending_quote_form_id', String(quoteData.formId || ''));
-            localStorage.setItem('pending_quote_id', String(quoteData.id || ''));
+            quoteData.id = savedQuote.id;
+            quoteData.formId = savedQuote.formId || quoteData.formId;
+
+            sessionStorage.setItem('pending_quote_form_id', String(quoteData.formId || ''));
+            sessionStorage.setItem('pending_quote_id', String(quoteData.id || ''));
             
-            console.log('[QUOTE FORM] SUCCESS! Form saved to localStorage');
+            console.log('[QUOTE FORM] SUCCESS! Form saved to server');
             console.log('[QUOTE FORM] Form ID:', quoteData.formId);
-            console.log('[QUOTE FORM] Requests now in storage:', requests.length + 1);
-            console.log('[QUOTE FORM] Stored variant:', storageSaveResult.variant);
+            console.log('[QUOTE FORM] Stored quote ID:', quoteData.id);
             
             // Clear house inventory data after submission
             localStorage.removeItem('house_removal_inventory');
             
             // Set flag for pending quote submission
-            localStorage.setItem('pending_quote_submission', 'true');
+            sessionStorage.setItem('pending_quote_submission', 'true');
 
             // Pass selected email to confirmation UI
             window.anytransportQuoteContactEmail = selectedQuoteEmail;

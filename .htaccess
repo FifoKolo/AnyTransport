@@ -1,0 +1,14 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /anytransport/
+
+    # Allow the /api/ directory and everything under it to pass through
+    RewriteRule ^api/ - [L]
+
+    # Don't rewrite if it's a real file or directory
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+
+    # Rewrite everything else to index.html
+    RewriteRule ^(.*)$ index.html [QSA,L]
+</IfModule>

@@ -533,7 +533,7 @@ body[data-form-step="3"] .form-stepper, body[data-current-step="3"] .form-steppe
 
 #house-removal-inventory-section .inventory-tabs,
 #house-removal-inventory-section #room-items-container {
-    max-width: 100vw;
+    max-width: 100%;
     width: 100%;
     margin: 0;
     padding: 0;
@@ -632,7 +632,7 @@ body[data-form-step="3"] #house-removal-inventory-section > #room-items-containe
 
 #house-removal-inventory-section .room-items-list {
     width: 100%;
-    max-width: 100vw;
+    max-width: 100%;
     margin: 0;
     padding: 0;
     background: transparent;
@@ -777,8 +777,8 @@ body[data-form-step="3"] #house-removal-inventory-section > #room-items-containe
 }
 /* Make inventory section full width */
 #house-removal-inventory-section.card-section {
-    width: 100vw;
-    max-width: 100vw;
+    width: 100%;
+    max-width: 100%;
     position: relative;
     left: auto;
     right: auto;
@@ -787,15 +787,15 @@ body[data-form-step="3"] #house-removal-inventory-section > #room-items-containe
     box-sizing: border-box;
     padding-left: 0;
     padding-right: 0;
-    margin-left: calc(50% - 50vw);
-    margin-right: calc(50% - 50vw);
+    margin-left: 0;
+    margin-right: 0;
 }
 
 #inventory-card-container {
-    width: 100vw;
-    max-width: 100vw;
-    margin-left: calc(50% - 50vw);
-    margin-right: calc(50% - 50vw);
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
     padding: 0;
     box-sizing: border-box;
 }
@@ -2931,12 +2931,36 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     color: #fff;
 }
 
+#house-removal-inventory-section .floor-inventory-block > .inventory-tabs,
+#house-removal-inventory-section .floor-inventory-block > .inventory-tabs-sticky {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    white-space: normal !important;
+}
+
+#house-removal-inventory-section .floor-inventory-block > .inventory-tabs .inventory-tab,
+#house-removal-inventory-section .floor-inventory-block > .inventory-tabs-sticky .inventory-tab {
+    flex: 1 1 140px !important;
+    min-width: 140px !important;
+    max-width: 200px !important;
+}
+
 @media (max-width: 768px) {
     .reset-confirm-dialog {
         padding: 16px;
         border-radius: 14px;
     }
 
+
+    #house-removal-inventory-section .floor-inventory-block > .inventory-tabs .inventory-tab,
+    #house-removal-inventory-section .floor-inventory-block > .inventory-tabs-sticky .inventory-tab {
+        flex: 1 1 calc(50% - 8px) !important;
+        min-width: calc(50% - 8px) !important;
+        max-width: none !important;
+    }
     .reset-confirm-actions {
         display: grid;
         grid-template-columns: 1fr;

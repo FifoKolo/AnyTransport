@@ -1,0 +1,1 @@
+<?php header('Content-Type: text/plain'); echo 'API_PHP_OK_20260421'; ?>

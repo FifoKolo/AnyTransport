@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>My Dashboard - AnyTransport</title>
+    <link rel="stylesheet" href="css/style.css?v=20260322-1">
+    <link rel="stylesheet" href="css/navbar.css?v=20260420-4">
+    <link rel="stylesheet" href="css/dashboard.css?v=20260418-3">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js"></script>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a class="navbar-logo" href="dashboard.html" aria-label="Go to dashboard">
+                <img src="assets/logo.jpeg" alt="AnyTransport Logo" class="logo-img">
+                <span class="logo-text">AnyTransport</span>
+            </a>
+            <div class="navbar-menu">
+                <a href="https://anytransport.ie/#about" class="nav-link">About Us</a>
+                <a href="https://anytransport.ie/#services" class="nav-link">Our Services</a>
+                <a href="https://anytransport.ie/#how-it-works" class="nav-link">How it Works</a>
+                <a href="https://anytransport.ie/#pricing" class="nav-link">Pricing</a>
+                <a href="https://anytransport.ie/#faq" class="nav-link">FAQ</a>
+                <a href="https://anytransport.ie/#contact" class="nav-link">Contact Us</a>
+            </div>
+            <div class="navbar-right">
+                <!-- Auth menu (shown when NOT logged in) -->
+                <div id="auth-menu" style="display: flex;">
+                    <button class="btn btn-outline" onclick="openLoginModal()">Login</button>
+                </div>
+                <!-- User menu (shown when logged in) -->
+                <div id="user-menu" style="display: none;">
+                    <div class="navbar-notification-bell">
+                        <button class="notification-bell-btn" id="notification-bell" title="View notifications">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                            </svg>
+                            <span class="notification-badge" id="notification-badge" style="display: none;">0</span>
+                        </button>
+                        <div class="notification-dropdown" id="notification-dropdown" style="display: none;">
+                            <div class="notification-header">
+                                <h3>Notifications</h3>
+                                <button class="notification-close" id="notification-close">&times;</button>
+                            </div>
+                            <div class="notification-list" id="notification-list">
+                                <div class="notification-empty">No notifications yet</div>
+                            </div>
+                        </div>
+                    </div>
+                    <a href="dashboard.html" style="text-decoration: none;">
+                        <div class="navbar-avatar" id="navbar-user-avatar">U</div>
+                    </a>
+                    <button class="btn btn-primary" onclick="logout()" style="margin-left: 10px;">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="container dashboard-container">
+        <!-- Main Content -->
+        <section class="dashboard-content">
+            <nav class="dashboard-inline-nav" aria-label="Dashboard navigation">
+                <a href="#" class="nav-item active" data-tab="provider-board">Provider Board</a>
+                <a href="#" class="nav-item" data-tab="my-bids">My Bids</a>
+            </nav>
+
+            <!-- Provider Board Tab -->
+            <div id="provider-board" class="tab-content active">
+                <div class="tab-header provider-board-header">
+                    <div>
+                        <h2>Transport Provider Board</h2>
+                        <p class="muted-text">View all customer listings, inspect step-by-step details, and place bids.</p>
+                    </div>
+                </div>
+
+                <section class="provider-mode-switch" id="provider-mode-switch" aria-label="Provider board mode">
+                    <button type="button" class="provider-mode-btn active" data-mode="dashboard">Dashboard</button>
+                    <button type="button" class="provider-mode-btn" data-mode="search">Search Deliveries</button>
+                </section>
+
+                <section id="provider-dashboard-panel" class="provider-mode-panel active" aria-label="Dashboard listings">
+                    <div class="provider-dashboard-tabs" id="provider-dashboard-tabs" role="tablist" aria-label="Dashboard listing tabs">
+                        <button type="button" class="provider-dashboard-tab active" data-scope="watching" role="tab" aria-selected="true">Watching (<span id="count-watching">0</span>)</button>
+                        <button type="button" class="provider-dashboard-tab" data-scope="bidding" role="tab" aria-selected="false">Bidding (<span id="count-bidding">0</span>)</button>
+                        <button type="button" class="provider-dashboard-tab" data-scope="won" role="tab" aria-selected="false">Won (<span id="count-won">0</span>)</button>
+                    </div>
+
+                    <div class="provider-dashboard-toolbar">
+                        <label for="dashboard-id-search">Search listing by ID</label>
+                        <input type="search" id="dashboard-id-search" class="form-input provider-search" placeholder="e.g. 9360218">
+                        <button type="button" id="dashboard-id-search-btn" class="btn btn-primary">Search</button>
+                        <button type="button" id="dashboard-id-reset-btn" class="btn btn-outline">Refresh</button>
+                    </div>
+                </section>
+
+                <section id="provider-search-panel" class="provider-mode-panel" aria-label="Search listings">
+                    <div class="provider-search-grid">
+                        <div class="filter-group">
+                            <label for="search-listing-id">Listing ID</label>
+                            <input type="search" id="search-listing-id" class="form-input" placeholder="ID ">
+                        </div>
+
+                        <div class="filter-group">
+                            <label for="search-category">Category</label>
+                            <select id="search-category" class="form-input filter-select">
+                                <option value="">All categories</option>
+                                <option value="house removal">House Removal</option>
+                                <option value="office relocation">Office Relocation</option>
+                                <option value="apartment move">Apartment Move</option>
+                                <option value="single room move">Single Room Move</option>
+                                <option value="man and van">Man &amp; Van</option>
+                            </select>
+                        </div>
+
+                        <div class="filter-group">
+                            <label for="search-city">City</label>
+                            <input type="search" id="search-city" class="form-input" placeholder="Pickup or delivery city">
+                        </div>
+
+                        <div class="filter-group">
+                            <label for="search-keyword">Keyword</label>
+                            <input type="search" id="search-keyword" class="form-input" placeholder="Service type, address, notes...">
+                        </div>
+
+                        <div class="filter-group">
+                            <label for="filter-distance-min">Distance (km)</label>
+                            <div class="distance-input-group">
+                                <input type="number" id="filter-distance-min" class="form-input distance-input" placeholder="Min" min="0" value="">
+                                <span class="distance-separator">-</span>
+                                <input type="number" id="filter-distance-max" class="form-input distance-input" placeholder="Max" min="0" value="">
+                            </div>
+                        </div>
+
+                        <div class="filter-group">
+                            <label for="filter-date">Move Date From</label>
+                            <input type="date" id="filter-date" class="form-input filter-date">
+                        </div>
+                    </div>
+
+                    <div class="provider-search-actions">
+                        <button type="button" id="filter-reset-btn" class="btn btn-outline">Reset Filters</button>
+                    </div>
+                </section>
+
+                <div id="provider-listings" class="provider-listings" aria-live="polite"></div>
+            </div>
+
+            <!-- My Bids Tab -->
+            <div id="my-bids" class="tab-content">
+                <div class="tab-header">
+                    <h2>My Submitted Bids</h2>
+                </div>
+                <div id="my-bids-list" class="quotes-list"></div>
+            </div>
+
+        </section>
+    </main>
+
+    <script src="js/cache-maintenance.js?v=20260322-2"></script>
+    <script src="js/auth.js?v=20260417-5"></script>
+    <script src="js/notifications.js?v=20260420-4"></script>
+    <script src="js/dashboard-fixed.js?v=20260420-1"></script>
+</body>
+</html>
