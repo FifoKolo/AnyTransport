@@ -180,7 +180,16 @@ function deleteJob(jobId) {
     if (!confirm('Are you sure you want to delete this request?')) return;
     const jobs = JSON.parse(localStorage.getItem('anytransport_quote_requests') || '[]');
     const filtered = jobs.filter(job => job.id !== jobId);
-    localStorage.setItem('anytransport_quote_requests', JSON.stringify(filtered));
+    try {
+        localStorage.setItem('anytransport_quote_requests', JSON.stringify(filtered));
+    } catch (error) {
+        const message = String((error && error.message) || '').toLowerCase();
+        if (message.includes('quota')) {
+            alert('Storage is full. Please remove old requests or large attachments and try again.');
+            return;
+        }
+        throw error;
+    }
     alert('Request deleted successfully');
     const user = auth.getUser();
     if (user) loadMyQuotes(user.id);

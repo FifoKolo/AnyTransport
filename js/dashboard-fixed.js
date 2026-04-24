@@ -26,6 +26,59 @@
         focusedFormId: ''
     };
 
+    function isStorageQuotaError(error) {
+        if (!error) return false;
+        const name = String(error.name || '').toLowerCase();
+        const message = String(error.message || '').toLowerCase();
+        return name === 'quotaexceedederror'
+            || name === 'nserror_dom_quota_reached'
+            || message.includes('quota')
+            || message.includes('exceeded the quota');
+    }
+
+    function stripHeavyMediaFields(value) {
+        if (Array.isArray(value)) {
+            return value.map(stripHeavyMediaFields);
+        }
+
+        if (!value || typeof value !== 'object') {
+            return value;
+        }
+
+        const result = {};
+        Object.keys(value).forEach((key) => {
+            if (key === 'previewDataUrl' || key === 'previewUrl' || key === 'dataUrl') {
+                return;
+            }
+            result[key] = stripHeavyMediaFields(value[key]);
+        });
+        return result;
+    }
+
+    function saveQuotesToStorage(quotes) {
+        const normalized = Array.isArray(quotes) ? quotes : [];
+        const candidates = [normalized, stripHeavyMediaFields(normalized)];
+        let quotaError = null;
+
+        for (let i = 0; i < candidates.length; i += 1) {
+            try {
+                localStorage.setItem(LISTING_STORAGE_KEY, JSON.stringify(candidates[i]));
+                return candidates[i];
+            } catch (error) {
+                if (!isStorageQuotaError(error)) {
+                    throw error;
+                }
+                quotaError = error;
+            }
+        }
+
+        throw new Error(
+            quotaError && quotaError.message
+                ? quotaError.message
+                : 'Storage is full. Please remove old items or attachments and try again.'
+        );
+    }
+
     document.addEventListener('DOMContentLoaded', initDashboard);
 
     function initDashboard() {
@@ -324,7 +377,11 @@
         });
 
         if (changed) {
-            localStorage.setItem(LISTING_STORAGE_KEY, JSON.stringify(merged));
+            try {
+                saveQuotesToStorage(merged);
+            } catch (_error) {
+                // Keep dashboard usable even if browser storage is currently full.
+            }
         }
     }
 
@@ -2106,7 +2163,12 @@
         }
 
         const filteredQuotes = quotes.filter((quote) => quote.id !== quoteId);
-        localStorage.setItem(LISTING_STORAGE_KEY, JSON.stringify(filteredQuotes));
+        try {
+            saveQuotesToStorage(filteredQuotes);
+        } catch (error) {
+            alert(error && error.message ? error.message : 'Unable to update quotes right now.');
+            return;
+        }
 
         const filteredBids = getAllBids().filter((bid) => bid.quoteId !== quoteId);
         saveAllBids(filteredBids);
@@ -2187,7 +2249,11 @@
             });
 
             if (changed) {
-                localStorage.setItem(LISTING_STORAGE_KEY, JSON.stringify(raw));
+                try {
+                    saveQuotesToStorage(raw);
+                } catch (_error) {
+                    // Ignore auto-fix persistence issues and continue with in-memory result.
+                }
             }
 
             return raw;

@@ -1,11 +1,43 @@
 // Authentication Management
 window.anytransportApi = window.anytransportApi || (function () {
-    const API_URL = 'api/index.php';
+    const API_URL = resolveApiUrl();
 
-    function isApiReachable() {
+    function getApiCandidates() {
+        const configured = String(window.ANYTRANSPORT_API_URL || '').trim();
+        const candidates = [];
+        if (configured) {
+            candidates.push(configured);
+        }
+
+        candidates.push('/api/index.php', '/api-external.php', 'api/index.php');
+
+        const seen = new Set();
+        return candidates.filter((candidate) => {
+            if (!candidate || seen.has(candidate)) return false;
+            seen.add(candidate);
+            return true;
+        });
+    }
+
+    function buildActionUrl(baseUrl, action, params) {
+        const query = new URLSearchParams();
+        query.set('action', action);
+        if (params && typeof params === 'object') {
+            Object.keys(params).forEach((key) => {
+                const value = params[key];
+                if (value !== undefined && value !== null && value !== '') {
+                    query.set(key, String(value));
+                }
+            });
+        }
+
+        return baseUrl + (baseUrl.indexOf('?') >= 0 ? '&' : '?') + query.toString();
+    }
+
+    function isApiReachable(baseUrl) {
         try {
             const xhr = new XMLHttpRequest();
-            xhr.open('GET', API_URL + '?action=auth.me', false);
+            xhr.open('GET', buildActionUrl(baseUrl, 'auth.me'), false);
             xhr.setRequestHeader('Accept', 'application/json');
             xhr.send(null);
 
@@ -25,22 +57,23 @@ window.anytransportApi = window.anytransportApi || (function () {
         }
     }
 
-    if (!isApiReachable()) {
+    function resolveApiUrl() {
+        const candidates = getApiCandidates();
+        for (let i = 0; i < candidates.length; i += 1) {
+            if (isApiReachable(candidates[i])) {
+                return candidates[i];
+            }
+        }
+        return '';
+    }
+
+    if (!API_URL) {
+        console.warn('[AnyTransport API] No reachable API endpoint found.');
         return null;
     }
 
     function buildUrl(action, params) {
-        const query = new URLSearchParams();
-        query.set('action', action);
-        if (params && typeof params === 'object') {
-            Object.keys(params).forEach((key) => {
-                const value = params[key];
-                if (value !== undefined && value !== null && value !== '') {
-                    query.set(key, String(value));
-                }
-            });
-        }
-        return API_URL + '?' + query.toString();
+        return buildActionUrl(API_URL, action, params);
     }
 
     function parseResponse(xhr) {

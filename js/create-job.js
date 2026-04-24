@@ -24507,6 +24507,16 @@ document.addEventListener('DOMContentLoaded', function() {
             const createLocalFormId = () => String(Math.floor(10000 + Math.random() * 90000));
             const createLocalQuoteId = () => 'quote_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
 
+            const isStorageQuotaError = (error) => {
+                if (!error) return false;
+                const name = String(error.name || '').toLowerCase();
+                const message = String(error.message || '').toLowerCase();
+                return name === 'quotaexceedederror'
+                    || name === 'nserror_dom_quota_reached'
+                    || message.includes('quota')
+                    || message.includes('exceeded the quota');
+            };
+
             const saveQuoteLocally = (quote) => {
                 const allQuotes = JSON.parse(localStorage.getItem(LISTING_STORAGE_KEY) || '[]');
                 const list = Array.isArray(allQuotes) ? allQuotes : [];
@@ -24530,8 +24540,32 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 list.push(saved);
-                localStorage.setItem(LISTING_STORAGE_KEY, JSON.stringify(list));
-                return saved;
+
+                const variants = ['full', 'trim-previews', 'drop-media'];
+                let lastQuotaError = null;
+
+                for (let i = 0; i < variants.length; i += 1) {
+                    const variant = variants[i];
+                    const candidateList = variant === 'full'
+                        ? list
+                        : list.map((entry) => buildStorageVariant(entry, variant));
+
+                    try {
+                        localStorage.setItem(LISTING_STORAGE_KEY, JSON.stringify(candidateList));
+                        return variant === 'full' ? saved : buildStorageVariant(saved, variant);
+                    } catch (error) {
+                        if (!isStorageQuotaError(error)) {
+                            throw error;
+                        }
+                        lastQuotaError = error;
+                    }
+                }
+
+                throw new Error(
+                    lastQuotaError && lastQuotaError.message
+                        ? lastQuotaError.message
+                        : 'Storage is full. Please remove old requests or large attachments and try again.'
+                );
             };
 
             let savedQuote = null;
