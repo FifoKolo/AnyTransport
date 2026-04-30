@@ -284,6 +284,15 @@ class AuthManager {
     normalizeUserRecord(user, users = []) {
         const normalized = { ...user };
         const fallbackUsername = this.getUsernameCandidate(normalized);
+        const bootstrapAdmin = String(normalized.email || '').trim().toLowerCase() === 'admin@example.com' || String(normalized.username || '').trim().toLowerCase() === 'admin';
+
+        if (bootstrapAdmin && !normalized.role) {
+            normalized.role = 'admin';
+        }
+
+        if (bootstrapAdmin && !Array.isArray(normalized.roles)) {
+            normalized.roles = ['admin'];
+        }
 
         if (!normalized.username) {
             normalized.username = this.makeUniqueUsername(fallbackUsername, users, normalized.id || null);
