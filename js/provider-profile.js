@@ -109,7 +109,10 @@
             }
         }
 
-        return fetch('api/index.php?action=users.list').then(function (res) {
+        const apiBase = String(window.ANYTRANSPORT_API_URL || '../api/index.php' || 'api/index.php').trim();
+        const apiUrl = apiBase + (apiBase.indexOf('?') >= 0 ? '&' : '?') + 'action=users.list';
+
+        return fetch(apiUrl).then(function (res) {
             if (!res.ok) throw new Error('Network');
             return res.json();
         }).then(function (payload) {

@@ -1,6 +1,7 @@
 // Authentication Management
 window.anytransportApi = window.anytransportApi || (function () {
     const API_URL = resolveApiUrl();
+    window.ANYTRANSPORT_API_URL = API_URL;
 
     function getApiCandidates() {
         const configured = String(window.ANYTRANSPORT_API_URL || '').trim();
@@ -9,7 +10,7 @@ window.anytransportApi = window.anytransportApi || (function () {
             candidates.push(configured);
         }
 
-        candidates.push('/api/index.php', '/api-external.php', 'api/index.php');
+        candidates.push('/api/index.php', '../api/index.php', '/api-external.php', 'api/index.php');
 
         const seen = new Set();
         return candidates.filter((candidate) => {
