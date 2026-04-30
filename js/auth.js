@@ -62,6 +62,7 @@ window.anytransportApi = window.anytransportApi || (function () {
         const candidates = getApiCandidates();
         for (let i = 0; i < candidates.length; i += 1) {
             if (isApiReachable(candidates[i])) {
+                console.info('[AnyTransport API] Resolved to:', candidates[i]);
                 return candidates[i];
             }
         }
