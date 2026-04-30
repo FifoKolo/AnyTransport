@@ -715,21 +715,26 @@ class AuthManager {
         return this.currentUser;
     }
 
+    getNormalizedRoles() {
+        const user = this.currentUser || {};
+        const rawRoles = Array.isArray(user.roles) ? user.roles : [user.role];
+        return rawRoles
+            .map((role) => String(role || '').trim().toLowerCase())
+            .filter((role) => role !== '');
+    }
+
     // Check if user is provider
     isProvider() {
-        const roles = this.currentUser?.roles || [this.currentUser?.role];
-        return roles.includes('provider');
+        return this.getNormalizedRoles().includes('provider');
     }
 
     // Check if user is customer
     isCustomer() {
-        const roles = this.currentUser?.roles || [this.currentUser?.role];
-        return roles.includes('customer');
+        return this.getNormalizedRoles().includes('customer');
     }
 
     isAdmin() {
-        const roles = this.currentUser?.roles || [this.currentUser?.role];
-        return roles.includes('admin');
+        return this.getNormalizedRoles().includes('admin');
     }
 }
 
@@ -876,6 +881,7 @@ if (loginForm) {
         if (email && password) {
             const loginResult = auth.login(email, password);
             const currentUser = loginResult && loginResult.user ? loginResult.user : null;
+            const isAdmin = currentUser && ((Array.isArray(currentUser.roles) && currentUser.roles.includes('admin')) || String(currentUser.role || '').toLowerCase() === 'admin');
 
             if (currentUser && String(currentUser.role || '') === 'provider') {
                 if (startProviderStripeOnboarding(currentUser)) {
@@ -892,6 +898,11 @@ if (loginForm) {
                 localStorage.removeItem('pending_quote_submission');
                 showConfirmationModal();
             } else {
+                if (isAdmin) {
+                    sessionStorage.removeItem('anytransport_auth_return_url');
+                    window.location.href = 'dashboard.html#verification-review';
+                    return;
+                }
                 const returnUrl = sessionStorage.getItem('anytransport_auth_return_url');
                 if (returnUrl) {
                     sessionStorage.removeItem('anytransport_auth_return_url');
@@ -1029,6 +1040,12 @@ if (signupForm) {
                 localStorage.removeItem('pending_quote_submission');
                 showConfirmationModal();
             } else {
+                const isAdmin = currentUser && ((Array.isArray(currentUser.roles) && currentUser.roles.includes('admin')) || String(currentUser.role || '').toLowerCase() === 'admin');
+                if (isAdmin) {
+                    sessionStorage.removeItem('anytransport_auth_return_url');
+                    window.location.href = 'dashboard.html#verification-review';
+                    return;
+                }
                 const returnUrl = sessionStorage.getItem('anytransport_auth_return_url');
                 if (returnUrl) {
                     sessionStorage.removeItem('anytransport_auth_return_url');

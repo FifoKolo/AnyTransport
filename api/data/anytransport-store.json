@@ -129,16 +129,17 @@
             "identityReviewSubmittedAt": "",
             "identityReviewedAt": "",
             "identityReviewedBy": "",
-            "identityReviewNotes": ""
+            "identityReviewNotes": "",
+            "paymentMethods": [],
+            "categories": [],
+            "skills": [],
+            "companyType": "",
+            "website": "",
+            "blockInvites": false,
+            "muteInviteEmails": false
         }
     ],
-    "sessions": [
-        {
-            "token": "sess-f628e2e2f617f954",
-            "userId": "user-9454159c3dd669d3",
-            "createdAt": "2026-04-29T08:09:44+00:00"
-        }
-    ],
+    "sessions": [],
     "quotes": [],
     "bids": [],
     "messages": [],
