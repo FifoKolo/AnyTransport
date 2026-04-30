@@ -95,6 +95,17 @@
             return;
         }
 
+        const me = auth.getUser && auth.getUser();
+        const isProvider = auth.isProvider && auth.isProvider();
+        const canBeProvider = isProvider && me && (me.verified === true || String(me.identityReviewStatus || '') === 'approved');
+        if (isProvider && !canBeProvider) {
+            alert('Your provider account is not yet approved. You will be redirected until approval.');
+            window.setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 0);
+            return;
+        }
+
         loadUserInfo(user);
         wireTabs();
         wireProviderControls(user);
@@ -104,11 +115,32 @@
         applyFocusedFormContext();
         renderAll(user);
 
-        if (auth.isProvider && auth.isProvider()) {
+        // If the inline nav only contains one visible item (e.g. only "Profile"), hide it to avoid a lonely pill.
+        consolidateInlineNav();
+
+        if (canBeProvider) {
             showTab('provider-board');
         } else {
             showTab('provider-board');
             hideProviderOnlyTabs();
+        }
+
+        // If the signed-in user is an admin, restrict the UI to admin-only views.
+        if (auth.isAdmin && auth.isAdmin()) {
+            document.querySelectorAll('.nav-item').forEach((item) => {
+                try {
+                    if (item.getAttribute('data-tab') !== 'verification-review') item.style.display = 'none';
+                } catch (_e) {
+                    // ignore
+                }
+            });
+            const modeSwitch = document.getElementById('provider-mode-switch');
+            if (modeSwitch) modeSwitch.style.display = 'none';
+            // Ensure admin sees the verification review immediately
+            showTab('verification-review');
+            // Re-check inline nav visibility after adjustments
+            consolidateInlineNav();
+            return;
         }
 
         if (state.focusedFormId && auth.isProvider && auth.isProvider()) {
@@ -172,6 +204,28 @@
         document.querySelectorAll('.nav-item[data-tab="provider-board"], .nav-item[data-tab="my-bids"]').forEach((item) => {
             item.style.display = 'none';
         });
+    }
+
+    function consolidateInlineNav() {
+        try {
+            const nav = document.querySelector('.dashboard-inline-nav');
+            if (!nav) return;
+            const items = Array.from(nav.querySelectorAll('.nav-item')) || [];
+            const visible = items.filter((i) => {
+                try {
+                    return getComputedStyle(i).display !== 'none' && i.offsetParent !== null;
+                } catch (_e) {
+                    return false;
+                }
+            });
+            if (visible.length <= 1) {
+                nav.style.display = 'none';
+            } else {
+                nav.style.display = '';
+            }
+        } catch (e) {
+            // ignore
+        }
     }
 
     function ensureDemoListingsExist() {
@@ -393,6 +447,24 @@
                 showTab(item.getAttribute('data-tab'));
             });
         });
+        // Wire dropdown toggles (profile menu)
+        document.querySelectorAll('.nav-dropdown .nav-toggle').forEach((btn) => {
+            btn.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                const parent = btn.closest('.nav-dropdown');
+                if (!parent) return;
+                const isOpen = parent.classList.toggle('open');
+                btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            });
+        });
+        // Close any open dropdown when clicking elsewhere
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.nav-dropdown.open').forEach((d) => {
+                d.classList.remove('open');
+                const t = d.querySelector('.nav-toggle');
+                if (t) t.setAttribute('aria-expanded', 'false');
+            });
+        });
     }
 
     function showTab(tabName) {
@@ -404,6 +476,14 @@
 
         const navItem = document.querySelector('[data-tab="' + tabName + '"]');
         if (navItem) navItem.classList.add('active');
+        if (tabName === 'profile') {
+            const modeSwitch = document.getElementById('provider-mode-switch');
+            if (modeSwitch) {
+                modeSwitch.querySelectorAll('.provider-mode-btn').forEach((node) => {
+                    node.classList.toggle('active', node.getAttribute('data-mode') === 'dashboard');
+                });
+            }
+        }
     }
 
     function wireProviderControls(user) {
@@ -420,7 +500,14 @@
             modeSwitch.addEventListener('click', (event) => {
                 const btn = event.target.closest('.provider-mode-btn');
                 if (!btn) return;
-                const mode = btn.getAttribute('data-mode') === 'search' ? 'search' : 'dashboard';
+                const modeAttr = btn.getAttribute('data-mode');
+                const mode = modeAttr === 'search' ? 'search' : modeAttr === 'profile' ? 'profile' : 'dashboard';
+
+                if (mode === 'profile') {
+                    showTab('profile');
+                    return;
+                }
+
                 state.activeProviderMode = mode;
 
                 modeSwitch.querySelectorAll('.provider-mode-btn').forEach((node) => {
@@ -885,27 +972,27 @@
         const isFocused = !!state.focusedFormId && formId === state.focusedFormId;
 
         const quickQuoteText = lowest ? ('€' + Number(lowest.amount).toFixed(2)) : 'No bids';
-        return [
-            '<article class="provider-listing' + (isFocused ? ' is-focused-form' : '') + '" data-quote-id="' + escapeHtml(quote.id) + '" data-form-id="' + escapeHtml(formId) + '">',
-            '<div class="listing-row body listing-row-toggle" role="button" tabindex="0" aria-expanded="false">',
-            '<div class="listing-cell">' + escapeHtml(timeAgoLabel(quote.submittedAt)) + '</div>',
-            '<div class="listing-cell">',
-            '<div class="listing-title">' + escapeHtml(getQuoteTitle(quote)) + '</div>',
-            '<div class="listing-sub">Listing ' + escapeHtml(getFormIdLabel(quote)) + ' • ' + escapeHtml(quote.itemDescription || 'General move') + '</div>',
-            '</div>',
-            '<div class="listing-cell">' + escapeHtml(getFromLabel(quote)) + '</div>',
-            '<div class="listing-cell">' + escapeHtml(getToLabel(quote)) + '</div>',
-            '<div class="listing-cell">' + escapeHtml(getPickupLabel(quote)) + '</div>',
-            '<div class="listing-cell">' + quoteBids.length + '</div>',
-            '<div class="listing-cell"><span class="listing-amount">' + escapeHtml(quickQuoteText) + '</span></div>',
-            '<div class="listing-cell actions"><button type="button" class="get-details-btn" data-quote-id="' + escapeHtml(quote.id) + '" data-form-id="' + escapeHtml(getFormIdLabel(quote)) + '">Get Details</button></div>',
-            '</div>',
-            '<div class="listing-details">',
-            '<div class="details-layout">',
-            createQuickInfoPanel(quote),
-            '</div>',
-            '</div>',
-            '</article>'
+            return [
+                '<article class="provider-listing' + (isFocused ? ' is-focused-form' : '') + '" data-quote-id="' + escapeHtml(quote.id) + '" data-form-id="' + escapeHtml(formId) + '">',
+                '<div class="listing-row body listing-row-toggle" role="button" tabindex="0" aria-expanded="false">',
+                '<div class="listing-cell">' + escapeHtml(timeAgoLabel(quote.submittedAt)) + '</div>',
+                '<div class="listing-cell">',
+                '<div class="listing-title">' + escapeHtml(getQuoteTitle(quote)) + '</div>',
+                '<div class="listing-sub">Listing ' + escapeHtml(getFormIdLabel(quote)) + ' • ' + escapeHtml(quote.itemDescription || 'General move') + '</div>',
+                '</div>',
+                '<div class="listing-cell">' + escapeHtml(getFromLabel(quote)) + '</div>',
+                '<div class="listing-cell">' + escapeHtml(getToLabel(quote)) + '</div>',
+                '<div class="listing-cell">' + escapeHtml(getPickupLabel(quote)) + '</div>',
+                '<div class="listing-cell">' + quoteBids.length + '</div>',
+                '<div class="listing-cell"><span class="listing-amount">' + escapeHtml(quickQuoteText) + '</span></div>',
+                '<div class="listing-cell actions"><button type="button" class="get-details-btn" data-quote-id="' + escapeHtml(quote.id) + '" data-form-id="' + escapeHtml(getFormIdLabel(quote)) + '">Get Details</button></div>',
+                '</div>',
+                '<div class="listing-details">',
+                '<div class="details-layout">',
+                createQuickInfoPanel(quote),
+                '</div>',
+                '</div>',
+                '</article>'
         ].join('');
     }
 

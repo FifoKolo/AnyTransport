@@ -1,0 +1,6 @@
+<?php
+
+return array(
+    'STRIPE_SECRET_KEY' => 'sk_test_your_secret_key_here',
+    'STRIPE_CONNECT_COUNTRY' => 'IE'
+);

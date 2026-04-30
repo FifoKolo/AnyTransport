@@ -89,11 +89,31 @@
         }
 
         const user = auth.getUser();
+        // provider-mode 'profile' has been removed from the UI; no action required here
         if (!user) {
             alert('Session expired. Please sign in again.');
             window.location.href = 'index.html';
             return;
         }
+
+        const me = auth.getUser && auth.getUser();
+        const isProvider = auth.isProvider && auth.isProvider();
+        const canBeProvider = isProvider && me && (me.verified === true || String(me.identityReviewStatus || '') === 'approved');
+        if (isProvider && !canBeProvider) {
+            alert('Your provider account is not yet approved. You will be redirected until approval.');
+            window.setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 0);
+            return;
+        }
+
+        const adminReviewNav = document.getElementById('admin-review-nav');
+        if (adminReviewNav) {
+            adminReviewNav.style.display = auth.isAdmin && auth.isAdmin() ? '' : 'none';
+        }
+
+        // If the inline nav only contains one visible item (e.g. only "Profile"), hide it to avoid a lonely pill.
+        consolidateInlineNav();
 
         loadUserInfo(user);
         wireTabs();
@@ -104,12 +124,33 @@
         applyFocusedFormContext();
         renderAll(user);
 
-        if (auth.isProvider && auth.isProvider()) {
+        if (canBeProvider) {
             showTab('provider-board');
         } else {
             showTab('provider-board');
             hideProviderOnlyTabs();
         }
+
+        // If the signed-in user is an admin, restrict the UI to admin-only views.
+        if (auth.isAdmin && auth.isAdmin()) {
+            document.querySelectorAll('.nav-item').forEach((item) => {
+                try {
+                    if (item.getAttribute('data-tab') !== 'verification-review') item.style.display = 'none';
+                } catch (_e) {
+                    // ignore
+                }
+            });
+            const modeSwitch = document.getElementById('provider-mode-switch');
+            if (modeSwitch) modeSwitch.style.display = 'none';
+            // Ensure admin sees the verification review immediately
+            showTab('verification-review');
+            // Re-check inline nav visibility after adjustments
+            consolidateInlineNav();
+            return;
+        }
+
+        // Re-check inline nav visibility after provider-only tabs may have been hidden
+        consolidateInlineNav();
 
         if (state.focusedFormId && auth.isProvider && auth.isProvider()) {
             requestAnimationFrame(() => focusHighlightedProviderListing());
@@ -172,6 +213,28 @@
         document.querySelectorAll('.nav-item[data-tab="provider-board"], .nav-item[data-tab="my-bids"]').forEach((item) => {
             item.style.display = 'none';
         });
+    }
+
+    function consolidateInlineNav() {
+        try {
+            const nav = document.querySelector('.dashboard-inline-nav');
+            if (!nav) return;
+            const items = Array.from(nav.querySelectorAll('.nav-item')) || [];
+            const visible = items.filter((i) => {
+                try {
+                    return getComputedStyle(i).display !== 'none' && i.offsetParent !== null;
+                } catch (_e) {
+                    return false;
+                }
+            });
+            if (visible.length <= 1) {
+                nav.style.display = 'none';
+            } else {
+                nav.style.display = '';
+            }
+        } catch (e) {
+            // ignore
+        }
     }
 
     function ensureDemoListingsExist() {
@@ -393,6 +456,34 @@
                 showTab(item.getAttribute('data-tab'));
             });
         });
+        // Wire dropdown toggles (profile menu)
+        document.querySelectorAll('.nav-dropdown .nav-toggle').forEach((btn) => {
+            btn.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                const parent = btn.closest('.nav-dropdown');
+                if (!parent) return;
+                const isOpen = parent.classList.toggle('open');
+                btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            });
+        });
+        // Close any open dropdown when clicking elsewhere
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.nav-dropdown.open').forEach((d) => {
+                d.classList.remove('open');
+                const t = d.querySelector('.nav-toggle');
+                if (t) t.setAttribute('aria-expanded', 'false');
+            });
+        });
+        // wire profile back button if present
+        const backBtn = document.getElementById('profile-back-btn');
+        if (backBtn) {
+            backBtn.addEventListener('click', function () {
+                showTab('provider-board');
+                // also ensure the provider board mode is visible
+                const modeBtn = document.querySelector('.provider-mode-btn[data-mode="dashboard"]');
+                if (modeBtn) modeBtn.click();
+            });
+        }
     }
 
     function showTab(tabName) {
@@ -404,6 +495,35 @@
 
         const navItem = document.querySelector('[data-tab="' + tabName + '"]');
         if (navItem) navItem.classList.add('active');
+        // If profile tab opened, navigate to full profile page so dropdown and tab show identical view
+        if (tabName === 'profile') {
+            try {
+                const current = auth && auth.getUser ? auth.getUser() : null;
+                if (current && current.id) {
+                    window.location.href = 'provider-profile.html?userId=' + encodeURIComponent(current.id);
+                    return;
+                }
+                // fallback: render inline if no current user
+                if (typeof window.renderProviderProfileInto === 'function') {
+                    try {
+                        window.renderProviderProfileInto('dashboard-profile-container', '').catch(() => {});
+                    } catch (_e) {}
+                }
+            } catch (_e) {}
+        }
+
+        if (tabName === 'profile') {
+            const modeSwitch = document.getElementById('provider-mode-switch');
+            if (modeSwitch) {
+                modeSwitch.querySelectorAll('.provider-mode-btn').forEach((node) => {
+                    node.classList.toggle('active', node.getAttribute('data-mode') === 'dashboard');
+                });
+            }
+        }
+
+        if (tabName === 'verification-review') {
+            renderAdminReviewQueue();
+        }
     }
 
     function wireProviderControls(user) {
@@ -420,7 +540,14 @@
             modeSwitch.addEventListener('click', (event) => {
                 const btn = event.target.closest('.provider-mode-btn');
                 if (!btn) return;
-                const mode = btn.getAttribute('data-mode') === 'search' ? 'search' : 'dashboard';
+                const modeAttr = btn.getAttribute('data-mode');
+                const mode = modeAttr === 'search' ? 'search' : modeAttr === 'profile' ? 'profile' : 'dashboard';
+
+                if (mode === 'profile') {
+                    showTab('profile');
+                    return;
+                }
+
                 state.activeProviderMode = mode;
 
                 modeSwitch.querySelectorAll('.provider-mode-btn').forEach((node) => {
@@ -429,6 +556,7 @@
 
                 if (dashboardPanel) dashboardPanel.classList.toggle('active', mode === 'dashboard');
                 if (searchPanel) searchPanel.classList.toggle('active', mode === 'search');
+                // ensure listing rendering only for dashboard/search modes
                 renderProviderListings(user);
             });
         }
@@ -599,6 +727,40 @@
                 return;
             }
 
+            const reviewBtn = event.target.closest('.review-provider-btn');
+            if (reviewBtn) {
+                if (!(auth.isAdmin && auth.isAdmin())) {
+                    alert('Admin access required.');
+                    return;
+                }
+
+                const providerId = String(reviewBtn.getAttribute('data-provider-id') || '').trim();
+                const status = String(reviewBtn.getAttribute('data-status') || '').trim();
+                const reviewCard = reviewBtn.closest('.provider-listing');
+                const notesField = reviewCard ? reviewCard.querySelector('.review-notes') : null;
+                const notes = notesField ? String(notesField.value || '').trim() : '';
+
+                // If admin is declining, require a note
+                if (status === 'rejected' && (!notes || String(notes).trim() === '')) {
+                    alert('Please add a review note explaining the reason for declining this provider.');
+                    if (notesField) notesField.focus();
+                    return;
+                }
+
+                try {
+                    if (!window.anytransportApi || typeof window.anytransportApi.updateIdentityReview !== 'function') {
+                        alert('Identity review tools are not available yet.');
+                        return;
+                    }
+
+                    window.anytransportApi.updateIdentityReview(providerId, status, notes);
+                    renderAdminReviewQueue();
+                } catch (error) {
+                    alert(error && error.message ? error.message : 'Unable to update the review status.');
+                }
+                return;
+            }
+
             const withdrawBtn = event.target.closest('.withdraw-bid-btn');
             if (withdrawBtn) {
                 withdrawBid(withdrawBtn.getAttribute('data-bid-id'), user);
@@ -660,6 +822,7 @@
     function renderAll(user) {
         renderProviderListings(user);
         renderMyBids(user);
+        renderAdminReviewQueue();
     }
 
     function loadUserInfo(user) {
@@ -848,6 +1011,67 @@
                 initializeMapsInScope(listing);
             }
         });
+    }
+
+    function renderAdminReviewQueue() {
+        const container = document.getElementById('provider-review-queue');
+        if (!container) return;
+
+        if (!(auth.isAdmin && auth.isAdmin())) {
+            container.innerHTML = '<div class="empty-inventory">Admin access required.</div>';
+            return;
+        }
+
+        if (!window.anytransportApi || typeof window.anytransportApi.getIdentityReviewQueue !== 'function') {
+            container.innerHTML = '<div class="empty-inventory">Identity review tools are not available yet.</div>';
+            return;
+        }
+
+        try {
+            const providers = window.anytransportApi.getIdentityReviewQueue();
+            if (!providers.length) {
+                container.innerHTML = '<div class="empty-inventory">No providers are waiting for review.</div>';
+                return;
+            }
+
+            container.innerHTML = providers.map((provider) => {
+                const name = escapeHtml(firstText(provider.businessName, provider.name, provider.nickname, provider.username, provider.email));
+                const email = escapeHtml(firstText(provider.email, 'Not provided'));
+                const status = escapeHtml(String(provider.identityReviewStatus || 'pending_review').replace(/_/g, ' '));
+                const notes = escapeHtml(firstText(provider.identityReviewNotes, ''));
+                const photos = Array.isArray(provider.identityPhotos) ? provider.identityPhotos : [];
+                const photoMarkup = photos.length ? photos.map((photo) => {
+                    const src = escapeHtml(firstText(photo.previewDataUrl, photo.dataUrl, photo.originalUrl, (photo.stripeFile ? ('api/index.php?action=stripe.file.get&fileId=' + encodeURIComponent(photo.stripeFile)) : '')));
+                    const label = escapeHtml(firstText(photo.label, photo.name, 'Identity photo'));
+                    return '<figure style="margin:0; width:140px;">' +
+                        '<img src="' + src + '" alt="' + label + '" style="width:140px; height:100px; object-fit:cover; border-radius:10px; border:1px solid #dbeafe;">' +
+                        '<figcaption style="font-size:12px; color:#64748b; margin-top:6px;">' + label + '</figcaption>' +
+                        '</figure>';
+                }).join('') : '<div class="empty-inventory">No identity photos attached.</div>';
+
+                return [
+                    '<article class="provider-listing" style="margin-bottom:16px;">',
+                    '<div class="listing-row body" style="grid-template-columns: 220px 160px 1fr 1fr;">',
+                    '<div class="listing-cell">',
+                    '<div class="listing-title">' + name + '</div>',
+                    '<div class="listing-sub">' + email + '</div>',
+                    '</div>',
+                    '<div class="listing-cell"><span class="profile-value">' + status + '</span></div>',
+                    '<div class="listing-cell" style="display:flex; flex-wrap:wrap; gap:10px;">' + photoMarkup + '</div>',
+                    '<div class="listing-cell review-actions-cell">',
+                    '<textarea class="form-input review-notes" rows="4" data-provider-id="' + escapeHtml(provider.id) + '" placeholder="Review notes" style="width:100%; box-sizing:border-box;">' + notes + '</textarea>',
+                    '<div class="actions review-actions" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-start;">',
+                    '<button type="button" class="btn btn-primary review-provider-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="approved">Approve</button>',
+                    '<button type="button" class="btn btn-danger review-provider-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="rejected">Decline</button>',
+                    '</div>',
+                    '</div>',
+                    '</div>',
+                    '</article>'
+                ].join('');
+            }).join('');
+        } catch (_error) {
+            container.innerHTML = '<div class="empty-inventory">Unable to load the review queue.</div>';
+        }
     }
 
     function createProviderPreviewListing(user, bids) {

@@ -129,12 +129,30 @@ window.anytransportApi = window.anytransportApi || (function () {
         signup: function (formData) {
             return request('auth.signup', 'POST', { formData: formData || {} });
         },
+        identityPhotosUpload: function (userId, photos) {
+            return request('identity.photos.upload', 'POST', { userId: userId, photos: Array.isArray(photos) ? photos : [] });
+        },
+        startProviderStripeOnboarding: function (returnPath) {
+            return request('stripe.provider.onboarding', 'POST', { returnPath: returnPath || 'dashboard.html' });
+        },
         logout: function () {
             return request('auth.logout', 'POST', {});
         },
         getUsers: function () {
             const response = request('users.list', 'GET');
             return Array.isArray(response.users) ? response.users : [];
+        },
+        getIdentityReviewQueue: function () {
+            const response = request('identity.review.queue', 'GET');
+            return Array.isArray(response.providers) ? response.providers : [];
+        },
+        updateIdentityReview: function (providerId, status, notes) {
+            const response = request('identity.review.update', 'POST', {
+                providerId: providerId,
+                status: status,
+                notes: notes || ''
+            });
+            return response.provider || null;
         },
         replaceUsers: function (users) {
             const response = request('users.replaceAll', 'POST', { users: Array.isArray(users) ? users : [] });
@@ -159,6 +177,15 @@ window.anytransportApi = window.anytransportApi || (function () {
         saveBid: function (bid) {
             const response = request('bids.create', 'POST', { bid: bid || {} });
             return response.bid || bid || null;
+        },
+        sendMessage: function (fromUserId, toUserId, text, title) {
+            const message = { fromUserId: fromUserId, toUserId: toUserId, text: text, title: title };
+            const response = request('messages.save', 'POST', { message: message });
+            return response.message || null;
+        },
+        getConversation: function (participantA, participantB) {
+            const response = request('messages.list', 'GET', null, { participantA: participantA, participantB: participantB });
+            return Array.isArray(response.messages) ? response.messages : [];
         },
         replaceAllBids: function (bids) {
             const response = request('bids.replaceAll', 'POST', { bids: Array.isArray(bids) ? bids : [] });
@@ -198,6 +225,35 @@ class AuthManager {
         this.currentUser = this.loadUser();
         this.migrateStoredUsers();
         this.initAuth();
+    }
+
+    // Small UI helper to show a transient message (non-blocking)
+    static showTransientMessage(text, duration = 4000) {
+        try {
+            const id = 'anytransport-transient-message';
+            let node = document.getElementById(id);
+            if (!node) {
+                node = document.createElement('div');
+                node.id = id;
+                node.style.position = 'fixed';
+                node.style.right = '16px';
+                node.style.top = '16px';
+                node.style.zIndex = '9999';
+                document.body.appendChild(node);
+            }
+            const msg = document.createElement('div');
+            msg.textContent = text;
+            msg.style.background = '#0ea5e9';
+            msg.style.color = '#fff';
+            msg.style.padding = '10px 12px';
+            msg.style.borderRadius = '8px';
+            msg.style.boxShadow = '0 4px 12px rgba(2,6,23,0.08)';
+            msg.style.marginTop = '8px';
+            node.appendChild(msg);
+            setTimeout(() => {
+                try { msg.remove(); } catch (_e) {}
+            }, duration);
+        } catch (_e) {}
     }
 
     normalizeUsername(value) {
@@ -247,6 +303,26 @@ class AuthManager {
 
         if (!normalized.nickname) {
             normalized.nickname = normalized.username;
+        }
+
+        if (!normalized.identityReviewStatus) {
+            normalized.identityReviewStatus = normalized.role === 'provider' ? 'pending_review' : 'not_required';
+        }
+
+        if (!Array.isArray(normalized.identityPhotos)) {
+            normalized.identityPhotos = [];
+        }
+
+        if (!normalized.identityReviewSubmittedAt) {
+            normalized.identityReviewSubmittedAt = '';
+        }
+
+        if (!normalized.identityReviewedAt) {
+            normalized.identityReviewedAt = '';
+        }
+
+        if (!normalized.identityReviewedBy) {
+            normalized.identityReviewedBy = '';
         }
 
         return normalized;
@@ -306,11 +382,63 @@ class AuthManager {
         if (this.currentUser) {
             if (authMenu) authMenu.style.display = 'none';
             if (userMenu) userMenu.style.display = 'flex';
+            this.ensureNavbarAvatarDropdown();
             this.updateUserDisplay();
+            this.wireNavbarDropdown();
         } else {
             if (authMenu) authMenu.style.display = 'flex';
             if (userMenu) userMenu.style.display = 'none';
         }
+    }
+
+    ensureNavbarAvatarDropdown() {
+        const userMenu = document.getElementById('user-menu');
+        if (!userMenu || userMenu.querySelector('#navbar-avatar-dropdown')) return;
+
+        const legacyAvatarLink = userMenu.querySelector('a[href="dashboard.html"]');
+        if (!legacyAvatarLink) return;
+
+        const dropdown = document.createElement('div');
+        dropdown.className = 'nav-dropdown';
+        dropdown.id = 'navbar-avatar-dropdown';
+        dropdown.style.display = 'inline-block';
+        dropdown.innerHTML = [
+            '<button type="button" class="nav-toggle" aria-haspopup="true" aria-expanded="false">',
+            '  <div class="navbar-avatar" id="navbar-user-avatar">U</div>',
+            '</button>',
+            '<div class="dropdown-menu" role="menu" aria-label="User menu">',
+            '  <a href="dashboard.html" class="nav-item">Dashboard</a>',
+            '  <a id="navbar-profile-link" href="provider-profile.html" class="nav-item">Profile</a>',
+            '</div>'
+        ].join('');
+
+        legacyAvatarLink.replaceWith(dropdown);
+    }
+
+    wireNavbarDropdown() {
+        if (this._navbarDropdownWired) return;
+        this._navbarDropdownWired = true;
+
+        document.addEventListener('click', (event) => {
+            const toggle = event.target.closest('.nav-dropdown .nav-toggle');
+            if (toggle) {
+                event.preventDefault();
+                event.stopPropagation();
+                const dropdown = toggle.closest('.nav-dropdown');
+                if (!dropdown) return;
+                const isOpen = dropdown.classList.toggle('open');
+                toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+                return;
+            }
+
+            if (!event.target.closest('.nav-dropdown')) {
+                document.querySelectorAll('.nav-dropdown.open').forEach((node) => {
+                    node.classList.remove('open');
+                    const button = node.querySelector('.nav-toggle');
+                    if (button) button.setAttribute('aria-expanded', 'false');
+                });
+            }
+        });
     }
 
     // Update user display in navbar
@@ -326,6 +454,19 @@ class AuthManager {
         if (navbarUserName) navbarUserName.textContent = displayName || 'Profile';
         if (navbarUserAvatar && displayName) {
             navbarUserAvatar.textContent = displayName.charAt(0).toUpperCase();
+        }
+        // Update an existing navbar profile link if present, but do not create one here.
+        try {
+            const profileLink = document.getElementById('navbar-profile-link');
+            if (profileLink) {
+                const uid = this.currentUser && this.currentUser.id ? this.currentUser.id : '';
+                const role = this.currentUser && this.currentUser.role ? String(this.currentUser.role).toLowerCase() : '';
+                const target = role === 'provider' ? 'provider-profile.html' : 'provider-profile.html';
+                profileLink.href = target + '?userId=' + encodeURIComponent(uid);
+                profileLink.textContent = 'My Profile';
+            }
+        } catch (e) {
+            // ignore DOM errors
         }
     }
 
@@ -445,14 +586,30 @@ class AuthManager {
         const targetId = user.id;
         const normalizedUser = this.normalizeUserRecord(user, users);
 
-        if (this.isUsernameTaken(normalizedUser.username, targetId)) {
-            throw new Error('That username is already in use. Please choose another one.');
+        // When a server API is available, let the server enforce username uniqueness
+        // because the server has authoritative user data and may already contain
+        // legitimate entries that cause false positives locally.
+        if (!window.anytransportApi) {
+            if (this.isUsernameTaken(normalizedUser.username, targetId)) {
+                throw new Error('That username is already in use. Please choose another one.');
+            }
         }
 
         if (window.anytransportApi) {
-            const savedUser = window.anytransportApi.saveUser(normalizedUser);
-            if (savedUser && savedUser.id) {
-                this.currentUser = this.normalizeUserRecord(savedUser, users);
+            // If the API is available and the user already has a server id, avoid
+            // calling users.upsert to prevent optimistic client conflicts (409).
+            // Server is authoritative — local state will be synchronized by API responses.
+            if (!normalizedUser.id) {
+                const savedUser = window.anytransportApi.saveUser(normalizedUser);
+                if (savedUser && savedUser.id) {
+                    this.currentUser = this.normalizeUserRecord(savedUser, users);
+                    localStorage.setItem('anytransport_user', JSON.stringify(this.currentUser));
+                    this.initAuth();
+                    return;
+                }
+            } else {
+                // simply persist locally and trust server copy
+                this.currentUser = normalizedUser;
                 localStorage.setItem('anytransport_user', JSON.stringify(this.currentUser));
                 this.initAuth();
                 return;
@@ -569,6 +726,11 @@ class AuthManager {
         const roles = this.currentUser?.roles || [this.currentUser?.role];
         return roles.includes('customer');
     }
+
+    isAdmin() {
+        const roles = this.currentUser?.roles || [this.currentUser?.role];
+        return roles.includes('admin');
+    }
 }
 
 // Initialize auth manager
@@ -596,22 +758,110 @@ function closeLoginModal() {
     }
 }
 
-function openSignupModal() {
-    document.getElementById('signup-modal').classList.add('show');
+function openSignupModal(role) {
+    const modal = document.getElementById('signup-modal');
+    if (!modal) {
+        return;
+    }
+
+    const roleHidden = document.getElementById('signup-role');
+    const title = document.getElementById('signup-modal-title');
+    const modeNote = document.getElementById('signup-role-note');
+    const identitySection = document.getElementById('provider-identity-section');
+    const selectedRole = role === 'provider' ? 'provider' : 'customer';
+
+    if (roleHidden) {
+        roleHidden.value = selectedRole;
+    }
+
+    if (title) {
+        title.textContent = selectedRole === 'provider' ? 'Transport Provider Sign Up' : 'Sign Up';
+    }
+
+    if (modeNote) {
+        modeNote.textContent = selectedRole === 'provider'
+            ? 'Provider account only'
+            : 'Customer account signup';
+    }
+
+    if (identitySection) {
+        identitySection.style.display = selectedRole === 'provider' ? 'block' : 'none';
+    }
+
+    modal.setAttribute('data-signup-role', selectedRole);
+    modal.classList.add('show');
 }
 
 function closeSignupModal() {
-    document.getElementById('signup-modal').classList.remove('show');
+    const modal = document.getElementById('signup-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+
+    const roleHidden = document.getElementById('signup-role');
+    const title = document.getElementById('signup-modal-title');
+    const modeNote = document.getElementById('signup-role-note');
+    const identitySection = document.getElementById('provider-identity-section');
+
+    if (roleHidden) {
+        roleHidden.value = 'customer';
+    }
+
+    if (title) {
+        title.textContent = 'Sign Up';
+    }
+
+    if (modeNote) {
+        modeNote.textContent = 'Customer account signup';
+    }
+
+    if (identitySection) {
+        identitySection.style.display = 'none';
+    }
+
+    if (modal) {
+        modal.setAttribute('data-signup-role', 'customer');
+    }
 }
 
-function switchToSignup() {
+function switchToSignup(role) {
     closeLoginModal();
-    openSignupModal();
+    openSignupModal(role);
 }
 
 function switchToLogin() {
     closeSignupModal();
     openLoginModal();
+}
+
+function getProviderReturnPath() {
+    const path = String(window.location.pathname || '/');
+    const folder = path.slice(0, path.lastIndexOf('/') + 1);
+    return folder + 'dashboard.html';
+}
+
+function startProviderStripeOnboarding(user) {
+    if (!user || String(user.role || '') !== 'provider') {
+        return false;
+    }
+
+    try {
+        const result = auth.startProviderStripeOnboarding(getProviderReturnPath());
+        if (result && result.complete) {
+            return false;
+        }
+
+        if (result && result.onboardingUrl) {
+            window.location.href = result.onboardingUrl;
+            return true;
+        }
+
+        alert('Stripe onboarding is not ready yet. Please try again or contact support.');
+    } catch (error) {
+        alert(error && error.message ? error.message : 'Unable to start Stripe verification.');
+    }
+
+    return true;
 }
 
 // Handle Login Form Submission
@@ -624,7 +874,15 @@ if (loginForm) {
         const password = this.querySelector('input[type="password"]').value;
 
         if (email && password) {
-            auth.login(email, password);
+            const loginResult = auth.login(email, password);
+            const currentUser = loginResult && loginResult.user ? loginResult.user : null;
+
+            if (currentUser && String(currentUser.role || '') === 'provider') {
+                if (startProviderStripeOnboarding(currentUser)) {
+                    return;
+                }
+            }
+
             closeLoginModal();
             
             // Check if we're redirecting after form submission
@@ -649,7 +907,7 @@ if (loginForm) {
 // Handle Signup Form Submission
 const signupForm = document.getElementById('signup-form');
 if (signupForm) {
-    signupForm.addEventListener('submit', function(e) {
+    signupForm.addEventListener('submit', async function(e) {
         e.preventDefault();
 
         const nameInput = this.querySelector('input[name="name"]');
@@ -660,6 +918,14 @@ if (signupForm) {
         const passwordConfirmInput = this.querySelector('#signup-password-confirm');
         const roleInput = this.querySelector('#signup-role');
         const usernameInput = this.querySelector('input[name="username"]');
+        const identityInputs = Array.from(this.querySelectorAll('input[name="identityPhotos"]'));
+
+        const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(reader.error || new Error('Unable to read file.'));
+            reader.readAsDataURL(file);
+        });
         
         const formData = {
             name: nameInput.value,
@@ -675,6 +941,34 @@ if (signupForm) {
             nickname: usernameInput ? usernameInput.value : ''
         };
 
+        if (formData.role === 'provider') {
+            const identityPhotos = [];
+            for (const input of identityInputs) {
+                const file = input && input.files && input.files[0] ? input.files[0] : null;
+                if (!file) continue;
+                if (file.size > 2 * 1024 * 1024) {
+                    alert('Please keep each identity photo under 2MB.');
+                    return;
+                }
+                const dataUrl = await readFileAsDataUrl(file);
+                identityPhotos.push({
+                    label: input.id || 'identity-photo',
+                    name: file.name,
+                    type: file.type || 'image/*',
+                    size: file.size,
+                    dataUrl: dataUrl,
+                    uploadedAt: new Date().toISOString()
+                });
+            }
+
+            if (!identityPhotos.length) {
+                alert('Please upload at least one identity photo before signing up as a provider.');
+                return;
+            }
+
+            formData.identityPhotos = identityPhotos;
+        }
+
         // Validate emails match
         if (formData.email !== formData.emailConfirm) {
             alert('Email addresses do not match. Please try again.');
@@ -689,7 +983,39 @@ if (signupForm) {
 
         if (formData.name && formData.email && formData.password) {
             try {
-                auth.signup(formData);
+                const signupResult = auth.signup(formData);
+                const currentUser = signupResult && signupResult.user ? signupResult.user : null;
+
+                if (currentUser && String(currentUser.role || '') === 'provider') {
+                    // If the signup included identity photos, upload them to Stripe
+                    try {
+                        if (window.anytransportApi && typeof window.anytransportApi.identityPhotosUpload === 'function' && Array.isArray(formData.identityPhotos) && formData.identityPhotos.length) {
+                            const photos = formData.identityPhotos.map((p) => p && p.dataUrl ? p.dataUrl : '').filter(Boolean);
+                            if (photos.length) {
+                                try {
+                                    const uploadResp = window.anytransportApi.identityPhotosUpload(currentUser.id, photos);
+                                    // update currentUser from server response if provided
+                                    if (uploadResp && uploadResp.user) {
+                                            currentUser = uploadResp.user;
+                                            auth.currentUser = currentUser;
+                                            localStorage.setItem('anytransport_user', JSON.stringify(currentUser));
+                                        }
+                                        if (uploadResp && Array.isArray(uploadResp.uploaded) && uploadResp.uploaded.length) {
+                                            try {
+                                                AuthManager.showTransientMessage('Identity photos uploaded successfully.');
+                                            } catch (_m) {}
+                                        }
+                                } catch (_err) {
+                                    // ignore upload errors for now; admin can still review later
+                                }
+                            }
+                        }
+                    } catch (_e) {}
+
+                    if (startProviderStripeOnboarding(currentUser)) {
+                        return;
+                    }
+                }
             } catch (error) {
                 alert(error && error.message ? error.message : 'Unable to sign up with this email.');
                 return;
@@ -718,15 +1044,29 @@ if (signupForm) {
 }
 
 function initSignupRoleSelector() {
+    const modal = document.getElementById('signup-modal');
     const roleHidden = document.getElementById('signup-role');
-    if (!roleHidden) return;
+    if (!modal || !roleHidden) return;
 
     const roleButtons = Array.from(document.querySelectorAll('[data-signup-role]'));
-    if (!roleButtons.length) return;
+    const title = document.getElementById('signup-modal-title');
+    const modeNote = document.getElementById('signup-role-note');
 
     const applyRole = (value) => {
         const selected = value === 'provider' ? 'provider' : 'customer';
         roleHidden.value = selected;
+        modal.setAttribute('data-signup-role', selected);
+
+        if (title) {
+            title.textContent = selected === 'provider' ? 'Transport Provider Sign Up' : 'Sign Up';
+        }
+
+        if (modeNote) {
+            modeNote.textContent = selected === 'provider'
+                ? 'Provider account only'
+                : 'Customer account signup';
+        }
+
         roleButtons.forEach((btn) => {
             const isActive = btn.getAttribute('data-signup-role') === selected;
             btn.classList.toggle('active', isActive);
@@ -740,7 +1080,7 @@ function initSignupRoleSelector() {
         });
     });
 
-    applyRole(roleHidden.value || 'customer');
+    applyRole(modal.getAttribute('data-signup-role') || roleHidden.value || 'customer');
 }
 
 if (document.readyState === 'loading') {

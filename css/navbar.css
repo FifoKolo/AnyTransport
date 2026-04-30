@@ -216,6 +216,53 @@
     flex-shrink: 0;
 }
 
+/* Generic dropdown used by the navbar avatar/profile button */
+.nav-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.nav-dropdown .nav-toggle {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+}
+
+.nav-dropdown .dropdown-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 160px;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    box-shadow: 0 12px 28px rgba(12, 28, 43, 0.16);
+    padding: 8px;
+    z-index: 999;
+}
+
+.nav-dropdown.open .dropdown-menu {
+    display: block;
+}
+
+.nav-dropdown .dropdown-menu .nav-item {
+    display: block;
+    padding: 10px 12px;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #1f3545;
+    font-weight: 600;
+}
+
+.nav-dropdown .dropdown-menu .nav-item:hover {
+    background: #f2f8ff;
+    color: #1676b7;
+}
+
 /* Notification Bell */
 .navbar-notification-bell {
     position: relative;

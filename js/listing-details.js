@@ -2589,6 +2589,8 @@
                 const amount = Number(bid.amount || 0).toFixed(2);
                 const expiry = getBidExpiryLabel(bid);
                 const comment = getBidCommentLabel(bid);
+                var providerId = firstText(bid.providerId, bid.bidderId, bid.provider || '');
+                var profileLink = providerId ? ('<a class="legacy-bids-view-link" href="provider-profile.html?userId=' + encodeURIComponent(providerId) + '" target="_blank">View profile</a>') : '';
                 return '<tr>' +
                     '<td class="legacy-bidder-cell"><span class="legacy-bidder-icon">+</span>' + escapeHtml(bidder) + '</td>' +
                     '<td>€' + amount + '</td>' +
@@ -2596,7 +2598,7 @@
                     '<td><strong>P:</strong> ' + escapeHtml(dateLabel) + '<br><strong>D:</strong> ' + escapeHtml(dateLabel) + '</td>' +
                     '<td>' + escapeHtml(expiry) + '</td>' +
                     '<td class="legacy-bid-comment">' + escapeHtml(comment) + '</td>' +
-                    '<td><button type="button" class="legacy-bids-view-btn">VIEW</button></td>' +
+                    '<td>' + profileLink + ' <button type="button" class="legacy-bids-view-btn">VIEW</button></td>' +
                     '</tr>';
             }).join('') +
             '</tbody></table>';

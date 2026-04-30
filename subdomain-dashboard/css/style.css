@@ -896,6 +896,18 @@ body {
     box-shadow: var(--shadow-md);
 }
 
+.btn-danger {
+    background-color: var(--danger-color);
+    color: white;
+    border: 1px solid var(--danger-color);
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+    border-color: #c82333;
+    box-shadow: var(--shadow-md);
+}
+
 .btn-secondary {
     background-color: var(--secondary-color);
     color: var(--text-primary);

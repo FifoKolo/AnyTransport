@@ -54,9 +54,15 @@
                             </div>
                         </div>
                     </div>
-                    <a href="dashboard.html" style="text-decoration: none;">
-                        <div class="navbar-avatar" id="navbar-user-avatar">U</div>
-                    </a>
+                    <div class="nav-dropdown" id="navbar-avatar-dropdown" style="display:inline-block;">
+                        <button type="button" class="nav-toggle" aria-haspopup="true" aria-expanded="false">
+                            <div class="navbar-avatar" id="navbar-user-avatar">U</div>
+                        </button>
+                        <div class="dropdown-menu" role="menu" aria-label="User menu">
+                            <a href="dashboard.html" class="nav-item">Dashboard</a>
+                            <a id="navbar-profile-link" href="provider-profile.html" class="nav-item">Profile</a>
+                        </div>
+                    </div>
                     <button class="btn btn-primary" onclick="logout()" style="margin-left: 10px;">Logout</button>
                 </div>
             </div>
@@ -67,11 +73,6 @@
     <main class="container dashboard-container">
         <!-- Main Content -->
         <section class="dashboard-content">
-            <nav class="dashboard-inline-nav" aria-label="Dashboard navigation">
-                <a href="#" class="nav-item active" data-tab="provider-board">Provider Board</a>
-                <a href="#" class="nav-item" data-tab="my-bids">My Bids</a>
-            </nav>
-
             <!-- Provider Board Tab -->
             <div id="provider-board" class="tab-content active">
                 <div class="tab-header provider-board-header">
@@ -84,6 +85,7 @@
                 <section class="provider-mode-switch" id="provider-mode-switch" aria-label="Provider board mode">
                     <button type="button" class="provider-mode-btn active" data-mode="dashboard">Dashboard</button>
                     <button type="button" class="provider-mode-btn" data-mode="search">Search Deliveries</button>
+                    <button type="button" class="provider-mode-btn" data-mode="profile">Profile</button>
                 </section>
 
                 <section id="provider-dashboard-panel" class="provider-mode-panel active" aria-label="Dashboard listings">
@@ -159,6 +161,22 @@
                     <h2>My Submitted Bids</h2>
                 </div>
                 <div id="my-bids-list" class="quotes-list"></div>
+            </div>
+
+            <!-- Profile Tab -->
+            <div id="profile" class="tab-content">
+                <div class="tab-header">
+                    <h2>My Profile</h2>
+                    <div style="margin-top:8px;">
+                        <button type="button" id="profile-back-btn" class="btn btn-outline">Back to Dashboard</button>
+                    </div>
+                </div>
+                <section class="profile-page-switch" aria-label="Profile navigation switch">
+                    <a class="provider-mode-btn" href="dashboard.html">Dashboard</a>
+                    <a class="provider-mode-btn" href="dashboard.html#provider-search-panel">Search Deliveries</a>
+                    <a class="provider-mode-btn active" href="dashboard.html#profile" aria-current="page">Profile</a>
+                </section>
+                <div id="dashboard-profile-container" style="margin-top:12px;"></div>
             </div>
 
         </section>

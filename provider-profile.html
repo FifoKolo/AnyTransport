@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Provider Profile - AnyTransport</title>
+    <link rel="stylesheet" href="css/style.css?v=20260322-1">
+    <link rel="stylesheet" href="css/navbar.css?v=20260420-4">
+    <link rel="stylesheet" href="css/listing-details.css?v=20260422-11">
+    <style>
+        /* offset the fixed navbar so page content isn't hidden underneath it */
+        body { padding-top: 88px; }
+        .profile-page-shell { max-width: 1220px; margin: 0 auto; padding: 0 16px 36px; }
+        .profile-page-title { margin: 18px 0 8px; font-size: 2rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; }
+        .profile-page-intro { margin: 0 0 18px; color: #64748b; font-size: 1rem; line-height: 1.55; max-width: 760px; }
+        .profile-page-switch { display: flex; gap: 0; width: 100%; background: linear-gradient(180deg, #f7fbff 0%, #edf5fb 100%); border: 1px solid #cfddea; border-bottom: 0; border-radius: 18px 18px 0 0; overflow: hidden; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05); }
+        .profile-page-switch .provider-mode-btn { appearance: none; border: none; border-radius: 0; padding: 14px 16px; color: #1f5f8f; font-weight: 800; background: transparent; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+        .profile-page-switch .provider-mode-btn { flex: 1; border-right: 1px solid #cfddea; }
+        .profile-page-switch .provider-mode-btn:last-child { border-right: 0; }
+        .profile-page-switch .provider-mode-btn.active { background: linear-gradient(180deg, #1971a2 0%, #115b86 100%); color: #fff; box-shadow: inset 0 -1px 0 rgba(255,255,255,.12); }
+        .provider-profile { display: grid; grid-template-columns: minmax(0, 1.08fr) 390px; gap: 22px; align-items: start; }
+        .provider-card { background: #fff; padding: 20px; border-radius: 18px; box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08); border: 1px solid #e5edf5; }
+        .provider-header { display:flex; gap:16px; align-items:center; }
+        .provider-avatar { width:96px; height:96px; border-radius:18px; background: linear-gradient(180deg, #eaf3fb 0%, #d8e8f4 100%); display:flex; align-items:center; justify-content:center; font-size:28px; color:#0f5f8f; font-weight:800; box-shadow: inset 0 0 0 1px rgba(255,255,255,.55); }
+        .provider-name { font-size:20px; margin:0; color:#0f172a; letter-spacing:-0.01em; }
+        .provider-meta { color:#64748b; font-size:14px; margin-top:2px; }
+        .provider-photos { display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; }
+        .provider-photos img { width:120px; height:80px; object-fit:cover; border-radius:10px; border:1px solid #dbe5ef; }
+        .profile-actions { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+        .label { font-weight:700; color:#334155; margin-top:10px; display:block; }
+        .profile-value { color:#1e293b; }
+        .profile-editor-card { margin-top:0; }
+        .profile-editor-form { margin-top:12px; display:grid; gap:10px; }
+        .profile-editor-form .form-input { width:100%; box-sizing:border-box; }
+        .profile-workspace { margin-top: 20px; width: 100%; }
+        .profile-editor-shell { display: grid; gap: 16px; }
+        .profile-editor-header { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; padding: 20px 22px; background: linear-gradient(135deg, #f8fbff 0%, #eef5fb 100%); border:1px solid #d8e4ef; border-radius: 18px; box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05); }
+        .profile-editor-kicker { font-size: .8rem; letter-spacing: .14em; text-transform: uppercase; color:#3b82b6; font-weight:800; margin-bottom: 8px; }
+        .profile-editor-title { margin: 0; font-size: 1.3rem; font-weight: 800; color:#0f172a; }
+        .profile-editor-subtitle { margin: 8px 0 0; color:#64748b; line-height:1.55; max-width: 680px; }
+        .profile-editor-badges { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
+        .profile-pill { display:inline-flex; align-items:center; padding:8px 12px; border-radius:999px; background:#fff; border:1px solid #dbe5ef; color:#285777; font-weight:700; font-size:.86rem; }
+        .profile-workspace-tabs { display:flex; width: 100%; background:#f2f6fa; border:1px solid #c7d8e5; border-bottom:0; overflow:hidden; }
+        .profile-workspace-tab { flex:1; padding:14px 10px; text-align:center; font-weight:700; color:#2b78b6; border-right:1px solid #d8e4ee; }
+        .profile-workspace-tab.active { background:#1e6f9f; color:#fff; }
+        .profile-workspace-grid { display:grid; width: 100%; grid-template-columns: minmax(0, 1.03fr) minmax(0, .97fr); gap: 16px; align-items: stretch; }
+        .profile-workspace-left, .profile-workspace-right { border-radius: 18px; padding: 22px; min-height: 0; border:1px solid #d8e4ef; box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05); }
+        .profile-workspace-left { background: linear-gradient(180deg, #f7fbff 0%, #edf5fb 100%); }
+        .profile-workspace-right { background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%); }
+        .profile-section-title { margin: 0 0 16px; color:#0f172a; font-size:1.04rem; font-weight:800; letter-spacing:-0.01em; }
+        .profile-form-row { display:grid; grid-template-columns: 150px minmax(0, 1fr); gap:16px; align-items:start; margin-bottom:16px; }
+        .profile-form-label { font-weight:700; color:#334155; padding-top:10px; line-height:1.25; }
+        .profile-help { font-size: .84rem; color:#64748b; margin-top: 6px; line-height: 1.35; }
+        .profile-upload-card { margin-top: 12px; }
+        .profile-upload-preview { width: 130px; height: 130px; background:#fff; border:1px solid #d7e3ee; display:flex; align-items:center; justify-content:center; overflow:hidden; margin: 12px 0 8px; position:relative; border-radius: 14px; box-shadow: 0 8px 16px rgba(15, 23, 42, 0.06); }
+        .profile-upload-preview img { width:100%; height:100%; object-fit:cover; }
+        .profile-upload-badge { position:absolute; right:8px; bottom:8px; width:22px; height:22px; background:#dc2626; color:#fff; border-radius:999px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:.95rem; box-shadow: 0 4px 10px rgba(220,38,38,.25); }
+        .profile-mini-link { color:#2563eb; text-decoration: none; font-size:.95rem; display:inline-block; margin-bottom: 8px; font-weight:700; }
+        .profile-mini-link:hover { text-decoration: underline; }
+        .profile-button { display:inline-flex; align-items:center; padding:10px 16px; border-radius:10px; border:1px solid #c5d6e3; background:linear-gradient(180deg, #ffffff 0%, #eef7ff 100%); color:#2563eb; font-weight:800; box-shadow:0 2px 0 rgba(0,0,0,.04); letter-spacing: .02em; }
+        .profile-check-grid { display:grid; grid-template-columns: 1fr; gap: 10px; margin-top: 10px; }
+        .profile-check-grid label { display:grid; grid-template-columns: 20px minmax(0, 1fr); gap:10px; align-items:start; color:#334155; line-height:1.45; min-width:0; padding: 12px 14px; border: 1px solid #e2e8f0; background: #fff; border-radius: 14px; box-shadow: 0 4px 10px rgba(15, 23, 42, 0.03); }
+        .profile-check-grid input { margin-top:3px; flex:0 0 auto; }
+        .profile-muted { color:#64748b; font-size:.95rem; line-height:1.5; }
+        .profile-footer-actions { margin-top:18px; display:flex; gap:10px; flex-wrap:wrap; }
+        .profile-upload-preview { margin-left: 0; }
+        .profile-section-note { padding: 14px 16px; border: 1px solid #dbe7f2; background: #fff; border-radius: 14px; color:#475569; line-height:1.5; }
+        .profile-section-note strong { color:#0f172a; }
+        #provider-edit { margin-top: 28px !important; }
+        @media (max-width: 980px) {
+            .provider-profile { grid-template-columns: 1fr; }
+            .profile-editor-header { flex-direction: column; }
+            .profile-editor-badges { justify-content:flex-start; }
+            .profile-workspace-grid { grid-template-columns: 1fr; }
+            .profile-form-row { grid-template-columns: 1fr; }
+            .profile-form-label { padding-top: 0; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a class="navbar-logo" href="index.html" aria-label="Go to landing page">
+                <img src="assets/logo.jpeg" alt="AnyTransport Logo" class="logo-img">
+                <span class="logo-text">AnyTransport</span>
+            </a>
+            <div class="navbar-menu">
+                <a href="index.html#about" class="nav-link">About Us</a>
+                <a href="index.html#services" class="nav-link">Our Services</a>
+                <a href="index.html#how-it-works" class="nav-link">How it Works</a>
+                <a href="index.html#pricing" class="nav-link">Pricing</a>
+                <a href="index.html#faq" class="nav-link">FAQ</a>
+                <a href="index.html#contact" class="nav-link">Contact Us</a>
+            </div>
+            <div class="navbar-right">
+                <div id="auth-menu" style="display:flex;">
+                    <button class="btn btn-outline" onclick="openLoginModal()">Login</button>
+                </div>
+                <div id="user-menu" style="display:none;">
+                    <div class="navbar-notification-bell">
+                        <button id="notification-bell" class="notification-bell-btn" type="button" aria-label="View notifications">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                            </svg>
+                            <div id="notification-badge" class="notification-badge" style="display: none;"></div>
+                        </button>
+                        <div id="notification-dropdown" class="notification-dropdown" style="display: none;">
+                            <div style="padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: bold;">Notifications</span>
+                                <button id="notification-close" type="button" style="background: none; border: none; cursor: pointer; font-size: 18px;">&times;</button>
+                            </div>
+                            <div id="notification-list" style="max-height: 400px; overflow-y: auto;"></div>
+                        </div>
+                    </div>
+                    <div class="nav-dropdown" id="navbar-avatar-dropdown" style="display:inline-block;">
+                        <button type="button" class="nav-toggle" aria-haspopup="true" aria-expanded="false">
+                            <div class="navbar-avatar" id="navbar-user-avatar">U</div>
+                        </button>
+                        <div class="dropdown-menu" role="menu" aria-label="User menu">
+                            <a href="dashboard.html" class="nav-item">Dashboard</a>
+                            <a id="navbar-profile-link" href="provider-profile.html" class="nav-item">Profile</a>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="logout()" style="margin-left: 10px;">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="profile-page-shell">
+        <h1 class="profile-page-title">My Profile</h1>
+        <p class="profile-page-intro">Keep your provider profile current with business details, services, payment options, and photos. The editor below saves as you work so your public profile stays polished.</p>
+        <section class="profile-page-switch" aria-label="Profile navigation switch">
+            <a class="provider-mode-btn" href="dashboard.html">Dashboard</a>
+            <a class="provider-mode-btn" href="dashboard.html#provider-search-panel">Search Deliveries</a>
+            <a class="provider-mode-btn active" href="provider-profile.html" aria-current="page">Profile</a>
+        </section>
+
+        <div class="provider-profile">
+            <div class="provider-card" id="provider-main">
+                <div class="provider-header">
+                    <div class="provider-avatar" id="provider-avatar">P</div>
+                    <div>
+                        <h2 class="provider-name" id="provider-name">Loading...</h2>
+                        <div class="provider-meta" id="provider-role">Transport Provider</div>
+                        <div class="profile-actions" id="provider-actions"></div>
+                    </div>
+                </div>
+
+                <div id="provider-description" style="margin-top:16px; color:#333;"> </div>
+
+                <div id="provider-photos" class="provider-photos" aria-hidden="true"></div>
+
+                <div id="provider-details" style="margin-top:16px;">
+                    <span class="label">Location</span>
+                    <div class="profile-value" id="provider-city">—</div>
+
+                    <span class="label">Contact</span>
+                    <div class="profile-value" id="provider-contact">—</div>
+
+                    <span class="label">About</span>
+                    <div class="profile-value" id="provider-about">—</div>
+                </div>
+            </div>
+
+            <aside>
+                <div class="provider-card">
+                    <h3>Services & Skills</h3>
+                    <div id="provider-services">Loading…</div>
+                </div>
+
+                <div class="provider-card" style="margin-top:12px;">
+                    <h3>Payment methods</h3>
+                    <div id="provider-payments">—</div>
+                </div>
+            </aside>
+        </div>
+
+        <div id="provider-edit" style="margin-top:24px;"></div>
+    </main>
+
+    <script src="js/auth.js?v=20260417-5"></script>
+    <script src="js/provider-profile.js?v=20260428-1"></script>
+</body>
+</html>

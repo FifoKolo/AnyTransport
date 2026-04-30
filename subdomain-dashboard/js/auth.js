@@ -129,6 +129,12 @@ window.anytransportApi = window.anytransportApi || (function () {
         signup: function (formData) {
             return request('auth.signup', 'POST', { formData: formData || {} });
         },
+        identityPhotosUpload: function (userId, photos) {
+            return request('identity.photos.upload', 'POST', { userId: userId, photos: Array.isArray(photos) ? photos : [] });
+        },
+        startProviderStripeOnboarding: function (returnPath) {
+            return request('stripe.provider.onboarding', 'POST', { returnPath: returnPath || 'dashboard.html' });
+        },
         logout: function () {
             return request('auth.logout', 'POST', {});
         },
@@ -159,6 +165,15 @@ window.anytransportApi = window.anytransportApi || (function () {
         saveBid: function (bid) {
             const response = request('bids.create', 'POST', { bid: bid || {} });
             return response.bid || bid || null;
+        },
+        sendMessage: function (fromUserId, toUserId, text, title) {
+            const message = { fromUserId: fromUserId, toUserId: toUserId, text: text, title: title };
+            const response = request('messages.save', 'POST', { message: message });
+            return response.message || null;
+        },
+        getConversation: function (participantA, participantB) {
+            const response = request('messages.list', 'GET', null, { participantA: participantA, participantB: participantB });
+            return Array.isArray(response.messages) ? response.messages : [];
         },
         replaceAllBids: function (bids) {
             const response = request('bids.replaceAll', 'POST', { bids: Array.isArray(bids) ? bids : [] });
@@ -198,6 +213,35 @@ class AuthManager {
         this.currentUser = this.loadUser();
         this.migrateStoredUsers();
         this.initAuth();
+    }
+
+    // Small UI helper to show a transient message (non-blocking)
+    static showTransientMessage(text, duration = 4000) {
+        try {
+            const id = 'anytransport-transient-message';
+            let node = document.getElementById(id);
+            if (!node) {
+                node = document.createElement('div');
+                node.id = id;
+                node.style.position = 'fixed';
+                node.style.right = '16px';
+                node.style.top = '16px';
+                node.style.zIndex = '9999';
+                document.body.appendChild(node);
+            }
+            const msg = document.createElement('div');
+            msg.textContent = text;
+            msg.style.background = '#0ea5e9';
+            msg.style.color = '#fff';
+            msg.style.padding = '10px 12px';
+            msg.style.borderRadius = '8px';
+            msg.style.boxShadow = '0 4px 12px rgba(2,6,23,0.08)';
+            msg.style.marginTop = '8px';
+            node.appendChild(msg);
+            setTimeout(() => {
+                try { msg.remove(); } catch (_e) {}
+            }, duration);
+        } catch (_e) {}
     }
 
     normalizeUsername(value) {
@@ -306,11 +350,63 @@ class AuthManager {
         if (this.currentUser) {
             if (authMenu) authMenu.style.display = 'none';
             if (userMenu) userMenu.style.display = 'flex';
+            this.ensureNavbarAvatarDropdown();
             this.updateUserDisplay();
+            this.wireNavbarDropdown();
         } else {
             if (authMenu) authMenu.style.display = 'flex';
             if (userMenu) userMenu.style.display = 'none';
         }
+    }
+
+    ensureNavbarAvatarDropdown() {
+        const userMenu = document.getElementById('user-menu');
+        if (!userMenu || userMenu.querySelector('#navbar-avatar-dropdown')) return;
+
+        const legacyAvatarLink = userMenu.querySelector('a[href="dashboard.html"]');
+        if (!legacyAvatarLink) return;
+
+        const dropdown = document.createElement('div');
+        dropdown.className = 'nav-dropdown';
+        dropdown.id = 'navbar-avatar-dropdown';
+        dropdown.style.display = 'inline-block';
+        dropdown.innerHTML = [
+            '<button type="button" class="nav-toggle" aria-haspopup="true" aria-expanded="false">',
+            '  <div class="navbar-avatar" id="navbar-user-avatar">U</div>',
+            '</button>',
+            '<div class="dropdown-menu" role="menu" aria-label="User menu">',
+            '  <a href="dashboard.html" class="nav-item">Dashboard</a>',
+            '  <a href="provider-profile.html" class="nav-item">Profile</a>',
+            '</div>'
+        ].join('');
+
+        legacyAvatarLink.replaceWith(dropdown);
+    }
+
+    wireNavbarDropdown() {
+        if (this._navbarDropdownWired) return;
+        this._navbarDropdownWired = true;
+
+        document.addEventListener('click', (event) => {
+            const toggle = event.target.closest('.nav-dropdown .nav-toggle');
+            if (toggle) {
+                event.preventDefault();
+                event.stopPropagation();
+                const dropdown = toggle.closest('.nav-dropdown');
+                if (!dropdown) return;
+                const isOpen = dropdown.classList.toggle('open');
+                toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+                return;
+            }
+
+            if (!event.target.closest('.nav-dropdown')) {
+                document.querySelectorAll('.nav-dropdown.open').forEach((node) => {
+                    node.classList.remove('open');
+                    const button = node.querySelector('.nav-toggle');
+                    if (button) button.setAttribute('aria-expanded', 'false');
+                });
+            }
+        });
     }
 
     // Update user display in navbar
@@ -326,6 +422,18 @@ class AuthManager {
         if (navbarUserName) navbarUserName.textContent = displayName || 'Profile';
         if (navbarUserAvatar && displayName) {
             navbarUserAvatar.textContent = displayName.charAt(0).toUpperCase();
+        }
+
+        // Only update an existing navbar profile link; don't create one here.
+        try {
+            const profileLink = document.getElementById('navbar-profile-link');
+            if (profileLink) {
+                const uid = this.currentUser && this.currentUser.id ? this.currentUser.id : '';
+                profileLink.href = 'provider-profile.html?userId=' + encodeURIComponent(uid);
+                profileLink.textContent = 'My Profile';
+            }
+        } catch (_error) {
+            // ignore DOM errors
         }
     }
 
@@ -445,14 +553,27 @@ class AuthManager {
         const targetId = user.id;
         const normalizedUser = this.normalizeUserRecord(user, users);
 
-        if (this.isUsernameTaken(normalizedUser.username, targetId)) {
-            throw new Error('That username is already in use. Please choose another one.');
+        // When a server API is available, let the server enforce username uniqueness
+        // to avoid false-positives caused by duplicate entries in the store.
+        if (!window.anytransportApi) {
+            if (this.isUsernameTaken(normalizedUser.username, targetId)) {
+                throw new Error('That username is already in use. Please choose another one.');
+            }
         }
 
         if (window.anytransportApi) {
-            const savedUser = window.anytransportApi.saveUser(normalizedUser);
-            if (savedUser && savedUser.id) {
-                this.currentUser = this.normalizeUserRecord(savedUser, users);
+            // Avoid calling server users.upsert for users that already have an id
+            // to prevent 409 conflicts. Only call API save for new users.
+            if (!normalizedUser.id) {
+                const savedUser = window.anytransportApi.saveUser(normalizedUser);
+                if (savedUser && savedUser.id) {
+                    this.currentUser = this.normalizeUserRecord(savedUser, users);
+                    localStorage.setItem('anytransport_user', JSON.stringify(this.currentUser));
+                    this.initAuth();
+                    return;
+                }
+            } else {
+                this.currentUser = normalizedUser;
                 localStorage.setItem('anytransport_user', JSON.stringify(this.currentUser));
                 this.initAuth();
                 return;
@@ -614,6 +735,36 @@ function switchToLogin() {
     openLoginModal();
 }
 
+function getProviderReturnPath() {
+    const path = String(window.location.pathname || '/');
+    const folder = path.slice(0, path.lastIndexOf('/') + 1);
+    return folder + 'dashboard.html';
+}
+
+function startProviderStripeOnboarding(user) {
+    if (!user || String(user.role || '') !== 'provider') {
+        return false;
+    }
+
+    try {
+        const result = auth.startProviderStripeOnboarding(getProviderReturnPath());
+        if (result && result.complete) {
+            return false;
+        }
+
+        if (result && result.onboardingUrl) {
+            window.location.href = result.onboardingUrl;
+            return true;
+        }
+
+        alert('Stripe onboarding is not ready yet. Please try again or contact support.');
+    } catch (error) {
+        alert(error && error.message ? error.message : 'Unable to start Stripe verification.');
+    }
+
+    return true;
+}
+
 // Handle Login Form Submission
 const loginForm = document.getElementById('login-form');
 if (loginForm) {
@@ -624,7 +775,15 @@ if (loginForm) {
         const password = this.querySelector('input[type="password"]').value;
 
         if (email && password) {
-            auth.login(email, password);
+            const loginResult = auth.login(email, password);
+            const currentUser = loginResult && loginResult.user ? loginResult.user : null;
+
+            if (currentUser && String(currentUser.role || '') === 'provider') {
+                if (startProviderStripeOnboarding(currentUser)) {
+                    return;
+                }
+            }
+
             closeLoginModal();
             
             // Check if we're redirecting after form submission
@@ -689,7 +848,38 @@ if (signupForm) {
 
         if (formData.name && formData.email && formData.password) {
             try {
-                auth.signup(formData);
+                const signupResult = auth.signup(formData);
+                const currentUser = signupResult && signupResult.user ? signupResult.user : null;
+
+                if (currentUser && String(currentUser.role || '') === 'provider') {
+                    // If the signup included identity photos, upload them to Stripe
+                    try {
+                        if (window.anytransportApi && typeof window.anytransportApi.identityPhotosUpload === 'function' && Array.isArray(formData.identityPhotos) && formData.identityPhotos.length) {
+                            const photos = formData.identityPhotos.map((p) => p && p.dataUrl ? p.dataUrl : '').filter(Boolean);
+                            if (photos.length) {
+                                try {
+                                    const uploadResp = window.anytransportApi.identityPhotosUpload(currentUser.id, photos);
+                                    if (uploadResp && uploadResp.user) {
+                                        currentUser = uploadResp.user;
+                                        auth.currentUser = currentUser;
+                                        localStorage.setItem('anytransport_user', JSON.stringify(currentUser));
+                                    }
+                                    if (uploadResp && Array.isArray(uploadResp.uploaded) && uploadResp.uploaded.length) {
+                                        try {
+                                            AuthManager.showTransientMessage('Identity photos uploaded successfully.');
+                                        } catch (_m) {}
+                                    }
+                                } catch (_err) {
+                                    // ignore upload errors for now; admin can still review later
+                                }
+                            }
+                        }
+                    } catch (_e) {}
+
+                    if (startProviderStripeOnboarding(currentUser)) {
+                        return;
+                    }
+                }
             } catch (error) {
                 alert(error && error.message ? error.message : 'Unable to sign up with this email.');
                 return;

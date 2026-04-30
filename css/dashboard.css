@@ -42,6 +42,58 @@
     border-color: #bfdef6;
 }
 
+/* Dropdown for profile nav */
+.dashboard-inline-nav .nav-dropdown {
+    position: relative;
+    display: inline-block;
+}
+.dashboard-inline-nav .nav-dropdown .nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 16px;
+    color: #1f3545;
+    background: #f8fbff;
+    border: 1px solid #e6f1fb;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.dashboard-inline-nav .nav-dropdown .nav-toggle:hover {
+    background: #edf6ff;
+    color: #1676b7;
+}
+.dashboard-inline-nav .nav-dropdown .caret {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+.dashboard-inline-nav .nav-dropdown .dropdown-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    background: #fff;
+    border: 1px solid #e6f1fb;
+    box-shadow: 0 8px 20px rgba(31,53,69,0.08);
+    border-radius: 8px;
+    padding: 8px;
+    z-index: 50;
+    min-width: 160px;
+}
+.dashboard-inline-nav .nav-dropdown.open .dropdown-menu {
+    display: block;
+}
+.dashboard-inline-nav .nav-dropdown .dropdown-menu .nav-item {
+    display: block;
+    padding: 8px 12px;
+    margin: 4px 0;
+    background: transparent;
+    border-radius: 6px;
+}
+.dashboard-inline-nav .nav-dropdown .dropdown-menu .nav-item:hover {
+    background: #f2f8ff;
+}
+
 .dashboard-sidebar {
     display: flex;
     flex-direction: column;
@@ -294,6 +346,37 @@
     border-radius: 10px;
     padding: 4px;
     margin-bottom: 12px;
+}
+
+.profile-page-switch {
+    display: inline-flex;
+    gap: 8px;
+    background: #eaf3fc;
+    border: 1px solid #d2e4f4;
+    border-radius: 10px;
+    padding: 4px;
+    margin-bottom: 18px;
+}
+
+.profile-page-switch .provider-mode-btn {
+    appearance: none;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 16px;
+    color: #3f5f73;
+    font-weight: 700;
+    background: transparent;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.profile-page-switch .provider-mode-btn.active {
+    background: #fff;
+    color: #0f6ca5;
+    box-shadow: 0 4px 10px rgba(42, 98, 135, 0.16);
 }
 
 .provider-mode-btn {
@@ -608,6 +691,18 @@
 .listing-cell.actions {
     display: flex;
     justify-content: flex-end;
+}
+
+.review-actions-cell {
+    min-width: 320px;
+}
+
+.review-actions-cell .review-notes {
+    min-height: 110px;
+}
+
+.review-actions-cell .review-actions {
+    width: 100%;
 }
 
 .listing-title {

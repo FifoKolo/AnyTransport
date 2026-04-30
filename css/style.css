@@ -97,6 +97,13 @@ body {
     margin-top: 8px;
 }
 
+.signup-mode-note {
+    margin: 0 0 20px;
+    text-align: center;
+    color: #64748b;
+    font-size: 0.95rem;
+}
+
 .signup-role-btn {
     appearance: none;
     border: 1px solid #c8deef;
@@ -776,6 +783,11 @@ body {
     transition: color 0.3s;
 }
 
+.footer-links .footer-provider-link {
+    font-weight: 700;
+    color: #fff;
+}
+
 .footer-links a:hover {
     color: white;
 }
@@ -893,6 +905,18 @@ body {
 
 .btn-primary:hover {
     background-color: var(--primary-dark);
+    box-shadow: var(--shadow-md);
+}
+
+.btn-danger {
+    background-color: var(--danger-color);
+    color: white;
+    border: 1px solid var(--danger-color);
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+    border-color: #c82333;
     box-shadow: var(--shadow-md);
 }
 
