@@ -79,6 +79,66 @@
         );
     }
 
+    function readFileAsDataUrl(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(reader.error || new Error('Unable to read file.'));
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function isProviderPendingReview(user) {
+        const role = String(user && user.role || '').toLowerCase().trim();
+        if (role !== 'provider') return false;
+        const status = String(user && user.identityReviewStatus || '').trim();
+        if (status === '') return true;
+        return status === 'pending_review' || status === 'rejected';
+    }
+
+    function getPendingProvidersForReview() {
+        let providers = [];
+
+        // Preferred path: dedicated admin queue endpoint.
+        try {
+            if (window.anytransportApi && typeof window.anytransportApi.getIdentityReviewQueue === 'function') {
+                providers = window.anytransportApi.getIdentityReviewQueue();
+                if (Array.isArray(providers) && providers.length) {
+                    return providers;
+                }
+            }
+        } catch (_error) {
+            // Continue with fallbacks.
+        }
+
+        // Web-safe fallback: fetch all users and filter providers client-side.
+        try {
+            if (window.anytransportApi && typeof window.anytransportApi.getUsers === 'function') {
+                const users = window.anytransportApi.getUsers();
+                if (Array.isArray(users) && users.length) {
+                    providers = users.filter(isProviderPendingReview);
+                    if (providers.length) {
+                        return providers;
+                    }
+                }
+            }
+        } catch (_error) {
+            // Continue with local fallback.
+        }
+
+        // Local file:// fallback.
+        try {
+            const users = auth && typeof auth.loadUsers === 'function' ? auth.loadUsers() : [];
+            if (Array.isArray(users) && users.length) {
+                providers = users.filter(isProviderPendingReview);
+            }
+        } catch (_error) {
+            providers = [];
+        }
+
+        return providers;
+    }
+
     document.addEventListener('DOMContentLoaded', initDashboard);
 
     function initDashboard() {
@@ -727,6 +787,14 @@
                 return;
             }
 
+            const reuploadBtn = event.target.closest('.reupload-identity-btn');
+            if (reuploadBtn) {
+                const reviewCard = reuploadBtn.closest('.provider-listing');
+                const uploadInput = reviewCard ? reviewCard.querySelector('.identity-reupload-input') : null;
+                if (uploadInput) uploadInput.click();
+                return;
+            }
+
             const reviewBtn = event.target.closest('.review-provider-btn');
             if (reviewBtn) {
                 if (!(auth.isAdmin && auth.isAdmin())) {
@@ -748,12 +816,29 @@
                 }
 
                 try {
-                    if (!window.anytransportApi || typeof window.anytransportApi.updateIdentityReview !== 'function') {
-                        alert('Identity review tools are not available yet.');
-                        return;
-                    }
+                    if (window.anytransportApi && typeof window.anytransportApi.updateIdentityReview === 'function') {
+                        window.anytransportApi.updateIdentityReview(providerId, status, notes);
+                    } else {
+                        const users = auth && typeof auth.loadUsers === 'function' ? auth.loadUsers() : [];
+                        const index = users.findIndex((entry) => String(entry && entry.id || '') === providerId);
+                        if (index < 0) {
+                            alert('Provider not found.');
+                            return;
+                        }
 
-                    window.anytransportApi.updateIdentityReview(providerId, status, notes);
+                        users[index] = {
+                            ...users[index],
+                            identityReviewStatus: status,
+                            identityReviewedAt: new Date().toISOString(),
+                            identityReviewedBy: String(auth.getUser && auth.getUser() && auth.getUser().id || ''),
+                            identityReviewNotes: notes,
+                            verified: status === 'approved' ? true : (status === 'rejected' ? false : !!users[index].verified)
+                        };
+
+                        if (typeof auth.saveUsers === 'function') {
+                            auth.saveUsers(users);
+                        }
+                    }
                     renderAdminReviewQueue();
                 } catch (error) {
                     alert(error && error.message ? error.message : 'Unable to update the review status.');
@@ -787,7 +872,73 @@
             rowToggle.click();
         });
 
-        document.addEventListener('change', (event) => {
+        document.addEventListener('change', async (event) => {
+            const identityInput = event.target.closest('.identity-reupload-input');
+            if (identityInput) {
+                if (!(auth.isAdmin && auth.isAdmin())) {
+                    alert('Admin access required.');
+                    return;
+                }
+
+                const providerId = String(identityInput.getAttribute('data-provider-id') || '').trim();
+                const files = Array.from(identityInput.files || []);
+                if (!providerId || !files.length) return;
+
+                try {
+                    const photoPayload = [];
+                    for (const file of files) {
+                        if (!file) continue;
+                        if (file.size > 2 * 1024 * 1024) {
+                            alert('Please keep each identity photo under 2MB.');
+                            return;
+                        }
+
+                        const dataUrl = await readFileAsDataUrl(file);
+                        photoPayload.push({
+                            label: file.name || 'identity-photo',
+                            name: file.name || 'identity-photo',
+                            type: file.type || 'image/*',
+                            size: file.size || 0,
+                            dataUrl: dataUrl,
+                            previewDataUrl: dataUrl,
+                            uploadedAt: new Date().toISOString()
+                        });
+                    }
+
+                    if (!photoPayload.length) return;
+
+                    if (window.anytransportApi && typeof window.anytransportApi.identityPhotosUpload === 'function') {
+                        const uploads = photoPayload.map((p) => p.dataUrl);
+                        window.anytransportApi.identityPhotosUpload(providerId, uploads);
+                    } else {
+                        const users = auth && typeof auth.loadUsers === 'function' ? auth.loadUsers() : [];
+                        const index = users.findIndex((entry) => String(entry && entry.id || '') === providerId);
+                        if (index < 0) {
+                            alert('Provider not found.');
+                            return;
+                        }
+
+                        const existing = Array.isArray(users[index].identityPhotos) ? users[index].identityPhotos : [];
+                        users[index] = {
+                            ...users[index],
+                            identityPhotos: existing.concat(photoPayload),
+                            identityReviewStatus: users[index].identityReviewStatus || 'pending_review',
+                            identityReviewSubmittedAt: users[index].identityReviewSubmittedAt || new Date().toISOString()
+                        };
+                        if (typeof auth.saveUsers === 'function') {
+                            auth.saveUsers(users);
+                        }
+                    }
+
+                    identityInput.value = '';
+                    renderAdminReviewQueue();
+                    alert('Identity photos uploaded successfully.');
+                } catch (error) {
+                    alert(error && error.message ? error.message : 'Unable to upload identity photos.');
+                }
+                return;
+            }
+
             const templateSelect = event.target.closest('.bid-template-select');
             if (!templateSelect) return;
             const quoteId = templateSelect.getAttribute('data-quote-id');
@@ -1022,13 +1173,8 @@
             return;
         }
 
-        if (!window.anytransportApi || typeof window.anytransportApi.getIdentityReviewQueue !== 'function') {
-            container.innerHTML = '<div class="empty-inventory">Identity review tools are not available yet.</div>';
-            return;
-        }
-
         try {
-            const providers = window.anytransportApi.getIdentityReviewQueue();
+            const providers = getPendingProvidersForReview();
             if (!providers.length) {
                 container.innerHTML = '<div class="empty-inventory">No providers are waiting for review.</div>';
                 return;
@@ -1060,7 +1206,9 @@
                     '<div class="listing-cell" style="display:flex; flex-wrap:wrap; gap:10px;">' + photoMarkup + '</div>',
                     '<div class="listing-cell review-actions-cell">',
                     '<textarea class="form-input review-notes" rows="4" data-provider-id="' + escapeHtml(provider.id) + '" placeholder="Review notes" style="width:100%; box-sizing:border-box;">' + notes + '</textarea>',
+                    '<input type="file" class="identity-reupload-input" data-provider-id="' + escapeHtml(provider.id) + '" accept="image/*" multiple style="display:none;">',
                     '<div class="actions review-actions" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-start;">',
+                    '<button type="button" class="btn btn-outline reupload-identity-btn" data-provider-id="' + escapeHtml(provider.id) + '">Upload photos</button>',
                     '<button type="button" class="btn btn-primary review-provider-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="approved">Approve</button>',
                     '<button type="button" class="btn btn-danger review-provider-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="rejected">Decline</button>',
                     '</div>',

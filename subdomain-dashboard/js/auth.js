@@ -847,7 +847,7 @@ if (loginForm) {
 // Handle Signup Form Submission
 const signupForm = document.getElementById('signup-form');
 if (signupForm) {
-    signupForm.addEventListener('submit', function(e) {
+    signupForm.addEventListener('submit', async function(e) {
         e.preventDefault();
 
         const nameInput = this.querySelector('input[name="name"]');
@@ -858,6 +858,14 @@ if (signupForm) {
         const passwordConfirmInput = this.querySelector('#signup-password-confirm');
         const roleInput = this.querySelector('#signup-role');
         const usernameInput = this.querySelector('input[name="username"]');
+        const identityInputs = Array.from(this.querySelectorAll('input[name="identityPhotos"]'));
+
+        const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(reader.error || new Error('Unable to read file.'));
+            reader.readAsDataURL(file);
+        });
         
         const formData = {
             name: nameInput.value,
@@ -872,6 +880,34 @@ if (signupForm) {
             username: usernameInput ? usernameInput.value : '',
             nickname: usernameInput ? usernameInput.value : ''
         };
+
+        if (formData.role === 'provider') {
+            const identityPhotos = [];
+            for (const input of identityInputs) {
+                const file = input && input.files && input.files[0] ? input.files[0] : null;
+                if (!file) continue;
+                if (file.size > 2 * 1024 * 1024) {
+                    alert('Please keep each identity photo under 2MB.');
+                    return;
+                }
+                const dataUrl = await readFileAsDataUrl(file);
+                identityPhotos.push({
+                    label: input.id || 'identity-photo',
+                    name: file.name,
+                    type: file.type || 'image/*',
+                    size: file.size,
+                    dataUrl: dataUrl,
+                    uploadedAt: new Date().toISOString()
+                });
+            }
+
+            if (!identityPhotos.length) {
+                alert('Please upload at least one identity photo before signing up as a provider.');
+                return;
+            }
+
+            formData.identityPhotos = identityPhotos;
+        }
 
         // Validate emails match
         if (formData.email !== formData.emailConfirm) {
