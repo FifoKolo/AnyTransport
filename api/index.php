@@ -147,7 +147,7 @@ function normalize_user($user) {
     }
 
     if (!isset($normalized['identityReviewStatus']) || trim((string) $normalized['identityReviewStatus']) === '') {
-        $normalized['identityReviewStatus'] = trim((string) ($normalized['role'] ?? 'customer')) === 'provider' ? 'pending_review' : 'not_required';
+        $normalized['identityReviewStatus'] = strtolower(trim((string) ($normalized['role'] ?? 'customer'))) === 'provider' ? 'pending_review' : 'not_required';
     }
 
     if (!isset($normalized['identityPhotos']) || !is_array($normalized['identityPhotos'])) {
@@ -865,8 +865,8 @@ switch ($action) {
             'city' => (string) ($formData['city'] ?? ''),
             'role' => $role,
             'identityPhotos' => is_array($formData['identityPhotos'] ?? null) ? array_values($formData['identityPhotos']) : array(),
-            'identityReviewStatus' => $role === 'provider' ? 'pending_review' : 'not_required',
-            'identityReviewSubmittedAt' => $role === 'provider' ? gmdate('c') : '',
+            'identityReviewStatus' => strtolower($role) === 'provider' ? 'pending_review' : 'not_required',
+            'identityReviewSubmittedAt' => strtolower($role) === 'provider' ? gmdate('c') : '',
             'identityReviewedAt' => '',
             'identityReviewedBy' => '',
             'identityReviewNotes' => ''
