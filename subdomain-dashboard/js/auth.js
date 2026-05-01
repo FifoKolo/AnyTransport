@@ -62,6 +62,7 @@ window.anytransportApi = window.anytransportApi || (function () {
         const candidates = getApiCandidates();
         for (let i = 0; i < candidates.length; i += 1) {
             if (isApiReachable(candidates[i])) {
+                console.info('[AnyTransport API] Resolved to:', candidates[i]);
                 return candidates[i];
             }
         }
@@ -142,6 +143,18 @@ window.anytransportApi = window.anytransportApi || (function () {
         getUsers: function () {
             const response = request('users.list', 'GET');
             return Array.isArray(response.users) ? response.users : [];
+        },
+        getIdentityReviewQueue: function () {
+            const response = request('identity.review.queue', 'GET');
+            return Array.isArray(response.providers) ? response.providers : [];
+        },
+        updateIdentityReview: function (providerId, status, notes) {
+            const response = request('identity.review.update', 'POST', {
+                providerId: providerId,
+                status: status,
+                notes: notes || ''
+            });
+            return response.provider || null;
         },
         replaceUsers: function (users) {
             const response = request('users.replaceAll', 'POST', { users: Array.isArray(users) ? users : [] });

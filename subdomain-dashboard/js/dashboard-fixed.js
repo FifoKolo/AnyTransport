@@ -484,6 +484,10 @@
                 });
             }
         }
+
+        if (tabName === 'verification-review') {
+            renderAdminReviewQueue();
+        }
     }
 
     function wireProviderControls(user) {
@@ -686,6 +690,39 @@
                 return;
             }
 
+            const reviewBtn = event.target.closest('.review-provider-btn');
+            if (reviewBtn) {
+                if (!(auth.isAdmin && auth.isAdmin())) {
+                    alert('Admin access required.');
+                    return;
+                }
+
+                const providerId = String(reviewBtn.getAttribute('data-provider-id') || '').trim();
+                const status = String(reviewBtn.getAttribute('data-status') || '').trim();
+                const reviewCard = reviewBtn.closest('.provider-listing');
+                const notesField = reviewCard ? reviewCard.querySelector('.review-notes') : null;
+                const notes = notesField ? String(notesField.value || '').trim() : '';
+
+                if (status === 'rejected' && (!notes || String(notes).trim() === '')) {
+                    alert('Please add a review note explaining the reason for declining this provider.');
+                    if (notesField) notesField.focus();
+                    return;
+                }
+
+                try {
+                    if (!window.anytransportApi || typeof window.anytransportApi.updateIdentityReview !== 'function') {
+                        alert('Identity review tools are not available yet.');
+                        return;
+                    }
+
+                    window.anytransportApi.updateIdentityReview(providerId, status, notes);
+                    renderAdminReviewQueue();
+                } catch (error) {
+                    alert(error && error.message ? error.message : 'Unable to update the review status.');
+                }
+                return;
+            }
+
             const withdrawBtn = event.target.closest('.withdraw-bid-btn');
             if (withdrawBtn) {
                 withdrawBid(withdrawBtn.getAttribute('data-bid-id'), user);
@@ -747,6 +784,7 @@
     function renderAll(user) {
         renderProviderListings(user);
         renderMyBids(user);
+        renderAdminReviewQueue();
     }
 
     function loadUserInfo(user) {
@@ -935,6 +973,71 @@
                 initializeMapsInScope(listing);
             }
         });
+    }
+
+    function renderAdminReviewQueue() {
+        const container = document.getElementById('provider-review-queue');
+        if (!container) return;
+
+        if (!(auth.isAdmin && auth.isAdmin())) {
+            container.innerHTML = '<div class="empty-inventory">Admin access required.</div>';
+            return;
+        }
+
+        if (!window.anytransportApi || typeof window.anytransportApi.getIdentityReviewQueue !== 'function') {
+            container.innerHTML = '<div class="empty-inventory">Identity review tools are not available yet.</div>';
+            return;
+        }
+
+        try {
+            const providers = window.anytransportApi.getIdentityReviewQueue();
+            if (!providers.length) {
+                container.innerHTML = '<div class="empty-inventory">No providers are waiting for review.</div>';
+                return;
+            }
+
+            const apiBase = String(window.ANYTRANSPORT_API_URL || '../api/index.php');
+            container.innerHTML = providers.map((provider) => {
+                const name = escapeHtml(firstText(provider.businessName, provider.name, provider.nickname, provider.username, provider.email));
+                const email = escapeHtml(firstText(provider.email, 'Not provided'));
+                const status = escapeHtml(String(provider.identityReviewStatus || 'pending_review').replace(/_/g, ' '));
+                const notes = escapeHtml(firstText(provider.identityReviewNotes, ''));
+                const photos = Array.isArray(provider.identityPhotos) ? provider.identityPhotos : [];
+                const photoMarkup = photos.length ? photos.map((photo) => {
+                    const stripePhotoSrc = photo.stripeFile
+                        ? (apiBase + (apiBase.indexOf('?') >= 0 ? '&' : '?') + 'action=stripe.file.get&fileId=' + encodeURIComponent(photo.stripeFile))
+                        : '';
+                    const src = escapeHtml(firstText(photo.previewDataUrl, photo.dataUrl, photo.originalUrl, stripePhotoSrc));
+                    const label = escapeHtml(firstText(photo.label, photo.name, 'Identity photo'));
+                    return '<figure style="margin:0; width:140px;">' +
+                        '<img src="' + src + '" alt="' + label + '" style="width:140px; height:100px; object-fit:cover; border-radius:10px; border:1px solid #dbeafe;">' +
+                        '<figcaption style="font-size:12px; color:#64748b; margin-top:6px;">' + label + '</figcaption>' +
+                        '</figure>';
+                }).join('') : '<div class="empty-inventory">No identity photos attached.</div>';
+
+                return [
+                    '<article class="provider-listing" style="margin-bottom:16px;">',
+                    '<div class="listing-row body" style="grid-template-columns: 220px 160px 1fr 1fr;">',
+                    '<div class="listing-cell">',
+                    '<div class="listing-title">' + name + '</div>',
+                    '<div class="listing-sub">' + email + '</div>',
+                    '</div>',
+                    '<div class="listing-cell"><span class="profile-value">' + status + '</span></div>',
+                    '<div class="listing-cell" style="display:flex; flex-wrap:wrap; gap:10px;">' + photoMarkup + '</div>',
+                    '<div class="listing-cell review-actions-cell">',
+                    '<textarea class="form-input review-notes" rows="4" data-provider-id="' + escapeHtml(provider.id) + '" placeholder="Review notes" style="width:100%; box-sizing:border-box;">' + notes + '</textarea>',
+                    '<div class="actions review-actions" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-start;">',
+                    '<button type="button" class="btn btn-primary review-provider-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="approved">Approve</button>',
+                    '<button type="button" class="btn btn-danger review-provider-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="rejected">Decline</button>',
+                    '</div>',
+                    '</div>',
+                    '</div>',
+                    '</article>'
+                ].join('');
+            }).join('');
+        } catch (_error) {
+            container.innerHTML = '<div class="empty-inventory">Unable to load the review queue.</div>';
+        }
     }
 
     function createProviderPreviewListing(user, bids) {
