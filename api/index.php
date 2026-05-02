@@ -593,6 +593,9 @@ function send_email_smtp($to, $subject, $body, $replyTo, $host, $port, $user, $p
         }
     }
 
+    // Helps support tickets: confirms envelope matches the mailbox you logged in with
+    file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | smtp_auth_ok auth_login=' . $user . ' envelope_from=' . $from . ' ehlo=' . $ehloHost . "\n", FILE_APPEND | LOCK_EX);
+
     $h = $send('MAIL FROM: <' . $from . '>');
     if (smtp_last_code($h) >= 400) {
         $fail('mail_from', $h);
