@@ -404,6 +404,27 @@ function send_email_simple($to, $subject, $body, $replyTo = '') {
     }
 }
 
+function smtp_read_full_response($fp) {
+    $out = '';
+    while ($line = @fgets($fp, 515)) {
+        $out .= $line;
+        if (preg_match('/^\d{3} /', $line)) {
+            break;
+        }
+    }
+    return $out;
+}
+
+function smtp_last_code($response) {
+    $lines = preg_split('/\R/', trim((string) $response));
+    for ($i = count($lines) - 1; $i >= 0; $i--) {
+        if (preg_match('/^(\d{3})(?:\s|-)/', $lines[$i], $m)) {
+            return (int) $m[1];
+        }
+    }
+    return 0;
+}
+
 function send_email_smtp($to, $subject, $body, $replyTo, $host, $port, $user, $pass, $secure = 'tls') {
     $timeout = 15;
     $errno = 0;
@@ -416,40 +437,80 @@ function send_email_smtp($to, $subject, $body, $replyTo, $host, $port, $user, $p
     }
 
     stream_set_timeout($fp, $timeout);
-    $resp = fgets($fp, 515);
+    smtp_read_full_response($fp);
 
     $send = function ($cmd) use ($fp) {
         fwrite($fp, $cmd . "\r\n");
-        return fgets($fp, 515);
+        return smtp_read_full_response($fp);
+    };
+
+    $fail = function ($stage, $resp) use ($host, $port) {
+        $snippet = trim(preg_replace('/\s+/', ' ', substr($resp, 0, 200)));
+        file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | smtp_fail stage={$stage} host={$host} port={$port} resp=" . $snippet . "\n", FILE_APPEND | LOCK_EX);
     };
 
     // EHLO
     $h = $send('EHLO ' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+    if (smtp_last_code($h) >= 400) {
+        $fail('ehlo', $h);
+        fclose($fp);
+        return false;
+    }
 
     // Start TLS if requested and supported
     if ($secure === 'tls') {
         $h = $send('STARTTLS');
-        // enable crypto
+        if (smtp_last_code($h) >= 400) {
+            $fail('starttls', $h);
+            fclose($fp);
+            return false;
+        }
         if (!stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
-            // proceed without TLS
+            file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | smtp_fail stage=starttls_crypto host={$host}\n", FILE_APPEND | LOCK_EX);
+            fclose($fp);
+            return false;
         }
         $h = $send('EHLO ' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+        if (smtp_last_code($h) >= 400) {
+            $fail('ehlo_after_tls', $h);
+            fclose($fp);
+            return false;
+        }
     }
 
     // Auth if credentials provided
     if ($user !== '' && $pass !== '') {
         $send('AUTH LOGIN');
         $send(base64_encode($user));
-        $send(base64_encode($pass));
+        $h = $send(base64_encode($pass));
+        if (smtp_last_code($h) >= 400) {
+            $fail('auth', $h);
+            fclose($fp);
+            return false;
+        }
     }
 
     $from = $user ?: ('no-reply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
-    $send('MAIL FROM: <' . $from . '>');
-    // multiple recipients not supported; single to
-    $send('RCPT TO: <' . $to . '>');
-    $send('DATA');
+    $h = $send('MAIL FROM: <' . $from . '>');
+    if (smtp_last_code($h) >= 400) {
+        $fail('mail_from', $h);
+        fclose($fp);
+        return false;
+    }
+    $h = $send('RCPT TO: <' . $to . '>');
+    if (smtp_last_code($h) >= 400) {
+        $fail('rcpt', $h);
+        fclose($fp);
+        return false;
+    }
+    $h = $send('DATA');
+    if (smtp_last_code($h) >= 400) {
+        $fail('data', $h);
+        fclose($fp);
+        return false;
+    }
     $headers = '';
-    $headers .= 'From: AnyTransport <' . $from . "\r\n";
+    $headers .= 'From: AnyTransport <' . $from . ">\r\n";
     if (trim((string) $replyTo) !== '') {
         $headers .= 'Reply-To: ' . trim((string) $replyTo) . "\r\n";
     }
@@ -457,10 +518,15 @@ function send_email_smtp($to, $subject, $body, $replyTo, $host, $port, $user, $p
     $headers .= 'MIME-Version: 1.0' . "\r\n";
     $headers .= 'Content-Type: text/plain; charset=utf-8' . "\r\n";
     $headers .= "\r\n";
-    $send($headers . $body . "\r\n.");
+    $h = $send($headers . $body . "\r\n.");
+    if (smtp_last_code($h) >= 400) {
+        $fail('message_body', $h);
+        fclose($fp);
+        return false;
+    }
     $send('QUIT');
     fclose($fp);
-    file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | smtp_send to={$to} host={$host} port={$port} user=" . ($user? $user : '(none)') . "\n", FILE_APPEND | LOCK_EX);
+    file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | smtp_send to={$to} host={$host} port={$port} user=" . ($user ? $user : '(none)') . "\n", FILE_APPEND | LOCK_EX);
     return true;
 }
 

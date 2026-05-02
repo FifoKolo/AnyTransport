@@ -1,0 +1,14 @@
+# Add INSIDE the server { } block for dev.anytransport.ie (HTTPS, port 443).
+# 1) Find PHP-FPM socket on the server:
+#    ls /run/php/
+#    (e.g. php8.3-fpm.sock — use the real name below)
+# 2) nginx -t && systemctl reload nginx
+#
+# Without this, Nginx serves .php as static files (download) and API POSTs can return 405.
+
+index index.html index.php;
+
+location ~ \.php$ {
+    include snippets/fastcgi-php.conf;
+    fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+}
