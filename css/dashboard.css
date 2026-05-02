@@ -705,6 +705,11 @@
     width: 100%;
 }
 
+.review-actions-cell .reupload-identity-btn {
+    background-color: var(--primary-light);
+    color: rgba(255, 255, 255, 1);
+}
+
 .listing-title {
     font-weight: 700;
     color: #1b3342;
