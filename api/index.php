@@ -472,7 +472,8 @@ function smtp_dns_a_records($host) {
 }
 
 /**
- * Connect to SMTP; retry IPv4 A records if the first attempt fails (common when IPv6 is broken on the server).
+ * Connect to SMTP. Try IPv4 (DNS A) first, then hostname — avoids err=110 timeouts when IPv6 is broken
+ * but IPv4 works (common on VPS: hostname resolves AAAA first and hangs).
  */
 function smtp_connect_with_ipv4_fallback($host, $port, $secure, $timeout, &$errno, &$errstr) {
     $errno = 0;
@@ -485,16 +486,18 @@ function smtp_connect_with_ipv4_fallback($host, $port, $secure, $timeout, &$errn
         ),
     );
 
-    if ($secure === 'ssl') {
-        $try = array('ssl://' . $host . ':' . $port);
-        foreach (smtp_dns_a_records($host) as $ip) {
+    $try = array();
+    foreach (smtp_dns_a_records($host) as $ip) {
+        if ($secure === 'ssl') {
             $try[] = array('ssl_ip', $ip);
-        }
-    } else {
-        $try = array('tcp://' . $host . ':' . $port);
-        foreach (smtp_dns_a_records($host) as $ip) {
+        } else {
             $try[] = array('tcp_ip', $ip);
         }
+    }
+    if ($secure === 'ssl') {
+        $try[] = 'ssl://' . $host . ':' . $port;
+    } else {
+        $try[] = 'tcp://' . $host . ':' . $port;
     }
 
     foreach ($try as $item) {
@@ -532,7 +535,12 @@ function send_email_smtp($to, $subject, $body, $replyTo, $host, $port, $user, $p
     $from = smtp_mail_from_address($user);
     list($fp, $viaIp) = smtp_connect_with_ipv4_fallback($host, $port, $secure, $timeout, $errno, $errstr);
     if (!$fp) {
-        $hint = ($errno === 0 && $errstr === '') ? ' hint=outbound port blocked, DNS, or IPv6; try telnet/nc from this host' : '';
+        $hint = '';
+        if ($errno === 0 && $errstr === '') {
+            $hint = ' hint=outbound port blocked, DNS, or IPv6; try telnet/nc from this host';
+        } elseif ($errno === 110) {
+            $hint = ' hint=connection timed out — try SMTP_PORT 587 + SMTP_SECURE tls, or check VPS firewall outbound to this host:port';
+        }
         file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | smtp_tcp_failed host={$host} port={$port} err={$errno} msg={$errstr}{$hint}\n", FILE_APPEND | LOCK_EX);
         return false;
     }
