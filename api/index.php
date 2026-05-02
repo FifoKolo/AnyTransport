@@ -1412,9 +1412,24 @@ switch ($action) {
         send_json(array('ok' => true, 'message' => $savedMessage));
 
     case 'email.test':
-        $to = trim((string) ($input['to'] ?? ''));
-        $subject = trim((string) ($input['subject'] ?? 'Test email from AnyTransport'));
-        $body = trim((string) ($input['body'] ?? 'This is a test email.'));
+        // POST: JSON body. GET: only if EMAIL_TEST_TOKEN is set in api/stripe-config.php (helps when Nginx returns 405 on POST during SMTP setup).
+        $to = '';
+        $subject = '';
+        $body = '';
+        if ($method === 'GET') {
+            $expected = get_env_value('EMAIL_TEST_TOKEN', '');
+            $given = trim((string) ($_GET['token'] ?? ''));
+            if ($expected === '' || $given === '' || !hash_equals($expected, $given)) {
+                send_json(array('ok' => false, 'error' => 'GET email test requires EMAIL_TEST_TOKEN in api/stripe-config.php and matching ?token= in the URL.'), 403);
+            }
+            $to = trim((string) ($_GET['to'] ?? ''));
+            $subject = trim((string) ($_GET['subject'] ?? 'Test email from AnyTransport'));
+            $body = trim((string) ($_GET['body'] ?? 'This is a test email.'));
+        } else {
+            $to = trim((string) ($input['to'] ?? ''));
+            $subject = trim((string) ($input['subject'] ?? 'Test email from AnyTransport'));
+            $body = trim((string) ($input['body'] ?? 'This is a test email.'));
+        }
         if ($to === '') {
             send_json(array('ok' => false, 'error' => 'Recipient (to) is required.'), 400);
         }
