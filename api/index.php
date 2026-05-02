@@ -454,26 +454,91 @@ function smtp_mail_from_address($smtpUser) {
     return 'no-reply@' . smtp_ehlo_hostname($smtpUser);
 }
 
+/** IPv4 addresses for hostname (empty if $host is already an IP). */
+function smtp_dns_a_records($host) {
+    if (filter_var($host, FILTER_VALIDATE_IP)) {
+        return array();
+    }
+    $ips = array();
+    $records = @dns_get_record($host, DNS_A);
+    if (is_array($records)) {
+        foreach ($records as $r) {
+            if (!empty($r['ip'])) {
+                $ips[] = $r['ip'];
+            }
+        }
+    }
+    return $ips;
+}
+
+/**
+ * Connect to SMTP; retry IPv4 A records if the first attempt fails (common when IPv6 is broken on the server).
+ */
+function smtp_connect_with_ipv4_fallback($host, $port, $secure, $timeout, &$errno, &$errstr) {
+    $errno = 0;
+    $errstr = '';
+    $sslCtx = array(
+        'ssl' => array(
+            'peer_name' => $host,
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+        ),
+    );
+
+    if ($secure === 'ssl') {
+        $try = array('ssl://' . $host . ':' . $port);
+        foreach (smtp_dns_a_records($host) as $ip) {
+            $try[] = array('ssl_ip', $ip);
+        }
+    } else {
+        $try = array('tcp://' . $host . ':' . $port);
+        foreach (smtp_dns_a_records($host) as $ip) {
+            $try[] = array('tcp_ip', $ip);
+        }
+    }
+
+    foreach ($try as $item) {
+        if (is_string($item)) {
+            $fp = @stream_socket_client($item, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT);
+            if ($fp) {
+                return array($fp, null);
+            }
+            continue;
+        }
+        $ip = $item[1];
+        if ($item[0] === 'tcp_ip') {
+            $ctx = stream_context_create($sslCtx);
+            $fp = @stream_socket_client('tcp://' . $ip . ':' . $port, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $ctx);
+            if ($fp) {
+                @stream_context_set_option($fp, 'ssl', 'peer_name', $host);
+                return array($fp, $ip);
+            }
+        } else {
+            $ctx = stream_context_create($sslCtx);
+            $fp = @stream_socket_client('ssl://' . $ip . ':' . $port, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $ctx);
+            if ($fp) {
+                return array($fp, $ip);
+            }
+        }
+    }
+    return array(false, null);
+}
+
 function send_email_smtp($to, $subject, $body, $replyTo, $host, $port, $user, $pass, $secure = 'tls') {
     $timeout = 15;
     $errno = 0;
     $errstr = '';
     $ehloHost = smtp_ehlo_hostname($user);
     $from = smtp_mail_from_address($user);
-    // stream_socket_client requires a scheme; bare "host:port" fails or behaves inconsistently (especially under FPM).
-    if ($secure === 'ssl') {
-        $remote = 'ssl://' . $host . ':' . $port;
-    } else {
-        $remote = 'tcp://' . $host . ':' . $port;
-    }
-    $fp = @stream_socket_client($remote, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT);
+    list($fp, $viaIp) = smtp_connect_with_ipv4_fallback($host, $port, $secure, $timeout, $errno, $errstr);
     if (!$fp) {
         $hint = ($errno === 0 && $errstr === '') ? ' hint=outbound port blocked, DNS, or IPv6; try telnet/nc from this host' : '';
         file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | smtp_tcp_failed host={$host} port={$port} err={$errno} msg={$errstr}{$hint}\n", FILE_APPEND | LOCK_EX);
         return false;
     }
 
-    file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | smtp_tcp_ok host={$host} port={$port}\n", FILE_APPEND | LOCK_EX);
+    $viaNote = $viaIp !== null ? " via_ip={$viaIp}" : '';
+    file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | smtp_tcp_ok host={$host} port={$port}{$viaNote}\n", FILE_APPEND | LOCK_EX);
     stream_set_timeout($fp, $timeout);
     smtp_read_full_response($fp);
 
