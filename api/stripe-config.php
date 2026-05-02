@@ -5,7 +5,7 @@ return array(
   'SMTP_HOST' => 'mail.privateemail.com',
   'SMTP_PORT' => 587,
   'SMTP_USER' => 'info@anytransport.ie',
-  'SMTP_PASS' => 'YOUR_INFO_MAILBOX_PASSWORD',
+  'SMTP_PASS' => '6LhYqDNDka#',
   'SMTP_SECURE' => 'tls',
   'SMTP_FROM' => 'info@anytransport.ie',
   'SMTP_EHLO_DOMAIN' => 'anytransport.ie',
