@@ -425,10 +425,25 @@ function smtp_last_code($response) {
     return 0;
 }
 
+function smtp_ehlo_hostname($smtpUser) {
+    $custom = get_env_value(array('SMTP_EHLO_DOMAIN', 'SMTP_EHLO_HOST'), '');
+    if ($custom !== '') {
+        return $custom;
+    }
+    if ($smtpUser !== '' && strpos($smtpUser, '@') !== false) {
+        $domain = strtolower(trim(substr(strrchr($smtpUser, '@'), 1)));
+        if ($domain !== '') {
+            return $domain;
+        }
+    }
+    return isset($_SERVER['HTTP_HOST']) ? (string) $_SERVER['HTTP_HOST'] : 'localhost';
+}
+
 function send_email_smtp($to, $subject, $body, $replyTo, $host, $port, $user, $pass, $secure = 'tls') {
     $timeout = 15;
     $errno = 0;
     $errstr = '';
+    $ehloHost = smtp_ehlo_hostname($user);
     $remote = ($secure === 'ssl') ? 'ssl://' . $host : $host;
     $fp = @stream_socket_client($remote . ':' . $port, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT);
     if (!$fp) {
@@ -449,8 +464,8 @@ function send_email_smtp($to, $subject, $body, $replyTo, $host, $port, $user, $p
         file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | smtp_fail stage={$stage} host={$host} port={$port} resp=" . $snippet . "\n", FILE_APPEND | LOCK_EX);
     };
 
-    // EHLO
-    $h = $send('EHLO ' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+    // EHLO (use mailbox domain when possible — avoids 554 "sender rejected" on some hosts when HTTP_HOST is a dev subdomain)
+    $h = $send('EHLO ' . $ehloHost);
     if (smtp_last_code($h) >= 400) {
         $fail('ehlo', $h);
         fclose($fp);
@@ -470,7 +485,7 @@ function send_email_smtp($to, $subject, $body, $replyTo, $host, $port, $user, $p
             fclose($fp);
             return false;
         }
-        $h = $send('EHLO ' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+        $h = $send('EHLO ' . $ehloHost);
         if (smtp_last_code($h) >= 400) {
             $fail('ehlo_after_tls', $h);
             fclose($fp);
