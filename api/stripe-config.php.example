@@ -2,5 +2,19 @@
 
 return array(
     'STRIPE_SECRET_KEY' => 'sk_test_your_secret_key_here',
-    'STRIPE_CONNECT_COUNTRY' => 'IE'
+    'STRIPE_CONNECT_COUNTRY' => 'IE',
+
+    // Outbound email (optional). If SMTP_HOST is set, PHP mail() is not used.
+    //
+    // Namecheap Private Email: create the mailbox in Namecheap → Private Email, then use:
+    // SMTP_USER = full email address; SMTP_PASS = that mailbox’s password.
+    // Set SMTP_EHLO_DOMAIN to your bare domain (e.g. anytransport.ie) if the server rejects the sender.
+    //
+    // 'SMTP_HOST' => 'mail.privateemail.com',
+    // 'SMTP_PORT' => 587,
+    // 'SMTP_USER' => 'no-reply@yourdomain.com',
+    // 'SMTP_PASS' => 'your-mailbox-password',
+    // 'SMTP_SECURE' => 'tls',
+    // 'SMTP_FROM' => 'no-reply@yourdomain.com',
+    // 'SMTP_EHLO_DOMAIN' => 'yourdomain.com',
 );

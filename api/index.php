@@ -439,18 +439,41 @@ function smtp_ehlo_hostname($smtpUser) {
     return isset($_SERVER['HTTP_HOST']) ? (string) $_SERVER['HTTP_HOST'] : 'localhost';
 }
 
+/**
+ * Envelope + From: address. When SMTP_USER is not an email (e.g. some relay APIs use "apikey"),
+ * set SMTP_FROM; otherwise the mailbox address is used (Namecheap Private Email, etc.).
+ */
+function smtp_mail_from_address($smtpUser) {
+    $fromCfg = get_env_value(array('SMTP_FROM', 'EMAIL_FROM', 'MAIL_FROM'), '');
+    if ($fromCfg !== '') {
+        return $fromCfg;
+    }
+    if ($smtpUser !== '' && strpos($smtpUser, '@') !== false) {
+        return $smtpUser;
+    }
+    return 'no-reply@' . smtp_ehlo_hostname($smtpUser);
+}
+
 function send_email_smtp($to, $subject, $body, $replyTo, $host, $port, $user, $pass, $secure = 'tls') {
     $timeout = 15;
     $errno = 0;
     $errstr = '';
     $ehloHost = smtp_ehlo_hostname($user);
-    $remote = ($secure === 'ssl') ? 'ssl://' . $host : $host;
-    $fp = @stream_socket_client($remote . ':' . $port, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT);
+    $from = smtp_mail_from_address($user);
+    // stream_socket_client requires a scheme; bare "host:port" fails or behaves inconsistently (especially under FPM).
+    if ($secure === 'ssl') {
+        $remote = 'ssl://' . $host . ':' . $port;
+    } else {
+        $remote = 'tcp://' . $host . ':' . $port;
+    }
+    $fp = @stream_socket_client($remote, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT);
     if (!$fp) {
-        file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | smtp_connect host={$host} port={$port} err={$errno} msg={$errstr}\n", FILE_APPEND | LOCK_EX);
+        $hint = ($errno === 0 && $errstr === '') ? ' hint=outbound port blocked, DNS, or IPv6; try telnet/nc from this host' : '';
+        file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | smtp_tcp_failed host={$host} port={$port} err={$errno} msg={$errstr}{$hint}\n", FILE_APPEND | LOCK_EX);
         return false;
     }
 
+    file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | smtp_tcp_ok host={$host} port={$port}\n", FILE_APPEND | LOCK_EX);
     stream_set_timeout($fp, $timeout);
     smtp_read_full_response($fp);
 
@@ -505,7 +528,6 @@ function send_email_smtp($to, $subject, $body, $replyTo, $host, $port, $user, $p
         }
     }
 
-    $from = $user ?: ('no-reply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
     $h = $send('MAIL FROM: <' . $from . '>');
     if (smtp_last_code($h) >= 400) {
         $fail('mail_from', $h);
