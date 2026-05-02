@@ -385,7 +385,7 @@ function send_email_simple($to, $subject, $body, $replyTo = '') {
     }
 
     $headers = array();
-    $headers[] = 'From: AnyTransport <no-reply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '>';
+    $headers[] = 'From: AnyTransport <info@' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '>';
     if (trim((string) $replyTo) !== '') {
         $headers[] = 'Reply-To: ' . trim((string) $replyTo);
     }
@@ -451,7 +451,7 @@ function smtp_mail_from_address($smtpUser) {
     if ($smtpUser !== '' && strpos($smtpUser, '@') !== false) {
         return $smtpUser;
     }
-    return 'no-reply@' . smtp_ehlo_hostname($smtpUser);
+    return 'info@' . smtp_ehlo_hostname($smtpUser);
 }
 
 /** IPv4 addresses for hostname (empty if $host is already an IP). */
