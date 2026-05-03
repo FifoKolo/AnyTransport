@@ -1668,6 +1668,9 @@ function applyDeliveryLiftSelection(value) {
     });
 }
 
+window.applyPickupLiftSelection = applyPickupLiftSelection;
+window.applyDeliveryLiftSelection = applyDeliveryLiftSelection;
+
 function autoAdvanceToInventoryIfReady() {
     const body = document.body;
     const isStep3 = body.getAttribute('data-form-step') === '3' || body.getAttribute('data-current-step') === '3';
@@ -3357,6 +3360,77 @@ document.addEventListener('click', function(event) {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
+        (function applyCreateJobEditQuoteBodyClass() {
+            try {
+                const p = new URLSearchParams(window.location.search || '');
+                if (String(p.get('editQuote') || p.get('resumeQuote') || '').trim()) {
+                    document.body.classList.add('create-job-edit-quote');
+                }
+            } catch (_e) {
+                /* ignore */
+            }
+        })();
+
+        (function hydrateEditQuoteFromUrlEarly() {
+            if (!window.__anytransportHasEditQuoteInUrl || !window.__anytransportHasEditQuoteInUrl()) {
+                return;
+            }
+            let quoteId = '';
+            try {
+                const p = new URLSearchParams(window.location.search || '');
+                quoteId = String(p.get('editQuote') || p.get('resumeQuote') || '').trim();
+            } catch (_e) {
+                return;
+            }
+            if (!quoteId) return;
+
+            let q = null;
+            if (window.anytransportApi && typeof window.anytransportApi.getQuote === 'function') {
+                try {
+                    q = window.anytransportApi.getQuote(quoteId);
+                } catch (_e) {
+                    q = null;
+                }
+            }
+            if (!q) {
+                try {
+                    const raw = localStorage.getItem('anytransport_quote_requests');
+                    const list = raw ? JSON.parse(raw) : [];
+                    if (Array.isArray(list)) {
+                        q = list.find((entry) => entry && String(entry.id || '') === quoteId) || null;
+                    }
+                } catch (_e) {
+                    q = null;
+                }
+            }
+            if (!q || typeof q !== 'object') {
+                return;
+            }
+
+            try {
+                sessionStorage.setItem('anytransport_edit_quote_id', String(q.id || quoteId || '').trim());
+                const fid = String(q.formId || '').trim();
+                if (fid) {
+                    sessionStorage.setItem('anytransport_edit_quote_form_id', fid);
+                } else {
+                    sessionStorage.removeItem('anytransport_edit_quote_form_id');
+                }
+            } catch (_e) {
+                /* ignore */
+            }
+
+            window.__createJobRestoreTargetStep = 5;
+            window.__createJobRestoreUnlockedStep = 8;
+            window.__createJobMaxReachedStep = 8;
+            window.__overviewStepVisited = true;
+
+            if (typeof window.hydrateCreateJobFormFromSavedQuote === 'function') {
+                window.hydrateCreateJobFormFromSavedQuote(q);
+            }
+
+            window.__anytransportEditQuoteHydrated = true;
+        })();
+
         // Create local references to module-level functions to ensure they're accessible in this scope
         const clearNextMissingHighlights = window.clearNextMissingHighlights;
         const validateStep1AreaOrEircode = window.validateStep1AreaOrEircode;
@@ -9025,6 +9099,176 @@ window.selectedPickupFloors = new Set();
 window.selectedDeliveryFloors = new Set();
 window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
 
+/** True when opening create-job with ?editQuote= or ?resumeQuote= (review/edit saved request). */
+window.__anytransportHasEditQuoteInUrl = function __anytransportHasEditQuoteInUrl() {
+    try {
+        const p = new URLSearchParams(window.location.search || '');
+        return !!String(p.get('editQuote') || p.get('resumeQuote') || '').trim();
+    } catch (_e) {
+        return false;
+    }
+};
+
+/**
+ * Apply a saved quote record (API or local listing) onto the create-job form.
+ * Used when editing from My requests; landing step is 5 (inventory) with full navigation unlocked.
+ */
+window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSavedQuote(q) {
+    if (!q || typeof q !== 'object') return;
+
+    const setEl = (id, val) => {
+        if (val === undefined || val === null || val === '') return;
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (typeof val === 'object') {
+            try {
+                el.value = JSON.stringify(val);
+            } catch (_e) {
+                return;
+            }
+        } else {
+            el.value = String(val);
+        }
+        try {
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (_e) {
+            /* ignore */
+        }
+    };
+
+    const stringPairs = [
+        ['pickupAddress', 'pickup-address'],
+        ['pickupCity', 'pickup-city'],
+        ['pickupPostcode', 'pickup-postcode'],
+        ['pickupPropertyType', 'pickup-property-type'],
+        ['propertyType', 'pickup-property-type'],
+        ['deliveryAddress', 'delivery-address'],
+        ['deliveryCity', 'delivery-city'],
+        ['deliveryPostcode', 'delivery-postcode'],
+        ['deliveryPropertyType', 'delivery-property-type'],
+        ['customerName', 'customer-name'],
+        ['customerEmail', 'customer-email'],
+        ['customerPhone', 'customer-phone'],
+        ['instructions', 'instructions'],
+        ['transportDate', 'service-transport-date'],
+        ['preferredDate', 'preferred-date'],
+        ['routeDistanceKm', 'route-distance-km'],
+        ['routeDurationText', 'route-duration-text'],
+        ['timeFlexibility', 'time-flexibility'],
+        ['serviceSpecialInstructions', 'service-special-instructions'],
+        ['servicePacking', 'service-packing'],
+        ['servicePackingMode', 'service-packing-mode'],
+        ['servicePackingBoxProvider', 'service-packing-box-provider'],
+        ['servicePackingItems', 'service-packing-items'],
+        ['serviceDisassembly', 'service-disassembly'],
+        ['serviceDisassemblyItems', 'service-disassembly-items'],
+        ['serviceAssembleAtArrival', 'service-assemble-at-arrival'],
+        ['serviceAssembleItems', 'service-assemble-items'],
+        ['serviceStorage', 'service-storage'],
+        ['serviceStorageMode', 'service-storage-mode'],
+        ['serviceStorageItems', 'service-storage-items'],
+        ['serviceStorageDateMode', 'service-storage-date-mode'],
+        ['serviceStorageStartDatetime', 'service-storage-start-datetime'],
+        ['serviceStorageEndDatetime', 'service-storage-end-datetime'],
+        ['serviceStorageStartApproxFrom', 'service-storage-start-approx-from'],
+        ['serviceStorageStartApproxTo', 'service-storage-start-approx-to'],
+        ['serviceStorageEndApproxFrom', 'service-storage-end-approx-from'],
+        ['serviceStorageEndApproxTo', 'service-storage-end-approx-to'],
+        ['servicePickupLoadingMethod', 'service-pickup-loading-method'],
+        ['serviceDeliveryLoadingMethod', 'service-delivery-loading-method'],
+        ['servicePickupMoversMode', 'service-pickup-movers-mode'],
+        ['servicePickupMovers', 'service-pickup-movers'],
+        ['servicePickupMoversConfirmed', 'service-pickup-movers-confirmed'],
+        ['serviceDeliveryMoversMode', 'service-delivery-movers-mode'],
+        ['serviceDeliveryMovers', 'service-delivery-movers'],
+        ['serviceDeliveryMoversConfirmed', 'service-delivery-movers-confirmed'],
+        ['preferredPickupTime', 'preferred-time-pickup'],
+        ['preferredDeliveryTime', 'preferred-time-delivery'],
+        ['pickupLiftAvailable', 'pickup-lift-available'],
+        ['deliveryLiftAvailable', 'delivery-lift-available']
+    ];
+
+    stringPairs.forEach(([k, id]) => {
+        if (q[k] !== undefined && q[k] !== null && q[k] !== '') {
+            setEl(id, q[k]);
+        }
+    });
+
+    const legacyPickupLift = q['pickup-lift-available'] ?? q.pickupLift;
+    if (legacyPickupLift !== undefined && legacyPickupLift !== null && String(legacyPickupLift).trim() !== '') {
+        setEl('pickup-lift-available', legacyPickupLift);
+    }
+    const legacyDeliveryLift = q['delivery-lift-available'] ?? q.deliveryLift;
+    if (legacyDeliveryLift !== undefined && legacyDeliveryLift !== null && String(legacyDeliveryLift).trim() !== '') {
+        setEl('delivery-lift-available', legacyDeliveryLift);
+    }
+
+    const itemType = String(q.itemType || q.itemDescription || '').trim();
+    if (itemType) {
+        setEl('item-description-hidden', itemType);
+    }
+
+    const pianosRaw = q.pianosJson;
+    if (typeof pianosRaw === 'string' && pianosRaw.trim()) {
+        setEl('pianos-json-hidden', pianosRaw);
+    }
+
+    if (q.houseInventory && typeof q.houseInventory === 'object') {
+        try {
+            localStorage.setItem('house_removal_inventory', JSON.stringify(q.houseInventory));
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
+    if (q.mediaAttachments && Array.isArray(q.mediaAttachments) && q.mediaAttachments.length > 0) {
+        setEl('global-service-media-hidden', JSON.stringify(q.mediaAttachments));
+    }
+
+    if (window.multiItemsManager && typeof window.multiItemsManager.renderPianosList === 'function') {
+        window.multiItemsManager.renderPianosList();
+    }
+
+    setTimeout(() => {
+        const pLift = String(document.getElementById('pickup-lift-available')?.value || '').trim();
+        const dLift = String(document.getElementById('delivery-lift-available')?.value || '').trim();
+        if (typeof window.applyPickupLiftSelection === 'function') {
+            window.applyPickupLiftSelection(pLift);
+        }
+        if (typeof window.applyDeliveryLiftSelection === 'function') {
+            window.applyDeliveryLiftSelection(dLift);
+        }
+        if (typeof window.syncPickupStep2FromState === 'function') {
+            window.syncPickupStep2FromState();
+        }
+        if (typeof window.syncDeliveryStep4FromState === 'function') {
+            window.syncDeliveryStep4FromState();
+        }
+        if (typeof window.renderPickupFloorSelector === 'function') {
+            window.renderPickupFloorSelector();
+        }
+        if (typeof window.renderDeliveryFloorSelector === 'function') {
+            window.renderDeliveryFloorSelector();
+        }
+        if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
+            window.renderSelectedPickupFloorsInventory(pLift);
+        }
+        if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
+            window.ensureMultiFloorInventoryVisible();
+        }
+        if (typeof window.renderInventoryByRoom === 'function') {
+            window.renderInventoryByRoom(window.currentRoom || null);
+        }
+        if (typeof window.updateOrganizationSectionVisibility === 'function') {
+            window.updateOrganizationSectionVisibility();
+        }
+        if (typeof window.updateFormSummary === 'function') {
+            window.updateFormSummary();
+        }
+    }, 50);
+};
+
 // --- Simple Draft Persistence ---
 (function setupSimpleCreateJobDraft() {
     const DRAFT_KEY_BASE = 'anytransport_simple_create_job_draft_v1';
@@ -9567,7 +9811,13 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
             bootDraft = legacyDraft;
         }
     }
-    if (bootDraft && Number.isFinite(parseInt(bootDraft.step, 10))) {
+    if (window.__anytransportHasEditQuoteInUrl && window.__anytransportHasEditQuoteInUrl()) {
+        window.__createJobRestoreTargetStep = 5;
+        window.__createJobRestoreUnlockedStep = 8;
+        window.__createJobMaxReachedStep = 8;
+        window.__overviewStepVisited = true;
+        bootLockedStep = 5;
+    } else if (bootDraft && Number.isFinite(parseInt(bootDraft.step, 10))) {
         bootLockedStep = parseInt(bootDraft.step, 10);
         window.__createJobRestoreTargetStep = bootLockedStep;
         const bootUnlockedStep = Number.isFinite(parseInt(bootDraft.maxReachedStep, 10))
@@ -10442,6 +10692,13 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
     };
 
     window.restoreCreateJobProgress = function restoreCreateJobProgress() {
+        // Loading a saved quote from the URL fully hydrates the form; draft restore would
+        // clobber fields (e.g. lift status) on delayed passes at the same step.
+        if (typeof window.__anytransportHasEditQuoteInUrl === 'function'
+            && window.__anytransportHasEditQuoteInUrl()) {
+            return;
+        }
+
         const requestedScope = getRestoreScope();
         const payloads = getSavedPayloadsForScope(requestedScope, false);
         let payload = payloads.full || payloads.core;
@@ -10729,11 +10986,17 @@ window.multiFloorInventory = {}; // Initialize multi-floor inventory storage
                 }
             }
 
-            const targetStep = Number.isFinite(parseInt(payload.step, 10)) ? parseInt(payload.step, 10) : 1;
-            const unlockedStep = Number.isFinite(parseInt(payload.maxReachedStep, 10))
+            let targetStep = Number.isFinite(parseInt(payload.step, 10)) ? parseInt(payload.step, 10) : 1;
+            let unlockedStep = Number.isFinite(parseInt(payload.maxReachedStep, 10))
                 ? parseInt(payload.maxReachedStep, 10)
                 : targetStep;
-            window.__overviewStepVisited = payload.overviewVisited === true || unlockedStep >= 8;
+            if (window.__anytransportHasEditQuoteInUrl && window.__anytransportHasEditQuoteInUrl()) {
+                targetStep = 5;
+                unlockedStep = Math.max(unlockedStep, 8);
+                window.__overviewStepVisited = true;
+            } else {
+                window.__overviewStepVisited = payload.overviewVisited === true || unlockedStep >= 8;
+            }
             bootLockedStep = targetStep;
             window.__createJobRestoreTargetStep = targetStep;
             window.__createJobRestoreUnlockedStep = Math.max(targetStep, unlockedStep);
@@ -11096,6 +11359,28 @@ function isPickupFloorConfirmationSatisfied() {
     return window.step3PickupFloorsConfirmed === true || hasSavedHouseRemovalInventoryData();
 }
 
+/** Floors currently chosen in the pickup UI (house multi-select and vehicle parking radiogroup). */
+function getDomSelectedPickupFloorNames() {
+    const selector = [
+        '#pickup-floors-selector .pickup-floor-selector-btn.selected',
+        '#pickup-floors-selector .pickup-floor-selector-btn[aria-pressed="true"]',
+        '#pickup-floors-selector .pickup-floor-selector-btn[aria-checked="true"]',
+        '#vehicle-step2-pickup-parking-selector .pickup-floor-selector-btn.selected',
+        '#vehicle-step2-pickup-parking-selector .pickup-floor-selector-btn[aria-pressed="true"]',
+        '#vehicle-step2-pickup-parking-selector .pickup-floor-selector-btn[aria-checked="true"]'
+    ].join(', ');
+    const seen = new Set();
+    const out = [];
+    document.querySelectorAll(selector).forEach((btn) => {
+        const name = String(btn.getAttribute('data-floor') || '').trim();
+        if (name && !seen.has(name)) {
+            seen.add(name);
+            out.push(name);
+        }
+    });
+    return out;
+}
+
 function syncPickupFloorHiddenFromSelection() {
     const hidden = document.getElementById('pickup-floor-select');
     if (!hidden) return;
@@ -11213,7 +11498,20 @@ window.renderDeliveryFloorSelector = function() {
             window.selectedDeliveryFloors.delete(floorName);
         }
     });
-    
+
+    // Put back any floor that still has Step 5 assignments (pruning can drop floors that must stay selected).
+    if (window.itemFloorAssignments && typeof window.itemFloorAssignments === 'object') {
+        Object.values(window.itemFloorAssignments).forEach((perFloor) => {
+            if (!perFloor || typeof perFloor !== 'object') return;
+            Object.keys(perFloor).forEach((floorName) => {
+                const qty = parseInt(perFloor[floorName], 10) || 0;
+                if (qty > 0 && floorName && availableDeliveryFloors.includes(floorName)) {
+                    window.selectedDeliveryFloors.add(floorName);
+                }
+            });
+        });
+    }
+
     selectorContainer.innerHTML = '';
     
     availableDeliveryFloors.forEach(floor => {
@@ -11620,9 +11918,10 @@ if (!window.__motorbikeConfirmFloorFallbackBound) {
                 window.selectedPickupFloors = new Set();
             }
 
-            const domSelectedFloors = Array.from(document.querySelectorAll('.pickup-floor-selector-btn.selected, .pickup-floor-selector-btn[aria-pressed="true"], .pickup-floor-selector-btn[aria-checked="true"]'))
-                .map((btn) => String(btn.getAttribute('data-floor') || '').trim())
-                .filter(Boolean);
+            let domSelectedFloors = getDomSelectedPickupFloorNames();
+            if (domSelectedFloors.length === 0 && window.selectedPickupFloors instanceof Set && window.selectedPickupFloors.size > 0) {
+                domSelectedFloors = getOrderedFloorList(Array.from(window.selectedPickupFloors));
+            }
 
             if (domSelectedFloors.length > 0) {
                 window.selectedPickupFloors = new Set(domSelectedFloors);
@@ -12082,9 +12381,6 @@ if (!window.__motorbikeConfirmFloorFallbackBound) {
         }
     });
 
-    // No longer need to listen for floorSelect (dropdown) changes here
-    updateInventoryAndliftVisibility();
-    
     // Ensure original inventory UI is visible
     function restoreOriginalInventoryUI() {
         const basicRoomTabs = document.getElementById('room-tabs');
@@ -12126,9 +12422,10 @@ if (!window.__motorbikeConfirmFloorFallbackBound) {
                 window.selectedPickupFloors = new Set();
             }
 
-            const domSelectedFloors = Array.from(document.querySelectorAll('#pickup-floors-selector .pickup-floor-selector-btn.selected'))
-                .map((btn) => String(btn.getAttribute('data-floor') || '').trim())
-                .filter(Boolean);
+            let domSelectedFloors = getDomSelectedPickupFloorNames();
+            if (domSelectedFloors.length === 0 && window.selectedPickupFloors instanceof Set && window.selectedPickupFloors.size > 0) {
+                domSelectedFloors = getOrderedFloorList(Array.from(window.selectedPickupFloors));
+            }
 
             if (domSelectedFloors.length > 0) {
                 window.selectedPickupFloors = new Set(domSelectedFloors);
@@ -12386,6 +12683,9 @@ if (!window.__motorbikeConfirmFloorFallbackBound) {
             }
         });
     }
+
+    // Run after confirm wiring so a visibility-sync error cannot leave the button without a handler.
+    updateInventoryAndliftVisibility();
     
 });
 
@@ -14473,20 +14773,20 @@ document.addEventListener('DOMContentLoaded', function () {
             ? VEHICLE_PARKING_LEVELS
             : deliveryFloors;
 
-        // Recovery path: if selected floors were lost but assignments still exist,
-        // rebuild selection from assigned floors so Step 5 can render correctly.
-        if (selectedDeliveryFloors.size === 0 && itemFloorAssignments && typeof itemFloorAssignments === 'object') {
+        // Always merge floors that still have assignments into the selection. Partial pruning
+        // (e.g. after returning from Overview) used to drop floors that were not "selected"
+        // even though itemFloorAssignments still referenced them, which hid all assignments.
+        if (itemFloorAssignments && typeof itemFloorAssignments === 'object') {
             Object.values(itemFloorAssignments).forEach((perFloor) => {
                 if (!perFloor || typeof perFloor !== 'object') return;
                 Object.keys(perFloor).forEach((floorName) => {
                     const qty = parseInt(perFloor[floorName], 10) || 0;
-                    if (qty > 0) {
+                    if (qty > 0 && floorName) {
                         selectedDeliveryFloors.add(floorName);
                     }
                 });
             });
 
-            // Reflect recovered selection in floor selector buttons.
             document.querySelectorAll('#delivery-floors-selector .delivery-floor-selector-btn').forEach((btn) => {
                 const floor = (btn.getAttribute('data-floor') || '').trim();
                 const selected = !!floor && selectedDeliveryFloors.has(floor);
@@ -18749,6 +19049,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const stepBackBtn = document.getElementById('step-back-btn') || document.getElementById('step-back-btn-top');
         const stepNextBtn = document.getElementById('step-next-btn');
         const getPricesBtn = document.getElementById('get-prices-btn');
+        const updateSavedFormBtn = document.getElementById('update-saved-form-btn');
         const totalSteps = 8;
         window.totalSteps = totalSteps;
         let currentStep = 1;
@@ -18909,7 +19210,10 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         
         const updateSubmitButton = () => {
-            if (!getPricesBtn) return;
+            const isEditFromRequests = typeof window.__anytransportHasEditQuoteInUrl === 'function'
+                && window.__anytransportHasEditQuoteInUrl();
+
+            if (!getPricesBtn && !updateSavedFormBtn) return;
             
             if (currentStep === totalSteps) {
                 // Validate all required fields in step 4
@@ -18917,15 +19221,36 @@ document.addEventListener('DOMContentLoaded', function() {
                 const firstInvalid = validateRequiredFieldsInStep(currentStep);
                 
                 if (!firstInvalid) {
-                    // All fields valid, show the button
-                    getPricesBtn.style.display = 'inline-flex';
+                    if (isEditFromRequests) {
+                        if (getPricesBtn) getPricesBtn.style.display = 'none';
+                        if (updateSavedFormBtn) {
+                            updateSavedFormBtn.style.display = '';
+                            updateSavedFormBtn.classList.add('show');
+                            updateSavedFormBtn.classList.remove('hide');
+                        }
+                    } else {
+                        if (getPricesBtn) getPricesBtn.style.display = 'inline-flex';
+                        if (updateSavedFormBtn) {
+                            updateSavedFormBtn.style.display = 'none';
+                            updateSavedFormBtn.classList.remove('show');
+                            updateSavedFormBtn.classList.add('hide');
+                        }
+                    }
                 } else {
-                    // Has invalid fields, hide the button
-                    getPricesBtn.style.display = 'none';
+                    if (getPricesBtn) getPricesBtn.style.display = 'none';
+                    if (updateSavedFormBtn) {
+                        updateSavedFormBtn.style.display = 'none';
+                        updateSavedFormBtn.classList.remove('show');
+                        updateSavedFormBtn.classList.add('hide');
+                    }
                 }
             } else {
-                // Not on final step, hide the button
-                getPricesBtn.style.display = 'none';
+                if (getPricesBtn) getPricesBtn.style.display = 'none';
+                if (updateSavedFormBtn) {
+                    updateSavedFormBtn.style.display = 'none';
+                    updateSavedFormBtn.classList.remove('show');
+                    updateSavedFormBtn.classList.add('hide');
+                }
             }
         };
 
@@ -19624,6 +19949,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const ensureStepStartsAtTop = (previousStep, nextStep) => {
             if (!Number.isFinite(previousStep) || !Number.isFinite(nextStep) || previousStep === nextStep) {
+                return;
+            }
+
+            // Overview (step 8) is long; scrolling the window to y=0 leaves the primary action off-screen.
+            if (nextStep === 8) {
+                const scrollOverviewIntoView = () => {
+                    const anchor =
+                        document.getElementById('update-saved-form-btn') ||
+                        document.getElementById('get-prices-btn') ||
+                        document.getElementById('overview-submit-anchor') ||
+                        document.querySelector('[data-form-step="8"] .card-section') ||
+                        document.querySelector('[data-form-step="8"]');
+                    if (anchor && typeof anchor.scrollIntoView === 'function') {
+                        anchor.scrollIntoView({ block: 'start', behavior: 'auto' });
+                    }
+                };
+                requestAnimationFrame(() => scrollOverviewIntoView());
+                setTimeout(() => scrollOverviewIntoView(), 90);
+                setTimeout(() => scrollOverviewIntoView(), 220);
                 return;
             }
 
@@ -23489,6 +23833,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 explicitQuoteSubmitRequested = true;
             });
         }
+        const updateSavedFormBtn = document.getElementById('update-saved-form-btn');
+        if (updateSavedFormBtn) {
+            updateSavedFormBtn.addEventListener('click', () => {
+                explicitQuoteSubmitRequested = true;
+            });
+        }
 
         if (isMultiStopMode) {
             initMultiStopMode();
@@ -23922,7 +24272,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 && !['submit', 'button', 'checkbox', 'radio', 'file'].includes(activeType);
             const isExplicitSubmit = explicitQuoteSubmitRequested
                 || (submitter && submitter === activeElement)
-                || (submitter && submitter.id === 'get-prices-btn' && activeElement === submitter);
+                || (submitter && submitter.id === 'get-prices-btn' && activeElement === submitter)
+                || (submitter && submitter.id === 'update-saved-form-btn' && activeElement === submitter);
 
             explicitQuoteSubmitRequested = false;
 
@@ -24220,6 +24571,13 @@ document.addEventListener('DOMContentLoaded', function() {
             quoteData.itemType = itemTypeValue;
             quoteData.itemDescription = firstItemName || itemTypeValue;
 
+            if (itemTypeValue === 'Piano Transport') {
+                quoteData.pianosJson = getElementValue('pianos-json-hidden');
+            }
+
+            quoteData.pickupLiftAvailable = getElementValue('pickup-lift-available');
+            quoteData.deliveryLiftAvailable = getElementValue('delivery-lift-available');
+
             if (isMultiStopMode) {
                 const stops = collectMultiStopStops();
                 if (stops.length < 2) {
@@ -24432,22 +24790,54 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
             }
 
-            console.log('[QUOTE FORM] All service validations passed, showing email confirmation modal');
-            const selectedQuoteEmail = await showQuoteEmailConfirmation(currentUser.email);
-            if (!selectedQuoteEmail) {
-                console.log('[QUOTE FORM] Email confirmation cancelled/failed');
-                return;
+            const isUpdateSavedFormSubmit = submitter && submitter.id === 'update-saved-form-btn';
+            let editQuoteId = '';
+            let editFormId = '';
+            try {
+                editQuoteId = String(sessionStorage.getItem('anytransport_edit_quote_id') || '').trim();
+                editFormId = String(sessionStorage.getItem('anytransport_edit_quote_form_id') || '').trim();
+            } catch (_e) {
+                editQuoteId = '';
+                editFormId = '';
             }
-            console.log('[QUOTE FORM] Email confirmed, proceeding to save');
+            if (!editQuoteId) {
+                try {
+                    const p = new URLSearchParams(window.location.search || '');
+                    editQuoteId = String(p.get('editQuote') || p.get('resumeQuote') || '').trim();
+                } catch (_e) {
+                    editQuoteId = '';
+                }
+            }
+            const isUpdateOnlyFlow = Boolean(isUpdateSavedFormSubmit && editQuoteId);
+
+            console.log('[QUOTE FORM] All service validations passed');
+            let selectedQuoteEmail = currentUser.email;
+            if (!isUpdateOnlyFlow) {
+                console.log('[QUOTE FORM] showing email confirmation modal');
+                selectedQuoteEmail = await showQuoteEmailConfirmation(currentUser.email);
+                if (!selectedQuoteEmail) {
+                    console.log('[QUOTE FORM] Email confirmation cancelled/failed');
+                    return;
+                }
+            }
+            console.log('[QUOTE FORM] proceeding to save');
 
             // Add user information to quote data
             quoteData.customerName = currentUser.name || quoteData.customerName;
             quoteData.customerEmail = selectedQuoteEmail;
             quoteData.customerPhone = currentUser.phone || '';
 
-            quoteData.id = Math.random().toString(36).substr(2, 9);
+            if (isUpdateOnlyFlow && editQuoteId) {
+                quoteData.id = editQuoteId;
+                if (editFormId && /^\d{5}$/.test(editFormId)) {
+                    quoteData.formId = editFormId;
+                }
+            } else {
+                quoteData.id = Math.random().toString(36).substr(2, 9);
+            }
             quoteData.status = 'pending'; // Awaiting quote from AnyTransport
             quoteData.userId = currentUser.id; // Link to user
+            quoteData.createdBy = currentUser.id; // Matches API + local listing filters
 
             const cloneForStorage = (value) => {
                 try {
@@ -24520,13 +24910,27 @@ document.addEventListener('DOMContentLoaded', function() {
             const saveQuoteLocally = (quote) => {
                 const allQuotes = JSON.parse(localStorage.getItem(LISTING_STORAGE_KEY) || '[]');
                 const list = Array.isArray(allQuotes) ? allQuotes : [];
+                const incomingId = String(quote && quote.id ? quote.id : '').trim();
+                const existingIdx = incomingId
+                    ? list.findIndex((entry) => entry && String(entry.id || '') === incomingId)
+                    : -1;
+
                 const usedFormIds = new Set(
                     list
-                        .map((entry) => String(entry && entry.formId ? entry.formId : '').trim())
+                        .map((entry, idx) => {
+                            if (existingIdx >= 0 && idx === existingIdx) return '';
+                            return String(entry && entry.formId ? entry.formId : '').trim();
+                        })
                         .filter((value) => /^\d{5}$/.test(value))
                 );
 
                 let formId = String(quote.formId || '').trim();
+                if (!/^\d{5}$/.test(formId) && existingIdx >= 0) {
+                    const prevForm = String(list[existingIdx]?.formId || '').trim();
+                    if (/^\d{5}$/.test(prevForm)) {
+                        formId = prevForm;
+                    }
+                }
                 if (!/^\d{5}$/.test(formId)) {
                     do {
                         formId = createLocalFormId();
@@ -24535,11 +24939,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const saved = {
                     ...quote,
-                    id: String(quote.id || createLocalQuoteId()),
+                    id: incomingId || String(quote.id || createLocalQuoteId()),
                     formId: formId
                 };
 
-                list.push(saved);
+                if (existingIdx >= 0) {
+                    list[existingIdx] = saved;
+                } else {
+                    list.push(saved);
+                }
 
                 const variants = ['full', 'trim-previews', 'drop-media'];
                 let lastQuotaError = null;
@@ -24572,7 +24980,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (window.anytransportApi && typeof window.anytransportApi.saveQuote === 'function') {
                 try {
                     savedQuote = window.anytransportApi.saveQuote(quoteData);
-                } catch (_error) {
+                } catch (err) {
+                    console.warn('[QUOTE FORM] API saveQuote failed; using local backup.', err && err.message ? err.message : err);
                     savedQuote = null;
                 }
             }
@@ -24589,24 +24998,29 @@ document.addEventListener('DOMContentLoaded', function() {
             quoteData.id = savedQuote.id;
             quoteData.formId = savedQuote.formId || quoteData.formId;
 
-            sessionStorage.setItem('pending_quote_form_id', String(quoteData.formId || ''));
-            sessionStorage.setItem('pending_quote_id', String(quoteData.id || ''));
-            
             console.log('[QUOTE FORM] SUCCESS! Form saved to server');
             console.log('[QUOTE FORM] Form ID:', quoteData.formId);
             console.log('[QUOTE FORM] Stored quote ID:', quoteData.id);
-            
+
             // Clear house inventory data after submission
             localStorage.removeItem('house_removal_inventory');
-            
-            // Set flag for pending quote submission
-            sessionStorage.setItem('pending_quote_submission', 'true');
 
-            // Pass selected email to confirmation UI
             window.anytransportQuoteContactEmail = selectedQuoteEmail;
             window.anytransportLastSubmittedFormId = String(quoteData.formId || '');
 
-            // Show confirmation modal
+            if (isUpdateOnlyFlow) {
+                const highlightId = String(quoteData.formId || '').trim();
+                const dashUrl = highlightId
+                    ? `customer-dashboard.html?highlightForm=${encodeURIComponent(highlightId)}`
+                    : 'customer-dashboard.html';
+                window.location.href = dashUrl;
+                return;
+            }
+
+            sessionStorage.setItem('pending_quote_form_id', String(quoteData.formId || ''));
+            sessionStorage.setItem('pending_quote_id', String(quoteData.id || ''));
+            sessionStorage.setItem('pending_quote_submission', 'true');
+
             console.log('[QUOTE FORM] Showing confirmation modal');
             showConfirmationModal();
         });
@@ -29685,10 +30099,13 @@ function formatPropertyTypeValue(value) {
 }
 
 function normalizeElevatorValue(value) {
+    if (typeof value === 'boolean') {
+        return value ? 'Yes' : 'No';
+    }
     const raw = String(value || '').trim().toLowerCase();
     if (!raw) return '';
-    if (raw === 'yes' || raw === 'available') return 'Yes';
-    if (raw === 'no' || raw === 'not-available' || raw === 'none') return 'No';
+    if (raw === 'yes' || raw === 'available' || raw === 'true' || raw === '1') return 'Yes';
+    if (raw === 'no' || raw === 'not-available' || raw === 'none' || raw === 'false' || raw === '0') return 'No';
     return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 

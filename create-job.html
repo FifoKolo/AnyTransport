@@ -9,9 +9,9 @@
     <title>Request a Quote - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260420-4">
-    <link rel="stylesheet" href="css/create-job.css?v=20260422-2">
+    <link rel="stylesheet" href="css/create-job.css?v=20260502-6">
     <link rel="stylesheet" href="css/house-removal.css?v=20260422-2">
-    <link rel="stylesheet" href="css/sticky-next-btn.css?v=20260322-1">
+    <link rel="stylesheet" href="css/sticky-next-btn.css?v=20260503-1">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js'></script>
 </head>
@@ -2370,7 +2370,7 @@
                             </div>
                         </div>
 
-                        <div class="form-actions" data-form-step="8" data-skip-progressive="true">
+                        <div class="form-actions" data-form-step="8" data-skip-progressive="true" style="display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
                             <button type="submit" class="btn btn-primary btn-large v2" id="get-prices-btn" style="display: none;">Get Prices</button>
                         </div>
                     </div> <!-- end .form-v2-main-grid -->
@@ -2381,6 +2381,7 @@
                     <button type="button" class="sticky-next-btn sticky-reset-btn" id="sticky-reset-btn">Reset</button>
                     <button type="button" class="sticky-next-btn sticky-manage-btn" id="sticky-manage-btn" style="display: none;">Manage</button>
                     <button type="button" class="sticky-next-btn sticky-assign-new-items-btn" id="sticky-assign-new-items-btn" style="display: none;">Assign New Items</button>
+                    <button type="submit" form="create-job-form" class="sticky-next-btn sticky-update-saved-form-btn" id="update-saved-form-btn" style="display: none;">Update form</button>
                     <button type="button" class="sticky-next-btn" id="sticky-next-btn">Next</button>
                 </form>
                 <!-- Removed duplicate lift-option-container. Only one instance should exist inside the form. -->
@@ -2417,7 +2418,8 @@
     <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/house-removal.js?v=20260322-1"></script>
     <script src="js/multi-items-handler.js?v=20260328-44"></script>
-    <script src="js/create-job.js?v=20260417-22"></script>
+    <script src="js/create-job.js?v=20260503-3"></script>
+    <script src="js/quote-edit-bootstrap.js?v=20260502-4"></script>
 
 <script>
 // Consolidated initialization for better performance
@@ -2455,7 +2457,10 @@ function setupImageModal() {
     var modal = document.getElementById('image-fullscreen-modal');
     var modalImage = document.getElementById('modal-image');
     var closeBtn = document.getElementById('modal-close-btn');
-    
+    if (!modal || !modalImage || !closeBtn) {
+        return;
+    }
+
     // Open modal when clicking any clickable image
     document.querySelectorAll('.clickable-image').forEach(function(img) {
         img.addEventListener('click', function(e) {
@@ -2464,19 +2469,19 @@ function setupImageModal() {
             modal.style.display = 'flex';
         });
     });
-    
+
     // Close modal when clicking close button
     closeBtn.addEventListener('click', function() {
         modal.style.display = 'none';
     });
-    
+
     // Close modal when clicking outside the image
     modal.addEventListener('click', function(e) {
         if (e.target === modal) {
             modal.style.display = 'none';
         }
     });
-    
+
     // Close modal with Escape key
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && modal.style.display === 'flex') {
