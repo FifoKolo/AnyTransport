@@ -1522,10 +1522,27 @@ switch ($action) {
         refresh_session_cookie();
         $quotes = array_values($store['quotes']);
         if ($userId !== '') {
-            $quotes = array_values(array_filter($quotes, function ($quote) use ($userId) {
-                return trim((string) ($quote['userId'] ?? $quote['createdBy'] ?? '')) === $userId
-                    || trim((string) ($quote['createdBy'] ?? '')) === $userId;
-            }));
+            if ($isAdmin) {
+                $quotes = array_values(array_filter($quotes, function ($quote) use ($userId) {
+                    return trim((string) ($quote['userId'] ?? $quote['createdBy'] ?? '')) === $userId
+                        || trim((string) ($quote['createdBy'] ?? '')) === $userId;
+                }));
+            } else {
+                $userEmailNorm = strtolower(trim((string) ($currentUser['email'] ?? '')));
+                $quotes = array_values(array_filter($quotes, function ($quote) use ($userId, $userEmailNorm) {
+                    $ownerId = trim((string) ($quote['userId'] ?? $quote['createdBy'] ?? ''));
+                    if ($ownerId === $userId) {
+                        return true;
+                    }
+                    if ($userEmailNorm !== '') {
+                        $quoteEmail = strtolower(trim((string) ($quote['customerEmail'] ?? '')));
+                        if ($quoteEmail !== '' && $quoteEmail === $userEmailNorm) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }));
+            }
         }
         send_json(array('ok' => true, 'quotes' => $quotes));
 

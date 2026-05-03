@@ -25187,6 +25187,17 @@ document.addEventListener('DOMContentLoaded', function() {
             quoteData.id = savedQuote.id;
             quoteData.formId = savedQuote.formId || quoteData.formId;
 
+            // Keep localStorage listing in sync so customer-dashboard still shows the request if
+            // quotes.list returns 401 (session/cookie not sent on the next page) or the user is offline.
+            try {
+                saveQuoteLocally(quoteData);
+            } catch (syncErr) {
+                console.warn(
+                    '[QUOTE FORM] Could not sync to local listing cache; open My requests may be empty until session works.',
+                    syncErr && syncErr.message ? syncErr.message : syncErr
+                );
+            }
+
             console.log('[QUOTE FORM] SUCCESS! Form saved to server');
             console.log('[QUOTE FORM] Form ID:', quoteData.formId);
             console.log('[QUOTE FORM] Stored quote ID:', quoteData.id);
