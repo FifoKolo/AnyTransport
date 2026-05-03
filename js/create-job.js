@@ -11595,7 +11595,15 @@ function renderPickupFloorSelector() {
     const confirmBtn = document.getElementById('confirm-pickup-floors-btn');
     
     if (confirmBtn) {
-        confirmBtn.style.display = window.selectedPickupFloors.size > 0 ? 'block' : 'none';
+        const show = window.selectedPickupFloors.size > 0;
+        confirmBtn.style.display = show ? 'block' : 'none';
+        if (show && typeof confirmBtn.scrollIntoView === 'function') {
+            requestAnimationFrame(() => {
+                try {
+                    confirmBtn.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+                } catch (_e) {}
+            });
+        }
     }
 
     syncPickupFloorHiddenFromSelection();

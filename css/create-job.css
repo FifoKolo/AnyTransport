@@ -918,14 +918,28 @@ body[data-form-step="3"] #pickup-room-list {
 /* Sticky form actions (#sticky-next-btn, etc.) are fixed at z-index 1000 and sit as
    siblings after .form-v2-main-grid, so they paint above all in-flow step content.
    Without extra scroll space, "Confirm Selected Floors" sits under the Next pill and
-   clicks never reach the button. */
+   clicks never reach the button. Extra padding + sticky confirm keeps the control usable. */
 body[data-form-step="3"] #pickup-room-list-wrapper:not(.step-hidden),
 body[data-current-step="3"] #pickup-room-list-wrapper:not(.step-hidden) {
-    padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(280px + env(safe-area-inset-bottom, 0px));
 }
 
 #confirm-pickup-floors-btn {
-    scroll-margin-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
+    scroll-margin-bottom: calc(280px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Keep confirm above long step content and above the fixed Next / stacked FABs */
+body[data-form-step="3"] #confirm-pickup-floors-btn,
+body[data-current-step="3"] #confirm-pickup-floors-btn {
+    position: sticky;
+    bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+    z-index: 40;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    background: #fff;
+    padding-top: 10px;
+    margin-top: 16px;
 }
 
 #house-removal-inventory-section {
