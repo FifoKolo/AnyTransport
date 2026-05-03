@@ -73,6 +73,15 @@
     background: #1e40af;
 }
 
+.sticky-update-saved-form-btn {
+    bottom: 230px;
+    background: #1d4ed8;
+}
+
+.sticky-update-saved-form-btn:hover {
+    background: #1e40af;
+}
+
 .sticky-reset-btn:hover {
     background: #b91c1c;
 }
@@ -107,6 +116,10 @@
 
     .sticky-assign-new-items-btn {
         bottom: calc(126px + env(safe-area-inset-bottom));
+    }
+
+    .sticky-update-saved-form-btn {
+        bottom: calc(186px + env(safe-area-inset-bottom));
     }
 
     .sticky-action-btn {

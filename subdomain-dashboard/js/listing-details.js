@@ -765,9 +765,10 @@
         sources.forEach(function (source) {
             if (!source || typeof source !== 'object') return;
 
-            if (source.items && typeof source.items === 'object') {
-                Object.keys(source.items).forEach(function (itemName) {
-                    const quantity = Math.max(0, parseInt(source.items[itemName], 10) || 0);
+            const flatQty = firstNonEmptyObject(source.items, source.itemQuantities);
+            if (flatQty) {
+                Object.keys(flatQty).forEach(function (itemName) {
+                    const quantity = Math.max(0, parseInt(flatQty[itemName], 10) || 0);
                     if (quantity <= 0) return;
                     entries.push({
                         name: itemName,
@@ -1961,20 +1962,29 @@
             target[cleanFloor][cleanItem] = (target[cleanFloor][cleanItem] || 0) + cleanQty;
         };
 
-        const multiFloorInventory = firstObject(quote.multiFloorInventory, quote.multi_floor_inventory, quote.floorInventory);
-        if (multiFloorInventory && typeof multiFloorInventory === 'object') {
-            Object.keys(multiFloorInventory).forEach(function (floorName) {
-                const floorItems = multiFloorInventory[floorName];
+        const mergeMultiFloorIntoPickup = function (source) {
+            if (!source || typeof source !== 'object') return;
+            Object.keys(source).forEach(function (floorName) {
+                const floorItems = source[floorName];
                 if (!floorItems || typeof floorItems !== 'object') return;
                 Object.keys(floorItems).forEach(function (itemName) {
                     addToFloorMap(pickupMap, floorName, itemName, floorItems[itemName]);
                 });
             });
+        };
+
+        mergeMultiFloorIntoPickup(firstObject(quote.multiFloorInventory, quote.multi_floor_inventory, quote.floorInventory));
+        if (!Object.keys(pickupMap).length && quote.houseInventory && typeof quote.houseInventory === 'object') {
+            mergeMultiFloorIntoPickup(quote.houseInventory.multiFloorInventory);
         }
 
         if (!Object.keys(pickupMap).length) {
             const pickupFloorFallback = firstText(quote.pickupFloorSelect, quote.pickupFloor, 'Ground');
-            collectFlatInventoryItems(quote.itemQuantities, function (item, qty) {
+            const flatQuantities = firstNonEmptyObject(
+                quote.houseInventory && quote.houseInventory.itemQuantities,
+                quote.itemQuantities
+            );
+            collectFlatInventoryItems(flatQuantities, function (item, qty) {
                 addToFloorMap(pickupMap, pickupFloorFallback, item, qty);
             });
         }
@@ -2284,7 +2294,8 @@
             );
 
             if (topLevelHouseInventory) {
-                collectFlatInventoryItems(topLevelHouseInventory.items, function (item, qty) {
+                const flatHouseItems = firstNonEmptyObject(topLevelHouseInventory.items, topLevelHouseInventory.itemQuantities);
+                collectFlatInventoryItems(flatHouseItems, function (item, qty) {
                     addEntry(
                         'General',
                         item,
@@ -2315,7 +2326,11 @@
         }
 
         if (!entries.length) {
-            collectFlatInventoryItems(quote.itemQuantities, function (item, qty) {
+            const rootFlatQty = firstNonEmptyObject(
+                quote.houseInventory && quote.houseInventory.itemQuantities,
+                quote.itemQuantities
+            );
+            collectFlatInventoryItems(rootFlatQty, function (item, qty) {
                 addEntry(
                     'General',
                     item,
@@ -2436,6 +2451,17 @@
             if (candidate && typeof candidate === 'object') return candidate;
         }
         return null;
+    }
+
+    /** Prefer plain objects that have at least one own key (avoids empty {} winning over populated maps). */
+    function firstNonEmptyObject() {
+        for (let i = 0; i < arguments.length; i += 1) {
+            const candidate = arguments[i];
+            if (candidate && typeof candidate === 'object' && Object.keys(candidate).length) {
+                return candidate;
+            }
+        }
+        return firstObject.apply(null, arguments);
     }
 
     function formatItemLabel(value) {
