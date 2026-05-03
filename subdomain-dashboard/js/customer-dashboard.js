@@ -206,7 +206,14 @@
         }
 
         var pdLink = document.getElementById('provider-dashboard-link');
-        if (pdLink && typeof authRef.isProvider === 'function' && !authRef.isProvider()) {
+        var showProviderDashNav = false;
+        try {
+            showProviderDashNav = typeof authRef.isProvider === 'function' && authRef.isProvider();
+            if (!showProviderDashNav && typeof authRef.isAdmin === 'function') {
+                showProviderDashNav = authRef.isAdmin();
+            }
+        } catch (_e) {}
+        if (pdLink && !showProviderDashNav) {
             pdLink.style.display = 'none';
         }
 

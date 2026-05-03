@@ -9214,12 +9214,153 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
         setEl('pianos-json-hidden', pianosRaw);
     }
 
-    if (q.houseInventory && typeof q.houseInventory === 'object') {
+    // --- House removals: restore global floor/inventory state from the saved quote ---
+    // Submit stores selectedPickupFloors, selectedDeliveryFloors, multiFloorInventory,
+    // itemFloorAssignments, etc. on the quote; older saves only nested some under houseInventory.
+    const hi = (q.houseInventory && typeof q.houseInventory === 'object') ? q.houseInventory : {};
+
+    const clonePlainObject = (obj) => {
         try {
-            localStorage.setItem('house_removal_inventory', JSON.stringify(q.houseInventory));
+            return obj && typeof obj === 'object' ? JSON.parse(JSON.stringify(obj)) : {};
         } catch (_e) {
-            /* ignore */
+            return {};
         }
+    };
+
+    const mergeObjectsPreferTop = (topVal, nestedVal) => {
+        const top = topVal && typeof topVal === 'object' ? topVal : null;
+        const nested = nestedVal && typeof nestedVal === 'object' ? nestedVal : null;
+        if (top && Object.keys(top).length > 0) return clonePlainObject(top);
+        if (nested && Object.keys(nested).length > 0) return clonePlainObject(nested);
+        if (top) return clonePlainObject(top);
+        if (nested) return clonePlainObject(nested);
+        return {};
+    };
+
+    const pickStrArray = (key) => {
+        if (Array.isArray(q[key]) && q[key].length > 0) {
+            return q[key].map((v) => String(v));
+        }
+        if (Array.isArray(hi[key]) && hi[key].length > 0) {
+            return hi[key].map((v) => String(v));
+        }
+        return [];
+    };
+
+    const selectedPickupArr = pickStrArray('selectedPickupFloors');
+    const selectedDeliveryArr = pickStrArray('selectedDeliveryFloors');
+
+    if (selectedPickupArr.length > 0) {
+        window.selectedPickupFloors = new Set(selectedPickupArr);
+    }
+    if (selectedDeliveryArr.length > 0) {
+        window.selectedDeliveryFloors = new Set(selectedDeliveryArr);
+    }
+
+    const mfiMerged = mergeObjectsPreferTop(q.multiFloorInventory, hi.multiFloorInventory);
+    if (Object.keys(mfiMerged).length > 0) {
+        const target = window.multiFloorInventory || {};
+        Object.keys(target).forEach((k) => {
+            delete target[k];
+        });
+        Object.assign(target, mfiMerged);
+        window.multiFloorInventory = target;
+    }
+
+    const ifaMerged = mergeObjectsPreferTop(q.itemFloorAssignments, hi.itemFloorAssignments);
+    if (Object.keys(ifaMerged).length > 0) {
+        const target = window.itemFloorAssignments || {};
+        Object.keys(target).forEach((k) => {
+            delete target[k];
+        });
+        Object.assign(target, ifaMerged);
+        window.itemFloorAssignments = target;
+    }
+
+    const iqMerged = mergeObjectsPreferTop(q.itemQuantities, hi.itemQuantities);
+    if (Object.keys(iqMerged).length > 0) {
+        const target = window.itemQuantities || {};
+        Object.keys(target).forEach((k) => {
+            delete target[k];
+        });
+        Object.assign(target, iqMerged);
+        window.itemQuantities = target;
+    }
+
+    const ciMerged = mergeObjectsPreferTop(q.customItems, hi.customItems);
+    if (Object.keys(ciMerged).length > 0) {
+        const target = window.customItems || {};
+        Object.keys(target).forEach((k) => {
+            delete target[k];
+        });
+        Object.assign(target, ciMerged);
+        window.customItems = target;
+    }
+
+    const cipMerged = mergeObjectsPreferTop(q.customItemPhotos, hi.customItemPhotos);
+    if (Object.keys(cipMerged).length > 0) {
+        const target = window.customItemPhotos || {};
+        Object.keys(target).forEach((k) => {
+            delete target[k];
+        });
+        Object.assign(target, cipMerged);
+        window.customItemPhotos = target;
+    }
+
+    const fmMerged = mergeObjectsPreferTop(q.floorMediaItems, hi.floorMediaItems);
+    if (Object.keys(fmMerged).length > 0) {
+        const target = window.floorMediaItems || {};
+        Object.keys(target).forEach((k) => {
+            delete target[k];
+        });
+        Object.assign(target, fmMerged);
+        window.floorMediaItems = target;
+    }
+
+    const step5Src = Array.isArray(q.step5SelectedItems) && q.step5SelectedItems.length > 0
+        ? q.step5SelectedItems
+        : (Array.isArray(hi.step5SelectedItems) ? hi.step5SelectedItems : null);
+    if (step5Src && step5Src.length > 0) {
+        window.step5SelectedItemKeys = Array.from(step5Src);
+    }
+
+    if (typeof q.step3PickupFloorsConfirmed === 'boolean') {
+        window.step3PickupFloorsConfirmed = q.step3PickupFloorsConfirmed;
+    } else if (selectedPickupArr.length > 0) {
+        window.step3PickupFloorsConfirmed = true;
+    } else if (Object.keys(mfiMerged).length > 0) {
+        const hasQty = Object.keys(mfiMerged).some((floorName) => {
+            const items = mfiMerged[floorName] || {};
+            return Object.values(items).some((qty) => (parseInt(qty, 10) || 0) > 0);
+        });
+        if (hasQty) {
+            window.step3PickupFloorsConfirmed = true;
+        }
+    }
+
+    if (q.officeInventoryState && typeof q.officeInventoryState === 'object') {
+        window.officeInventoryState = clonePlainObject(q.officeInventoryState);
+    }
+
+    try {
+        const houseSnap = {
+            itemQuantities: mergeObjectsPreferTop(q.itemQuantities, hi.itemQuantities),
+            customItems: mergeObjectsPreferTop(q.customItems, hi.customItems),
+            customItemPhotos: mergeObjectsPreferTop(q.customItemPhotos, hi.customItemPhotos),
+            selectedPickupFloors: selectedPickupArr,
+            selectedDeliveryFloors: selectedDeliveryArr,
+            step5SelectedItems: Array.isArray(step5Src) ? step5Src : [],
+            itemFloorAssignments: mergeObjectsPreferTop(q.itemFloorAssignments, hi.itemFloorAssignments),
+            multiFloorInventory: mergeObjectsPreferTop(q.multiFloorInventory, hi.multiFloorInventory),
+            floorMediaItems: mergeObjectsPreferTop(q.floorMediaItems, hi.floorMediaItems)
+        };
+        localStorage.setItem('house_removal_inventory', JSON.stringify(houseSnap));
+    } catch (_e) {
+        /* ignore */
+    }
+
+    if (typeof syncPickupFloorHiddenFromSelection === 'function') {
+        syncPickupFloorHiddenFromSelection();
     }
 
     if (q.mediaAttachments && Array.isArray(q.mediaAttachments) && q.mediaAttachments.length > 0) {
@@ -9262,6 +9403,12 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
         }
         if (typeof window.updateOrganizationSectionVisibility === 'function') {
             window.updateOrganizationSectionVisibility();
+        }
+        if (typeof window.renderDeliveryFloors === 'function') {
+            window.renderDeliveryFloors();
+        }
+        if (typeof window.updateOverviewFloorAndInventorySummary === 'function') {
+            window.updateOverviewFloorAndInventorySummary();
         }
         if (typeof window.updateFormSummary === 'function') {
             window.updateFormSummary();
@@ -31879,12 +32026,29 @@ function getOverviewFloorSummaryText(kind) {
         }
     }
 
+    if (!isPickup) {
+        const assignMap = window.itemFloorAssignments || {};
+        const floorsFromAssignments = new Set();
+        Object.values(assignMap).forEach((perFloor) => {
+            if (!perFloor || typeof perFloor !== 'object') return;
+            Object.entries(perFloor).forEach(([floorName, qty]) => {
+                if ((parseInt(qty, 10) || 0) > 0 && floorName) {
+                    floorsFromAssignments.add(floorName);
+                }
+            });
+        });
+        const orderedDeliveryFromAssignments = getOrderedFloorList(Array.from(floorsFromAssignments));
+        if (orderedDeliveryFromAssignments.length > 0) {
+            return orderedDeliveryFromAssignments.join(', ');
+        }
+    }
+
     return '';
 }
 
 function updateOverviewFloorAndInventorySummary() {
-    const pickupText = getOverviewFloorSummaryText('pickup') || 'Example: Ground, 1st, Attic';
-    const deliveryText = getOverviewFloorSummaryText('delivery') || 'Example: Ground, 2nd';
+    const pickupText = getOverviewFloorSummaryText('pickup') || '—';
+    const deliveryText = getOverviewFloorSummaryText('delivery') || '—';
 
     const pickupFloorsEl = document.getElementById('summary-pickup-floors');
     const deliveryFloorsEl = document.getElementById('summary-delivery-floors');

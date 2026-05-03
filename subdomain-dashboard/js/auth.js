@@ -388,9 +388,51 @@ class AuthManager {
             this.ensureNavbarAvatarDropdown();
             this.updateUserDisplay();
             this.wireNavbarDropdown();
+            this.scheduleSyncNavigationForRole();
         } else {
             if (authMenu) authMenu.style.display = 'flex';
             if (userMenu) userMenu.style.display = 'none';
+        }
+    }
+
+    scheduleSyncNavigationForRole() {
+        const run = () => this.syncNavigationForRole();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', run, { once: true });
+        } else {
+            run();
+        }
+    }
+
+    syncNavigationForRole() {
+        if (!this.currentUser) return;
+        const allowProviderDash = this.isProvider() || this.isAdmin();
+
+        document.querySelectorAll('.at-nav-provider-dashboard').forEach((el) => {
+            el.style.display = allowProviderDash ? '' : 'none';
+        });
+        document.querySelectorAll('.at-nav-my-requests').forEach((el) => {
+            el.style.display = allowProviderDash ? '' : 'none';
+        });
+
+        document.querySelectorAll('#navbar-profile-link').forEach((profileLink) => {
+            if (allowProviderDash) {
+                const uid = this.currentUser.id ? String(this.currentUser.id) : '';
+                profileLink.href = 'provider-profile.html?userId=' + encodeURIComponent(uid);
+                profileLink.textContent = 'Profile';
+            } else {
+                profileLink.href = 'customer-dashboard.html';
+                profileLink.textContent = 'Profile';
+            }
+        });
+
+        document.querySelectorAll('#provider-dashboard-link').forEach((el) => {
+            el.style.display = allowProviderDash ? '' : 'none';
+        });
+
+        const avatarLink = document.getElementById('navbar-avatar-home-link');
+        if (avatarLink) {
+            avatarLink.href = allowProviderDash ? 'dashboard.html#provider-board' : 'customer-dashboard.html';
         }
     }
 
@@ -410,8 +452,9 @@ class AuthManager {
             '  <div class="navbar-avatar" id="navbar-user-avatar">U</div>',
             '</button>',
             '<div class="dropdown-menu" role="menu" aria-label="User menu">',
-            '  <a href="dashboard.html" class="nav-item">Dashboard</a>',
-            '  <a href="provider-profile.html" class="nav-item">Profile</a>',
+            '  <a href="customer-dashboard.html" class="nav-item at-nav-my-requests">My requests</a>',
+            '  <a href="dashboard.html" class="nav-item at-nav-provider-dashboard">Dashboard</a>',
+            '  <a id="navbar-profile-link" href="customer-dashboard.html" class="nav-item">Profile</a>',
             '</div>'
         ].join('');
 
@@ -459,17 +502,7 @@ class AuthManager {
             navbarUserAvatar.textContent = displayName.charAt(0).toUpperCase();
         }
 
-        // Only update an existing navbar profile link; don't create one here.
-        try {
-            const profileLink = document.getElementById('navbar-profile-link');
-            if (profileLink) {
-                const uid = this.currentUser && this.currentUser.id ? this.currentUser.id : '';
-                profileLink.href = 'provider-profile.html?userId=' + encodeURIComponent(uid);
-                profileLink.textContent = 'My Profile';
-            }
-        } catch (_error) {
-            // ignore DOM errors
-        }
+        this.syncNavigationForRole();
     }
 
     // Login user
@@ -1133,13 +1166,16 @@ function showConfirmationModal() {
 
         const dashboardBtn = document.getElementById('confirmation-view-dashboard-btn');
         if (dashboardBtn) {
-            if (auth.isProvider && auth.isProvider()) {
+            const useProviderBoard = (auth.isProvider && auth.isProvider()) || (auth.isAdmin && auth.isAdmin());
+            if (useProviderBoard) {
+                dashboardBtn.textContent = 'View provider dashboard';
                 const rolePath = '#provider-board';
                 const target = formIdText ? ('dashboard.html?newFormId=' + encodeURIComponent(formIdText) + rolePath) : ('dashboard.html' + rolePath);
                 dashboardBtn.onclick = function () {
                     window.location.href = target;
                 };
             } else {
+                dashboardBtn.textContent = 'View my profile';
                 const target = formIdText ? ('customer-dashboard.html?highlightForm=' + encodeURIComponent(formIdText)) : 'customer-dashboard.html';
                 dashboardBtn.onclick = function () {
                     window.location.href = target;
