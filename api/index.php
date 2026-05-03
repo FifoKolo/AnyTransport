@@ -1308,7 +1308,17 @@ switch ($action) {
         send_json(array('ok' => true, 'uploaded' => $uploaded, 'user' => $updated));
 
     case 'quotes.list':
-        $userId = trim((string) ($_GET['userId'] ?? ''));
+        $currentUser = get_current_user_record($store);
+        $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
+        $isAdmin = is_admin_user($currentUser);
+        if (!$isAdmin) {
+            if ($currentUserId === '') {
+                send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+            }
+            $userId = $currentUserId;
+        } else {
+            $userId = trim((string) ($_GET['userId'] ?? ''));
+        }
         $quotes = array_values($store['quotes']);
         if ($userId !== '') {
             $quotes = array_values(array_filter($quotes, function ($quote) use ($userId) {
@@ -1318,9 +1328,53 @@ switch ($action) {
         }
         send_json(array('ok' => true, 'quotes' => $quotes));
 
+    case 'quotes.get':
+        $quoteId = trim((string) ($_GET['id'] ?? ''));
+        if ($quoteId === '') {
+            send_json(array('ok' => false, 'error' => 'Quote id is required.'), 400);
+        }
+        $found = null;
+        foreach ($store['quotes'] as $quote) {
+            if (!is_array($quote)) {
+                continue;
+            }
+            if (trim((string) ($quote['id'] ?? '')) === $quoteId) {
+                $found = $quote;
+                break;
+            }
+        }
+        if ($found === null) {
+            send_json(array('ok' => false, 'error' => 'Quote not found.'), 404);
+        }
+        $currentUser = get_current_user_record($store);
+        $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
+        $ownerId = trim((string) ($found['userId'] ?? $found['createdBy'] ?? ''));
+        if (!is_admin_user($currentUser)) {
+            if ($currentUserId === '') {
+                send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+            }
+            $ownerMatch = ($ownerId !== '' && $ownerId === $currentUserId);
+            $quoteEmail = strtolower(trim((string) ($found['customerEmail'] ?? '')));
+            $userEmail = strtolower(trim((string) ($currentUser['email'] ?? '')));
+            $emailMatch = !$ownerMatch && $ownerId === '' && $quoteEmail !== '' && $userEmail !== '' && $quoteEmail === $userEmail;
+            if (!$ownerMatch && !$emailMatch) {
+                send_json(array('ok' => false, 'error' => 'You do not have access to this quote.'), 403);
+            }
+        }
+        send_json(array('ok' => true, 'quote' => $found));
+
     case 'quotes.create':
         $quote = is_array($input['quote'] ?? null) ? $input['quote'] : array();
         $normalized = normalize_quote($quote, $store['quotes']);
+        $sessionUser = get_current_user_record($store);
+        if (is_array($sessionUser)) {
+            $sid = trim((string) ($sessionUser['id'] ?? ''));
+            if ($sid !== '') {
+                // Always attach the logged-in account as owner so "My requests" works for every role (providers book jobs too).
+                $normalized['userId'] = $sid;
+                $normalized['createdBy'] = $sid;
+            }
+        }
         $index = find_user_index($store['quotes'], function ($existing) use ($normalized) {
             return trim((string) ($existing['id'] ?? '')) === trim((string) ($normalized['id'] ?? ''));
         });

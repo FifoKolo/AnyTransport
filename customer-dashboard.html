@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>My account - AnyTransport</title>
+    <link rel="stylesheet" href="css/style.css?v=20260322-1">
+    <link rel="stylesheet" href="css/navbar.css?v=20260420-4">
+    <link rel="stylesheet" href="css/dashboard.css?v=20260502-1">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a class="navbar-logo" href="index.html" aria-label="Go to landing page">
+                <img src="assets/logo.jpeg" alt="AnyTransport Logo" class="logo-img">
+                <span class="logo-text">AnyTransport</span>
+            </a>
+            <div class="navbar-menu">
+                <a href="index.html#services" class="nav-link">Services</a>
+                <a href="create-job.html?freshStart=1" class="nav-link">Request a quote</a>
+            </div>
+            <div class="navbar-right">
+                <div id="auth-menu" style="display: flex;">
+                    <button class="btn btn-outline" onclick="openLoginModal()">Login</button>
+                </div>
+                <div id="user-menu" style="display: none; align-items: center; gap: 10px;">
+                    <a id="provider-dashboard-link" href="dashboard.html" class="nav-link" style="font-size: 0.9rem;">Provider dashboard</a>
+                    <button class="btn btn-primary" onclick="logout()">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container dashboard-container customer-dashboard-wrap">
+        <header class="customer-dashboard-header">
+            <h1>Hello, <span id="customer-user-name">Customer</span></h1>
+            <p class="muted">Your transport request forms and messages in one place.</p>
+        </header>
+
+        <div class="customer-tabs" role="tablist">
+            <button type="button" class="customer-tab-btn active" data-tab="forms" role="tab" aria-selected="true">My request forms</button>
+            <button type="button" class="customer-tab-btn" data-tab="inbox" role="tab" aria-selected="false">Messages</button>
+        </div>
+
+        <section class="customer-tab-panel active" data-panel="forms" role="tabpanel">
+            <h2 class="visually-hidden">Request forms</h2>
+            <div class="customer-quotes-table-wrap">
+                <table class="customer-quotes-table" aria-label="Your request forms">
+                    <thead>
+                        <tr>
+                            <th>Form ID</th>
+                            <th>Submitted</th>
+                            <th>Service</th>
+                            <th>Route</th>
+                            <th>Status</th>
+                            <th>Bids / actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="customer-quotes-body">
+                        <tr><td colspan="6" class="customer-empty-cell">Loading…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="customer-tab-panel" data-panel="inbox" role="tabpanel">
+            <h2 class="visually-hidden">Messages</h2>
+            <div id="customer-messages-list" class="customer-messages-list">
+                <p class="customer-empty">Loading…</p>
+            </div>
+        </section>
+    </main>
+
+    <script src="js/cache-maintenance.js?v=20260322-2"></script>
+    <script src="js/auth.js?v=20260502-1"></script>
+    <script src="js/notifications.js?v=20260420-4"></script>
+    <script src="js/customer-dashboard.js?v=20260502-2"></script>
+</body>
+</html>

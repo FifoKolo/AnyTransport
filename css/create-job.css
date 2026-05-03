@@ -1080,6 +1080,11 @@ form.form-v2-main {
     display: inline-flex !important;
 }
 
+/* Editing from My requests (?editQuote= / ?resumeQuote=): hide Get Prices even in .single-form (above uses !important). */
+body.create-job-edit-quote #get-prices-btn {
+    display: none !important;
+}
+
 .single-form .floor-block .location-nav {
     display: none;
 }

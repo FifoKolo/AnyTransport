@@ -168,6 +168,18 @@ window.anytransportApi = window.anytransportApi || (function () {
             const response = request('quotes.list', 'GET', null, userId ? { userId: userId } : {});
             return Array.isArray(response.quotes) ? response.quotes : [];
         },
+        getQuote: function (quoteId) {
+            const id = String(quoteId || '').trim();
+            if (!id) {
+                return null;
+            }
+            try {
+                const response = request('quotes.get', 'GET', null, { id: id });
+                return response && response.quote ? response.quote : null;
+            } catch (_error) {
+                return null;
+            }
+        },
         saveQuote: function (quote) {
             const response = request('quotes.create', 'POST', { quote: quote || {} });
             return response.quote || quote || null;
@@ -727,6 +739,7 @@ class AuthManager {
 
 // Initialize auth manager
 const auth = new AuthManager();
+window.auth = auth;
 
 // Modal Functions
 function openLoginModal() {
@@ -1120,11 +1133,18 @@ function showConfirmationModal() {
 
         const dashboardBtn = document.getElementById('confirmation-view-dashboard-btn');
         if (dashboardBtn) {
-            const rolePath = auth.isProvider && auth.isProvider() ? '#provider-board' : '#my-quotes';
-            const target = formIdText ? ('dashboard.html?newFormId=' + encodeURIComponent(formIdText) + rolePath) : ('dashboard.html' + rolePath);
-            dashboardBtn.onclick = function () {
-                window.location.href = target;
-            };
+            if (auth.isProvider && auth.isProvider()) {
+                const rolePath = '#provider-board';
+                const target = formIdText ? ('dashboard.html?newFormId=' + encodeURIComponent(formIdText) + rolePath) : ('dashboard.html' + rolePath);
+                dashboardBtn.onclick = function () {
+                    window.location.href = target;
+                };
+            } else {
+                const target = formIdText ? ('customer-dashboard.html?highlightForm=' + encodeURIComponent(formIdText)) : 'customer-dashboard.html';
+                dashboardBtn.onclick = function () {
+                    window.location.href = target;
+                };
+            }
         }
 
         modal.classList.add('show');

@@ -80,7 +80,7 @@ function loadMyQuotes(userId) {
             <div class="empty-state">
                 <h3>No quotes requested yet</h3>
                 <p>Request your first quote to get started</p>
-                <a href="create-job.html" class="btn btn-primary">Get a Quote</a>
+                <a href="create-job.html?freshStart=1" class="btn btn-primary">Get a Quote</a>
             </div>
         `;
         return;

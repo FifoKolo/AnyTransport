@@ -58,6 +58,7 @@
                             <div class="navbar-avatar" id="navbar-user-avatar">U</div>
                         </button>
                         <div class="dropdown-menu" role="menu" aria-label="User menu">
+                            <a href="customer-dashboard.html" class="nav-item">My requests</a>
                             <a href="dashboard.html" class="nav-item">Dashboard</a>
                             <a id="navbar-profile-link" href="provider-profile.html" class="nav-item">Profile</a>
                         </div>
@@ -658,7 +659,12 @@ function scrollToServicesSection() {
                     savedAt: Date.now()
                 };
                 localStorage.setItem('anytransport_quote_prefill', JSON.stringify(payload));
-                window.location.href = 'create-job.html';
+                try {
+                    sessionStorage.setItem('anytransport_force_fresh_start_v1', '1');
+                } catch (_e) {
+                    /* ignore */
+                }
+                window.location.href = 'create-job.html?freshStart=1';
             });
         }
     })();
