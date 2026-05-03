@@ -1,3 +1,30 @@
+/** Diagnostics: `?at_debug=1` (session), `localStorage.setItem('anytransport_debug','1')`, or `window.ANYTRANSPORT_DEBUG = true`. */
+(function () {
+    window.anytransportIsDebug = function anytransportIsDebug() {
+        try {
+            if (window.ANYTRANSPORT_DEBUG === true) return true;
+            if (String(window.ANYTRANSPORT_DEBUG || '') === '1') return true;
+            if (typeof localStorage !== 'undefined' && localStorage.getItem('anytransport_debug') === '1') return true;
+            if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('anytransport_debug') === '1') return true;
+            return new URLSearchParams(window.location.search || '').get('at_debug') === '1';
+        } catch (_e) {
+            return false;
+        }
+    };
+    try {
+        if (new URLSearchParams(window.location.search || '').get('at_debug') === '1' && typeof sessionStorage !== 'undefined') {
+            sessionStorage.setItem('anytransport_debug', '1');
+        }
+    } catch (_e) {}
+    if (window.anytransportIsDebug()) {
+        try {
+            console.info(
+                '[AnyTransport] Verbose client debug on. Set localStorage anytransport_debug=1, or ANYTRANSPORT_DEBUG, or use ?at_debug=1 on the URL.'
+            );
+        } catch (_e) {}
+    }
+})();
+
 // Authentication Management
 window.anytransportApi = window.anytransportApi || (function () {
     const API_URL = resolveApiUrl();
@@ -66,6 +93,9 @@ window.anytransportApi = window.anytransportApi || (function () {
                 return candidates[i];
             }
         }
+        if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+            console.warn('[AnyTransport API] No candidate reached. Tried:', candidates);
+        }
         return '';
     }
 
@@ -104,7 +134,9 @@ window.anytransportApi = window.anytransportApi || (function () {
 
     function request(action, method, payload, params) {
         const xhr = new XMLHttpRequest();
-        xhr.open(method, buildUrl(action, params), false);
+        const url = buildUrl(action, params);
+        const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+        xhr.open(method, url, false);
         xhr.withCredentials = true;
         xhr.setRequestHeader('Accept', 'application/json');
 
@@ -112,16 +144,60 @@ window.anytransportApi = window.anytransportApi || (function () {
             xhr.setRequestHeader('Content-Type', 'application/json');
         }
 
-        xhr.send(method === 'GET' ? null : JSON.stringify(payload || {}));
-        return parseResponse(xhr);
+        try {
+            xhr.send(method === 'GET' ? null : JSON.stringify(payload || {}));
+        } catch (sendErr) {
+            console.warn('[AnyTransport API]', action, method, 'send failed', sendErr && sendErr.message ? sendErr.message : sendErr);
+            throw sendErr;
+        }
+
+        try {
+            const result = parseResponse(xhr);
+            if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                const ms = typeof performance !== 'undefined' ? Math.round(performance.now() - t0) : 0;
+                const keyHint =
+                    payload && typeof payload === 'object' && !Array.isArray(payload) ? Object.keys(payload) : [];
+                console.debug('[AnyTransport API] ok', action, method, 'HTTP', xhr.status, ms + 'ms', keyHint.length ? { bodyKeys: keyHint } : '');
+            }
+            return result;
+        } catch (err) {
+            const snippet = String(xhr.responseText || '').trim().slice(0, 280);
+            console.warn(
+                '[AnyTransport API]',
+                action,
+                method,
+                'HTTP',
+                xhr.status,
+                err && err.message ? err.message : err,
+                snippet ? '| body:' + snippet : ''
+            );
+            if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                const keys =
+                    payload && typeof payload === 'object' && !Array.isArray(payload) ? Object.keys(payload) : [];
+                console.debug('[AnyTransport API] failed detail', {
+                    action,
+                    method,
+                    url,
+                    params: params || {},
+                    postKeys: keys
+                });
+            }
+            throw err;
+        }
     }
 
     return {
+        isDebug: function () {
+            return window.anytransportIsDebug && window.anytransportIsDebug();
+        },
         getCurrentUser: function () {
             try {
                 const response = request('auth.me', 'GET');
                 return response && response.user ? response.user : null;
-            } catch (_error) {
+            } catch (err) {
+                if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                    console.debug('[AnyTransport API] getCurrentUser (auth.me) — no session or error', err);
+                }
                 return null;
             }
         },
@@ -141,8 +217,30 @@ window.anytransportApi = window.anytransportApi || (function () {
             return request('auth.logout', 'POST', {});
         },
         getUsers: function () {
-            const response = request('users.list', 'GET');
-            return Array.isArray(response.users) ? response.users : [];
+            try {
+                const response = request('users.list', 'GET');
+                return Array.isArray(response.users) ? response.users : [];
+            } catch (err) {
+                if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                    console.debug('[AnyTransport API] getUsers — empty (common if 401 / not admin list)', err);
+                }
+                return [];
+            }
+        },
+        getUserById: function (userId) {
+            const id = String(userId || '').trim();
+            if (!id) {
+                return null;
+            }
+            try {
+                const response = request('users.get', 'GET', null, { id: id });
+                return response && response.user ? response.user : null;
+            } catch (err) {
+                if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                    console.debug('[AnyTransport API] getUserById failed', id, err);
+                }
+                return null;
+            }
         },
         getIdentityReviewQueue: function () {
             const response = request('identity.review.queue', 'GET');
@@ -165,8 +263,15 @@ window.anytransportApi = window.anytransportApi || (function () {
             return response.user || user || null;
         },
         getQuotes: function (userId) {
-            const response = request('quotes.list', 'GET', null, userId ? { userId: userId } : {});
-            return Array.isArray(response.quotes) ? response.quotes : [];
+            try {
+                const response = request('quotes.list', 'GET', null, userId ? { userId: userId } : {});
+                return Array.isArray(response.quotes) ? response.quotes : [];
+            } catch (err) {
+                if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                    console.debug('[AnyTransport API] getQuotes — empty (often 401 / session)', err);
+                }
+                return [];
+            }
         },
         getQuote: function (quoteId) {
             const id = String(quoteId || '').trim();
@@ -176,13 +281,23 @@ window.anytransportApi = window.anytransportApi || (function () {
             try {
                 const response = request('quotes.get', 'GET', null, { id: id });
                 return response && response.quote ? response.quote : null;
-            } catch (_error) {
+            } catch (err) {
+                if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                    console.debug('[AnyTransport API] getQuote failed', id, err);
+                }
                 return null;
             }
         },
         saveQuote: function (quote) {
             const response = request('quotes.create', 'POST', { quote: quote || {} });
             return response.quote || quote || null;
+        },
+        uploadQuoteMedia: function (dataUrl, quoteId) {
+            const response = request('quotes.uploadMedia', 'POST', {
+                dataUrl: dataUrl || '',
+                quoteId: quoteId ? String(quoteId) : ''
+            });
+            return response.media || null;
         },
         getBids: function (quoteId) {
             const response = request('bids.list', 'GET', null, { quoteId: quoteId });
@@ -198,16 +313,30 @@ window.anytransportApi = window.anytransportApi || (function () {
             return response.message || null;
         },
         getConversation: function (participantA, participantB) {
-            const response = request('messages.list', 'GET', null, { participantA: participantA, participantB: participantB });
-            return Array.isArray(response.messages) ? response.messages : [];
+            try {
+                const response = request('messages.list', 'GET', null, { participantA: participantA, participantB: participantB });
+                return Array.isArray(response.messages) ? response.messages : [];
+            } catch (err) {
+                if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                    console.debug('[AnyTransport API] getConversation failed', { participantA, participantB }, err);
+                }
+                return [];
+            }
         },
         replaceAllBids: function (bids) {
             const response = request('bids.replaceAll', 'POST', { bids: Array.isArray(bids) ? bids : [] });
             return Array.isArray(response.bids) ? response.bids : [];
         },
         getSavedMessages: function (userId) {
-            const response = request('messages.list', 'GET', null, { userId: userId });
-            return Array.isArray(response.messages) ? response.messages : [];
+            try {
+                const response = request('messages.list', 'GET', null, { userId: userId });
+                return Array.isArray(response.messages) ? response.messages : [];
+            } catch (err) {
+                if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                    console.debug('[AnyTransport API] getSavedMessages failed', userId, err);
+                }
+                return [];
+            }
         },
         saveSavedMessage: function (userId, message) {
             const response = request('messages.save', 'POST', { userId: userId, message: message || {} });
@@ -728,11 +857,21 @@ class AuthManager {
                     cachedRaw.forEach((user) => {
                         normalizedCachedUsers.push(this.normalizeUserRecord(user, normalizedCachedUsers));
                     });
-                    window.anytransportApi.replaceUsers(normalizedCachedUsers);
+                    if (this.isAdmin && this.isAdmin()) {
+                        try {
+                            window.anytransportApi.replaceUsers(normalizedCachedUsers);
+                        } catch (e) {
+                            if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                                console.debug('[AnyTransport] replaceUsers (cached migration) failed', e);
+                            }
+                        }
+                    }
                     return normalizedCachedUsers;
                 }
-            } catch (_error) {
-                // Fall back to local storage below.
+            } catch (error) {
+                if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                    console.debug('[AnyTransport] loadUsers server branch failed, using local fallback', error);
+                }
             }
         }
 
@@ -753,10 +892,23 @@ class AuthManager {
     saveUsers(users) {
         if (window.anytransportApi) {
             try {
-                window.anytransportApi.replaceUsers(Array.isArray(users) ? users : []);
+                const list = Array.isArray(users) ? users : [];
+                if (this.isAdmin && this.isAdmin()) {
+                    window.anytransportApi.replaceUsers(list);
+                    return;
+                }
+                const self =
+                    this.currentUser && this.currentUser.id
+                        ? list.find((u) => u && u.id === this.currentUser.id)
+                        : null;
+                if (self) {
+                    window.anytransportApi.saveUser(self);
+                }
                 return;
-            } catch (_error) {
-                // Fall back to local storage if the API is unavailable.
+            } catch (error) {
+                if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                    console.debug('[AnyTransport] saveUsers API path failed, writing localStorage only', error);
+                }
             }
         }
 

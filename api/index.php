@@ -30,7 +30,8 @@ function default_store() {
         'bids' => array(),
         'messages' => array(),
         'replyTokens' => array(),
-        'notifications' => array()
+        'notifications' => array(),
+        'quoteMedia' => array()
     );
 }
 
@@ -199,6 +200,25 @@ function normalize_user($user) {
     }
 
     return $normalized;
+}
+
+function sanitize_user_for_client($user) {
+    if (!is_array($user)) {
+        return $user;
+    }
+    $out = $user;
+    unset($out['password']);
+    return $out;
+}
+
+function sanitize_users_for_client($users) {
+    $out = array();
+    foreach ($users as $u) {
+        if (is_array($u)) {
+            $out[] = sanitize_user_for_client($u);
+        }
+    }
+    return $out;
 }
 
 function get_env_value($names, $default = '') {
@@ -829,6 +849,139 @@ function normalize_bid($bid) {
     return $normalized;
 }
 
+function is_https_request() {
+    if (!empty($_SERVER['HTTPS']) && (string) $_SERVER['HTTPS'] !== 'off') {
+        return true;
+    }
+    $xf = isset($_SERVER['HTTP_X_FORWARDED_PROTO']) ? strtolower(trim((string) $_SERVER['HTTP_X_FORWARDED_PROTO'])) : '';
+    if ($xf === 'https') {
+        return true;
+    }
+    if (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && (string) $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on') {
+        return true;
+    }
+    return false;
+}
+
+function refresh_session_cookie() {
+    $cookieNames = array('anytransport_session', 'ANYTRANSPORT_SESSION');
+    $token = '';
+    foreach ($cookieNames as $cookieName) {
+        if (!empty($_COOKIE[$cookieName])) {
+            $token = trim((string) $_COOKIE[$cookieName]);
+            break;
+        }
+    }
+    if ($token !== '') {
+        set_session_cookie($token);
+    }
+}
+
+function find_quote_by_id($quotes, $quoteId) {
+    $quoteId = trim((string) $quoteId);
+    if ($quoteId === '') {
+        return null;
+    }
+    foreach ($quotes as $quote) {
+        if (!is_array($quote)) {
+            continue;
+        }
+        if (trim((string) ($quote['id'] ?? '')) === $quoteId) {
+            return $quote;
+        }
+    }
+    return null;
+}
+
+function user_can_access_quote_media($store, $sessionUser, $record) {
+    if (!is_array($record)) {
+        return false;
+    }
+    $uid = is_array($sessionUser) ? trim((string) ($sessionUser['id'] ?? '')) : '';
+    $mediaOwner = trim((string) ($record['userId'] ?? ''));
+    if ($uid !== '' && $mediaOwner !== '' && $uid === $mediaOwner) {
+        return true;
+    }
+    if (is_admin_user($sessionUser)) {
+        return true;
+    }
+    if ($uid === '') {
+        return false;
+    }
+    $quoteId = trim((string) ($record['quoteId'] ?? ''));
+    if ($quoteId === '') {
+        return false;
+    }
+    $quote = find_quote_by_id($store['quotes'], $quoteId);
+    if ($quote === null) {
+        return false;
+    }
+    $ownerId = trim((string) ($quote['userId'] ?? $quote['createdBy'] ?? ''));
+    if ($ownerId !== '' && $ownerId === $uid) {
+        return true;
+    }
+    $quoteEmail = strtolower(trim((string) ($quote['customerEmail'] ?? '')));
+    $userEmail = strtolower(trim((string) ($sessionUser['email'] ?? '')));
+    if ($quoteEmail !== '' && $userEmail !== '' && $quoteEmail === $userEmail) {
+        return true;
+    }
+    foreach ($store['bids'] as $bid) {
+        if (!is_array($bid)) {
+            continue;
+        }
+        if (trim((string) ($bid['quoteId'] ?? '')) !== $quoteId) {
+            continue;
+        }
+        if (trim((string) ($bid['providerId'] ?? '')) === $uid) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function decode_data_url_binary($dataUrl) {
+    $dataUrl = trim((string) $dataUrl);
+    if ($dataUrl === '' || stripos($dataUrl, 'data:') !== 0) {
+        return null;
+    }
+    $comma = strpos($dataUrl, ',');
+    if ($comma === false) {
+        return null;
+    }
+    $meta = substr($dataUrl, 5, $comma - 5);
+    $payload = substr($dataUrl, $comma + 1);
+    $isBase64 = preg_match('/;base64/i', $meta) === 1;
+    $mime = 'application/octet-stream';
+    if (preg_match('/^([^;]+)/', $meta, $m)) {
+        $mime = trim($m[1]);
+    }
+    $binary = $isBase64 ? base64_decode($payload, true) : rawurldecode($payload);
+    if ($binary === false || $binary === null || $binary === '') {
+        return null;
+    }
+    return array('mime' => $mime, 'binary' => $binary);
+}
+
+function extension_from_mime($mime) {
+    $mime = strtolower(trim((string) $mime));
+    $map = array(
+        'image/jpeg' => 'jpg',
+        'image/jpg' => 'jpg',
+        'image/png' => 'png',
+        'image/gif' => 'gif',
+        'image/webp' => 'webp',
+        'video/mp4' => 'mp4',
+        'video/webm' => 'webm',
+        'video/quicktime' => 'mov',
+    );
+    return isset($map[$mime]) ? $map[$mime] : 'bin';
+}
+
+function build_quote_media_url($mediaId) {
+    $script = isset($_SERVER['SCRIPT_NAME']) ? (string) $_SERVER['SCRIPT_NAME'] : '/api/index.php';
+    return $script . '?action=quotes.media&id=' . rawurlencode($mediaId);
+}
+
 function get_session_user($store) {
     $cookieNames = array('anytransport_session', 'ANYTRANSPORT_SESSION');
     $token = '';
@@ -866,20 +1019,22 @@ function get_session_user($store) {
 }
 
 function set_session_cookie($token) {
+    $secure = is_https_request();
     setcookie('anytransport_session', $token, array(
         'expires' => time() + 60 * 60 * 24 * 30,
         'path' => '/',
-        'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+        'secure' => $secure,
         'httponly' => true,
         'samesite' => 'Lax'
     ));
 }
 
 function clear_session_cookie() {
+    $secure = is_https_request();
     setcookie('anytransport_session', '', array(
         'expires' => time() - 3600,
         'path' => '/',
-        'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+        'secure' => $secure,
         'httponly' => true,
         'samesite' => 'Lax'
     ));
@@ -919,7 +1074,10 @@ $input = read_json_input();
 switch ($action) {
     case 'auth.me':
         $user = get_session_user($store);
-        send_json(array('ok' => true, 'user' => $user));
+        if (is_array($user)) {
+            refresh_session_cookie();
+        }
+        send_json(array('ok' => true, 'user' => is_array($user) ? sanitize_user_for_client($user) : null));
 
     case 'auth.logout':
         $token = !empty($_COOKIE['anytransport_session']) ? trim((string) $_COOKIE['anytransport_session']) : '';
@@ -938,9 +1096,9 @@ switch ($action) {
         if ($email === '' || $password === '') {
             send_json(array('ok' => false, 'error' => 'Email and password are required.'), 400);
         }
-        // Special development admin shortcut: if the password matches the admin override,
-        // sign in as the first admin user found (or create one) regardless of the email entered.
-        if ($password === 'Admin123!') {
+        // Development-only admin shortcut (enable with ANYTRANSPORT_ALLOW_DEV_ADMIN_LOGIN=1).
+        $allowDevAdmin = get_env_value('ANYTRANSPORT_ALLOW_DEV_ADMIN_LOGIN', '') === '1';
+        if ($allowDevAdmin && $password === 'Admin123!') {
             $adminIndex = -1;
             foreach ($store['users'] as $i => $u) {
                 $role = strtolower(trim((string) ($u['role'] ?? '')));
@@ -1008,7 +1166,7 @@ switch ($action) {
         );
         write_store($storeFile, $store);
         set_session_cookie($token);
-        send_json(array('ok' => true, 'user' => $user));
+        send_json(array('ok' => true, 'user' => sanitize_user_for_client($user)));
 
     case 'auth.signup':
         $formData = is_array($input['formData'] ?? null) ? $input['formData'] : array();
@@ -1060,12 +1218,54 @@ switch ($action) {
         );
         write_store($storeFile, $store);
         set_session_cookie($token);
-        send_json(array('ok' => true, 'user' => $user));
+        send_json(array('ok' => true, 'user' => sanitize_user_for_client($user)));
+
+    case 'users.get':
+        $targetId = trim((string) ($_GET['id'] ?? ''));
+        if ($targetId === '') {
+            send_json(array('ok' => false, 'error' => 'User id is required.'), 400);
+        }
+        $found = null;
+        foreach ($store['users'] as $u) {
+            if (!is_array($u)) {
+                continue;
+            }
+            if (trim((string) ($u['id'] ?? '')) === $targetId) {
+                $found = $u;
+                break;
+            }
+        }
+        if ($found === null) {
+            send_json(array('ok' => false, 'error' => 'User not found.'), 404);
+        }
+        send_json(array('ok' => true, 'user' => sanitize_user_for_client(normalize_user($found))));
 
     case 'users.list':
-        send_json(array('ok' => true, 'users' => array_values($store['users'])));
+        $currentUser = get_current_user_record($store);
+        $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
+        if ($currentUserId === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        if (is_admin_user($currentUser)) {
+            send_json(array('ok' => true, 'users' => sanitize_users_for_client(array_values($store['users']))));
+        }
+        $self = null;
+        foreach ($store['users'] as $u) {
+            if (is_array($u) && trim((string) ($u['id'] ?? '')) === $currentUserId) {
+                $self = $u;
+                break;
+            }
+        }
+        if ($self === null) {
+            send_json(array('ok' => true, 'users' => array()));
+        }
+        send_json(array('ok' => true, 'users' => array(sanitize_user_for_client(normalize_user($self)))));
 
     case 'users.replaceAll':
+        $currentUser = get_current_user_record($store);
+        if (!is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin access required.'), 403);
+        }
         $incoming = is_array($input['users'] ?? null) ? $input['users'] : array();
         $normalizedUsers = array();
         foreach ($incoming as $user) {
@@ -1076,14 +1276,14 @@ switch ($action) {
         }
         $store['users'] = $normalizedUsers;
         write_store($storeFile, $store);
-        send_json(array('ok' => true, 'users' => array_values($store['users'])));
+        send_json(array('ok' => true, 'users' => sanitize_users_for_client(array_values($store['users']))));
 
     case 'users.upsert':
         $user = is_array($input['user'] ?? null) ? $input['user'] : array();
-        // DEBUG: log incoming upsert user payload for troubleshooting persistent services
-        @file_put_contents(__DIR__ . '/debug-users-upsert.log', gmdate('c') . " | incoming user: " . json_encode($user, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
-        // DEBUG: also log the full parsed input to help diagnose missing fields
-        @file_put_contents(__DIR__ . '/debug-users-upsert.log', gmdate('c') . " | full input: " . json_encode($input, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
+        if (get_env_value('ANYTRANSPORT_DEBUG_UPSERT_LOG', '') === '1') {
+            @file_put_contents(__DIR__ . '/debug-users-upsert.log', gmdate('c') . " | incoming user: " . json_encode($user, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
+            @file_put_contents(__DIR__ . '/debug-users-upsert.log', gmdate('c') . " | full input: " . json_encode($input, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
+        }
         $targetId = trim((string) ($user['id'] ?? ''));
         $targetIndex = $targetId !== '' ? find_user_index_by_id($store['users'], $targetId) : -1;
         $existingUser = $targetIndex >= 0 ? normalize_user($store['users'][$targetIndex]) : array();
@@ -1155,7 +1355,7 @@ switch ($action) {
             $store['users'][] = $normalized;
         }
         write_store($storeFile, $store);
-        send_json(array('ok' => true, 'user' => $normalized));
+        send_json(array('ok' => true, 'user' => sanitize_user_for_client($normalized)));
 
     case 'identity.review.queue':
         $currentUser = get_current_user_record($store);
@@ -1169,7 +1369,7 @@ switch ($action) {
             return $role === 'provider' && in_array($status, array('pending_review', 'rejected'), true);
         }));
 
-        send_json(array('ok' => true, 'providers' => $queue));
+        send_json(array('ok' => true, 'providers' => sanitize_users_for_client($queue)));
 
     case 'identity.review.update':
         $currentUser = get_current_user_record($store);
@@ -1234,7 +1434,7 @@ switch ($action) {
             }
         }
 
-        send_json(array('ok' => true, 'provider' => $updatedProvider));
+        send_json(array('ok' => true, 'provider' => sanitize_user_for_client($updatedProvider)));
 
     case 'identity.photos.upload':
         // Upload one or more identity photos to Stripe and attach metadata in the user record.
@@ -1305,7 +1505,7 @@ switch ($action) {
 
         $store['users'][$userIndex] = $updated;
         write_store($storeFile, $store);
-        send_json(array('ok' => true, 'uploaded' => $uploaded, 'user' => $updated));
+        send_json(array('ok' => true, 'uploaded' => $uploaded, 'user' => sanitize_user_for_client($updated)));
 
     case 'quotes.list':
         $currentUser = get_current_user_record($store);
@@ -1319,6 +1519,7 @@ switch ($action) {
         } else {
             $userId = trim((string) ($_GET['userId'] ?? ''));
         }
+        refresh_session_cookie();
         $quotes = array_values($store['quotes']);
         if ($userId !== '') {
             $quotes = array_values(array_filter($quotes, function ($quote) use ($userId) {
@@ -1361,7 +1562,98 @@ switch ($action) {
                 send_json(array('ok' => false, 'error' => 'You do not have access to this quote.'), 403);
             }
         }
+        refresh_session_cookie();
         send_json(array('ok' => true, 'quote' => $found));
+
+    case 'quotes.uploadMedia':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $sessionUser = get_current_user_record($store);
+        if (!is_array($sessionUser) || trim((string) ($sessionUser['id'] ?? '')) === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        $userId = trim((string) $sessionUser['id']);
+        $dataUrl = (string) ($input['dataUrl'] ?? '');
+        $quoteId = trim((string) ($input['quoteId'] ?? ''));
+        $decoded = decode_data_url_binary($dataUrl);
+        if ($decoded === null) {
+            send_json(array('ok' => false, 'error' => 'Invalid media data. Expected a data URL.'), 400);
+        }
+        $maxBytes = 15 * 1024 * 1024;
+        if (strlen($decoded['binary']) > $maxBytes) {
+            send_json(array('ok' => false, 'error' => 'File too large (max 15 MB).'), 413);
+        }
+        $ext = extension_from_mime($decoded['mime']);
+        $mediaId = make_id('media');
+        $relative = 'quote-media/' . $userId . '/' . $mediaId . '.' . $ext;
+        $fullPath = $storeDir . '/' . $relative;
+        $dir = dirname($fullPath);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        if (@file_put_contents($fullPath, $decoded['binary'], LOCK_EX) === false) {
+            send_json(array('ok' => false, 'error' => 'Unable to save file.'), 500);
+        }
+        if (!isset($store['quoteMedia']) || !is_array($store['quoteMedia'])) {
+            $store['quoteMedia'] = array();
+        }
+        $store['quoteMedia'][] = array(
+            'id' => $mediaId,
+            'userId' => $userId,
+            'quoteId' => $quoteId,
+            'relativePath' => $relative,
+            'mimeType' => $decoded['mime'],
+            'createdAt' => gmdate('c')
+        );
+        write_store($storeFile, $store);
+        $mediaUrl = build_quote_media_url($mediaId);
+        refresh_session_cookie();
+        send_json(array(
+            'ok' => true,
+            'media' => array(
+                'id' => $mediaId,
+                'url' => $mediaUrl,
+                'mimeType' => $decoded['mime']
+            )
+        ));
+
+    case 'quotes.media':
+        $mediaId = trim((string) ($_GET['id'] ?? ''));
+        if ($mediaId === '') {
+            send_json(array('ok' => false, 'error' => 'Missing media id.'), 400);
+        }
+        $record = null;
+        foreach ($store['quoteMedia'] ?? array() as $m) {
+            if (!is_array($m)) {
+                continue;
+            }
+            if (trim((string) ($m['id'] ?? '')) === $mediaId) {
+                $record = $m;
+                break;
+            }
+        }
+        if ($record === null) {
+            send_json(array('ok' => false, 'error' => 'Not found.'), 404);
+        }
+        $sessionUser = get_current_user_record($store);
+        if (!user_can_access_quote_media($store, $sessionUser, $record)) {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        $rel = trim((string) ($record['relativePath'] ?? ''));
+        $fullPath = $rel !== '' ? ($storeDir . '/' . $rel) : '';
+        if ($fullPath === '' || !is_file($fullPath)) {
+            send_json(array('ok' => false, 'error' => 'File missing.'), 404);
+        }
+        $mime = trim((string) ($record['mimeType'] ?? ''));
+        if ($mime === '') {
+            $mime = 'application/octet-stream';
+        }
+        header('Content-Type: ' . $mime, true);
+        header('Cache-Control: private, max-age=3600', true);
+        header('X-Content-Type-Options: nosniff', true);
+        readfile($fullPath);
+        exit;
 
     case 'quotes.create':
         $quote = is_array($input['quote'] ?? null) ? $input['quote'] : array();
@@ -1384,6 +1676,7 @@ switch ($action) {
             $store['quotes'][] = $normalized;
         }
         write_store($storeFile, $store);
+        refresh_session_cookie();
         send_json(array('ok' => true, 'quote' => $normalized));
 
     case 'bids.list':
@@ -1484,6 +1777,10 @@ switch ($action) {
         send_json(array('ok' => true, 'bid' => $normalized));
 
     case 'bids.replaceAll':
+        $currentUser = get_current_user_record($store);
+        if (!is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin access required.'), 403);
+        }
         $incoming = is_array($input['bids'] ?? null) ? $input['bids'] : array();
         $normalizedBids = array();
         foreach ($incoming as $bid) {
@@ -1497,36 +1794,54 @@ switch ($action) {
         send_json(array('ok' => true, 'bids' => array_values($store['bids'])));
 
     case 'messages.list':
+        $currentUser = get_current_user_record($store);
+        $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
         $userId = trim((string) ($_GET['userId'] ?? ''));
         $participantA = trim((string) ($_GET['participantA'] ?? ''));
         $participantB = trim((string) ($_GET['participantB'] ?? ''));
         $messages = array_values($store['messages']);
 
         if ($participantA !== '' && $participantB !== '') {
+            if (!is_admin_user($currentUser)) {
+                if ($currentUserId === '' || ($currentUserId !== $participantA && $currentUserId !== $participantB)) {
+                    send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+                }
+            }
             $messages = array_values(array_filter($messages, function ($m) use ($participantA, $participantB) {
                 $from = trim((string) ($m['fromUserId'] ?? ''));
                 $to = trim((string) ($m['toUserId'] ?? ''));
                 return ($from === $participantA && $to === $participantB) || ($from === $participantB && $to === $participantA);
             }));
         } else if ($userId !== '') {
+            if (!is_admin_user($currentUser)) {
+                if ($currentUserId === '' || $currentUserId !== $userId) {
+                    send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+                }
+            }
             $messages = array_values(array_filter($messages, function ($m) use ($userId) {
                 $from = trim((string) ($m['fromUserId'] ?? ''));
                 $to = trim((string) ($m['toUserId'] ?? ''));
                 return $from === $userId || $to === $userId;
             }));
+        } else {
+            send_json(array('ok' => false, 'error' => 'Specify userId or participantA and participantB.'), 400);
         }
 
         send_json(array('ok' => true, 'messages' => $messages));
 
     case 'messages.save':
         // Newer message format supports sender and recipient
+        $sessionUser = get_current_user_record($store);
+        if (!is_array($sessionUser) || trim((string) ($sessionUser['id'] ?? '')) === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        $fromUserId = trim((string) $sessionUser['id']);
         $message = is_array($input['message'] ?? null) ? $input['message'] : array();
-        $fromUserId = trim((string) ($message['fromUserId'] ?? ''));
         $toUserId = trim((string) ($message['toUserId'] ?? ''));
         $text = trim((string) ($message['text'] ?? ''));
 
-        if ($fromUserId === '' || $toUserId === '' || $text === '') {
-            send_json(array('ok' => false, 'error' => 'Message must include fromUserId, toUserId and text.'), 400);
+        if ($toUserId === '' || $text === '') {
+            send_json(array('ok' => false, 'error' => 'Message must include toUserId and text.'), 400);
         }
 
         $savedMessage = array(
@@ -1576,14 +1891,34 @@ switch ($action) {
         send_json(array('ok' => true, 'message' => $savedMessage, 'replyToken' => $token));
 
     case 'messages.delete':
-        $userId = trim((string) ($input['userId'] ?? ''));
+        $sessionUser = get_current_user_record($store);
+        $sessionId = is_array($sessionUser) ? trim((string) ($sessionUser['id'] ?? '')) : '';
+        if ($sessionId === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
         $messageId = trim((string) ($input['messageId'] ?? ''));
-        if ($userId === '' || $messageId === '') {
-            send_json(array('ok' => false, 'error' => 'User and message IDs are required.'), 400);
+        if ($messageId === '') {
+            send_json(array('ok' => false, 'error' => 'Message id is required.'), 400);
         }
 
-        $store['messages'] = array_values(array_filter($store['messages'], function ($message) use ($userId, $messageId) {
-            return !(trim((string) ($message['userId'] ?? '')) === $userId && trim((string) ($message['id'] ?? '')) === $messageId);
+        $found = null;
+        foreach ($store['messages'] as $m) {
+            if (is_array($m) && trim((string) ($m['id'] ?? '')) === $messageId) {
+                $found = $m;
+                break;
+            }
+        }
+        if ($found === null) {
+            send_json(array('ok' => false, 'error' => 'Message not found.'), 404);
+        }
+        $from = trim((string) ($found['fromUserId'] ?? ''));
+        $to = trim((string) ($found['toUserId'] ?? ''));
+        if (!is_admin_user($sessionUser) && $sessionId !== $from && $sessionId !== $to) {
+            send_json(array('ok' => false, 'error' => 'Forbidden.'), 403);
+        }
+
+        $store['messages'] = array_values(array_filter($store['messages'], function ($message) use ($messageId) {
+            return trim((string) ($message['id'] ?? '')) !== $messageId;
         }));
         write_store($storeFile, $store);
         send_json(array('ok' => true));

@@ -15819,6 +15819,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (key && window.floorMediaObjectUrls[key]) {
             return window.floorMediaObjectUrls[key];
         }
+        if (typeof entry.mediaUrl === 'string' && entry.mediaUrl) {
+            return entry.mediaUrl;
+        }
         if (typeof entry.previewDataUrl === 'string' && entry.previewDataUrl) {
             return entry.previewDataUrl;
         }
@@ -15829,6 +15832,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const value = String(previewDataUrl || '').trim().toLowerCase();
         if (value.startsWith('data:video/')) return 'video';
         if (value.startsWith('data:image/')) return 'photo';
+        if (value.includes('.mp4') || value.includes('.webm') || value.includes('.mov')) return 'video';
         return 'photo';
     }
 
@@ -25122,6 +25126,44 @@ document.addEventListener('DOMContentLoaded', function() {
                         : 'Storage is full. Please remove old requests or large attachments and try again.'
                 );
             };
+
+            const flushInlineMediaToServer = () => {
+                if (!window.anytransportApi || typeof window.anytransportApi.uploadQuoteMedia !== 'function') {
+                    return;
+                }
+                const qid = String(quoteData.id || '').trim();
+                const pushServerUrls = (entry) => {
+                    if (!entry || typeof entry !== 'object') return;
+                    const raw = String(entry.previewDataUrl || entry.dataUrl || '').trim();
+                    if (!raw || !raw.startsWith('data:')) return;
+                    try {
+                        const media = window.anytransportApi.uploadQuoteMedia(raw, qid);
+                        const url = media && media.url ? String(media.url) : '';
+                        if (!url) return;
+                        entry.mediaUrl = url;
+                        entry.previewDataUrl = url;
+                        const mt = String((media && media.mimeType) || '').toLowerCase();
+                        entry.mediaType = mt.startsWith('video') ? 'video' : 'photo';
+                        delete entry.dataUrl;
+                    } catch (err) {
+                        console.warn('[QUOTE FORM] Server media upload failed; saving inline data.', err && err.message ? err.message : err);
+                    }
+                };
+                const fm = quoteData.floorMediaItems;
+                if (fm && typeof fm === 'object') {
+                    Object.keys(fm).forEach((floorKey) => {
+                        const arr = fm[floorKey];
+                        if (!Array.isArray(arr)) return;
+                        arr.forEach(pushServerUrls);
+                    });
+                }
+                const attachments = quoteData.mediaAttachments;
+                if (Array.isArray(attachments)) {
+                    attachments.forEach(pushServerUrls);
+                }
+            };
+
+            flushInlineMediaToServer();
 
             let savedQuote = null;
             if (window.anytransportApi && typeof window.anytransportApi.saveQuote === 'function') {

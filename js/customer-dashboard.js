@@ -2,6 +2,14 @@
 (function () {
     'use strict';
 
+    function isAtDebug() {
+        try {
+            return typeof window.anytransportIsDebug === 'function' && window.anytransportIsDebug();
+        } catch (_e) {
+            return false;
+        }
+    }
+
     function escapeHtml(s) {
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;')
@@ -56,7 +64,10 @@
         }
         try {
             return window.anytransportApi.getBids('') || [];
-        } catch (_e) {
+        } catch (e) {
+            if (isAtDebug()) {
+                console.debug('[AnyTransport] customer-dashboard loadAllBids', e);
+            }
             return [];
         }
     }
@@ -69,12 +80,10 @@
         if (owner && uid && owner === uid) {
             return true;
         }
-        if (!owner && userEmail) {
-            var a = String(userEmail || '').trim().toLowerCase();
-            var b = String((q && q.customerEmail) || '').trim().toLowerCase();
-            if (a && b && a === b) {
-                return true;
-            }
+        var a = String(userEmail || '').trim().toLowerCase();
+        var b = String((q && q.customerEmail) || '').trim().toLowerCase();
+        if (a && b && a === b) {
+            return true;
         }
         return false;
     }
@@ -85,7 +94,10 @@
         if (window.anytransportApi && typeof window.anytransportApi.getQuotes === 'function') {
             try {
                 apiQuotes = window.anytransportApi.getQuotes() || [];
-            } catch (_e) {
+            } catch (e) {
+                if (isAtDebug()) {
+                    console.debug('[AnyTransport] customer-dashboard getQuotes (using local merge if any)', e);
+                }
                 apiQuotes = [];
             }
         }

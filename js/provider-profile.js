@@ -60,27 +60,21 @@
                 '</div>';
         }
 
-        // reuse anytransportApi if available
-        if (window.anytransportApi && typeof window.anytransportApi.getUsers === 'function') {
-            try {
-                const users = window.anytransportApi.getUsers();
-                const u = users.find(u => String(u.id) === String(userId));
-                if (!u) {
-                    root.innerHTML = '<div class="empty-inventory">Profile not found.</div>';
-                    return Promise.resolve(null);
-                }
-                root.innerHTML = buildCompactHtml(u);
-                return Promise.resolve(u);
-            } catch (e) {
-                // fallback to fetch
-            }
+        const syncUser = resolveUserRecordSync(userId);
+        if (syncUser) {
+            root.innerHTML = buildCompactHtml(syncUser);
+            return Promise.resolve(syncUser);
         }
 
-        return fetch('api/index.php?action=users.list').then(function (res) {
+        const apiBase = String(window.ANYTRANSPORT_API_URL || 'api/index.php').trim();
+        const sep = apiBase.indexOf('?') >= 0 ? '&' : '?';
+        const apiUrl = apiBase + sep + 'action=users.get&id=' + encodeURIComponent(String(userId || '').trim());
+
+        return fetch(apiUrl, { credentials: 'include' }).then(function (res) {
             if (!res.ok) throw new Error('Network');
             return res.json();
         }).then(function (payload) {
-            const u = payload && Array.isArray(payload.users) ? payload.users.find(function (x) { return String(x.id) === String(userId); }) : null;
+            const u = payload && payload.user ? payload.user : null;
             if (!u) {
                 root.innerHTML = '<div class="empty-inventory">Profile not found.</div>';
                 return null;
@@ -98,26 +92,44 @@
         if (main) main.innerHTML = '<div class="empty-inventory">' + escapeHtml(msg) + '</div>';
     }
 
-    function loadProvider(userId) {
-        // Use anytransportApi if available, otherwise call API directly
+    function resolveUserRecordSync(userId) {
+        const id = String(userId || '').trim();
+        if (!id) return null;
+        if (window.anytransportApi && typeof window.anytransportApi.getUserById === 'function') {
+            try {
+                const u = window.anytransportApi.getUserById(id);
+                if (u) return u;
+            } catch (_e) {
+                /* continue */
+            }
+        }
         if (window.anytransportApi && typeof window.anytransportApi.getUsers === 'function') {
             try {
                 const users = window.anytransportApi.getUsers();
-                return Promise.resolve(users.find(u => String(u.id) === userId) || null);
-            } catch (e) {
-                // fallback
+                const u = Array.isArray(users) ? users.find(function (x) { return String(x.id) === id; }) : null;
+                if (u) return u;
+            } catch (_e) {
+                /* continue */
             }
+        }
+        return null;
+    }
+
+    function loadProvider(userId) {
+        const syncUser = resolveUserRecordSync(userId);
+        if (syncUser) {
+            return Promise.resolve(syncUser);
         }
 
         const apiBase = String(window.ANYTRANSPORT_API_URL || '../api/index.php' || 'api/index.php').trim();
-        const apiUrl = apiBase + (apiBase.indexOf('?') >= 0 ? '&' : '?') + 'action=users.list';
+        const sep = apiBase.indexOf('?') >= 0 ? '&' : '?';
+        const apiUrl = apiBase + sep + 'action=users.get&id=' + encodeURIComponent(String(userId || '').trim());
 
-        return fetch(apiUrl).then(function (res) {
+        return fetch(apiUrl, { credentials: 'include' }).then(function (res) {
             if (!res.ok) throw new Error('Network');
             return res.json();
         }).then(function (payload) {
-            if (!payload || !Array.isArray(payload.users)) return null;
-            return payload.users.find(function (u) { return String(u.id) === userId; }) || null;
+            return payload && payload.user ? payload.user : null;
         });
     }
 
