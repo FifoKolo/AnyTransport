@@ -91,6 +91,15 @@
     align-items: stretch;
 }
 
+/* Customers viewing their listing: no provider quote panel */
+body.listing-details--customer .bid-sidebar {
+    display: none;
+}
+
+body.listing-details--customer .details-workspace {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .details-main-column {
     min-width: 0;
     display: flex;

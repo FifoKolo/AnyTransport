@@ -33,19 +33,42 @@
         titleEl.textContent = getQuoteTitle(quote);
         subtitleEl.textContent = 'Listing ' + listingId + ' • Full submitted form details';
 
+        const showQuoteTools = isTransportProviderUser();
+        if (!showQuoteTools) {
+            document.body.classList.add('listing-details--customer');
+            applyCustomerListingChrome();
+        }
+
         renderQuickInfo(quote);
         renderWatchToggle(quote);
         renderMap(quote);
         renderInventory(quote);
         renderMediaGallery(quote);
         renderServices(quote);
-        renderBidUserContext();
-        renderSidebarQuickInfo(quote);
+        if (showQuoteTools) {
+            renderBidUserContext();
+            renderSidebarQuickInfo(quote);
+        }
         renderBids(quoteId, quote);
-        initializeBidFormDefaults(quote);
-        setupBidForm(quoteId, quote);
+        if (showQuoteTools) {
+            initializeBidFormDefaults(quote);
+            setupBidForm(quoteId, quote);
+        }
         renderFormSections(quote);
         initNotificationBell();
+    }
+
+    function applyCustomerListingChrome() {
+        var profileHref = 'customer-dashboard.html';
+        document.querySelectorAll('.back-to-listings-btn, .details-hero .back-btn').forEach(function (el) {
+            if (!el) return;
+            el.textContent = 'Back to Profile';
+            el.setAttribute('href', profileHref);
+        });
+        var eyebrow = document.querySelector('.details-hero .eyebrow');
+        if (eyebrow) {
+            eyebrow.textContent = 'Your request';
+        }
     }
 
     function getActiveUser() {
