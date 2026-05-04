@@ -58,6 +58,19 @@
         }).length;
     }
 
+    function getNewestActiveBidForQuote(quoteId, bids) {
+        const id = String(quoteId || '').trim();
+        if (!id || !Array.isArray(bids)) return null;
+        const active = bids.filter(function (b) {
+            return String(b.quoteId || '') === id && String(b.status || 'active') === 'active';
+        });
+        if (!active.length) return null;
+        active.sort(function (a, b) {
+            return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+        });
+        return active[0];
+    }
+
     function loadAllBids() {
         if (!window.anytransportApi || typeof window.anytransportApi.getBids !== 'function') {
             return [];
@@ -149,7 +162,11 @@
             const fid = getQuoteLabel(q);
             const isHi = highlightFormId && String(q.formId || '').trim() === highlightFormId;
             const bidN = countBidsForQuote(q.id, bids);
+            const newestBid = getNewestActiveBidForQuote(q.id, bids);
             const status = escapeHtml(String(q.status || 'pending'));
+            const messagesAction = newestBid
+                ? '<a class="btn btn-outline btn-sm" href="messages.html?quoteId=' + encodeURIComponent(q.id) + '&bidId=' + encodeURIComponent(newestBid.id || '') + '&to=' + encodeURIComponent(newestBid.providerId || '') + '">Messages</a>'
+                : '<span class="btn btn-outline btn-sm" style="opacity:.5; pointer-events:none;">Messages</span>';
             return [
                 '<tr class="customer-quote-row' + (isHi ? ' customer-quote-row--highlight' : '') + '" data-form-id="' + escapeHtml(String(q.formId || '')) + '">',
                 '<td><strong>' + escapeHtml(fid) + '</strong></td>',
@@ -160,7 +177,8 @@
                 '<td class="customer-actions">',
                 '<span class="customer-bid-count">' + bidN + '</span>',
                 '<a class="btn btn-outline btn-sm" href="listing-details.html?quoteId=' + encodeURIComponent(q.id) + '">View</a> ',
-                '<a class="btn btn-primary btn-sm" href="create-job.html?editQuote=' + encodeURIComponent(q.id) + '">Edit</a>',
+                '<a class="btn btn-primary btn-sm" href="create-job.html?editQuote=' + encodeURIComponent(q.id) + '">Edit</a> ',
+                messagesAction,
                 '</td></tr>'
             ].join('');
         }).join('');
@@ -185,15 +203,18 @@
 
         el.innerHTML = mine.map(function (m) {
             const incoming = String(m.toUserId || '') === String(userId);
+            const otherUserId = incoming ? String(m.fromUserId || '') : String(m.toUserId || '');
             const title = escapeHtml(m.title || 'Message');
             const preview = escapeHtml(firstLine(m.text, 220));
             const when = formatWhen(m.createdAt);
             const dir = incoming ? 'In' : 'Out';
+            const openHref = 'messages.html?to=' + encodeURIComponent(otherUserId);
             return [
                 '<article class="customer-msg-card customer-msg-card--' + (incoming ? 'in' : 'out') + '">',
                 '<div class="customer-msg-meta"><span class="customer-msg-dir">' + dir + '</span> · ' + escapeHtml(when) + '</div>',
                 '<h4 class="customer-msg-title">' + title + '</h4>',
                 '<p class="customer-msg-text">' + preview + '</p>',
+                '<a class="btn btn-outline btn-sm" href="' + openHref + '">Open chatroom</a>',
                 '</article>'
             ].join('');
         }).join('');

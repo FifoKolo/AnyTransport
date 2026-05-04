@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messages - AnyTransport</title>
+    <link rel="stylesheet" href="css/style.css?v=20260322-1">
+    <link rel="stylesheet" href="css/navbar.css?v=20260420-4">
+    <style>
+        .messages-wrap { max-width: 1000px; margin: 0 auto; padding: 24px 16px 40px; }
+        .messages-head { margin-bottom: 16px; }
+        .messages-head h1 { margin: 0 0 8px; }
+        .messages-head p { margin: 0; color: #475569; }
+        .messages-bid-context { border: 1px solid #dbeafe; background: #eff6ff; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+        .messages-bid-context h3 { margin: 0 0 6px; font-size: 14px; color: #1d4ed8; }
+        .messages-bid-context p { margin: 0; color: #1e293b; }
+        .messages-thread { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; min-height: 260px; max-height: 52vh; overflow-y: auto; }
+        .messages-empty { color: #64748b; font-size: 14px; margin: 0; }
+        .msg-row { margin: 0 0 10px; display: flex; }
+        .msg-row--out { justify-content: flex-end; }
+        .msg-bubble { max-width: 75%; border-radius: 10px; padding: 10px 12px; border: 1px solid #cbd5e1; background: #f8fafc; }
+        .msg-row--out .msg-bubble { background: #0ea5e9; color: #fff; border-color: #0284c7; }
+        .msg-meta { display: block; font-size: 11px; opacity: 0.8; margin-bottom: 4px; }
+        .msg-text { margin: 0; white-space: pre-wrap; }
+        .messages-composer { margin-top: 14px; display: grid; gap: 8px; }
+        .messages-composer input, .messages-composer textarea {
+            width: 100%;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 10px;
+            font: inherit;
+        }
+        .messages-actions { display: flex; gap: 10px; align-items: center; }
+        .messages-status { font-size: 13px; color: #334155; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a class="navbar-logo" href="index.html" aria-label="Go to landing page">
+                <img src="assets/logo.jpeg" alt="AnyTransport Logo" class="logo-img">
+                <span class="logo-text">AnyTransport</span>
+            </a>
+            <div class="navbar-right">
+                <a class="btn btn-outline" href="customer-dashboard.html">Back to profile</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="messages-wrap">
+        <header class="messages-head">
+            <h1>Messages</h1>
+            <p id="messages-subtitle">Chat with your provider.</p>
+        </header>
+
+        <section id="messages-bid-context" class="messages-bid-context" style="display:none;">
+            <h3>Started from a bid</h3>
+            <p id="messages-bid-text"></p>
+        </section>
+
+        <section id="messages-thread" class="messages-thread" aria-live="polite">
+            <p class="messages-empty">Loading conversation...</p>
+        </section>
+
+        <form id="messages-form" class="messages-composer">
+            <input id="messages-title" type="text" maxlength="120" placeholder="Subject (optional)">
+            <textarea id="messages-text" rows="5" maxlength="2000" placeholder="Write your message"></textarea>
+            <div class="messages-actions">
+                <button class="btn btn-primary" type="submit">Send message</button>
+                <span id="messages-status" class="messages-status"></span>
+            </div>
+        </form>
+    </main>
+
+    <script src="js/auth.js?v=20260503-7"></script>
+    <script src="js/messages.js?v=20260504-1"></script>
+</body>
+</html>
