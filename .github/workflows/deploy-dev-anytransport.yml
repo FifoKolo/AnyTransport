@@ -30,18 +30,41 @@ jobs:
 
       - name: Validate deploy variables
         run: |
-          if [ -z "${HETZNER_HOST}" ]; then
+          RAW_HOST="${HETZNER_HOST}"
+          RAW_USER="${HETZNER_USER}"
+          RAW_PATH="${HETZNER_DEV_PATH}"
+
+          # Accept either plain values or accidental "KEY=value" formatting.
+          RAW_HOST="${RAW_HOST#*=}"
+          RAW_USER="${RAW_USER#*=}"
+          RAW_PATH="${RAW_PATH#*=}"
+
+          CLEAN_HOST="$(printf '%s' "${RAW_HOST}" | tr -d '\r' | xargs)"
+          CLEAN_USER="$(printf '%s' "${RAW_USER}" | tr -d '\r' | xargs)"
+          CLEAN_PATH="$(printf '%s' "${RAW_PATH}" | tr -d '\r' | xargs)"
+
+          if [ -z "${CLEAN_HOST}" ]; then
             echo "HETZNER_HOST is empty; using fallback 77.42.30.113"
-            echo "HETZNER_HOST=77.42.30.113" >> "$GITHUB_ENV"
+            CLEAN_HOST="77.42.30.113"
           fi
-          if [ -z "${HETZNER_USER}" ]; then
+          if [ -z "${CLEAN_USER}" ]; then
             echo "Missing required secret: HETZNER_USER"
             exit 1
           fi
-          if [ -z "${HETZNER_DEV_PATH}" ]; then
+          if [ -z "${CLEAN_PATH}" ]; then
             echo "Missing required secret: HETZNER_DEV_PATH"
             exit 1
           fi
+
+          if ! printf '%s' "${CLEAN_HOST}" | grep -Eq '^[A-Za-z0-9.-]+$'; then
+            echo "Invalid HETZNER_HOST value after cleanup: ${CLEAN_HOST}"
+            echo "Expected example: 77.42.30.113"
+            exit 1
+          fi
+
+          echo "HETZNER_HOST=${CLEAN_HOST}" >> "$GITHUB_ENV"
+          echo "HETZNER_USER=${CLEAN_USER}" >> "$GITHUB_ENV"
+          echo "HETZNER_DEV_PATH=${CLEAN_PATH}" >> "$GITHUB_ENV"
 
       - name: Add server host key
         run: |
