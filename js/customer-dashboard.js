@@ -220,6 +220,88 @@
         }).join('');
     }
 
+    function setSettingsStatus(message, isError) {
+        const statusEl = document.getElementById('customer-settings-status');
+        if (!statusEl) return;
+        statusEl.textContent = String(message || '');
+        statusEl.style.color = isError ? '#b42318' : '#166534';
+    }
+
+    function wireAccountSettings(authRef, user) {
+        const form = document.getElementById('customer-account-form');
+        if (!form) return;
+
+        const nameInput = document.getElementById('customer-settings-name');
+        const usernameInput = document.getElementById('customer-settings-username');
+        const emailInput = document.getElementById('customer-settings-email');
+        const currentPasswordInput = document.getElementById('customer-settings-current-password');
+        const newPasswordInput = document.getElementById('customer-settings-new-password');
+        const confirmPasswordInput = document.getElementById('customer-settings-confirm-password');
+
+        if (nameInput) nameInput.value = String(user.name || '');
+        if (usernameInput) usernameInput.value = String(user.username || user.nickname || '');
+        if (emailInput) emailInput.value = String(user.email || '');
+
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            setSettingsStatus('', false);
+
+            if (!window.anytransportApi || typeof window.anytransportApi.updateAccountSettings !== 'function') {
+                setSettingsStatus('Account updates are not available right now. Please try again later.', true);
+                return;
+            }
+
+            const name = String(nameInput && nameInput.value || '').trim();
+            const username = String(usernameInput && usernameInput.value || '').trim();
+            const email = String(emailInput && emailInput.value || '').trim();
+            const currentPassword = String(currentPasswordInput && currentPasswordInput.value || '');
+            const newPassword = String(newPasswordInput && newPasswordInput.value || '');
+            const confirmNewPassword = String(confirmPasswordInput && confirmPasswordInput.value || '');
+
+            if (!name || !username || !email) {
+                setSettingsStatus('Name, username, and email are required.', true);
+                return;
+            }
+
+            if (newPassword && newPassword !== confirmNewPassword) {
+                setSettingsStatus('New password and confirmation do not match.', true);
+                return;
+            }
+
+            try {
+                const updatedUser = window.anytransportApi.updateAccountSettings({
+                    name: name,
+                    username: username,
+                    email: email,
+                    currentPassword: currentPassword,
+                    newPassword: newPassword
+                });
+                if (!updatedUser || !updatedUser.id) {
+                    setSettingsStatus('Unable to save your settings right now.', true);
+                    return;
+                }
+
+                authRef.currentUser = updatedUser;
+                localStorage.setItem('anytransport_user', JSON.stringify(updatedUser));
+                if (typeof authRef.initAuth === 'function') {
+                    authRef.initAuth();
+                }
+
+                const nameEl = document.getElementById('customer-user-name');
+                if (nameEl) {
+                    nameEl.textContent = updatedUser.username || updatedUser.name || updatedUser.email || 'Customer';
+                }
+
+                if (currentPasswordInput) currentPasswordInput.value = '';
+                if (newPasswordInput) newPasswordInput.value = '';
+                if (confirmPasswordInput) confirmPasswordInput.value = '';
+                setSettingsStatus('Your account settings have been updated.', false);
+            } catch (error) {
+                setSettingsStatus(error && error.message ? error.message : 'Unable to save settings.', true);
+            }
+        });
+    }
+
     function init() {
         var authRef = window.auth;
         if (!authRef || typeof authRef.isLoggedIn !== 'function' || !authRef.isLoggedIn()) {
@@ -271,6 +353,7 @@
             }
         }
         renderMessages(user.id, messages);
+        wireAccountSettings(authRef, user);
 
         document.querySelectorAll('.customer-tab-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {

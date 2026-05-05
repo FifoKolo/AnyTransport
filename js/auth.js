@@ -262,6 +262,10 @@ window.anytransportApi = window.anytransportApi || (function () {
             const response = request('users.upsert', 'POST', { user: user || {} });
             return response.user || user || null;
         },
+        updateAccountSettings: function (payload) {
+            const response = request('users.account.update', 'POST', payload || {});
+            return response.user || null;
+        },
         getQuotes: function (userId) {
             try {
                 const response = request('quotes.list', 'GET', null, userId ? { userId: userId } : {});

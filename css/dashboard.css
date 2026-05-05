@@ -2028,6 +2028,47 @@
     text-align: center;
 }
 
+.customer-settings-form {
+    max-width: 720px;
+    background: #fff;
+    border: 1px solid #e6f1fb;
+    border-radius: 12px;
+    padding: 18px;
+}
+
+.customer-settings-note {
+    margin: 0 0 12px;
+    color: #5a6f7e;
+}
+
+.customer-settings-label {
+    display: block;
+    margin: 0 0 6px;
+    font-weight: 600;
+    color: #1f3545;
+}
+
+.customer-settings-input {
+    width: 100%;
+    margin: 0 0 12px;
+    border: 1px solid #caddec;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+}
+
+.customer-settings-input:focus {
+    outline: none;
+    border-color: #1676b7;
+    box-shadow: 0 0 0 3px rgba(22, 118, 183, 0.16);
+}
+
+.customer-settings-status {
+    min-height: 1.2em;
+    margin-top: 10px;
+    font-weight: 600;
+}
+
 .quote-edit-bootstrap-banner {
     background: #e8f4fc;
     border-bottom: 1px solid #cfe8f7;

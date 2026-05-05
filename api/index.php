@@ -405,7 +405,7 @@ function send_email_simple($to, $subject, $body, $replyTo = '') {
     }
 
     $headers = array();
-    $headers[] = 'From: AnyTransport <info@' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '>';
+    $headers[] = 'From: AnyTransport <no-reply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '>';
     if (trim((string) $replyTo) !== '') {
         $headers[] = 'Reply-To: ' . trim((string) $replyTo);
     }
@@ -471,7 +471,7 @@ function smtp_mail_from_address($smtpUser) {
     if ($smtpUser !== '' && strpos($smtpUser, '@') !== false) {
         return $smtpUser;
     }
-    return 'info@' . smtp_ehlo_hostname($smtpUser);
+    return 'no-reply@' . smtp_ehlo_hostname($smtpUser);
 }
 
 /** IPv4 addresses for hostname (empty if $host is already an IP). */
@@ -1356,6 +1356,70 @@ switch ($action) {
         }
         write_store($storeFile, $store);
         send_json(array('ok' => true, 'user' => sanitize_user_for_client($normalized)));
+
+    case 'users.account.update':
+        $currentUser = get_current_user_record($store);
+        if (!is_array($currentUser) || trim((string) ($currentUser['id'] ?? '')) === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+
+        $currentUserId = trim((string) ($currentUser['id'] ?? ''));
+        $userIndex = find_user_index_by_id($store['users'], $currentUserId);
+        if ($userIndex < 0) {
+            send_json(array('ok' => false, 'error' => 'User not found.'), 404);
+        }
+
+        $existingUser = normalize_user($store['users'][$userIndex]);
+        $name = trim((string) ($input['name'] ?? $existingUser['name'] ?? ''));
+        $username = trim((string) ($input['username'] ?? $existingUser['username'] ?? ''));
+        $email = strtolower(trim((string) ($input['email'] ?? $existingUser['email'] ?? '')));
+        $currentPassword = (string) ($input['currentPassword'] ?? '');
+        $newPassword = (string) ($input['newPassword'] ?? '');
+
+        if ($name === '' || $username === '' || $email === '') {
+            send_json(array('ok' => false, 'error' => 'Name, username, and email are required.'), 400);
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            send_json(array('ok' => false, 'error' => 'Please provide a valid email address.'), 400);
+        }
+
+        $emailChanged = strtolower(trim((string) ($existingUser['email'] ?? ''))) !== $email;
+        $passwordChanged = trim((string) $newPassword) !== '';
+
+        if ($emailChanged || $passwordChanged) {
+            $savedPassword = (string) ($existingUser['password'] ?? '');
+            if ($savedPassword === '' || $currentPassword === '' || $savedPassword !== $currentPassword) {
+                send_json(array('ok' => false, 'error' => 'Current password is required to change email or password.'), 403);
+            }
+        }
+
+        foreach ($store['users'] as $idx => $u) {
+            if (!is_array($u) || $idx === $userIndex) {
+                continue;
+            }
+            if (strtolower(trim((string) ($u['email'] ?? ''))) === $email) {
+                send_json(array('ok' => false, 'error' => 'An account with this email already exists.'), 409);
+            }
+            if (strtolower(trim((string) ($u['username'] ?? ''))) === strtolower($username)) {
+                send_json(array('ok' => false, 'error' => 'That username is already in use.'), 409);
+            }
+        }
+
+        $updates = array(
+            'name' => $name,
+            'username' => $username,
+            'nickname' => $username,
+            'email' => $email
+        );
+        if ($passwordChanged) {
+            $updates['password'] = $newPassword;
+        }
+
+        $store['users'][$userIndex] = normalize_user(array_merge($existingUser, $updates));
+        $updatedUser = $store['users'][$userIndex];
+        write_store($storeFile, $store);
+        send_json(array('ok' => true, 'user' => sanitize_user_for_client($updatedUser)));
 
     case 'identity.review.queue':
         $currentUser = get_current_user_record($store);

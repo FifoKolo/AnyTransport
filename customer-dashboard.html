@@ -41,6 +41,7 @@
         <div class="customer-tabs" role="tablist">
             <button type="button" class="customer-tab-btn active" data-tab="forms" role="tab" aria-selected="true">My request forms</button>
             <button type="button" class="customer-tab-btn" data-tab="inbox" role="tab" aria-selected="false">Messages</button>
+            <button type="button" class="customer-tab-btn" data-tab="settings" role="tab" aria-selected="false">Account settings</button>
         </div>
 
         <section class="customer-tab-panel active" data-panel="forms" role="tabpanel">
@@ -69,6 +70,34 @@
             <div id="customer-messages-list" class="customer-messages-list">
                 <p class="customer-empty">Loading…</p>
             </div>
+        </section>
+
+        <section class="customer-tab-panel" data-panel="settings" role="tabpanel">
+            <h2 class="visually-hidden">Account settings</h2>
+            <form id="customer-account-form" class="customer-settings-form" autocomplete="on">
+                <p class="customer-settings-note">Update your profile details and login credentials.</p>
+
+                <label class="customer-settings-label" for="customer-settings-name">Full name</label>
+                <input id="customer-settings-name" name="name" type="text" class="customer-settings-input" required>
+
+                <label class="customer-settings-label" for="customer-settings-username">Username</label>
+                <input id="customer-settings-username" name="username" type="text" class="customer-settings-input" required>
+
+                <label class="customer-settings-label" for="customer-settings-email">Email</label>
+                <input id="customer-settings-email" name="email" type="email" class="customer-settings-input" required>
+
+                <label class="customer-settings-label" for="customer-settings-current-password">Current password (required to change email/password)</label>
+                <input id="customer-settings-current-password" name="currentPassword" type="password" class="customer-settings-input" autocomplete="current-password">
+
+                <label class="customer-settings-label" for="customer-settings-new-password">New password (optional)</label>
+                <input id="customer-settings-new-password" name="newPassword" type="password" class="customer-settings-input" autocomplete="new-password">
+
+                <label class="customer-settings-label" for="customer-settings-confirm-password">Confirm new password</label>
+                <input id="customer-settings-confirm-password" name="confirmNewPassword" type="password" class="customer-settings-input" autocomplete="new-password">
+
+                <button type="submit" class="btn btn-primary">Save changes</button>
+                <p id="customer-settings-status" class="customer-settings-status" aria-live="polite"></p>
+            </form>
         </section>
     </main>
 
