@@ -14,6 +14,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: development
+    env:
+      HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+      HETZNER_USER: ${{ secrets.HETZNER_USER }}
+      HETZNER_DEV_PATH: ${{ secrets.HETZNER_DEV_PATH }}
 
     steps:
       - name: Checkout repository
@@ -24,10 +28,25 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
 
+      - name: Validate deploy variables
+        run: |
+          if [ -z "${HETZNER_HOST}" ]; then
+            echo "HETZNER_HOST is empty; using fallback 77.42.30.113"
+            echo "HETZNER_HOST=77.42.30.113" >> "$GITHUB_ENV"
+          fi
+          if [ -z "${HETZNER_USER}" ]; then
+            echo "Missing required secret: HETZNER_USER"
+            exit 1
+          fi
+          if [ -z "${HETZNER_DEV_PATH}" ]; then
+            echo "Missing required secret: HETZNER_DEV_PATH"
+            exit 1
+          fi
+
       - name: Add server host key
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H "${{ secrets.HETZNER_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "${HETZNER_HOST}" >> ~/.ssh/known_hosts
 
       - name: Sync files to dev server
         run: |
@@ -37,13 +56,13 @@ jobs:
             --exclude "node_modules" \
             --exclude ".env" \
             --exclude "api/.env" \
-            ./ "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}:${{ secrets.HETZNER_DEV_PATH }}/"
+            ./ "${HETZNER_USER}@${HETZNER_HOST}:${HETZNER_DEV_PATH}/"
 
       - name: Post-deploy checks and service reload
         run: |
-          ssh "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}" "bash -lc '
+          ssh "${HETZNER_USER}@${HETZNER_HOST}" "bash -lc '
             set -e
-            cd \"${{ secrets.HETZNER_DEV_PATH }}\"
+            cd \"${HETZNER_DEV_PATH}\"
             if [ -f composer.json ]; then
               composer install --no-interaction --no-dev --prefer-dist
             fi
