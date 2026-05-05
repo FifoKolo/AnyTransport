@@ -405,7 +405,7 @@ function send_email_simple($to, $subject, $body, $replyTo = '') {
     }
 
     $headers = array();
-    $headers[] = 'From: AnyTransport <no-reply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '>';
+    $headers[] = 'From: AnyTransport <' . smtp_mail_from_address('') . '>';
     if (trim((string) $replyTo) !== '') {
         $headers[] = 'Reply-To: ' . trim((string) $replyTo);
     }
@@ -422,6 +422,49 @@ function send_email_simple($to, $subject, $body, $replyTo = '') {
         file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | mail() to={$to} error=" . $e->getMessage() . "\n", FILE_APPEND | LOCK_EX);
         return false;
     }
+}
+
+function send_provider_review_email($provider, $status, $notes = '') {
+    $providerEmail = trim((string) ($provider['email'] ?? ''));
+    if ($providerEmail === '') {
+        return false;
+    }
+
+    $providerName = trim((string) ($provider['name'] ?? $provider['username'] ?? 'there'));
+    $status = strtolower(trim((string) $status));
+    $notes = trim((string) $notes);
+    $appUrl = get_app_url('');
+    if ($appUrl === '' || $appUrl === '/') {
+        $appUrl = 'AnyTransport';
+    }
+
+    $subject = '';
+    $body = "Hello " . $providerName . ",\n\n";
+
+    if ($status === 'pending_review') {
+        $subject = 'AnyTransport provider application received';
+        $body .= "Thanks for applying to become a transport provider on AnyTransport.\n";
+        $body .= "Your application is now on our waiting list and pending review.\n\n";
+        $body .= "We will email you again as soon as the admin team makes a decision.\n\n";
+        $body .= "You can still sign in to your account while your review is pending.\n\n";
+        $body .= "Regards,\nAnyTransport";
+    } elseif ($status === 'approved') {
+        $subject = 'Your AnyTransport provider application was approved';
+        $body .= "Great news - your provider application has been approved.\n\n";
+        $body .= "Your provider account is now active. You can sign in and start using the provider dashboard:\n";
+        $body .= $appUrl . "\n\n";
+        $body .= "Regards,\nAnyTransport";
+    } elseif ($status === 'rejected') {
+        $subject = 'Your AnyTransport provider application was not approved';
+        $body .= "We reviewed your provider application and, at this time, it was not approved.\n\n";
+        $body .= "Reason from admin:\n" . $notes . "\n\n";
+        $body .= "If you have additional information to share, please reply to this email.\n\n";
+        $body .= "Regards,\nAnyTransport";
+    } else {
+        return false;
+    }
+
+    return send_email_simple($providerEmail, $subject, $body);
 }
 
 function smtp_read_full_response($fp) {
@@ -464,12 +507,10 @@ function smtp_ehlo_hostname($smtpUser) {
  * set SMTP_FROM; otherwise the mailbox address is used (Namecheap Private Email, etc.).
  */
 function smtp_mail_from_address($smtpUser) {
-    $fromCfg = get_env_value(array('SMTP_FROM', 'EMAIL_FROM', 'MAIL_FROM'), '');
+    // Keep one consistent no-reply sender for all email types.
+    $fromCfg = get_env_value(array('NO_REPLY_EMAIL', 'SMTP_FROM', 'EMAIL_FROM', 'MAIL_FROM'), '');
     if ($fromCfg !== '') {
         return $fromCfg;
-    }
-    if ($smtpUser !== '' && strpos($smtpUser, '@') !== false) {
-        return $smtpUser;
     }
     return 'no-reply@' . smtp_ehlo_hostname($smtpUser);
 }
@@ -1218,6 +1259,15 @@ switch ($action) {
         );
         write_store($storeFile, $store);
         set_session_cookie($token);
+
+        if (strtolower($role) === 'provider') {
+            try {
+                send_provider_review_email($user, 'pending_review', '');
+            } catch (Exception $_e) {
+                // swallow email errors
+            }
+        }
+
         send_json(array('ok' => true, 'user' => sanitize_user_for_client($user)));
 
     case 'users.get':
@@ -1447,6 +1497,9 @@ switch ($action) {
         if ($providerId === '' || !in_array($status, array('approved', 'rejected', 'pending_review'), true)) {
             send_json(array('ok' => false, 'error' => 'Provider ID and a valid review status are required.'), 400);
         }
+        if ($status === 'rejected' && trim((string) $notes) === '') {
+            send_json(array('ok' => false, 'error' => 'A rejection note is required when declining a provider.'), 400);
+        }
 
         $index = find_user_index_by_id($store['users'], $providerId);
         if ($index < 0) {
@@ -1476,25 +1529,11 @@ switch ($action) {
         $store['users'][$index] = $updatedProvider;
         write_store($storeFile, $store);
 
-        // If rejected, require a note and email the provider the admin's note.
-        if ($status === 'rejected') {
-            if (trim((string) $notes) === '') {
-                send_json(array('ok' => false, 'error' => 'A rejection note is required when declining a provider.'), 400);
-            }
-
-            $providerEmail = trim((string) ($updatedProvider['email'] ?? ''));
-            if ($providerEmail !== '') {
-                $subject = 'Your AnyTransport provider application — declined';
-                $body = "Hello " . trim((string) ($updatedProvider['name'] ?? $updatedProvider['username'] ?? '')) . ",\n\n";
-                $body .= "We reviewed your provider application and it has been declined.\n\n";
-                $body .= "Admin note:\n" . trim((string) $notes) . "\n\n";
-                $body .= "If you have additional information to provide, please reply to this email.\n\nRegards,\nAnyTransport";
-
-                try {
-                    send_email_simple($providerEmail, $subject, $body);
-                } catch (Exception $_e) {
-                    // swallow email errors
-                }
+        if (in_array($status, array('approved', 'rejected', 'pending_review'), true)) {
+            try {
+                send_provider_review_email($updatedProvider, $status, $notes);
+            } catch (Exception $_e) {
+                // swallow email errors
             }
         }
 

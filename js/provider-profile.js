@@ -406,6 +406,7 @@
             '#profile-contact',
             '#profile-website'
         ];
+        let lastSavedSignature = '';
 
         function renderPhotoPreviews() {
             if (!previewRoot) return;
@@ -462,6 +463,14 @@
             };
         }
 
+        function payloadSignature(payload) {
+            return JSON.stringify(payload || {});
+        }
+
+        function hasPendingChanges() {
+            return payloadSignature(buildPayload()) !== lastSavedSignature;
+        }
+
         function setSaveBadge(text, isError) {
             if (!saveBadge) return;
             saveBadge.textContent = text;
@@ -472,8 +481,14 @@
 
         function saveProfile(options) {
             const payload = buildPayload();
+            const signature = payloadSignature(payload);
             if (!window.anytransportApi || typeof window.anytransportApi.saveUser !== 'function') {
                 return Promise.reject(new Error('Profile saving is not available yet.'));
+            }
+
+            if (signature === lastSavedSignature) {
+                setSaveBadge('Saved just now', false);
+                return Promise.resolve();
             }
 
             setSaveBadge('Saving...', false);
@@ -488,6 +503,7 @@
             } catch (_err) {}
 
             return Promise.resolve(window.anytransportApi.saveUser(payload)).then(function () {
+                lastSavedSignature = signature;
                 setSaveBadge('Saved just now', false);
                 if (!options || !options.silent) {
                     alert('Profile updated successfully.');
@@ -500,6 +516,9 @@
         }
 
         function queueAutosave() {
+            if (!hasPendingChanges()) {
+                return;
+            }
             if (renderEditor._autosaveTimer) {
                 clearTimeout(renderEditor._autosaveTimer);
             }
@@ -522,9 +541,7 @@
                 queueAutosave();
             });
             if ((node.tagName === 'INPUT' && node.type === 'text') || node.tagName === 'TEXTAREA') {
-                node.addEventListener('blur', function () {
-                    queueAutosave();
-                });
+                node.addEventListener('input', queueAutosave);
             }
         }
 
@@ -562,6 +579,7 @@
         }
 
         renderPhotoPreviews();
+        lastSavedSignature = payloadSignature(buildPayload());
 
         if (isEditable) {
             root.querySelectorAll(checkboxAutosaveSelectors.join(',')).forEach(bindAutosave);

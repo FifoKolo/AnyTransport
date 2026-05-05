@@ -950,6 +950,13 @@ class AuthManager {
     isAdmin() {
         return this.getNormalizedRoles().includes('admin');
     }
+
+    startProviderStripeOnboarding(returnPath) {
+        if (!window.anytransportApi || typeof window.anytransportApi.startProviderStripeOnboarding !== 'function') {
+            return { complete: true };
+        }
+        return window.anytransportApi.startProviderStripeOnboarding(returnPath);
+    }
 }
 
 // Initialize auth manager
@@ -1084,6 +1091,12 @@ function startProviderStripeOnboarding(user) {
     return true;
 }
 
+function getUserFromAuthResult(result) {
+    if (!result || typeof result !== 'object') return null;
+    if (result.user && typeof result.user === 'object') return result.user;
+    return result;
+}
+
 // Handle Login Form Submission
 const loginForm = document.getElementById('login-form');
 if (loginForm) {
@@ -1095,7 +1108,7 @@ if (loginForm) {
 
         if (email && password) {
             const loginResult = auth.login(email, password);
-            const currentUser = loginResult && loginResult.user ? loginResult.user : null;
+            const currentUser = getUserFromAuthResult(loginResult);
             const isAdmin = currentUser && ((Array.isArray(currentUser.roles) && currentUser.roles.includes('admin')) || String(currentUser.role || '').toLowerCase() === 'admin');
 
             if (currentUser && String(currentUser.role || '') === 'provider') {
@@ -1126,6 +1139,44 @@ if (loginForm) {
                 }
                 // Stay on the current page so the landing page remains the default.
             }
+        }
+    });
+}
+
+const footerDriverLoginButton = document.querySelector('.footer-newsletter .btn-newsletter');
+if (footerDriverLoginButton) {
+    footerDriverLoginButton.addEventListener('click', function (event) {
+        event.preventDefault();
+        const footerBox = footerDriverLoginButton.closest('.footer-newsletter');
+        const emailInput = footerBox ? footerBox.querySelector('input[type="email"]') : null;
+        const passwordInput = footerBox ? footerBox.querySelector('input[type="password"]') : null;
+        const email = String(emailInput && emailInput.value ? emailInput.value : '').trim();
+        const password = String(passwordInput && passwordInput.value ? passwordInput.value : '');
+
+        if (!email || !password) {
+            alert('Please enter your email and password.');
+            return;
+        }
+
+        try {
+            const loginResult = auth.login(email, password);
+            const currentUser = getUserFromAuthResult(loginResult);
+            if (!currentUser) {
+                alert('Unable to log in. Please try again.');
+                return;
+            }
+
+            if (String(currentUser.role || '').toLowerCase() !== 'provider') {
+                alert('This login is for transport providers. Please use the main login for customer accounts.');
+                return;
+            }
+
+            if (startProviderStripeOnboarding(currentUser)) {
+                return;
+            }
+            window.location.href = 'dashboard.html#provider-board';
+        } catch (error) {
+            alert(error && error.message ? error.message : 'Unable to log in.');
         }
     });
 }
@@ -1208,9 +1259,10 @@ if (signupForm) {
         }
 
         if (formData.name && formData.email && formData.password) {
+            let currentUser = null;
             try {
                 const signupResult = auth.signup(formData);
-                const currentUser = signupResult && signupResult.user ? signupResult.user : null;
+                currentUser = getUserFromAuthResult(signupResult);
 
                 if (currentUser && String(currentUser.role || '') === 'provider') {
                     // If the signup included identity photos, upload them to Stripe
