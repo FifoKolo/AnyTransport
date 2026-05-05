@@ -1,0 +1,59 @@
+name: Deploy Dev (Hetzner)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dev-anytransport
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: development
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
+
+      - name: Add server host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.HETZNER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync files to dev server
+        run: |
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude ".github" \
+            --exclude "node_modules" \
+            --exclude ".env" \
+            --exclude "api/.env" \
+            ./ "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}:${{ secrets.HETZNER_DEV_PATH }}/"
+
+      - name: Post-deploy checks and service reload
+        run: |
+          ssh "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}" "bash -lc '
+            set -e
+            cd \"${{ secrets.HETZNER_DEV_PATH }}\"
+            if [ -f composer.json ]; then
+              composer install --no-interaction --no-dev --prefer-dist
+            fi
+            nginx -t
+            systemctl reload nginx
+            if systemctl list-unit-files | grep -q \"^php8.2-fpm\"; then
+              systemctl reload php8.2-fpm || true
+            fi
+          '"
+
+      - name: Health check (dev)
+        run: |
+          curl -fsS "https://dev.anytransport.ie/" > /dev/null

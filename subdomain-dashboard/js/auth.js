@@ -807,6 +807,11 @@ class AuthManager {
             if (serverUser && serverUser.id) {
                 return this.normalizeUserRecord(serverUser, this.loadUsers());
             }
+            // API is available but no valid server session: do not trust stale localStorage user.
+            try {
+                localStorage.removeItem('anytransport_user');
+            } catch (_e) {}
+            return null;
         }
 
         const userData = localStorage.getItem('anytransport_user');
