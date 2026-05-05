@@ -1693,6 +1693,34 @@ switch ($action) {
             $store['quotes'][] = $normalized;
         }
         write_store($storeFile, $store);
+
+        // Send form submission confirmation email to the customer when possible.
+        $customerEmail = strtolower(trim((string) ($normalized['customerEmail'] ?? '')));
+        if ($customerEmail === '' && is_array($sessionUser)) {
+            $customerEmail = strtolower(trim((string) ($sessionUser['email'] ?? '')));
+        }
+        if ($customerEmail !== '') {
+            $customerName = trim((string) ($normalized['customerName'] ?? ''));
+            if ($customerName === '' && is_array($sessionUser)) {
+                $customerName = trim((string) ($sessionUser['name'] ?? $sessionUser['username'] ?? ''));
+            }
+            if ($customerName === '') {
+                $customerName = 'there';
+            }
+            $formReference = trim((string) ($normalized['formId'] ?? $normalized['id'] ?? ''));
+            $subject = 'We received your request';
+            $body = "Hi " . $customerName . ",\n\n";
+            $body .= "Your request form has been submitted successfully.\n";
+            if ($formReference !== '') {
+                $body .= "Reference: " . $formReference . "\n";
+            }
+            $body .= "\nYou can view updates in your dashboard:\n";
+            $body .= get_app_url('customer-dashboard.html') . "\n\n";
+            $body .= "This inbox is not monitored. Please use your dashboard/messages for updates.\n\n";
+            $body .= "Regards,\nAnyTransport";
+            send_email_simple($customerEmail, $subject, $body);
+        }
+
         refresh_session_cookie();
         send_json(array('ok' => true, 'quote' => $normalized));
 
@@ -1779,14 +1807,12 @@ switch ($action) {
 
             // send email notification
             if ($owner && !empty($owner['email'])) {
-                $replyDomain = get_env_value('INBOUND_EMAIL_DOMAIN', ($_SERVER['HTTP_HOST'] ?? 'localhost'));
-                $replyToAddress = 'reply+' . $token . '@' . $replyDomain;
                 $subject = 'New bid on your listing ' . $quoteLabel;
                 $body = "Hi " . (string) ($owner['name'] ?? $owner['username'] ?? '') . ",\n\n";
                 $body .= $messageText . "\n\n";
-                $body .= "Reply by visiting: " . get_app_url('messages.html?reply=' . rawurlencode($token)) . "\n";
-                $body .= "Or reply by sending an email to: " . $replyToAddress . "\n";
-                send_email_simple($owner['email'], $subject, $body, $replyToAddress);
+                $body .= "View and respond in your dashboard: " . get_app_url('messages.html?reply=' . rawurlencode($token)) . "\n";
+                $body .= "This inbox is not monitored. Please use the link above to reply.\n";
+                send_email_simple($owner['email'], $subject, $body);
             }
 
             write_store($storeFile, $store);
@@ -1894,14 +1920,12 @@ switch ($action) {
         }
 
         if ($recipient && !empty($recipient['email'])) {
-            $replyDomain = get_env_value('messages.anytransport.reply.domain', ($_SERVER['HTTP_HOST'] ?? 'localhost'));
-            $replyToAddress = 'reply+' . $token . '@' . $replyDomain;
             $subject = 'New message from ' . (string) ($message['title'] ?? 'Provider');
             $body = "You have received a new message from " . (string) ($fromUserId) . "\n\n";
             $body .= $text . "\n\n";
-            $body .= "Reply by visiting: " . get_app_url('messages.html?reply=' . rawurlencode($token)) . "\n";
-            $body .= "Or reply by sending an email to: " . $replyToAddress . "\n";
-            send_email_simple($recipient['email'], $subject, $body, $replyToAddress);
+            $body .= "View and respond in your dashboard: " . get_app_url('messages.html?reply=' . rawurlencode($token)) . "\n";
+            $body .= "This inbox is not monitored. Please use the link above to reply.\n";
+            send_email_simple($recipient['email'], $subject, $body);
         }
 
         write_store($storeFile, $store);
