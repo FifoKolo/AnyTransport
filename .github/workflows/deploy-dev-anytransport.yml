@@ -48,6 +48,17 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H "${HETZNER_HOST}" >> ~/.ssh/known_hosts
 
+      - name: Preflight on server (SSH + rsync + path)
+        run: |
+          ssh "${HETZNER_USER}@${HETZNER_HOST}" "bash -lc '
+            set -e
+            if ! command -v rsync >/dev/null 2>&1; then
+              apt-get update
+              apt-get install -y rsync
+            fi
+            mkdir -p \"${HETZNER_DEV_PATH}\"
+          '"
+
       - name: Sync files to dev server
         run: |
           rsync -az --delete \
