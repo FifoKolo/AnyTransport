@@ -1685,6 +1685,69 @@ switch ($action) {
         refresh_session_cookie();
         send_json(array('ok' => true, 'quote' => $found));
 
+    case 'quotes.delete':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $sessionUser = get_current_user_record($store);
+        if (!is_array($sessionUser) || trim((string) ($sessionUser['id'] ?? '')) === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        $quoteId = trim((string) ($input['quoteId'] ?? $input['id'] ?? ''));
+        if ($quoteId === '') {
+            send_json(array('ok' => false, 'error' => 'Quote id is required.'), 400);
+        }
+
+        $quoteIndex = find_user_index($store['quotes'], function ($quote) use ($quoteId) {
+            return trim((string) ($quote['id'] ?? '')) === $quoteId;
+        });
+        if ($quoteIndex < 0) {
+            send_json(array('ok' => false, 'error' => 'Quote not found.'), 404);
+        }
+
+        $quote = is_array($store['quotes'][$quoteIndex]) ? $store['quotes'][$quoteIndex] : array();
+        $isAdmin = is_admin_user($sessionUser);
+        $currentUserId = trim((string) ($sessionUser['id'] ?? ''));
+        $ownerId = trim((string) ($quote['userId'] ?? $quote['createdBy'] ?? ''));
+        $ownerMatch = ($ownerId !== '' && $ownerId === $currentUserId);
+        $quoteEmail = strtolower(trim((string) ($quote['customerEmail'] ?? '')));
+        $userEmail = strtolower(trim((string) ($sessionUser['email'] ?? '')));
+        $emailMatch = !$ownerMatch && $ownerId === '' && $quoteEmail !== '' && $userEmail !== '' && $quoteEmail === $userEmail;
+        if (!$isAdmin && !$ownerMatch && !$emailMatch) {
+            send_json(array('ok' => false, 'error' => 'You can only delete your own quote.'), 403);
+        }
+
+        array_splice($store['quotes'], $quoteIndex, 1);
+        $store['bids'] = array_values(array_filter($store['bids'], function ($bid) use ($quoteId) {
+            return trim((string) ($bid['quoteId'] ?? '')) !== $quoteId;
+        }));
+
+        if (!isset($store['quoteMedia']) || !is_array($store['quoteMedia'])) {
+            $store['quoteMedia'] = array();
+        }
+        $remainingMedia = array();
+        foreach ($store['quoteMedia'] as $media) {
+            if (!is_array($media)) {
+                continue;
+            }
+            if (trim((string) ($media['quoteId'] ?? '')) === $quoteId) {
+                $rel = trim((string) ($media['relativePath'] ?? ''));
+                if ($rel !== '') {
+                    $full = $storeDir . '/' . $rel;
+                    if (is_file($full)) {
+                        @unlink($full);
+                    }
+                }
+                continue;
+            }
+            $remainingMedia[] = $media;
+        }
+        $store['quoteMedia'] = array_values($remainingMedia);
+
+        write_store($storeFile, $store);
+        refresh_session_cookie();
+        send_json(array('ok' => true, 'deletedQuoteId' => $quoteId));
+
     case 'quotes.uploadMedia':
         if ($method !== 'POST') {
             send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
@@ -1826,6 +1889,77 @@ switch ($action) {
 
         refresh_session_cookie();
         send_json(array('ok' => true, 'quote' => $normalized));
+
+    case 'quotes.admin.notify':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $currentUser = get_current_user_record($store);
+        if (!is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin access required.'), 403);
+        }
+
+        $quoteId = trim((string) ($input['quoteId'] ?? ''));
+        $reason = trim((string) ($input['reason'] ?? ''));
+        if ($quoteId === '' || $reason === '') {
+            send_json(array('ok' => false, 'error' => 'Quote ID and reason are required.'), 400);
+        }
+
+        $quote = null;
+        foreach ($store['quotes'] as $q) {
+            if (trim((string) ($q['id'] ?? '')) === $quoteId) {
+                $quote = is_array($q) ? $q : array();
+                break;
+            }
+        }
+        if (!is_array($quote)) {
+            send_json(array('ok' => false, 'error' => 'Quote not found.'), 404);
+        }
+
+        $ownerId = trim((string) ($quote['userId'] ?? $quote['createdBy'] ?? ''));
+        $recipient = null;
+        if ($ownerId !== '') {
+            foreach ($store['users'] as $u) {
+                if (trim((string) ($u['id'] ?? '')) === $ownerId) {
+                    $recipient = is_array($u) ? $u : null;
+                    break;
+                }
+            }
+        }
+        if (!is_array($recipient)) {
+            $quoteEmail = strtolower(trim((string) ($quote['customerEmail'] ?? '')));
+            if ($quoteEmail !== '') {
+                foreach ($store['users'] as $u) {
+                    if (strtolower(trim((string) ($u['email'] ?? ''))) === $quoteEmail) {
+                        $recipient = is_array($u) ? $u : null;
+                        break;
+                    }
+                }
+            }
+        }
+
+        $to = trim((string) ($recipient['email'] ?? $quote['customerEmail'] ?? ''));
+        if ($to === '') {
+            send_json(array('ok' => false, 'error' => 'No email address found for this form owner.'), 400);
+        }
+
+        $name = trim((string) ($recipient['name'] ?? $recipient['username'] ?? $quote['customerName'] ?? 'there'));
+        $formReference = trim((string) ($quote['formId'] ?? $quote['id'] ?? $quoteId));
+        $subject = 'Update about your AnyTransport form ' . $formReference;
+        $body = "Hello " . $name . ",\n\n";
+        $body .= "An admin reviewed your request form (" . $formReference . ") and sent this note:\n\n";
+        $body .= $reason . "\n\n";
+        $body .= "You can view your form in your dashboard:\n";
+        $body .= get_app_url('customer-dashboard.html') . "\n\n";
+        $body .= "Regards,\nAnyTransport";
+
+        $sent = false;
+        try {
+            $sent = send_email_simple($to, $subject, $body);
+        } catch (Exception $_e) {
+            $sent = false;
+        }
+        send_json(array('ok' => true, 'sent' => !!$sent, 'email' => $to, 'quoteId' => $quoteId));
 
     case 'bids.list':
         $quoteId = trim((string) ($_GET['quoteId'] ?? ''));

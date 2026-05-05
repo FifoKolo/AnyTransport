@@ -296,6 +296,12 @@ window.anytransportApi = window.anytransportApi || (function () {
             const response = request('quotes.create', 'POST', { quote: quote || {} });
             return response.quote || quote || null;
         },
+        deleteQuote: function (quoteId) {
+            return request('quotes.delete', 'POST', { quoteId: quoteId ? String(quoteId) : '' });
+        },
+        notifyQuoteOwner: function (quoteId, reason) {
+            return request('quotes.admin.notify', 'POST', { quoteId: quoteId ? String(quoteId) : '', reason: reason || '' });
+        },
         uploadQuoteMedia: function (dataUrl, quoteId) {
             const response = request('quotes.uploadMedia', 'POST', {
                 dataUrl: dataUrl || '',

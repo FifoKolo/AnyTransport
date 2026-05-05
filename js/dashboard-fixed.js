@@ -139,6 +139,29 @@
         return providers;
     }
 
+    function getAllProvidersForAdmin() {
+        let providers = [];
+        try {
+            if (window.anytransportApi && typeof window.anytransportApi.getUsers === 'function') {
+                const users = window.anytransportApi.getUsers();
+                if (Array.isArray(users) && users.length) {
+                    providers = users.filter((user) => String(user && user.role || '').toLowerCase().trim() === 'provider');
+                    return providers;
+                }
+            }
+        } catch (_error) {}
+
+        try {
+            const users = auth && typeof auth.loadUsers === 'function' ? auth.loadUsers() : [];
+            if (Array.isArray(users) && users.length) {
+                providers = users.filter((user) => String(user && user.role || '').toLowerCase().trim() === 'provider');
+            }
+        } catch (_error) {
+            providers = [];
+        }
+        return providers;
+    }
+
     document.addEventListener('DOMContentLoaded', initDashboard);
 
     function initDashboard() {
@@ -846,6 +869,50 @@
                 return;
             }
 
+            const adminEmailBtn = event.target.closest('.admin-email-form-btn');
+            if (adminEmailBtn) {
+                if (!(auth.isAdmin && auth.isAdmin())) {
+                    alert('Admin access required.');
+                    return;
+                }
+                const quoteId = String(adminEmailBtn.getAttribute('data-quote-id') || '').trim();
+                const row = adminEmailBtn.closest('.provider-listing');
+                const notesField = row ? row.querySelector('.admin-form-note') : null;
+                const statusBadge = row ? row.querySelector('.admin-email-status') : null;
+                const reason = notesField ? String(notesField.value || '').trim() : '';
+                if (!quoteId || !reason) {
+                    alert('Please write a reason before sending the email.');
+                    if (notesField) notesField.focus();
+                    return;
+                }
+                try {
+                    if (statusBadge) {
+                        statusBadge.textContent = 'Sending...';
+                        statusBadge.style.color = '#1d4ed8';
+                    }
+                    if (window.anytransportApi && typeof window.anytransportApi.notifyQuoteOwner === 'function') {
+                        window.anytransportApi.notifyQuoteOwner(quoteId, reason);
+                        if (statusBadge) {
+                            statusBadge.textContent = 'Sent';
+                            statusBadge.style.color = '#166534';
+                        }
+                    } else {
+                        if (statusBadge) {
+                            statusBadge.textContent = 'Email unavailable';
+                            statusBadge.style.color = '#991b1b';
+                        }
+                        alert('Email sending is not available in this mode.');
+                    }
+                } catch (error) {
+                    if (statusBadge) {
+                        statusBadge.textContent = 'Failed';
+                        statusBadge.style.color = '#991b1b';
+                    }
+                    alert(error && error.message ? error.message : 'Unable to send email.');
+                }
+                return;
+            }
+
             const withdrawBtn = event.target.closest('.withdraw-bid-btn');
             if (withdrawBtn) {
                 withdrawBid(withdrawBtn.getAttribute('data-bid-id'), user);
@@ -1175,12 +1242,10 @@
 
         try {
             const providers = getPendingProvidersForReview();
-            if (!providers.length) {
-                container.innerHTML = '<div class="empty-inventory">No providers are waiting for review.</div>';
-                return;
-            }
+            const allProviders = getAllProvidersForAdmin();
+            const allQuotes = getAllQuotes();
 
-            container.innerHTML = providers.map((provider) => {
+            const pendingMarkup = providers.length ? providers.map((provider) => {
                 const name = escapeHtml(firstText(provider.businessName, provider.name, provider.nickname, provider.username, provider.email));
                 const email = escapeHtml(firstText(provider.email, 'Not provided'));
                 const status = escapeHtml(String(provider.identityReviewStatus || 'pending_review').replace(/_/g, ' '));
@@ -1216,7 +1281,63 @@
                     '</div>',
                     '</article>'
                 ].join('');
-            }).join('');
+            }).join('') : '<div class="empty-inventory">No providers are waiting for review.</div>';
+
+            const providerRows = allProviders.length ? allProviders.map((provider) => {
+                const status = escapeHtml(String(provider.identityReviewStatus || 'pending_review').replace(/_/g, ' '));
+                return '<tr>'
+                    + '<td>' + escapeHtml(firstText(provider.businessName, provider.name, provider.username, provider.email)) + '</td>'
+                    + '<td>' + escapeHtml(firstText(provider.email, '—')) + '</td>'
+                    + '<td>' + status + '</td>'
+                    + '<td>' + escapeHtml(firstText(provider.city, provider.location, '—')) + '</td>'
+                    + '</tr>';
+            }).join('') : '<tr><td colspan="4" class="customer-empty-cell">No providers found.</td></tr>';
+
+            const quoteRows = allQuotes.length ? allQuotes.slice().sort((a, b) => {
+                return new Date(b.submittedAt || b.createdAt || 0) - new Date(a.submittedAt || a.createdAt || 0);
+            }).map((quote) => {
+                const quoteId = String(quote.id || '').trim();
+                const formId = escapeHtml(firstText(quote.formId, quoteId, '—'));
+                const owner = escapeHtml(firstText(quote.customerEmail, quote.customerName, quote.userId, 'Unknown'));
+                return [
+                    '<article class="provider-listing" style="margin-bottom:12px;">',
+                    '<div class="listing-row body" style="grid-template-columns: 160px 1fr 1fr;">',
+                    '<div class="listing-cell">',
+                    '<div class="listing-title">Form ' + formId + '</div>',
+                    '<div class="listing-sub">' + escapeHtml(formatDateTime(quote.submittedAt || quote.createdAt || '')) + '</div>',
+                    '</div>',
+                    '<div class="listing-cell">',
+                    '<div class="listing-sub">Owner: ' + owner + '</div>',
+                    '<div class="listing-sub">' + escapeHtml(firstText(quote.itemDescription, quote.itemType, 'Transport request')) + '</div>',
+                    '</div>',
+                    '<div class="listing-cell review-actions-cell">',
+                    '<textarea class="form-input admin-form-note" rows="3" placeholder="Reason to email the user"></textarea>',
+                    '<div class="actions review-actions" style="margin-top:8px;">',
+                    '<button type="button" class="btn btn-outline admin-email-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">Email form owner</button>',
+                    '<span class="admin-email-status" style="display:inline-flex; align-items:center; font-weight:700; color:#64748b;">Not sent</span>',
+                    '</div>',
+                    '</div>',
+                    '</div>',
+                    '</article>'
+                ].join('');
+            }).join('') : '<div class="empty-inventory">No forms found.</div>';
+
+            container.innerHTML = [
+                '<section style="margin-bottom:24px;">',
+                '<h3 style="margin:0 0 10px;">Pending provider reviews</h3>',
+                pendingMarkup,
+                '</section>',
+                '<section style="margin-bottom:24px;">',
+                '<h3 style="margin:0 0 10px;">All providers on site</h3>',
+                '<div class="customer-quotes-table-wrap"><table class="customer-quotes-table"><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Location</th></tr></thead><tbody>',
+                providerRows,
+                '</tbody></table></div>',
+                '</section>',
+                '<section>',
+                '<h3 style="margin:0 0 10px;">All submitted forms</h3>',
+                quoteRows,
+                '</section>'
+            ].join('');
         } catch (_error) {
             container.innerHTML = '<div class="empty-inventory">Unable to load the review queue.</div>';
         }
@@ -2536,7 +2657,11 @@
 
         const filteredQuotes = quotes.filter((quote) => quote.id !== quoteId);
         try {
-            saveQuotesToStorage(filteredQuotes);
+            if (window.anytransportApi && typeof window.anytransportApi.deleteQuote === 'function') {
+                window.anytransportApi.deleteQuote(quoteId);
+            } else {
+                saveQuotesToStorage(filteredQuotes);
+            }
         } catch (error) {
             alert(error && error.message ? error.message : 'Unable to update quotes right now.');
             return;

@@ -178,10 +178,37 @@
                 '<span class="customer-bid-count">' + bidN + '</span>',
                 '<a class="btn btn-outline btn-sm" href="listing-details.html?quoteId=' + encodeURIComponent(q.id) + '">View</a> ',
                 '<a class="btn btn-primary btn-sm" href="create-job.html?editQuote=' + encodeURIComponent(q.id) + '">Edit</a> ',
+                '<button type="button" class="btn btn-danger btn-sm customer-delete-quote-btn" data-quote-id="' + escapeHtml(String(q.id || '')) + '">Delete</button> ',
                 messagesAction,
                 '</td></tr>'
             ].join('');
         }).join('');
+    }
+
+    function deleteQuoteForUser(authRef, user, quoteId) {
+        const id = String(quoteId || '').trim();
+        if (!id) return false;
+        if (!confirm('Delete this request form? This cannot be undone.')) return false;
+
+        try {
+            if (window.anytransportApi && typeof window.anytransportApi.deleteQuote === 'function') {
+                window.anytransportApi.deleteQuote(id);
+            } else {
+                const raw = JSON.parse(localStorage.getItem(LISTING_STORAGE_KEY) || '[]');
+                const filtered = Array.isArray(raw) ? raw.filter(function (q) {
+                    return String(q && q.id || '') !== id;
+                }) : [];
+                localStorage.setItem(LISTING_STORAGE_KEY, JSON.stringify(filtered));
+            }
+        } catch (error) {
+            alert(error && error.message ? error.message : 'Unable to delete this form right now.');
+            return false;
+        }
+
+        const quotes = loadQuotesMerged(user.id, user.email || '');
+        const bids = loadAllBids();
+        renderQuotes(quotes, bids, '');
+        return true;
     }
 
     function renderMessages(userId, messages) {
@@ -271,6 +298,16 @@
             }
         }
         renderMessages(user.id, messages);
+
+        const quotesBody = document.getElementById('customer-quotes-body');
+        if (quotesBody) {
+            quotesBody.addEventListener('click', function (event) {
+                const deleteBtn = event.target.closest('.customer-delete-quote-btn');
+                if (!deleteBtn) return;
+                const quoteId = String(deleteBtn.getAttribute('data-quote-id') || '').trim();
+                deleteQuoteForUser(authRef, user, quoteId);
+            });
+        }
 
         document.querySelectorAll('.customer-tab-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
