@@ -12,9 +12,9 @@ return array(
     //
     // 'SMTP_HOST' => 'mail.privateemail.com',
     // 'SMTP_PORT' => 587,
-    // 'SMTP_USER' => 'info@yourdomain.com',
-    // 'SMTP_PASS' => 'your-mailbox-password',
+    // 'SMTP_USER' => 'no-reply@anytransport.ie',
+    // 'SMTP_PASS' => '6LhYqDNDka#',
     // 'SMTP_SECURE' => 'tls',
-    // 'SMTP_FROM' => 'info@yourdomain.com',
-    // 'SMTP_EHLO_DOMAIN' => 'yourdomain.com',
+    // 'SMTP_FROM' => 'no-reply@anytransport.ie',
+    // 'SMTP_EHLO_DOMAIN' => 'anytransport.ie',
 );
