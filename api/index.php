@@ -1866,11 +1866,13 @@ switch ($action) {
         $currentUser = get_current_user_record($store);
         $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
         $isAdmin = is_admin_user($currentUser);
+        $isProvider = strtolower(trim((string) ($currentUser['role'] ?? ''))) === 'provider';
         if (!$isAdmin) {
             if ($currentUserId === '') {
                 send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
             }
-            $userId = $currentUserId;
+            // Providers need visibility of open marketplace forms, not only self-owned forms.
+            $userId = $isProvider ? '' : $currentUserId;
         } else {
             $userId = trim((string) ($_GET['userId'] ?? ''));
         }
@@ -1925,7 +1927,8 @@ switch ($action) {
         $currentUser = get_current_user_record($store);
         $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
         $ownerId = trim((string) ($found['userId'] ?? $found['createdBy'] ?? ''));
-        if (!is_admin_user($currentUser)) {
+        $isProvider = strtolower(trim((string) ($currentUser['role'] ?? ''))) === 'provider';
+        if (!is_admin_user($currentUser) && !$isProvider) {
             if ($currentUserId === '') {
                 send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
             }
