@@ -439,6 +439,7 @@ window.anytransportApi = window.anytransportApi || (function () {
 class AuthManager {
     constructor() {
         this.usersStorageKey = 'anytransport_users';
+        this.currentUserStorageKey = 'anytransport_user';
         this.currentUser = this.loadUser();
         this.migrateStoredUsers();
         this.initAuth();
@@ -534,6 +535,43 @@ class AuthManager {
         return normalized;
     }
 
+    setStoredCurrentUser(user) {
+        const serialized = JSON.stringify(user);
+        try {
+            if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.setItem(this.currentUserStorageKey, serialized);
+            }
+        } catch (_e) {}
+        try {
+            localStorage.setItem(this.currentUserStorageKey, serialized);
+        } catch (_e) {}
+    }
+
+    clearStoredCurrentUser() {
+        try {
+            if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.removeItem(this.currentUserStorageKey);
+            }
+        } catch (_e) {}
+        try {
+            localStorage.removeItem(this.currentUserStorageKey);
+        } catch (_e) {}
+    }
+
+    getStoredCurrentUserRaw() {
+        try {
+            if (typeof sessionStorage !== 'undefined') {
+                const tabScoped = sessionStorage.getItem(this.currentUserStorageKey);
+                if (tabScoped) return tabScoped;
+            }
+        } catch (_e) {}
+        try {
+            return localStorage.getItem(this.currentUserStorageKey);
+        } catch (_e) {
+            return null;
+        }
+    }
+
     migrateStoredUsers() {
         const migratedKey = 'anytransport_users_migrated_username';
         if (localStorage.getItem(migratedKey) === 'true') {
@@ -564,7 +602,7 @@ class AuthManager {
 
         if (this.currentUser) {
             this.currentUser = this.normalizeUserRecord(this.currentUser, migratedUsers);
-            localStorage.setItem('anytransport_user', JSON.stringify(this.currentUser));
+            this.setStoredCurrentUser(this.currentUser);
         }
 
         localStorage.setItem(migratedKey, 'true');
@@ -812,7 +850,7 @@ class AuthManager {
                 // Ignore logout sync failures.
             }
         }
-        localStorage.removeItem('anytransport_user');
+        this.clearStoredCurrentUser();
         this.initAuth();
         window.location.href = 'index.html';
     }
@@ -839,13 +877,13 @@ class AuthManager {
                 const savedUser = window.anytransportApi.saveUser(normalizedUser);
                 if (savedUser && savedUser.id) {
                     this.currentUser = this.normalizeUserRecord(savedUser, users);
-                    localStorage.setItem('anytransport_user', JSON.stringify(this.currentUser));
+                    this.setStoredCurrentUser(this.currentUser);
                     this.initAuth();
                     return;
                 }
             } else {
                 this.currentUser = normalizedUser;
-                localStorage.setItem('anytransport_user', JSON.stringify(this.currentUser));
+                this.setStoredCurrentUser(this.currentUser);
                 this.initAuth();
                 return;
             }
@@ -864,7 +902,7 @@ class AuthManager {
 
         this.saveUsers(users);
         this.currentUser = normalizedUser;
-        localStorage.setItem('anytransport_user', JSON.stringify(normalizedUser));
+        this.setStoredCurrentUser(normalizedUser);
         this.initAuth();
     }
 
@@ -877,12 +915,12 @@ class AuthManager {
             }
             // API is available but no valid server session: do not trust stale localStorage user.
             try {
-                localStorage.removeItem('anytransport_user');
+                this.clearStoredCurrentUser();
             } catch (_e) {}
             return null;
         }
 
-        const userData = localStorage.getItem('anytransport_user');
+        const userData = this.getStoredCurrentUserRaw();
         if (!userData) return null;
 
         try {
@@ -1266,7 +1304,7 @@ if (signupForm) {
                                     if (uploadResp && uploadResp.user) {
                                         currentUser = uploadResp.user;
                                         auth.currentUser = currentUser;
-                                        localStorage.setItem('anytransport_user', JSON.stringify(currentUser));
+                                        auth.setStoredCurrentUser(currentUser);
                                     }
                                     if (uploadResp && Array.isArray(uploadResp.uploaded) && uploadResp.uploaded.length) {
                                         try {
