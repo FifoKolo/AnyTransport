@@ -56,14 +56,35 @@ function read_store($storeFile) {
 }
 
 function write_store($storeFile, $store) {
-    $encoded = json_encode($store, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $encoded = json_encode($store, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     if ($encoded === false) {
         send_json(array('ok' => false, 'error' => 'Unable to encode data.'), 500);
     }
 
-    $written = file_put_contents($storeFile, $encoded, LOCK_EX);
+    $storeDir = dirname($storeFile);
+    if (!is_dir($storeDir)) {
+        @mkdir($storeDir, 0775, true);
+    }
+    if (!is_dir($storeDir) || !is_writable($storeDir)) {
+        @file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | store_write_failed reason=dir_not_writable dir={$storeDir}\n", FILE_APPEND | LOCK_EX);
+        send_json(array('ok' => false, 'error' => 'Unable to save data: storage directory is not writable.'), 500);
+    }
+
+    $tmpFile = $storeFile . '.tmp';
+    $written = @file_put_contents($tmpFile, $encoded, LOCK_EX);
     if ($written === false) {
-        send_json(array('ok' => false, 'error' => 'Unable to save data.'), 500);
+        $err = error_get_last();
+        $detail = is_array($err) && !empty($err['message']) ? (string) $err['message'] : 'unknown';
+        @file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | store_write_failed reason=tmp_write_failed file={$tmpFile} detail={$detail}\n", FILE_APPEND | LOCK_EX);
+        send_json(array('ok' => false, 'error' => 'Unable to save data: temporary write failed.'), 500);
+    }
+
+    if (!@rename($tmpFile, $storeFile)) {
+        $err = error_get_last();
+        $detail = is_array($err) && !empty($err['message']) ? (string) $err['message'] : 'unknown';
+        @unlink($tmpFile);
+        @file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | store_write_failed reason=rename_failed file={$storeFile} detail={$detail}\n", FILE_APPEND | LOCK_EX);
+        send_json(array('ok' => false, 'error' => 'Unable to save data: replace failed.'), 500);
     }
 }
 
