@@ -514,7 +514,8 @@
 
     function renderProviderReportForm(quote) {
         const quotesSection = document.getElementById('bid-history');
-        if (!quotesSection || !quote) return;
+        const quotesPanel = quotesSection ? quotesSection.closest('.legacy-bids-panel') : null;
+        if (!quotesSection || !quotesPanel || !quote) return;
         if (document.querySelector('.provider-report-panel')) return;
         const quoteId = String((quote && quote.id) || '').trim();
         if (!quoteId) return;
@@ -551,7 +552,7 @@
             '</div>',
             '</div>'
         ].join('');
-        quotesSection.insertAdjacentElement('afterend', wrapper);
+        quotesPanel.insertAdjacentElement('afterend', wrapper);
 
         const openEl = wrapper.querySelector('.provider-report-open');
         const modalEl = wrapper.querySelector('.provider-report-modal');
