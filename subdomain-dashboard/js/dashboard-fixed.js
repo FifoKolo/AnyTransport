@@ -23,7 +23,11 @@
         distanceMax: '',
         dateFilter: '',
         expandedQuoteIds: new Set(),
-        focusedFormId: ''
+        focusedFormId: '',
+        activeTab: '',
+        adminReviewQuery: '',
+        adminShowRejected: false,
+        adminReviewRefreshTimer: null
     };
 
     function isStorageQuotaError(error) {
@@ -160,6 +164,25 @@
             providers = [];
         }
         return providers;
+    }
+
+    function getAllUsersForAdmin() {
+        try {
+            if (window.anytransportApi && typeof window.anytransportApi.getUsers === 'function') {
+                const users = window.anytransportApi.getUsers();
+                if (Array.isArray(users) && users.length) {
+                    return users;
+                }
+            }
+        } catch (_error) {}
+
+        try {
+            const users = auth && typeof auth.loadUsers === 'function' ? auth.loadUsers() : [];
+            if (Array.isArray(users) && users.length) {
+                return users;
+            }
+        } catch (_error) {}
+        return [];
     }
 
     document.addEventListener('DOMContentLoaded', initDashboard);
@@ -551,6 +574,7 @@
     }
 
     function showTab(tabName) {
+        state.activeTab = tabName;
         document.querySelectorAll('.tab-content').forEach((tab) => tab.classList.remove('active'));
         document.querySelectorAll('.nav-item').forEach((item) => item.classList.remove('active'));
 
@@ -570,7 +594,26 @@
 
         if (tabName === 'verification-review') {
             renderAdminReviewQueue();
+            ensureAdminReviewAutoRefresh();
+            return;
         }
+        clearAdminReviewAutoRefresh();
+    }
+
+    function clearAdminReviewAutoRefresh() {
+        if (state.adminReviewRefreshTimer) {
+            clearInterval(state.adminReviewRefreshTimer);
+            state.adminReviewRefreshTimer = null;
+        }
+    }
+
+    function ensureAdminReviewAutoRefresh() {
+        if (!(auth.isAdmin && auth.isAdmin())) return;
+        if (state.adminReviewRefreshTimer) return;
+        state.adminReviewRefreshTimer = window.setInterval(() => {
+            if (state.activeTab !== 'verification-review') return;
+            renderAdminReviewQueue();
+        }, 30000);
     }
 
     function wireProviderControls(user) {
@@ -831,6 +874,20 @@
                 return;
             }
 
+            const rejectedToggleBtn = event.target.closest('.admin-rejected-toggle');
+            if (rejectedToggleBtn) {
+                state.adminShowRejected = !state.adminShowRejected;
+                renderAdminReviewQueue();
+                return;
+            }
+
+            const clearSearchBtn = event.target.closest('.admin-provider-search-clear');
+            if (clearSearchBtn) {
+                state.adminReviewQuery = '';
+                renderAdminReviewQueue();
+                return;
+            }
+
             const adminEmailBtn = event.target.closest('.admin-email-form-btn');
             if (adminEmailBtn) {
                 if (!(auth.isAdmin && auth.isAdmin())) {
@@ -984,6 +1041,15 @@
         });
 
         document.addEventListener('input', (event) => {
+            const adminSearchInput = event.target.closest('.admin-provider-search');
+            if (adminSearchInput) {
+                state.adminReviewQuery = String(adminSearchInput.value || '').trim();
+                if (state.activeTab === 'verification-review') {
+                    renderAdminReviewQueue();
+                }
+                return;
+            }
+
             const amountInput = event.target.closest('.bid-amount-input');
             if (!amountInput) return;
 
@@ -1204,10 +1270,34 @@
 
         try {
             const providers = getPendingProvidersForReview();
+            const allUsers = getAllUsersForAdmin();
             const allProviders = getAllProvidersForAdmin();
+            const rejectedProviders = allProviders.filter((provider) => {
+                const status = String(provider && provider.identityReviewStatus || '').trim().toLowerCase();
+                return status === 'rejected';
+            });
             const approvedProviders = allProviders.filter((provider) => {
                 const status = String(provider && provider.identityReviewStatus || '').trim().toLowerCase();
                 return status === 'approved' || provider.verified === true;
+            });
+            const query = String(state.adminReviewQuery || '').trim().toLowerCase();
+            const matchesProviderQuery = (provider) => {
+                if (!query) return true;
+                const status = String(provider && provider.identityReviewStatus || '').trim().toLowerCase().replace(/_/g, ' ');
+                const haystack = [
+                    firstText(provider.businessName, provider.name, provider.username, provider.email),
+                    firstText(provider.city, provider.location, ''),
+                    status
+                ].join(' ').toLowerCase();
+                return haystack.indexOf(query) >= 0;
+            };
+            const approvedFiltered = approvedProviders.filter(matchesProviderQuery);
+            const rejectedFiltered = rejectedProviders.filter(matchesProviderQuery);
+            const userNameById = {};
+            allUsers.forEach((entry) => {
+                const id = String(entry && entry.id || '').trim();
+                if (!id) return;
+                userNameById[id] = firstText(entry.businessName, entry.name, entry.nickname, entry.username, entry.email, id);
             });
             const allQuotes = getAllQuotes();
             const apiBase = String(window.ANYTRANSPORT_API_URL || '../api/index.php');
@@ -1252,15 +1342,33 @@
                 ].join('');
             }).join('') : '<div class="empty-inventory">No providers are waiting for review.</div>';
 
-            const providerRows = approvedProviders.length ? approvedProviders.map((provider) => {
+            const providerRows = approvedFiltered.length ? approvedFiltered.map((provider) => {
                 const status = escapeHtml(String(provider.identityReviewStatus || 'pending_review').replace(/_/g, ' '));
+                const reviewedBy = String(provider.identityReviewedBy || '').trim();
+                const reviewerLabel = escapeHtml(firstText(userNameById[reviewedBy], reviewedBy, '—'));
                 return '<tr>'
                     + '<td>' + escapeHtml(firstText(provider.businessName, provider.name, provider.username, provider.email)) + '</td>'
                     + '<td>' + escapeHtml(firstText(provider.email, '—')) + '</td>'
                     + '<td>' + status + '</td>'
                     + '<td>' + escapeHtml(firstText(provider.city, provider.location, '—')) + '</td>'
+                    + '<td>' + escapeHtml(formatDateTime(provider.identityReviewedAt || provider.verifiedAt || '')) + '</td>'
+                    + '<td>' + reviewerLabel + '</td>'
                     + '</tr>';
-            }).join('') : '<tr><td colspan="4" class="customer-empty-cell">No approved providers found.</td></tr>';
+            }).join('') : '<tr><td colspan="6" class="customer-empty-cell">No approved providers found.</td></tr>';
+
+            const rejectedRows = rejectedFiltered.length ? rejectedFiltered.map((provider) => {
+                const status = escapeHtml(String(provider.identityReviewStatus || 'rejected').replace(/_/g, ' '));
+                const reviewedBy = String(provider.identityReviewedBy || '').trim();
+                const reviewerLabel = escapeHtml(firstText(userNameById[reviewedBy], reviewedBy, '—'));
+                return '<tr>'
+                    + '<td>' + escapeHtml(firstText(provider.businessName, provider.name, provider.username, provider.email)) + '</td>'
+                    + '<td>' + escapeHtml(firstText(provider.email, '—')) + '</td>'
+                    + '<td>' + status + '</td>'
+                    + '<td>' + escapeHtml(firstText(provider.city, provider.location, '—')) + '</td>'
+                    + '<td>' + escapeHtml(formatDateTime(provider.identityReviewedAt || '')) + '</td>'
+                    + '<td>' + reviewerLabel + '</td>'
+                    + '</tr>';
+            }).join('') : '<tr><td colspan="6" class="customer-empty-cell">No rejected providers found.</td></tr>';
 
             const quoteRows = allQuotes.length ? allQuotes.slice().sort((a, b) => {
                 return new Date(b.submittedAt || b.createdAt || 0) - new Date(a.submittedAt || a.createdAt || 0);
@@ -1293,14 +1401,29 @@
 
             container.innerHTML = [
                 '<section style="margin-bottom:24px;">',
-                '<h3 style="margin:0 0 10px;">Pending provider reviews</h3>',
+                '<h3 style="margin:0 0 10px;">Pending provider reviews (' + providers.length + ')</h3>',
                 pendingMarkup,
                 '</section>',
                 '<section style="margin-bottom:24px;">',
-                '<h3 style="margin:0 0 10px;">Approved providers</h3>',
-                '<div class="customer-quotes-table-wrap"><table class="customer-quotes-table"><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Location</th></tr></thead><tbody>',
+                '<div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-bottom:10px;">',
+                '<h3 style="margin:0;">Approved providers (' + approvedFiltered.length + ')</h3>',
+                '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
+                '<input class="form-input admin-provider-search" type="search" placeholder="Search approved/rejected providers" value="' + escapeHtml(state.adminReviewQuery || '') + '" style="min-width:280px;">',
+                '<button type="button" class="btn btn-outline admin-provider-search-clear">Clear</button>',
+                '</div>',
+                '</div>',
+                '<div class="customer-quotes-table-wrap"><table class="customer-quotes-table"><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Location</th><th>Approved at</th><th>Approved by</th></tr></thead><tbody>',
                 providerRows,
                 '</tbody></table></div>',
+                '</section>',
+                '<section style="margin-bottom:24px;">',
+                '<div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-bottom:10px;">',
+                '<h3 style="margin:0;">Rejected providers (' + rejectedFiltered.length + ')</h3>',
+                '<button type="button" class="btn btn-outline admin-rejected-toggle">' + (state.adminShowRejected ? 'Hide rejected' : 'Show rejected') + '</button>',
+                '</div>',
+                (state.adminShowRejected
+                    ? '<div class="customer-quotes-table-wrap"><table class="customer-quotes-table"><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Location</th><th>Reviewed at</th><th>Reviewed by</th></tr></thead><tbody>' + rejectedRows + '</tbody></table></div>'
+                    : '<div class="empty-inventory">Rejected providers are hidden.</div>'),
                 '</section>',
                 '<section>',
                 '<h3 style="margin:0 0 10px;">All submitted forms</h3>',
