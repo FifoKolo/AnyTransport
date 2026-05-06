@@ -1049,6 +1049,40 @@ function normalize_quote($quote, $quotes) {
     return $normalized;
 }
 
+function build_quote_media_entries($store, $quoteId) {
+    $qid = trim((string) $quoteId);
+    if ($qid === '') return array();
+    $entries = array();
+    foreach ($store['quoteMedia'] ?? array() as $media) {
+        if (!is_array($media)) continue;
+        if (trim((string) ($media['quoteId'] ?? '')) !== $qid) continue;
+        $mediaId = trim((string) ($media['id'] ?? ''));
+        if ($mediaId === '') continue;
+        $mime = strtolower(trim((string) ($media['mimeType'] ?? '')));
+        $isVideo = strpos($mime, 'video/') === 0;
+        $entries[] = array(
+            'id' => $mediaId,
+            'mediaType' => $isVideo ? 'video' : 'photo',
+            'previewUrl' => build_quote_media_url($mediaId),
+            'fileName' => basename(trim((string) ($media['relativePath'] ?? ''))),
+            'mimeType' => $mime
+        );
+    }
+    return $entries;
+}
+
+function attach_quote_media($store, $quote) {
+    if (!is_array($quote)) return $quote;
+    $qid = trim((string) ($quote['id'] ?? ''));
+    if ($qid === '') return $quote;
+    $attached = build_quote_media_entries($store, $qid);
+    if (!empty($attached)) {
+        $existing = isset($quote['mediaAttachments']) && is_array($quote['mediaAttachments']) ? $quote['mediaAttachments'] : array();
+        $quote['mediaAttachments'] = array_values(array_merge($existing, $attached));
+    }
+    return $quote;
+}
+
 function normalize_bid($bid) {
     $normalized = is_array($bid) ? $bid : array();
     if (!isset($normalized['id']) || trim((string) $normalized['id']) === '') {
@@ -1907,6 +1941,9 @@ switch ($action) {
                 }));
             }
         }
+        $quotes = array_map(function ($quote) use ($store) {
+            return attach_quote_media($store, $quote);
+        }, $quotes);
         send_json(array('ok' => true, 'quotes' => $quotes));
 
     case 'quotes.get':
@@ -1946,6 +1983,7 @@ switch ($action) {
                 send_json(array('ok' => false, 'error' => 'You do not have access to this quote.'), 403);
             }
         }
+        $found = attach_quote_media($store, $found);
         refresh_session_cookie();
         send_json(array('ok' => true, 'quote' => $found));
 

@@ -1664,8 +1664,47 @@
             packingQtyByItem: createPackingQtyMap(packingItems),
             disassemblyQtyByFloorItem: createFloorItemQtyMap(disassemblyItems),
             assembleQtyByFloorItem: createFloorItemQtyMap(assembleItems),
-            storageQtyByFloorItem: createFloorItemQtyMap(storageItems)
+            storageQtyByFloorItem: createFloorItemQtyMap(storageItems),
+            genericServiceLabels: collectGenericServiceLabels(quote)
         };
+    }
+
+    function collectGenericServiceLabels(quote) {
+        const labels = [];
+        const append = function (value) {
+            const clean = String(value || '').trim();
+            if (!clean) return;
+            labels.push(clean);
+        };
+        const listSources = [
+            quote.additionalServices,
+            quote.serviceSelections,
+            quote.selectedServices,
+            quote.additionalServiceList,
+            quote.step6Selections,
+            quote.services
+        ];
+        listSources.forEach(function (source) {
+            if (Array.isArray(source)) {
+                source.forEach(append);
+                return;
+            }
+            if (source && typeof source === 'object') {
+                Object.keys(source).forEach(function (key) {
+                    const value = source[key];
+                    if (value === true || String(value || '').toLowerCase() === 'yes') {
+                        append(String(key || '').replace(/[_-]+/g, ' '));
+                    } else {
+                        append(value);
+                    }
+                });
+                return;
+            }
+            append(source);
+        });
+        return Array.from(new Set(labels.map(function (entry) { return entry.toLowerCase(); }))).map(function (key) {
+            return labels.find(function (entry) { return entry.toLowerCase() === key; }) || key;
+        });
     }
 
     function renderRoomSortedInventory(quote, overviewInventory) {
@@ -1787,6 +1826,13 @@
 
     function renderServicesMarkup(inventoryData, services, filteredTypes) {
         if (!inventoryData || !inventoryData.pickup || !Object.keys(inventoryData.pickup).length) {
+            if (services && Array.isArray(services.genericServiceLabels) && services.genericServiceLabels.length) {
+                return '<div class="services-modal-wrap"><div class="services-floor-block"><h4 class="services-floor-title">Selected services</h4><ul class="services-item-list">' +
+                    services.genericServiceLabels.map(function (label) {
+                        return '<li class="services-item-row"><div class="services-item-main"><span class="services-item-name">' + escapeHtml(String(label || '')) + '</span></div></li>';
+                    }).join('') +
+                    '</ul></div></div>';
+            }
             return '<div class="empty-inventory">No inventory items available to map services yet.</div>';
         }
 
@@ -1844,6 +1890,13 @@
         }).join('');
 
         if (!floorBlocks) {
+            if (services && Array.isArray(services.genericServiceLabels) && services.genericServiceLabels.length) {
+                return '<div class="services-modal-wrap"><div class="services-floor-block"><h4 class="services-floor-title">Selected services</h4><ul class="services-item-list">' +
+                    services.genericServiceLabels.map(function (label) {
+                        return '<li class="services-item-row"><div class="services-item-main"><span class="services-item-name">' + escapeHtml(String(label || '')) + '</span></div></li>';
+                    }).join('') +
+                    '</ul></div></div>';
+            }
             return '<div class="empty-inventory">No item-level services selected for this listing.</div>';
         }
 
