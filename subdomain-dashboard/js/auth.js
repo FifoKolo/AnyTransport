@@ -1232,6 +1232,47 @@ if (signupForm) {
             reader.onerror = () => reject(reader.error || new Error('Unable to read file.'));
             reader.readAsDataURL(file);
         });
+
+        const optimizeImageForUpload = async (file) => {
+            const originalDataUrl = await readFileAsDataUrl(file);
+            if (!/^image\//i.test(String(file && file.type || ''))) {
+                return originalDataUrl;
+            }
+
+            try {
+                const image = await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = () => reject(new Error('Unable to process image.'));
+                    img.src = originalDataUrl;
+                });
+
+                const maxDimension = 1280;
+                const scale = Math.min(1, maxDimension / Math.max(image.width || 1, image.height || 1));
+                const width = Math.max(1, Math.round((image.width || 1) * scale));
+                const height = Math.max(1, Math.round((image.height || 1) * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return originalDataUrl;
+                ctx.drawImage(image, 0, 0, width, height);
+
+                const qualities = [0.82, 0.72, 0.62, 0.52];
+                const maxChars = 900000;
+                let candidate = originalDataUrl;
+                for (const quality of qualities) {
+                    const next = canvas.toDataURL('image/jpeg', quality);
+                    candidate = next;
+                    if (next.length <= maxChars) {
+                        break;
+                    }
+                }
+                return candidate.length < originalDataUrl.length ? candidate : originalDataUrl;
+            } catch (_e) {
+                return originalDataUrl;
+            }
+        };
         
         const formData = {
             name: nameInput.value,
@@ -1247,6 +1288,7 @@ if (signupForm) {
             nickname: usernameInput ? usernameInput.value : ''
         };
 
+        let pendingIdentityPhotos = [];
         if (formData.role === 'provider') {
             const identityPhotos = [];
             for (const input of identityInputs) {
@@ -1256,11 +1298,15 @@ if (signupForm) {
                     alert('Please keep each identity photo under 2MB.');
                     return;
                 }
-                const dataUrl = await readFileAsDataUrl(file);
+                const dataUrl = await optimizeImageForUpload(file);
+                if (!dataUrl || dataUrl.length > 1200000) {
+                    alert('One of your images is still too large after optimization. Please use a smaller image.');
+                    return;
+                }
                 identityPhotos.push({
                     label: input.id || 'identity-photo',
                     name: file.name,
-                    type: file.type || 'image/*',
+                    type: 'image/jpeg',
                     size: file.size,
                     dataUrl: dataUrl,
                     uploadedAt: new Date().toISOString()
@@ -1272,7 +1318,7 @@ if (signupForm) {
                 return;
             }
 
-            formData.identityPhotos = identityPhotos;
+            pendingIdentityPhotos = identityPhotos;
         }
 
         // Validate emails match
@@ -1296,24 +1342,29 @@ if (signupForm) {
                 if (currentUser && String(currentUser.role || '') === 'provider') {
                     // If the signup included identity photos, upload them to Stripe
                     try {
-                        if (window.anytransportApi && typeof window.anytransportApi.identityPhotosUpload === 'function' && Array.isArray(formData.identityPhotos) && formData.identityPhotos.length) {
-                            const photos = formData.identityPhotos.map((p) => p && p.dataUrl ? p.dataUrl : '').filter(Boolean);
-                            if (photos.length) {
+                        if (window.anytransportApi && typeof window.anytransportApi.identityPhotosUpload === 'function' && Array.isArray(pendingIdentityPhotos) && pendingIdentityPhotos.length) {
+                            let uploadedCount = 0;
+                            for (const entry of pendingIdentityPhotos) {
+                                const photoData = entry && entry.dataUrl ? String(entry.dataUrl) : '';
+                                if (!photoData) continue;
                                 try {
-                                    const uploadResp = window.anytransportApi.identityPhotosUpload(currentUser.id, photos);
+                                    const uploadResp = window.anytransportApi.identityPhotosUpload(currentUser.id, [photoData]);
                                     if (uploadResp && uploadResp.user) {
                                         currentUser = uploadResp.user;
                                         auth.currentUser = currentUser;
                                         auth.setStoredCurrentUser(currentUser);
                                     }
                                     if (uploadResp && Array.isArray(uploadResp.uploaded) && uploadResp.uploaded.length) {
-                                        try {
-                                            AuthManager.showTransientMessage('Identity photos uploaded successfully.');
-                                        } catch (_m) {}
+                                        uploadedCount += uploadResp.uploaded.length;
                                     }
                                 } catch (_err) {
-                                    // ignore upload errors for now; admin can still review later
+                                    // keep attempting next photo
                                 }
+                            }
+                            if (uploadedCount > 0) {
+                                try {
+                                    AuthManager.showTransientMessage('Identity photos uploaded successfully.');
+                                } catch (_m) {}
                             }
                         }
                     } catch (_e) {}
