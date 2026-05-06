@@ -42,6 +42,60 @@
     border-color: #bfdef6;
 }
 
+[id^="admin-section-"] {
+    scroll-margin-top: 96px;
+}
+
+.admin-review-layout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.admin-side-nav {
+    position: sticky;
+    top: 90px;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid #d9e5f4;
+    background: linear-gradient(180deg, #f8fbff 0%, #f2f7ff 100%);
+    box-shadow: 0 8px 22px rgba(25, 56, 91, 0.08);
+}
+
+.admin-side-nav-title {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #1e3a5f;
+    text-transform: uppercase;
+}
+
+.admin-side-nav-links {
+    display: grid;
+    gap: 8px;
+}
+
+.admin-side-nav-link {
+    text-decoration: none;
+    color: #1f5c96;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.admin-side-nav-link:hover,
+.admin-side-nav-link:focus-visible {
+    color: #0f4a84;
+    background: #e9f3ff;
+    border-color: #cfe5ff;
+    outline: none;
+}
+
 /* Dropdown for profile nav */
 .dashboard-inline-nav .nav-dropdown {
     position: relative;
