@@ -247,6 +247,17 @@
         }).join('');
     }
 
+    function loadMessagesForUser(userId) {
+        if (!window.anytransportApi || typeof window.anytransportApi.getSavedMessages !== 'function') {
+            return [];
+        }
+        try {
+            return window.anytransportApi.getSavedMessages(userId) || [];
+        } catch (_e) {
+            return [];
+        }
+    }
+
     function init() {
         var authRef = window.auth;
         if (!authRef || typeof authRef.isLoggedIn !== 'function' || !authRef.isLoggedIn()) {
@@ -289,14 +300,7 @@
         const bids = loadAllBids();
         renderQuotes(quotes, bids, highlightFormId);
 
-        let messages = [];
-        if (window.anytransportApi && typeof window.anytransportApi.getSavedMessages === 'function') {
-            try {
-                messages = window.anytransportApi.getSavedMessages(user.id) || [];
-            } catch (_e) {
-                messages = [];
-            }
-        }
+        let messages = loadMessagesForUser(user.id);
         renderMessages(user.id, messages);
 
         const quotesBody = document.getElementById('customer-quotes-body');
@@ -318,6 +322,9 @@
                 document.querySelectorAll('.customer-tab-panel').forEach(function (p) {
                     p.classList.toggle('active', p.getAttribute('data-panel') === tab);
                 });
+                if (tab === 'messages') {
+                    renderMessages(user.id, loadMessagesForUser(user.id));
+                }
             });
         });
     }

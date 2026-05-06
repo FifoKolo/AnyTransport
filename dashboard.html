@@ -86,6 +86,7 @@
                 <section class="provider-mode-switch" id="provider-mode-switch" aria-label="Provider board mode">
                     <button type="button" class="provider-mode-btn active" data-mode="dashboard">Dashboard</button>
                     <button type="button" class="provider-mode-btn" data-mode="search">Search Deliveries</button>
+                    <button type="button" class="provider-mode-btn" data-mode="messages">Messages</button>
                     <button type="button" class="provider-mode-btn" data-mode="profile">Profile</button>
                 </section>
 
@@ -151,6 +152,14 @@
                     <div class="provider-search-actions">
                         <button type="button" id="filter-reset-btn" class="btn btn-outline">Reset Filters</button>
                     </div>
+                </section>
+
+                <section id="provider-messages-panel" class="provider-mode-panel" aria-label="Provider messages">
+                    <div class="tab-header">
+                        <h3>Messages</h3>
+                        <p class="muted-text">Read and reply to customer conversations.</p>
+                    </div>
+                    <div id="provider-messages-list" class="quotes-list"></div>
                 </section>
 
                 <div id="provider-listings" class="provider-listings" aria-live="polite"></div>

@@ -663,12 +663,14 @@
         const modeSwitch = document.getElementById('provider-mode-switch');
         const dashboardPanel = document.getElementById('provider-dashboard-panel');
         const searchPanel = document.getElementById('provider-search-panel');
+        const messagesPanel = document.getElementById('provider-messages-panel');
+        const listingsContainer = document.getElementById('provider-listings');
         if (modeSwitch) {
             modeSwitch.addEventListener('click', (event) => {
                 const btn = event.target.closest('.provider-mode-btn');
                 if (!btn) return;
                 const modeAttr = btn.getAttribute('data-mode');
-                const mode = modeAttr === 'search' ? 'search' : modeAttr === 'profile' ? 'profile' : 'dashboard';
+                const mode = modeAttr === 'search' ? 'search' : modeAttr === 'messages' ? 'messages' : modeAttr === 'profile' ? 'profile' : 'dashboard';
 
                 if (mode === 'profile') {
                     showTab('profile');
@@ -683,6 +685,12 @@
 
                 if (dashboardPanel) dashboardPanel.classList.toggle('active', mode === 'dashboard');
                 if (searchPanel) searchPanel.classList.toggle('active', mode === 'search');
+                if (messagesPanel) messagesPanel.classList.toggle('active', mode === 'messages');
+                if (listingsContainer) listingsContainer.style.display = mode === 'messages' ? 'none' : '';
+                if (mode === 'messages') {
+                    renderProviderMessages(user);
+                    return;
+                }
                 // ensure listing rendering only for dashboard/search modes
                 renderProviderListings(user);
             });
@@ -2757,6 +2765,43 @@
                 bid.status === 'active'
                     ? '<div class="job-actions" style="margin-top: 10px;"><button type="button" class="ghost-btn withdraw-bid-btn" data-bid-id="' + escapeHtml(bid.id) + '">Withdraw bid</button></div>'
                     : '',
+                '</article>'
+            ].join('');
+        }).join('');
+    }
+
+    function renderProviderMessages(user) {
+        const container = document.getElementById('provider-messages-list');
+        if (!container) return;
+        const userId = String(user && user.id || '').trim();
+        if (!userId) {
+            container.innerHTML = '<div class="empty-inventory">Sign in to view messages.</div>';
+            return;
+        }
+        let messages = [];
+        if (window.anytransportApi && typeof window.anytransportApi.getSavedMessages === 'function') {
+            try {
+                messages = window.anytransportApi.getSavedMessages(userId) || [];
+            } catch (_e) {
+                messages = [];
+            }
+        }
+        const mine = messages.filter((m) => String(m && (m.fromUserId || '')) === userId || String(m && (m.toUserId || '')) === userId)
+            .sort((a, b) => new Date(b && b.createdAt || 0) - new Date(a && a.createdAt || 0));
+        if (!mine.length) {
+            container.innerHTML = '<div class="empty-inventory">No messages yet. Customer replies will appear here.</div>';
+            return;
+        }
+        container.innerHTML = mine.map((m) => {
+            const incoming = String(m && m.toUserId || '') === userId;
+            const otherUserId = incoming ? String(m && m.fromUserId || '') : String(m && m.toUserId || '');
+            return [
+                '<article class="provider-listing" style="margin-bottom:10px;">',
+                '<div class="listing-row body" style="grid-template-columns: 120px 1fr 140px;">',
+                '<div class="listing-cell"><strong>' + (incoming ? 'Incoming' : 'Outgoing') + '</strong><div class="listing-sub">' + escapeHtml(formatDateTime(m && m.createdAt || '')) + '</div></div>',
+                '<div class="listing-cell"><div class="listing-title">' + escapeHtml(firstText(m && m.title, 'Message')) + '</div><div class="listing-sub">' + escapeHtml(firstText(m && m.text, '')) + '</div></div>',
+                '<div class="listing-cell actions"><a class="btn btn-outline" href="messages.html?to=' + encodeURIComponent(otherUserId) + '">Open chat</a></div>',
+                '</div>',
                 '</article>'
             ].join('');
         }).join('');

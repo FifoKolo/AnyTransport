@@ -2739,6 +2739,20 @@
                 return Number(a.amount || 0) - Number(b.amount || 0);
             });
 
+        const providerNameById = {};
+        quoteBids.forEach(function (bid) {
+            const providerId = String(bid && bid.providerId || '').trim();
+            if (!providerId || providerNameById[providerId] || !window.anytransportApi || typeof window.anytransportApi.getUserById !== 'function') {
+                return;
+            }
+            try {
+                const provider = window.anytransportApi.getUserById(providerId);
+                providerNameById[providerId] = firstText(provider && provider.username, provider && provider.nickname, provider && provider.name, '');
+            } catch (_error) {
+                providerNameById[providerId] = '';
+            }
+        });
+
         updateSidebarBidCount(quoteBids.length);
 
         const dateLabel = firstText(getMoveDate(quote), 'Not provided');
@@ -2751,6 +2765,7 @@
         historyEl.innerHTML = '<table class="legacy-bids-table legacy-bids-table-bottom"><thead><tr><th>Quoter</th><th>Amount</th><th>When</th><th>Dates</th><th>Expires</th><th>Comment</th><th></th></tr></thead><tbody>' +
             quoteBids.map(function (bid) {
                 const bidder = firstText(
+                    providerNameById[String(bid && bid.providerId || '').trim()],
                     bid.providerUsername,
                     bid.providerNickname,
                     bid.providerName,

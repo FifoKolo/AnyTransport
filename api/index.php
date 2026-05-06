@@ -2335,6 +2335,20 @@ switch ($action) {
             send_json(array('ok' => false, 'error' => 'Bid must include a quoteId and providerId.'), 400);
         }
 
+        $providerRecord = null;
+        foreach ($store['users'] as $u) {
+            if (trim((string) ($u['id'] ?? '')) === $providerId) {
+                $providerRecord = normalize_user($u);
+                break;
+            }
+        }
+        if (is_array($providerRecord)) {
+            $displayName = trim((string) ($providerRecord['username'] ?? $providerRecord['nickname'] ?? $providerRecord['name'] ?? $providerRecord['email'] ?? ''));
+            $normalized['providerUsername'] = $displayName;
+            $normalized['providerNickname'] = $displayName;
+            $normalized['providerName'] = trim((string) ($providerRecord['name'] ?? $displayName));
+        }
+
         $store['bids'] = array_values(array_filter($store['bids'], function ($existing) use ($quoteId, $providerId) {
             return !(trim((string) ($existing['quoteId'] ?? '')) === $quoteId && trim((string) ($existing['providerId'] ?? '')) === $providerId);
         }));
@@ -2343,10 +2357,21 @@ switch ($action) {
 
         // Notify quote owner about the new bid by creating an internal message and sending email
         $quoteOwnerId = '';
+        $quoteOwnerEmail = '';
         foreach ($store['quotes'] as $q) {
             if (trim((string) ($q['id'] ?? '')) === $quoteId) {
                 $quoteOwnerId = trim((string) ($q['userId'] ?? $q['createdBy'] ?? ''));
+                $quoteOwnerEmail = strtolower(trim((string) ($q['customerEmail'] ?? '')));
                 break;
+            }
+        }
+
+        if ($quoteOwnerId === '' && $quoteOwnerEmail !== '') {
+            foreach ($store['users'] as $u) {
+                if (strtolower(trim((string) ($u['email'] ?? ''))) === $quoteOwnerEmail) {
+                    $quoteOwnerId = trim((string) ($u['id'] ?? ''));
+                    break;
+                }
             }
         }
 
