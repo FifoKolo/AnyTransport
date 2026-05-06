@@ -28,6 +28,7 @@
 // Authentication Management
 window.anytransportApi = window.anytransportApi || (function () {
     const API_URL = resolveApiUrl();
+    const TAB_SESSION_KEY = 'anytransport_session_token';
     window.ANYTRANSPORT_API_URL = API_URL;
 
     function getApiCandidates() {
@@ -143,6 +144,10 @@ window.anytransportApi = window.anytransportApi || (function () {
         if (method !== 'GET') {
             xhr.setRequestHeader('Content-Type', 'application/json');
         }
+        const sessionToken = getTabSessionToken();
+        if (sessionToken) {
+            xhr.setRequestHeader('X-Anytransport-Session', sessionToken);
+        }
 
         try {
             xhr.send(method === 'GET' ? null : JSON.stringify(payload || {}));
@@ -186,6 +191,23 @@ window.anytransportApi = window.anytransportApi || (function () {
         }
     }
 
+    function getTabSessionToken() {
+        try {
+            return typeof sessionStorage !== 'undefined' ? String(sessionStorage.getItem(TAB_SESSION_KEY) || '').trim() : '';
+        } catch (_e) {
+            return '';
+        }
+    }
+
+    function setTabSessionToken(token) {
+        const value = String(token || '').trim();
+        try {
+            if (typeof sessionStorage === 'undefined') return;
+            if (value) sessionStorage.setItem(TAB_SESSION_KEY, value);
+            else sessionStorage.removeItem(TAB_SESSION_KEY);
+        } catch (_e) {}
+    }
+
     return {
         isDebug: function () {
             return window.anytransportIsDebug && window.anytransportIsDebug();
@@ -202,10 +224,18 @@ window.anytransportApi = window.anytransportApi || (function () {
             }
         },
         login: function (email, password) {
-            return request('auth.login', 'POST', { email: email, password: password });
+            const response = request('auth.login', 'POST', { email: email, password: password });
+            if (response && response.sessionToken) {
+                setTabSessionToken(response.sessionToken);
+            }
+            return response;
         },
         signup: function (formData) {
-            return request('auth.signup', 'POST', { formData: formData || {} });
+            const response = request('auth.signup', 'POST', { formData: formData || {} });
+            if (response && response.sessionToken) {
+                setTabSessionToken(response.sessionToken);
+            }
+            return response;
         },
         identityPhotosUpload: function (userId, photos) {
             return request('identity.photos.upload', 'POST', { userId: userId, photos: Array.isArray(photos) ? photos : [] });
@@ -214,7 +244,9 @@ window.anytransportApi = window.anytransportApi || (function () {
             return request('stripe.provider.onboarding', 'POST', { returnPath: returnPath || 'dashboard.html' });
         },
         logout: function () {
-            return request('auth.logout', 'POST', {});
+            const response = request('auth.logout', 'POST', {});
+            setTabSessionToken('');
+            return response;
         },
         getUsers: function () {
             try {

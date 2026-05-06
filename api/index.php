@@ -1197,16 +1197,22 @@ function build_quote_media_url($mediaId) {
     return $script . '?action=quotes.media&id=' . rawurlencode($mediaId);
 }
 
-function get_session_user($store) {
+function get_request_session_token() {
+    $headerToken = trim((string) ($_SERVER['HTTP_X_ANYTRANSPORT_SESSION'] ?? ''));
+    if ($headerToken !== '') {
+        return $headerToken;
+    }
     $cookieNames = array('anytransport_session', 'ANYTRANSPORT_SESSION');
-    $token = '';
     foreach ($cookieNames as $cookieName) {
         if (!empty($_COOKIE[$cookieName])) {
-            $token = trim((string) $_COOKIE[$cookieName]);
-            break;
+            return trim((string) $_COOKIE[$cookieName]);
         }
     }
+    return '';
+}
 
+function get_session_user($store) {
+    $token = get_request_session_token();
     if ($token === '') {
         return null;
     }
@@ -1299,7 +1305,7 @@ switch ($action) {
         send_json(array('ok' => true, 'user' => is_array($user) ? sanitize_user_for_client($user) : null));
 
     case 'auth.logout':
-        $token = !empty($_COOKIE['anytransport_session']) ? trim((string) $_COOKIE['anytransport_session']) : '';
+        $token = get_request_session_token();
         if ($token !== '') {
             $store['sessions'] = array_values(array_filter($store['sessions'], function ($session) use ($token) {
                 return trim((string) ($session['token'] ?? '')) !== $token;
@@ -1361,9 +1367,6 @@ switch ($action) {
         }
 
         $token = make_id('sess');
-        $store['sessions'] = array_values(array_filter($store['sessions'], function ($session) use ($user) {
-            return trim((string) ($session['userId'] ?? '')) !== trim((string) ($user['id'] ?? ''));
-        }));
         $store['sessions'][] = array(
             'token' => $token,
             'userId' => $user['id'],
@@ -1371,7 +1374,7 @@ switch ($action) {
         );
         write_store($storeFile, $store);
         set_session_cookie($token);
-        send_json(array('ok' => true, 'user' => sanitize_user_for_client($user)));
+        send_json(array('ok' => true, 'user' => sanitize_user_for_client($user), 'sessionToken' => $token));
 
     case 'auth.signup':
         $formData = is_array($input['formData'] ?? null) ? $input['formData'] : array();
@@ -1436,9 +1439,6 @@ switch ($action) {
             $store['users'][$existingByEmailIndex] = $reappliedProvider;
 
             $token = make_id('sess');
-            $store['sessions'] = array_values(array_filter($store['sessions'], function ($session) use ($reappliedProvider) {
-                return trim((string) ($session['userId'] ?? '')) !== trim((string) ($reappliedProvider['id'] ?? ''));
-            }));
             $store['sessions'][] = array(
                 'token' => $token,
                 'userId' => $reappliedProvider['id'],
@@ -1453,7 +1453,7 @@ switch ($action) {
                 // swallow email errors
             }
 
-            send_json(array('ok' => true, 'user' => sanitize_user_for_client($reappliedProvider)));
+            send_json(array('ok' => true, 'user' => sanitize_user_for_client($reappliedProvider), 'sessionToken' => $token));
         }
 
         $user = normalize_user(array(
@@ -1493,7 +1493,7 @@ switch ($action) {
             }
         }
 
-        send_json(array('ok' => true, 'user' => sanitize_user_for_client($user)));
+        send_json(array('ok' => true, 'user' => sanitize_user_for_client($user), 'sessionToken' => $token));
 
     case 'users.get':
         $targetId = trim((string) ($_GET['id'] ?? ''));
