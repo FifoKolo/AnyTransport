@@ -102,7 +102,7 @@ jobs:
             fi
             nginx -t
             systemctl reload nginx
-            if systemctl list-unit-files | grep -q \"^php8.2-fpm\"; then
+            if systemctl list-unit-files | grep -q \"^php8.3-fpm\"; then
               systemctl reload php8.2-fpm || true
             fi
           '"
