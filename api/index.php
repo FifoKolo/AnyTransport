@@ -144,6 +144,54 @@ function read_store($storeFile) {
     return array_merge(default_store(), $parsed);
 }
 
+function build_store_candidates($preferredStoreFile, $activeStoreFile) {
+    $candidates = array();
+    $candidates[] = trim((string) $activeStoreFile);
+    $candidates[] = trim((string) $preferredStoreFile);
+    $candidates[] = rtrim(__DIR__, '/\\') . '/tmp/anytransport-store.json';
+    $sysTmp = function_exists('sys_get_temp_dir') ? trim((string) sys_get_temp_dir()) : '';
+    if ($sysTmp !== '') {
+        $candidates[] = rtrim($sysTmp, '/\\') . '/anytransport-data/anytransport-store.json';
+    }
+    $out = array();
+    foreach ($candidates as $file) {
+        if ($file === '') continue;
+        if (!in_array($file, $out, true)) {
+            $out[] = $file;
+        }
+    }
+    return $out;
+}
+
+function store_signal_score($store) {
+    if (!is_array($store)) return 0;
+    $users = isset($store['users']) && is_array($store['users']) ? count($store['users']) : 0;
+    $quotes = isset($store['quotes']) && is_array($store['quotes']) ? count($store['quotes']) : 0;
+    $bids = isset($store['bids']) && is_array($store['bids']) ? count($store['bids']) : 0;
+    $messages = isset($store['messages']) && is_array($store['messages']) ? count($store['messages']) : 0;
+    return ($users * 1000) + ($quotes * 100) + ($bids * 10) + $messages;
+}
+
+function choose_richest_store($preferredStoreFile, $activeStoreFile) {
+    $bestStore = default_store();
+    $bestScore = -1;
+    $bestFile = '';
+    $candidates = build_store_candidates($preferredStoreFile, $activeStoreFile);
+    foreach ($candidates as $candidate) {
+        if (!file_exists($candidate) || !is_readable($candidate)) {
+            continue;
+        }
+        $store = read_store($candidate);
+        $score = store_signal_score($store);
+        if ($score > $bestScore) {
+            $bestScore = $score;
+            $bestStore = $store;
+            $bestFile = $candidate;
+        }
+    }
+    return array('store' => $bestStore, 'score' => $bestScore, 'file' => $bestFile);
+}
+
 function write_store($storeFile, $store) {
     $encoded = json_encode($store, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     if ($encoded === false) {
@@ -1219,7 +1267,11 @@ function is_admin_user($user) {
     return false;
 }
 
-$store = read_store($storeFile);
+$selected = choose_richest_store($preferredStoreFile, $storeFile);
+$store = $selected['store'];
+if (!empty($selected['file']) && $selected['file'] !== $storeFile) {
+    @file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | store_read_selected source={$selected['file']} active={$storeFile} score=" . (string) ($selected['score'] ?? -1) . "\n", FILE_APPEND | LOCK_EX);
+}
 $input = read_json_input();
 
 switch ($action) {
