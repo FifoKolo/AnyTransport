@@ -1340,21 +1340,7 @@ switch ($action) {
                 $user = normalize_user($store['users'][$userIndex]);
                 $store['users'][$userIndex] = $user;
             } else {
-                $usernameBase = preg_replace('/@.*/', '', $email);
-                $usernameBase = preg_replace('/\s+/', '', $usernameBase) ?: 'User';
-                $user = normalize_user(array(
-                    'id' => make_id('user'),
-                    'name' => $usernameBase,
-                    'username' => $usernameBase,
-                    'nickname' => $usernameBase,
-                    'email' => $email,
-                    'password' => $password,
-                    'phone' => '',
-                    'contact' => '',
-                    'city' => '',
-                    'role' => 'customer'
-                ));
-                $store['users'][] = $user;
+                send_json(array('ok' => false, 'error' => 'Invalid email or password.'), 401);
             }
         }
 
