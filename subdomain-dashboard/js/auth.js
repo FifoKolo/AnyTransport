@@ -1112,12 +1112,23 @@ function startProviderStripeOnboarding(user) {
             return true;
         }
 
-        alert('Stripe onboarding is not ready yet. Please try again or contact support.');
+        try {
+            AuthManager.showTransientMessage('Provider account created. Stripe onboarding is not available right now.');
+        } catch (_e) {}
+        return false;
     } catch (error) {
-        alert(error && error.message ? error.message : 'Unable to start Stripe verification.');
+        const message = String(error && error.message ? error.message : '');
+        const isStripeConfigIssue = /invalid api key|stripe is not configured|no such api key/i.test(message);
+        if (isStripeConfigIssue) {
+            try {
+                AuthManager.showTransientMessage('Provider account created. Stripe setup is temporarily unavailable.');
+            } catch (_e) {}
+            return false;
+        }
+        alert('Unable to start Stripe verification right now. You can continue and try again later.');
+        return false;
     }
-
-    return true;
+    return false;
 }
 
 function getUserFromAuthResult(result) {
