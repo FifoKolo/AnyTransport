@@ -1305,14 +1305,20 @@ switch ($action) {
         send_json(array('ok' => true, 'user' => is_array($user) ? sanitize_user_for_client($user) : null));
 
     case 'auth.logout':
-        $token = get_request_session_token();
+        $headerToken = trim((string) ($_SERVER['HTTP_X_ANYTRANSPORT_SESSION'] ?? ''));
+        $token = $headerToken !== '' ? $headerToken : get_request_session_token();
         if ($token !== '') {
             $store['sessions'] = array_values(array_filter($store['sessions'], function ($session) use ($token) {
                 return trim((string) ($session['token'] ?? '')) !== $token;
             }));
             write_store($storeFile, $store);
         }
-        clear_session_cookie();
+        // Only clear the shared cookie when logout itself was cookie-based.
+        // If the request used a tab-scoped header token, keep cookie untouched
+        // so other tabs are not forced out.
+        if ($headerToken === '') {
+            clear_session_cookie();
+        }
         send_json(array('ok' => true));
 
     case 'auth.login':
