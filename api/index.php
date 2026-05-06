@@ -5,6 +5,7 @@ header('Pragma: no-cache');
 header('Expires: 0');
 
 $preferredStoreDir = __DIR__ . '/data';
+$preferredStoreFile = $preferredStoreDir . '/anytransport-store.json';
 $storeDir = '';
 $storeFile = '';
 $action = isset($_GET['action']) ? trim((string) $_GET['action']) : '';
@@ -50,6 +51,36 @@ function resolve_store_dir($preferredDir) {
 
 $storeDir = resolve_store_dir($preferredStoreDir);
 $storeFile = $storeDir . '/anytransport-store.json';
+
+function bootstrap_store_from_fallback($targetStoreFile, $fallbackStoreFile) {
+    $target = trim((string) $targetStoreFile);
+    $fallback = trim((string) $fallbackStoreFile);
+    if ($target === '' || $fallback === '' || $target === $fallback) {
+        return;
+    }
+    if (file_exists($target)) {
+        return;
+    }
+    if (!file_exists($fallback) || !is_readable($fallback)) {
+        return;
+    }
+    $raw = @file_get_contents($fallback);
+    if ($raw === false || trim((string) $raw) === '') {
+        return;
+    }
+    $dir = dirname($target);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+    if (!is_dir($dir) || !is_writable($dir)) {
+        return;
+    }
+    if (@file_put_contents($target, $raw, LOCK_EX) !== false) {
+        @file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | store_bootstrap_copied from={$fallback} to={$target}\n", FILE_APPEND | LOCK_EX);
+    }
+}
+
+bootstrap_store_from_fallback($storeFile, $preferredStoreFile);
 
 function default_store() {
     return array(
