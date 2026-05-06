@@ -1501,11 +1501,23 @@
             }).join('') : '<div class="empty-inventory">No open reports from providers.</div>';
 
             container.innerHTML = [
-                '<section style="margin-bottom:24px;">',
+                '<div style="display:grid; grid-template-columns: 220px minmax(0, 1fr); gap:16px; align-items:start;">',
+                '<aside style="position:sticky; top:90px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">',
+                '<h4 style="margin:0 0 8px; font-size:14px;">Admin sections</h4>',
+                '<nav style="display:grid; gap:6px;">',
+                '<a href="#admin-section-pending" style="font-size:13px; color:#2563eb; text-decoration:none;">Pending reviews</a>',
+                '<a href="#admin-section-approved" style="font-size:13px; color:#2563eb; text-decoration:none;">Approved providers</a>',
+                '<a href="#admin-section-rejected" style="font-size:13px; color:#2563eb; text-decoration:none;">Rejected providers</a>',
+                '<a href="#admin-section-reports" style="font-size:13px; color:#2563eb; text-decoration:none;">Provider reports</a>',
+                '<a href="#admin-section-forms" style="font-size:13px; color:#2563eb; text-decoration:none;">Submitted forms</a>',
+                '</nav>',
+                '</aside>',
+                '<div>',
+                '<section id="admin-section-pending" style="margin-bottom:24px;">',
                 '<h3 style="margin:0 0 10px;">Pending provider reviews (' + providers.length + ')</h3>',
                 pendingMarkup,
                 '</section>',
-                '<section style="margin-bottom:24px;">',
+                '<section id="admin-section-approved" style="margin-bottom:24px;">',
                 '<div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-bottom:10px;">',
                 '<h3 style="margin:0;">Approved providers (' + approvedFiltered.length + ')</h3>',
                 '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
@@ -1517,23 +1529,25 @@
                 providerRows,
                 '</tbody></table></div>',
                 '</section>',
-                '<section style="margin-bottom:24px;">',
+                '<section id="admin-section-rejected" style="margin-bottom:24px;">',
                 '<div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-bottom:10px;">',
                 '<h3 style="margin:0;">Rejected providers (' + rejectedFiltered.length + ')</h3>',
-                '<button type="button" class="btn btn-outline admin-rejected-toggle">' + (state.adminShowRejected ? 'Hide rejected' : 'Show rejected') + '</button>',
+                '<button type="button" class="btn btn-secondary admin-rejected-toggle">' + (state.adminShowRejected ? 'Hide rejected' : 'Show rejected') + '</button>',
                 '</div>',
                 (state.adminShowRejected
                     ? '<div class="customer-quotes-table-wrap"><table class="customer-quotes-table"><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Location</th><th>Reviewed at</th><th>Reviewed by</th></tr></thead><tbody>' + rejectedRows + '</tbody></table></div>'
                     : '<div class="empty-inventory">Rejected providers are hidden.</div>'),
                 '</section>',
-                '<section style="margin-bottom:24px;">',
+                '<section id="admin-section-reports" style="margin-bottom:24px;">',
                 '<h3 style="margin:0 0 10px;">Provider reports (' + openReports.length + ')</h3>',
                 reportRows,
                 '</section>',
-                '<section>',
+                '<section id="admin-section-forms">',
                 '<h3 style="margin:0 0 10px;">All submitted forms</h3>',
                 quoteRows,
-                '</section>'
+                '</section>',
+                '</div>',
+                '</div>'
             ].join('');
         } catch (_error) {
             container.innerHTML = '<div class="empty-inventory">Unable to load the review queue.</div>';
