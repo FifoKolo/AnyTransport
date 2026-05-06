@@ -19,7 +19,10 @@
             return;
         }
 
-        const quote = resolveListingByRef(getAllQuotes(), listingRef);
+        let quote = resolveListingByRef(getAllQuotes(), listingRef);
+        if (!quote) {
+            quote = resolveListingViaApi(listingRef);
+        }
         if (!quote) {
             titleEl.textContent = 'Listing not found';
             subtitleEl.textContent = 'The selected listing does not exist in local storage.';
@@ -33,10 +36,11 @@
         titleEl.textContent = getQuoteTitle(quote);
         subtitleEl.textContent = 'Listing ' + listingId + ' • Full submitted form details';
 
+        const isAdmin = isAdminUser();
         const showQuoteTools = isTransportProviderUser();
         if (!showQuoteTools) {
             document.body.classList.add('listing-details--customer');
-            applyCustomerListingChrome();
+            applyCustomerListingChrome(isAdmin);
         }
 
         renderQuickInfo(quote);
@@ -48,6 +52,7 @@
         if (showQuoteTools) {
             renderBidUserContext();
             renderSidebarQuickInfo(quote);
+            renderProviderReportForm(quote);
         }
         renderBids(quoteId, quote);
         if (showQuoteTools) {
@@ -58,16 +63,17 @@
         initNotificationBell();
     }
 
-    function applyCustomerListingChrome() {
-        var profileHref = 'customer-dashboard.html';
+    function applyCustomerListingChrome(isAdmin) {
+        var profileHref = isAdmin ? 'dashboard.html#verification-review' : 'customer-dashboard.html';
+        var profileLabel = isAdmin ? 'Back to Admin Panel' : 'Back to Profile';
         document.querySelectorAll('.back-to-listings-btn, .details-hero .back-btn').forEach(function (el) {
             if (!el) return;
-            el.textContent = 'Back to Profile';
+            el.textContent = profileLabel;
             el.setAttribute('href', profileHref);
         });
         var eyebrow = document.querySelector('.details-hero .eyebrow');
         if (eyebrow) {
-            eyebrow.textContent = 'Your request';
+            eyebrow.textContent = isAdmin ? 'Admin review' : 'Your request';
         }
     }
 
@@ -100,6 +106,21 @@
         const roles = user && Array.isArray(user.roles) ? user.roles : [user && user.role];
         return roles.some(function (role) {
             return String(role || '').trim().toLowerCase() === 'provider';
+        });
+    }
+
+    function isAdminUser() {
+        if (typeof auth !== 'undefined' && auth && typeof auth.isAdmin === 'function') {
+            try {
+                return !!auth.isAdmin();
+            } catch (_error) {
+                return false;
+            }
+        }
+        const user = getActiveUser();
+        const roles = user && Array.isArray(user.roles) ? user.roles : [user && user.role];
+        return roles.some(function (role) {
+            return String(role || '').trim().toLowerCase() === 'admin';
         });
     }
 
@@ -472,6 +493,82 @@
         } catch (error) {
             return [];
         }
+    }
+
+    function resolveListingViaApi(listingRef) {
+        if (!listingRef || !window.anytransportApi) return null;
+        try {
+            if (listingRef.type === 'formId' && typeof window.anytransportApi.getQuoteByFormId === 'function') {
+                const byFormId = window.anytransportApi.getQuoteByFormId(listingRef.value);
+                if (byFormId) return byFormId;
+            }
+            if (typeof window.anytransportApi.getQuote === 'function') {
+                const byQuoteId = window.anytransportApi.getQuote(listingRef.value);
+                if (byQuoteId) return byQuoteId;
+            }
+        } catch (_error) {
+            return null;
+        }
+        return null;
+    }
+
+    function renderProviderReportForm(quote) {
+        const panel = document.getElementById('bid-form-section');
+        if (!panel || !quote) return;
+        if (panel.querySelector('.provider-report-panel')) return;
+        const quoteId = String((quote && quote.id) || '').trim();
+        if (!quoteId) return;
+
+        const wrapper = document.createElement('section');
+        wrapper.className = 'provider-report-panel';
+        wrapper.style.marginTop = '12px';
+        wrapper.style.paddingTop = '12px';
+        wrapper.style.borderTop = '1px solid #e2e8f0';
+        wrapper.innerHTML = [
+            '<h4 style="margin:0 0 8px;">Report this form</h4>',
+            '<p style="margin:0 0 8px; color:#64748b; font-size:13px;">If this listing looks suspicious (fake/scam/abuse), report it to admin.</p>',
+            '<div style="display:grid; gap:8px;">',
+            '<select class="form-input provider-report-reason">',
+            '<option value="">Select reason</option>',
+            '<option value="false_form">False or misleading form</option>',
+            '<option value="suspected_scam">Suspected scam</option>',
+            '<option value="abusive_user">Abusive user behaviour</option>',
+            '<option value="other">Other issue</option>',
+            '</select>',
+            '<textarea class="form-input provider-report-details" rows="3" maxlength="1000" placeholder="Add details (optional but helpful)"></textarea>',
+            '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
+            '<button type="button" class="btn btn-danger provider-report-submit">Send report to admin</button>',
+            '<span class="provider-report-status" style="font-size:13px; color:#64748b;"></span>',
+            '</div>',
+            '</div>'
+        ].join('');
+        panel.appendChild(wrapper);
+
+        const reasonEl = wrapper.querySelector('.provider-report-reason');
+        const detailsEl = wrapper.querySelector('.provider-report-details');
+        const submitEl = wrapper.querySelector('.provider-report-submit');
+        const statusEl = wrapper.querySelector('.provider-report-status');
+        if (!submitEl) return;
+        submitEl.addEventListener('click', function () {
+            const reason = String(reasonEl && reasonEl.value || '').trim();
+            const details = String(detailsEl && detailsEl.value || '').trim();
+            if (!reason) {
+                if (statusEl) statusEl.textContent = 'Pick a reason first.';
+                return;
+            }
+            if (!window.anytransportApi || typeof window.anytransportApi.createFormReport !== 'function') {
+                if (statusEl) statusEl.textContent = 'Reporting is unavailable right now.';
+                return;
+            }
+            try {
+                window.anytransportApi.createFormReport({ quoteId: quoteId, reason: reason, details: details });
+                if (statusEl) statusEl.textContent = 'Report sent to admin.';
+                if (reasonEl) reasonEl.value = '';
+                if (detailsEl) detailsEl.value = '';
+            } catch (_error) {
+                if (statusEl) statusEl.textContent = 'Failed to send report. Please try again.';
+            }
+        });
     }
 
     function getFormIdLabel(quote) {

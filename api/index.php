@@ -120,7 +120,8 @@ function default_store() {
         'messages' => array(),
         'replyTokens' => array(),
         'notifications' => array(),
-        'quoteMedia' => array()
+        'quoteMedia' => array(),
+        'formReports' => array()
     );
 }
 
@@ -1816,15 +1817,18 @@ switch ($action) {
 
     case 'quotes.get':
         $quoteId = trim((string) ($_GET['id'] ?? ''));
-        if ($quoteId === '') {
-            send_json(array('ok' => false, 'error' => 'Quote id is required.'), 400);
+        $formId = trim((string) ($_GET['formId'] ?? ''));
+        if ($quoteId === '' && $formId === '') {
+            send_json(array('ok' => false, 'error' => 'Quote id or formId is required.'), 400);
         }
         $found = null;
         foreach ($store['quotes'] as $quote) {
             if (!is_array($quote)) {
                 continue;
             }
-            if (trim((string) ($quote['id'] ?? '')) === $quoteId) {
+            $idMatch = ($quoteId !== '' && trim((string) ($quote['id'] ?? '')) === $quoteId);
+            $formMatch = ($formId !== '' && trim((string) ($quote['formId'] ?? '')) === $formId);
+            if ($idMatch || $formMatch) {
                 $found = $quote;
                 break;
             }
@@ -2125,6 +2129,102 @@ switch ($action) {
             $sent = false;
         }
         send_json(array('ok' => true, 'sent' => !!$sent, 'email' => $to, 'quoteId' => $quoteId));
+
+    case 'reports.create':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $sessionUser = get_current_user_record($store);
+        if (!is_array($sessionUser) || trim((string) ($sessionUser['id'] ?? '')) === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        $role = strtolower(trim((string) ($sessionUser['role'] ?? '')));
+        if ($role !== 'provider' && !is_admin_user($sessionUser)) {
+            send_json(array('ok' => false, 'error' => 'Only providers can report forms.'), 403);
+        }
+        $quoteId = trim((string) ($input['quoteId'] ?? ''));
+        $reason = trim((string) ($input['reason'] ?? ''));
+        $details = trim((string) ($input['details'] ?? ''));
+        if ($quoteId === '' || $reason === '') {
+            send_json(array('ok' => false, 'error' => 'quoteId and reason are required.'), 400);
+        }
+        $quote = find_quote_by_id($store['quotes'], $quoteId);
+        if (!is_array($quote)) {
+            send_json(array('ok' => false, 'error' => 'Form not found.'), 404);
+        }
+        if (!isset($store['formReports']) || !is_array($store['formReports'])) {
+            $store['formReports'] = array();
+        }
+        $report = array(
+            'id' => make_id('report'),
+            'quoteId' => $quoteId,
+            'formId' => trim((string) ($quote['formId'] ?? '')),
+            'reportedByUserId' => trim((string) ($sessionUser['id'] ?? '')),
+            'reportedByEmail' => trim((string) ($sessionUser['email'] ?? '')),
+            'reason' => $reason,
+            'details' => $details,
+            'status' => 'open',
+            'createdAt' => gmdate('c'),
+            'updatedAt' => gmdate('c'),
+            'resolvedAt' => '',
+            'resolvedBy' => ''
+        );
+        array_unshift($store['formReports'], $report);
+        $store['formReports'] = array_slice($store['formReports'], 0, 500);
+        write_store($storeFile, $store);
+        send_json(array('ok' => true, 'report' => $report));
+
+    case 'reports.list':
+        $currentUser = get_current_user_record($store);
+        if (!is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin access required.'), 403);
+        }
+        $status = strtolower(trim((string) ($_GET['status'] ?? '')));
+        $reports = array_values(isset($store['formReports']) && is_array($store['formReports']) ? $store['formReports'] : array());
+        if ($status !== '') {
+            $reports = array_values(array_filter($reports, function ($report) use ($status) {
+                return strtolower(trim((string) ($report['status'] ?? 'open'))) === $status;
+            }));
+        }
+        send_json(array('ok' => true, 'reports' => $reports));
+
+    case 'reports.update':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $currentUser = get_current_user_record($store);
+        if (!is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin access required.'), 403);
+        }
+        $reportId = trim((string) ($input['reportId'] ?? ''));
+        $status = strtolower(trim((string) ($input['status'] ?? '')));
+        if ($reportId === '' || !in_array($status, array('open', 'resolved'), true)) {
+            send_json(array('ok' => false, 'error' => 'reportId and valid status are required.'), 400);
+        }
+        if (!isset($store['formReports']) || !is_array($store['formReports'])) {
+            $store['formReports'] = array();
+        }
+        $updated = null;
+        foreach ($store['formReports'] as $idx => $report) {
+            if (!is_array($report)) continue;
+            if (trim((string) ($report['id'] ?? '')) !== $reportId) continue;
+            $store['formReports'][$idx]['status'] = $status;
+            $store['formReports'][$idx]['updatedAt'] = gmdate('c');
+            if ($status === 'resolved') {
+                $store['formReports'][$idx]['resolvedAt'] = gmdate('c');
+                $store['formReports'][$idx]['resolvedBy'] = trim((string) ($currentUser['id'] ?? ''));
+            } else {
+                $store['formReports'][$idx]['resolvedAt'] = '';
+                $store['formReports'][$idx]['resolvedBy'] = '';
+            }
+            $updated = $store['formReports'][$idx];
+            break;
+        }
+        if (!is_array($updated)) {
+            send_json(array('ok' => false, 'error' => 'Report not found.'), 404);
+        }
+        write_store($storeFile, $store);
+        send_json(array('ok' => true, 'report' => $updated));
 
     case 'bids.list':
         $quoteId = trim((string) ($_GET['quoteId'] ?? ''));

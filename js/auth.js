@@ -292,6 +292,21 @@ window.anytransportApi = window.anytransportApi || (function () {
                 return null;
             }
         },
+        getQuoteByFormId: function (formId) {
+            const id = String(formId || '').trim();
+            if (!id) {
+                return null;
+            }
+            try {
+                const response = request('quotes.get', 'GET', null, { formId: id });
+                return response && response.quote ? response.quote : null;
+            } catch (err) {
+                if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                    console.debug('[AnyTransport API] getQuoteByFormId failed', id, err);
+                }
+                return null;
+            }
+        },
         saveQuote: function (quote) {
             const response = request('quotes.create', 'POST', { quote: quote || {} });
             return response.quote || quote || null;
@@ -316,6 +331,21 @@ window.anytransportApi = window.anytransportApi || (function () {
         saveBid: function (bid) {
             const response = request('bids.create', 'POST', { bid: bid || {} });
             return response.bid || bid || null;
+        },
+        createFormReport: function (payload) {
+            const response = request('reports.create', 'POST', payload || {});
+            return response.report || null;
+        },
+        getFormReports: function (status) {
+            const response = request('reports.list', 'GET', null, status ? { status: status } : {});
+            return Array.isArray(response.reports) ? response.reports : [];
+        },
+        updateFormReport: function (reportId, status) {
+            const response = request('reports.update', 'POST', {
+                reportId: reportId ? String(reportId) : '',
+                status: status ? String(status) : ''
+            });
+            return response.report || null;
         },
         sendMessage: function (fromUserId, toUserId, text, title) {
             const message = { fromUserId: fromUserId, toUserId: toUserId, text: text, title: title };

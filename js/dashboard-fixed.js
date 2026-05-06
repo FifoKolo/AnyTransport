@@ -978,6 +978,25 @@
                 return;
             }
 
+            const adminResolveReportBtn = event.target.closest('.admin-resolve-report-btn');
+            if (adminResolveReportBtn) {
+                if (!(auth.isAdmin && auth.isAdmin())) {
+                    alert('Admin access required.');
+                    return;
+                }
+                const reportId = String(adminResolveReportBtn.getAttribute('data-report-id') || '').trim();
+                if (!reportId || !window.anytransportApi || typeof window.anytransportApi.updateFormReport !== 'function') {
+                    return;
+                }
+                try {
+                    window.anytransportApi.updateFormReport(reportId, 'resolved');
+                    renderAdminReviewQueue();
+                } catch (error) {
+                    alert(error && error.message ? error.message : 'Unable to resolve report.');
+                }
+                return;
+            }
+
             const withdrawBtn = event.target.closest('.withdraw-bid-btn');
             if (withdrawBtn) {
                 withdrawBid(withdrawBtn.getAttribute('data-bid-id'), user);
@@ -1346,6 +1365,14 @@
                 userNameById[id] = firstText(entry.businessName, entry.name, entry.nickname, entry.username, entry.email, id);
             });
             const allQuotes = getAllQuotes();
+            let openReports = [];
+            try {
+                if (window.anytransportApi && typeof window.anytransportApi.getFormReports === 'function') {
+                    openReports = window.anytransportApi.getFormReports('open');
+                }
+            } catch (_error) {
+                openReports = [];
+            }
 
             const pendingMarkup = providers.length ? providers.map((provider) => {
                 const name = escapeHtml(firstText(provider.businessName, provider.name, provider.nickname, provider.username, provider.email));
@@ -1443,6 +1470,36 @@
                 ].join('');
             }).join('') : '<div class="empty-inventory">No forms found.</div>';
 
+            const reportRows = openReports.length ? openReports.map((report) => {
+                const quoteId = String(report && report.quoteId || '').trim();
+                const formId = escapeHtml(firstText(report && report.formId, '—'));
+                const reason = escapeHtml(firstText(report && report.reason, '—').replace(/_/g, ' '));
+                const details = escapeHtml(firstText(report && report.details, 'No details'));
+                const reportedBy = escapeHtml(firstText(report && report.reportedByEmail, report && report.reportedByUserId, 'Unknown'));
+                const createdAt = escapeHtml(formatDateTime(report && report.createdAt || ''));
+                return [
+                    '<article class="provider-listing" style="margin-bottom:12px;">',
+                    '<div class="listing-row body" style="grid-template-columns: 180px 1fr 1fr;">',
+                    '<div class="listing-cell">',
+                    '<div class="listing-title">Form ' + formId + '</div>',
+                    '<div class="listing-sub">' + createdAt + '</div>',
+                    '<div class="listing-sub">By: ' + reportedBy + '</div>',
+                    '</div>',
+                    '<div class="listing-cell">',
+                    '<div class="listing-sub"><strong>Reason:</strong> ' + reason + '</div>',
+                    '<div class="listing-sub">' + details + '</div>',
+                    '</div>',
+                    '<div class="listing-cell review-actions-cell">',
+                    '<div class="actions review-actions" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
+                    '<button type="button" class="btn btn-primary admin-view-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">View form</button>',
+                    '<button type="button" class="btn btn-outline admin-resolve-report-btn" data-report-id="' + escapeHtml(String(report && report.id || '')) + '">Mark resolved</button>',
+                    '</div>',
+                    '</div>',
+                    '</div>',
+                    '</article>'
+                ].join('');
+            }).join('') : '<div class="empty-inventory">No open reports from providers.</div>';
+
             container.innerHTML = [
                 '<section style="margin-bottom:24px;">',
                 '<h3 style="margin:0 0 10px;">Pending provider reviews (' + providers.length + ')</h3>',
@@ -1468,6 +1525,10 @@
                 (state.adminShowRejected
                     ? '<div class="customer-quotes-table-wrap"><table class="customer-quotes-table"><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Location</th><th>Reviewed at</th><th>Reviewed by</th></tr></thead><tbody>' + rejectedRows + '</tbody></table></div>'
                     : '<div class="empty-inventory">Rejected providers are hidden.</div>'),
+                '</section>',
+                '<section style="margin-bottom:24px;">',
+                '<h3 style="margin:0 0 10px;">Provider reports (' + openReports.length + ')</h3>',
+                reportRows,
                 '</section>',
                 '<section>',
                 '<h3 style="margin:0 0 10px;">All submitted forms</h3>',
