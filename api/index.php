@@ -2439,6 +2439,22 @@ switch ($action) {
             array_unshift($store['messages'], $savedMessage);
             $store['messages'] = array_slice($store['messages'], 0, 200);
 
+            // Add in-app notification for the customer so navbar bell can open the right context.
+            $store['notifications'][] = array(
+                'id' => make_id('ntf'),
+                'userId' => $quoteOwnerId,
+                'title' => 'New bid received',
+                'message' => 'You received a new bid on listing ' . $quoteLabel . '.',
+                'type' => 'bid_received',
+                'read' => false,
+                'createdAt' => gmdate('c'),
+                'data' => array(
+                    'quoteId' => $quoteId,
+                    'bidId' => trim((string) ($normalized['id'] ?? '')),
+                    'fromUserId' => $providerId
+                )
+            );
+
             // create reply token
             $token = generate_reply_token();
             $store['replyTokens'][$token] = array(
@@ -2584,6 +2600,23 @@ switch ($action) {
         array_unshift($store['messages'], $savedMessage);
         // Keep recent 200 messages to avoid uncontrolled growth
         $store['messages'] = array_slice($store['messages'], 0, 200);
+
+        // Add in-app notification for recipient that deep-links to messages thread.
+        $store['notifications'][] = array(
+            'id' => make_id('ntf'),
+            'userId' => $toUserId,
+            'title' => 'New message received',
+            'message' => trim((string) ($savedMessage['title'] ?? 'Message')),
+            'type' => 'message_received',
+            'read' => false,
+            'createdAt' => gmdate('c'),
+            'data' => array(
+                'fromUserId' => $fromUserId,
+                'toUserId' => $toUserId,
+                'quoteId' => trim((string) ($message['quoteId'] ?? '')),
+                'bidId' => trim((string) ($message['bidId'] ?? ''))
+            )
+        );
 
         // Create a reply token mapping so recipients can reply by email
         $token = generate_reply_token();

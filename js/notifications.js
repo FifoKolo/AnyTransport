@@ -192,10 +192,17 @@
                         var icon = notif.type === 'quote-accepted' ? '✓' : '📋';
                         var typeClass = notif.type === 'quote-accepted' ? 'quote-accepted' : 'quote-added';
                         var quoteId = (notif.data && notif.data.quoteId) ? String(notif.data.quoteId) : '';
-                        var dataAttr = quoteId ? ' data-quote-id="' + self.escapeHtml(quoteId) + '"' : '';
-                        var clickableClass = quoteId ? ' notification-clickable' : '';
+                        var bidId = (notif.data && notif.data.bidId) ? String(notif.data.bidId) : '';
+                        var fromUserId = (notif.data && notif.data.fromUserId) ? String(notif.data.fromUserId) : '';
+                        var notifType = String(notif.type || '');
+                        var dataAttr = ''
+                            + (quoteId ? ' data-quote-id="' + self.escapeHtml(quoteId) + '"' : '')
+                            + (bidId ? ' data-bid-id="' + self.escapeHtml(bidId) + '"' : '')
+                            + (fromUserId ? ' data-from-user-id="' + self.escapeHtml(fromUserId) + '"' : '')
+                            + ' data-notification-type="' + self.escapeHtml(notifType) + '"';
+                        var clickableClass = (quoteId || fromUserId) ? ' notification-clickable' : '';
 
-                        return '<div class="notification-item ' + (notif.read ? '' : 'unread') + ' ' + typeClass + clickableClass + '" data-notification-id="' + self.escapeHtml(notif.id) + '"' + dataAttr + ' style="' + (quoteId ? 'cursor: pointer;' : '') + '">' +
+                        return '<div class="notification-item ' + (notif.read ? '' : 'unread') + ' ' + typeClass + clickableClass + '" data-notification-id="' + self.escapeHtml(notif.id) + '"' + dataAttr + ' style="' + ((quoteId || fromUserId) ? 'cursor: pointer;' : '') + '">' +
                             '<div class="notification-item-icon">' + icon + '</div>' +
                             '<div class="notification-item-content">' +
                                 '<p class="notification-item-title">' + self.escapeHtml(notif.title) + '</p>' +
@@ -212,14 +219,24 @@
                             e.stopPropagation();
                             var notificationId = item.getAttribute('data-notification-id');
                             var quoteId = item.getAttribute('data-quote-id');
-                            
-                            if (quoteId) {
-                                // Mark as read
+                            var bidId = item.getAttribute('data-bid-id');
+                            var fromUserId = item.getAttribute('data-from-user-id');
+                            var notifType = String(item.getAttribute('data-notification-type') || '');
+
+                            if (quoteId || fromUserId) {
                                 if (user && typeof user.id !== 'undefined') {
                                     self.markNotificationAsRead(user, notificationId);
                                 }
-                                // Navigate to listing-details page with quoteId
-                                window.location.href = 'listing-details.html?quoteId=' + encodeURIComponent(quoteId);
+                                if (notifType === 'message_received' && fromUserId) {
+                                    var msgUrl = 'messages.html?to=' + encodeURIComponent(fromUserId);
+                                    if (quoteId) msgUrl += '&quoteId=' + encodeURIComponent(quoteId);
+                                    if (bidId) msgUrl += '&bidId=' + encodeURIComponent(bidId);
+                                    window.location.href = msgUrl;
+                                    return;
+                                }
+                                if (quoteId) {
+                                    window.location.href = 'listing-details.html?quoteId=' + encodeURIComponent(quoteId);
+                                }
                             }
                         });
                     });
