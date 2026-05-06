@@ -1243,6 +1243,10 @@
         try {
             const providers = getPendingProvidersForReview();
             const allProviders = getAllProvidersForAdmin();
+            const approvedProviders = allProviders.filter((provider) => {
+                const status = String(provider && provider.identityReviewStatus || '').trim().toLowerCase();
+                return status === 'approved' || provider.verified === true;
+            });
             const allQuotes = getAllQuotes();
 
             const pendingMarkup = providers.length ? providers.map((provider) => {
@@ -1283,7 +1287,7 @@
                 ].join('');
             }).join('') : '<div class="empty-inventory">No providers are waiting for review.</div>';
 
-            const providerRows = allProviders.length ? allProviders.map((provider) => {
+            const providerRows = approvedProviders.length ? approvedProviders.map((provider) => {
                 const status = escapeHtml(String(provider.identityReviewStatus || 'pending_review').replace(/_/g, ' '));
                 return '<tr>'
                     + '<td>' + escapeHtml(firstText(provider.businessName, provider.name, provider.username, provider.email)) + '</td>'
@@ -1291,7 +1295,7 @@
                     + '<td>' + status + '</td>'
                     + '<td>' + escapeHtml(firstText(provider.city, provider.location, '—')) + '</td>'
                     + '</tr>';
-            }).join('') : '<tr><td colspan="4" class="customer-empty-cell">No providers found.</td></tr>';
+            }).join('') : '<tr><td colspan="4" class="customer-empty-cell">No approved providers found.</td></tr>';
 
             const quoteRows = allQuotes.length ? allQuotes.slice().sort((a, b) => {
                 return new Date(b.submittedAt || b.createdAt || 0) - new Date(a.submittedAt || a.createdAt || 0);
@@ -1328,7 +1332,7 @@
                 pendingMarkup,
                 '</section>',
                 '<section style="margin-bottom:24px;">',
-                '<h3 style="margin:0 0 10px;">All providers on site</h3>',
+                '<h3 style="margin:0 0 10px;">Approved providers</h3>',
                 '<div class="customer-quotes-table-wrap"><table class="customer-quotes-table"><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Location</th></tr></thead><tbody>',
                 providerRows,
                 '</tbody></table></div>',
