@@ -42,6 +42,10 @@
     border-color: #bfdef6;
 }
 
+[id^="admin-section-"] {
+    scroll-margin-top: 96px;
+}
+
 /* Dropdown for profile nav */
 .dashboard-inline-nav .nav-dropdown {
     position: relative;

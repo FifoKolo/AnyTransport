@@ -779,6 +779,22 @@
 
     function wireDashboardActions(user) {
         document.addEventListener('click', (event) => {
+            const adminAnchor = event.target.closest('a[href^="#admin-section-"]');
+            if (adminAnchor) {
+                const targetId = String(adminAnchor.getAttribute('href') || '').trim();
+                const targetEl = targetId ? document.querySelector(targetId) : null;
+                if (targetEl) {
+                    event.preventDefault();
+                    const topOffset = 96;
+                    const targetY = Math.max(0, window.pageYOffset + targetEl.getBoundingClientRect().top - topOffset);
+                    window.scrollTo({ top: targetY, behavior: 'smooth' });
+                    if (window.history && typeof window.history.replaceState === 'function') {
+                        window.history.replaceState(null, '', targetId);
+                    }
+                    return;
+                }
+            }
+
             const getDetailsBtn = event.target.closest('.get-details-btn');
             if (getDetailsBtn) {
                 const formId = String(getDetailsBtn.getAttribute('data-form-id') || '').trim();
