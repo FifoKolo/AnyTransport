@@ -616,8 +616,8 @@ function send_provider_review_email($provider, $status, $notes = '') {
 
     if ($status === 'pending_review') {
         $subject = 'AnyTransport provider application received';
-        $body .= "Thanks for applying to become a transport provider on AnyTransport.\n";
-        $body .= "Your application is now on our waiting list and pending review.\n\n";
+        $body .= "Thank you for applying to become a transport provider on AnyTransport.\n";
+        $body .= "Your application is now in our review queue.\n\n";
         $body .= "We will email you again as soon as the admin team makes a decision.\n\n";
         $body .= "You can still sign in to your account while your review is pending.\n\n";
         $body .= "Regards,\nAnyTransport";
@@ -632,7 +632,7 @@ function send_provider_review_email($provider, $status, $notes = '') {
         $body .= "We reviewed your provider application and, at this time, it was not approved.\n\n";
         $body .= "Reason from admin:\n" . $notes . "\n\n";
         $body .= "Please do not reply to this email address.\n";
-        $body .= "If you have additional information to share, sign in and use dashboard messages.\n\n";
+        $body .= "If you want to reapply, sign in and submit updated account details or identity documents.\n\n";
         $body .= "Regards,\nAnyTransport";
     } else {
         return false;
@@ -1386,13 +1386,74 @@ switch ($action) {
         }
 
         $normalizedEmail = strtolower($email);
-        foreach ($store['users'] as $existingUser) {
+        $requestedRole = strtolower($role);
+        $existingByEmailIndex = -1;
+        foreach ($store['users'] as $existingIndex => $existingUser) {
             if (strtolower(trim((string) ($existingUser['email'] ?? ''))) === $normalizedEmail) {
-                send_json(array('ok' => false, 'error' => 'An account with this email already exists. Please log in instead.'), 409);
+                $existingByEmailIndex = $existingIndex;
+                continue;
             }
             if (strtolower(trim((string) ($existingUser['username'] ?? ''))) === strtolower($requestedUsername)) {
                 send_json(array('ok' => false, 'error' => 'That username is already in use. Please choose another one.'), 409);
             }
+        }
+
+        if ($existingByEmailIndex >= 0) {
+            $existingByEmail = normalize_user($store['users'][$existingByEmailIndex]);
+            $existingRole = strtolower(trim((string) ($existingByEmail['role'] ?? '')));
+            $existingStatus = strtolower(trim((string) ($existingByEmail['identityReviewStatus'] ?? '')));
+            $isProviderReapply = ($requestedRole === 'provider' && $existingRole === 'provider' && $existingStatus === 'rejected');
+
+            if (!$isProviderReapply) {
+                send_json(array('ok' => false, 'error' => 'An account with this email already exists. Please log in instead.'), 409);
+            }
+
+            foreach ($store['users'] as $idx => $otherUser) {
+                if (!is_array($otherUser) || $idx === $existingByEmailIndex) {
+                    continue;
+                }
+                if (strtolower(trim((string) ($otherUser['username'] ?? ''))) === strtolower($requestedUsername)) {
+                    send_json(array('ok' => false, 'error' => 'That username is already in use. Please choose another one.'), 409);
+                }
+            }
+
+            $reappliedProvider = normalize_user(array_merge($existingByEmail, array(
+                'name' => $name,
+                'username' => $requestedUsername,
+                'nickname' => $requestedUsername,
+                'password' => $password,
+                'phone' => (string) ($formData['phone'] ?? $formData['contact'] ?? $existingByEmail['phone'] ?? ''),
+                'contact' => (string) ($formData['contact'] ?? $formData['phone'] ?? $existingByEmail['contact'] ?? ''),
+                'city' => (string) ($formData['city'] ?? $existingByEmail['city'] ?? ''),
+                'identityPhotos' => is_array($formData['identityPhotos'] ?? null) ? array_values($formData['identityPhotos']) : ($existingByEmail['identityPhotos'] ?? array()),
+                'identityReviewStatus' => 'pending_review',
+                'identityReviewSubmittedAt' => gmdate('c'),
+                'identityReviewedAt' => '',
+                'identityReviewedBy' => '',
+                'identityReviewNotes' => '',
+                'verified' => false
+            )));
+            $store['users'][$existingByEmailIndex] = $reappliedProvider;
+
+            $token = make_id('sess');
+            $store['sessions'] = array_values(array_filter($store['sessions'], function ($session) use ($reappliedProvider) {
+                return trim((string) ($session['userId'] ?? '')) !== trim((string) ($reappliedProvider['id'] ?? ''));
+            }));
+            $store['sessions'][] = array(
+                'token' => $token,
+                'userId' => $reappliedProvider['id'],
+                'createdAt' => gmdate('c')
+            );
+            write_store($storeFile, $store);
+            set_session_cookie($token);
+
+            try {
+                send_provider_review_email($reappliedProvider, 'pending_review', '');
+            } catch (Exception $_e) {
+                // swallow email errors
+            }
+
+            send_json(array('ok' => true, 'user' => sanitize_user_for_client($reappliedProvider)));
         }
 
         $user = normalize_user(array(
@@ -1719,6 +1780,12 @@ switch ($action) {
         }
 
         $updated = normalize_user($store['users'][$userIndex]);
+        $currentUser = get_current_user_record($store);
+        $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
+        $canEditIdentity = is_admin_user($currentUser) || ($currentUserId !== '' && $currentUserId === $userId);
+        if (!$canEditIdentity) {
+            send_json(array('ok' => false, 'error' => 'You can only upload identity photos for your own account.'), 403);
+        }
         $accountId = trim((string) ($updated['stripeAccountId'] ?? ''));
 
         $uploaded = array();
@@ -1770,6 +1837,22 @@ switch ($action) {
             if (!empty($u['originalUrl'])) $entry['originalUrl'] = $u['originalUrl'];
             if (!empty($u['previewDataUrl'])) $entry['previewDataUrl'] = $u['previewDataUrl'];
             $updated['identityPhotos'][] = $entry;
+        }
+
+        $isProvider = strtolower(trim((string) ($updated['role'] ?? ''))) === 'provider';
+        $wasRejected = strtolower(trim((string) ($updated['identityReviewStatus'] ?? ''))) === 'rejected';
+        if ($isProvider && $wasRejected && !empty($uploaded)) {
+            $updated['identityReviewStatus'] = 'pending_review';
+            $updated['identityReviewSubmittedAt'] = gmdate('c');
+            $updated['identityReviewedAt'] = '';
+            $updated['identityReviewedBy'] = '';
+            $updated['identityReviewNotes'] = '';
+            $updated['verified'] = false;
+            try {
+                send_provider_review_email($updated, 'pending_review', '');
+            } catch (Exception $_e) {
+                // swallow email errors
+            }
         }
 
         $store['users'][$userIndex] = $updated;
