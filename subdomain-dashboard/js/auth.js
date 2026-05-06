@@ -329,6 +329,12 @@ window.anytransportApi = window.anytransportApi || (function () {
                 return [];
             }
         },
+        resolveMessageReplyToken: function (token) {
+            const cleanToken = String(token || '').trim();
+            if (!cleanToken) return null;
+            const response = request('messages.replyContext', 'GET', null, { token: cleanToken });
+            return response && response.context ? response.context : null;
+        },
         replaceAllBids: function (bids) {
             const response = request('bids.replaceAll', 'POST', { bids: Array.isArray(bids) ? bids : [] });
             return Array.isArray(response.bids) ? response.bids : [];

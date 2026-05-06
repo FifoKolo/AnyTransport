@@ -94,6 +94,21 @@
         var toUserId = String(params.get('to') || '').trim();
         var bidId = String(params.get('bidId') || '').trim();
         var quoteId = String(params.get('quoteId') || '').trim();
+        var replyToken = String(params.get('reply') || '').trim();
+
+        if (!toUserId && replyToken && window.anytransportApi && typeof window.anytransportApi.resolveMessageReplyToken === 'function') {
+            try {
+                var replyContext = window.anytransportApi.resolveMessageReplyToken(replyToken);
+                if (replyContext) {
+                    toUserId = String(replyContext.toUserId || '').trim();
+                    if (!bidId) bidId = String(replyContext.bidId || '').trim();
+                    if (!quoteId) quoteId = String(replyContext.quoteId || '').trim();
+                }
+            } catch (_e) {
+                var statusFromReply = document.getElementById('messages-status');
+                if (statusFromReply) statusFromReply.textContent = 'That email link is invalid or has expired.';
+            }
+        }
 
         if (!toUserId && bidId) {
             var allBids = getAllBids();

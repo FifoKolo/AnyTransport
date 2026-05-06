@@ -2039,6 +2039,8 @@ switch ($action) {
                 'fromUserId' => $providerId,
                 'toUserId' => $quoteOwnerId,
                 'messageId' => $savedMessage['id'],
+                'quoteId' => $quoteId,
+                'bidId' => trim((string) ($normalized['id'] ?? '')),
                 'createdAt' => gmdate('c')
             );
 
@@ -2109,6 +2111,45 @@ switch ($action) {
 
         send_json(array('ok' => true, 'messages' => $messages));
 
+    case 'messages.replyContext':
+        $currentUser = get_current_user_record($store);
+        $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
+        if ($currentUserId === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        $token = trim((string) ($_GET['token'] ?? ''));
+        if ($token === '') {
+            send_json(array('ok' => false, 'error' => 'Reply token is required.'), 400);
+        }
+        $mapping = isset($store['replyTokens'][$token]) && is_array($store['replyTokens'][$token]) ? $store['replyTokens'][$token] : null;
+        if ($mapping === null) {
+            send_json(array('ok' => false, 'error' => 'Reply token not found.'), 404);
+        }
+        $fromUserId = trim((string) ($mapping['fromUserId'] ?? ''));
+        $toUserId = trim((string) ($mapping['toUserId'] ?? ''));
+        $isParticipant = ($currentUserId !== '' && ($currentUserId === $fromUserId || $currentUserId === $toUserId));
+        if (!$isParticipant && !is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'You do not have access to this message link.'), 403);
+        }
+
+        $conversationPeerId = $fromUserId;
+        if ($currentUserId === $fromUserId && $toUserId !== '') {
+            $conversationPeerId = $toUserId;
+        }
+        if ($conversationPeerId === '' || $conversationPeerId === $currentUserId) {
+            send_json(array('ok' => false, 'error' => 'Could not resolve conversation participants.'), 422);
+        }
+
+        send_json(array(
+            'ok' => true,
+            'context' => array(
+                'toUserId' => $conversationPeerId,
+                'quoteId' => trim((string) ($mapping['quoteId'] ?? '')),
+                'bidId' => trim((string) ($mapping['bidId'] ?? '')),
+                'messageId' => trim((string) ($mapping['messageId'] ?? ''))
+            )
+        ));
+
     case 'messages.save':
         // Newer message format supports sender and recipient
         $sessionUser = get_current_user_record($store);
@@ -2144,6 +2185,8 @@ switch ($action) {
             'fromUserId' => $fromUserId,
             'toUserId' => $toUserId,
             'messageId' => $savedMessage['id'],
+            'quoteId' => trim((string) ($message['quoteId'] ?? '')),
+            'bidId' => trim((string) ($message['bidId'] ?? '')),
             'createdAt' => gmdate('c')
         );
 
