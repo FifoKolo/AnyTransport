@@ -107,7 +107,7 @@
         try {
             if (window.anytransportApi && typeof window.anytransportApi.getIdentityReviewQueue === 'function') {
                 providers = window.anytransportApi.getIdentityReviewQueue();
-                if (Array.isArray(providers) && providers.length) {
+                if (Array.isArray(providers)) {
                     return providers;
                 }
             }
