@@ -2372,11 +2372,32 @@ switch ($action) {
             }
         }
 
-        if ($quoteOwnerId === '' && $quoteOwnerEmail !== '') {
-            foreach ($store['users'] as $u) {
-                if (strtolower(trim((string) ($u['email'] ?? ''))) === $quoteOwnerEmail) {
-                    $quoteOwnerId = trim((string) ($u['id'] ?? ''));
-                    break;
+        if ($quoteOwnerEmail !== '') {
+            // Prefer the newest customer-like account for this email so messages land in the
+            // account the user is most likely actively using (helps when duplicate test accounts exist).
+            $emailMatches = array_values(array_filter($store['users'], function ($u) use ($quoteOwnerEmail) {
+                return strtolower(trim((string) ($u['email'] ?? ''))) === $quoteOwnerEmail;
+            }));
+            if (!empty($emailMatches)) {
+                usort($emailMatches, function ($a, $b) {
+                    $aCreated = strtotime((string) ($a['createdAt'] ?? '')) ?: 0;
+                    $bCreated = strtotime((string) ($b['createdAt'] ?? '')) ?: 0;
+                    return $bCreated <=> $aCreated;
+                });
+                $preferred = null;
+                foreach ($emailMatches as $candidate) {
+                    $role = strtolower(trim((string) ($candidate['role'] ?? 'customer')));
+                    if ($role === 'customer' || $role === '') {
+                        $preferred = $candidate;
+                        break;
+                    }
+                }
+                if ($preferred === null) {
+                    $preferred = $emailMatches[0];
+                }
+                $candidateId = trim((string) ($preferred['id'] ?? ''));
+                if ($candidateId !== '') {
+                    $quoteOwnerId = $candidateId;
                 }
             }
         }
