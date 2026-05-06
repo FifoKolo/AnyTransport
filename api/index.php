@@ -1396,7 +1396,10 @@ switch ($action) {
                 $existingByEmailIndex = $existingIndex;
                 continue;
             }
-            if (strtolower(trim((string) ($existingUser['username'] ?? ''))) === strtolower($requestedUsername)) {
+            $existingUsername = strtolower(trim((string) ($existingUser['username'] ?? '')));
+            $existingNickname = strtolower(trim((string) ($existingUser['nickname'] ?? '')));
+            $wantedUsername = strtolower($requestedUsername);
+            if ($existingUsername === $wantedUsername || $existingNickname === $wantedUsername) {
                 send_json(array('ok' => false, 'error' => 'That username is already in use. Please choose another one.'), 409);
             }
         }
