@@ -525,8 +525,15 @@
         wrapper.style.paddingTop = '12px';
         wrapper.style.borderTop = '1px solid #e2e8f0';
         wrapper.innerHTML = [
+            '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
+            '<button type="button" class="btn btn-danger provider-report-open">Report this form</button>',
+            '<span class="provider-report-status" style="font-size:13px; color:#64748b;"></span>',
+            '</div>',
+            '<div class="provider-report-modal" style="display:none; position:fixed; inset:0; z-index:1200;">',
+            '<div class="provider-report-modal-backdrop" style="position:absolute; inset:0; background:rgba(15, 23, 42, 0.45);"></div>',
+            '<div style="position:relative; max-width:520px; margin:8vh auto; background:#fff; border-radius:12px; border:1px solid #e2e8f0; box-shadow:0 20px 45px rgba(15, 23, 42, 0.25); padding:16px;">',
             '<h4 style="margin:0 0 8px;">Report this form</h4>',
-            '<p style="margin:0 0 8px; color:#64748b; font-size:13px;">If this listing looks suspicious (fake/scam/abuse), report it to admin.</p>',
+            '<p style="margin:0 0 10px; color:#64748b; font-size:13px;">If this listing looks suspicious (fake/scam/abuse), report it to admin.</p>',
             '<div style="display:grid; gap:8px;">',
             '<select class="form-input provider-report-reason">',
             '<option value="">Select reason</option>',
@@ -535,20 +542,38 @@
             '<option value="abusive_user">Abusive user behaviour</option>',
             '<option value="other">Other issue</option>',
             '</select>',
-            '<textarea class="form-input provider-report-details" rows="3" maxlength="1000" placeholder="Add details (optional but helpful)"></textarea>',
-            '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
-            '<button type="button" class="btn btn-danger provider-report-submit">Send report to admin</button>',
-            '<span class="provider-report-status" style="font-size:13px; color:#64748b;"></span>',
+            '<textarea class="form-input provider-report-details" rows="4" maxlength="1000" placeholder="Add details (optional but helpful)"></textarea>',
+            '<div style="display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap;">',
+            '<button type="button" class="btn btn-outline provider-report-cancel">Cancel</button>',
+            '<button type="button" class="btn btn-danger provider-report-submit">Send report</button>',
+            '</div>',
+            '</div>',
             '</div>',
             '</div>'
         ].join('');
         panel.appendChild(wrapper);
 
+        const openEl = wrapper.querySelector('.provider-report-open');
+        const modalEl = wrapper.querySelector('.provider-report-modal');
+        const backdropEl = wrapper.querySelector('.provider-report-modal-backdrop');
+        const cancelEl = wrapper.querySelector('.provider-report-cancel');
         const reasonEl = wrapper.querySelector('.provider-report-reason');
         const detailsEl = wrapper.querySelector('.provider-report-details');
         const submitEl = wrapper.querySelector('.provider-report-submit');
         const statusEl = wrapper.querySelector('.provider-report-status');
-        if (!submitEl) return;
+        if (!submitEl || !modalEl || !openEl) return;
+
+        function closeModal() {
+            modalEl.style.display = 'none';
+        }
+
+        openEl.addEventListener('click', function () {
+            modalEl.style.display = 'block';
+            if (reasonEl) reasonEl.focus();
+        });
+        if (cancelEl) cancelEl.addEventListener('click', closeModal);
+        if (backdropEl) backdropEl.addEventListener('click', closeModal);
+
         submitEl.addEventListener('click', function () {
             const reason = String(reasonEl && reasonEl.value || '').trim();
             const details = String(detailsEl && detailsEl.value || '').trim();
@@ -565,6 +590,7 @@
                 if (statusEl) statusEl.textContent = 'Report sent to admin.';
                 if (reasonEl) reasonEl.value = '';
                 if (detailsEl) detailsEl.value = '';
+                closeModal();
             } catch (_error) {
                 if (statusEl) statusEl.textContent = 'Failed to send report. Please try again.';
             }
