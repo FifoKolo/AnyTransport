@@ -970,6 +970,14 @@
                 return;
             }
 
+            const adminViewFormBtn = event.target.closest('.admin-view-form-btn');
+            if (adminViewFormBtn) {
+                const quoteId = String(adminViewFormBtn.getAttribute('data-quote-id') || '').trim();
+                if (!quoteId) return;
+                window.location.href = 'listing-details.html?quoteId=' + encodeURIComponent(quoteId);
+                return;
+            }
+
             const withdrawBtn = event.target.closest('.withdraw-bid-btn');
             if (withdrawBtn) {
                 withdrawBid(withdrawBtn.getAttribute('data-bid-id'), user);
@@ -1424,7 +1432,8 @@
                     '</div>',
                     '<div class="listing-cell review-actions-cell">',
                     '<textarea class="form-input admin-form-note" rows="3" placeholder="Reason to email the user"></textarea>',
-                    '<div class="actions review-actions" style="margin-top:8px;">',
+                    '<div class="actions review-actions" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
+                    '<button type="button" class="btn btn-primary admin-view-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">View form</button>',
                     '<button type="button" class="btn btn-outline admin-email-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">Email form owner</button>',
                     '<span class="admin-email-status" style="display:inline-flex; align-items:center; font-weight:700; color:#64748b;">Not sent</span>',
                     '</div>',
