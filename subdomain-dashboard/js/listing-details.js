@@ -513,9 +513,9 @@
     }
 
     function renderProviderReportForm(quote) {
-        const panel = document.getElementById('bid-form-section');
-        if (!panel || !quote) return;
-        if (panel.querySelector('.provider-report-panel')) return;
+        const quotesSection = document.getElementById('bid-history');
+        if (!quotesSection || !quote) return;
+        if (document.querySelector('.provider-report-panel')) return;
         const quoteId = String((quote && quote.id) || '').trim();
         if (!quoteId) return;
 
@@ -551,7 +551,7 @@
             '</div>',
             '</div>'
         ].join('');
-        panel.appendChild(wrapper);
+        quotesSection.insertAdjacentElement('afterend', wrapper);
 
         const openEl = wrapper.querySelector('.provider-report-open');
         const modalEl = wrapper.querySelector('.provider-report-modal');
