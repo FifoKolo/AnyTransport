@@ -165,8 +165,8 @@
             const newestBid = getNewestActiveBidForQuote(q.id, bids);
             const status = escapeHtml(String(q.status || 'pending'));
             const messagesAction = newestBid
-                ? '<a class="btn btn-outline btn-sm" href="messages.html?quoteId=' + encodeURIComponent(q.id) + '&bidId=' + encodeURIComponent(newestBid.id || '') + '&to=' + encodeURIComponent(newestBid.providerId || '') + '">Messages</a>'
-                : '<span class="btn btn-outline btn-sm" style="opacity:.5; pointer-events:none;">Messages</span>';
+                ? '<a class="btn btn-secondary btn-sm" href="messages.html?quoteId=' + encodeURIComponent(q.id) + '&bidId=' + encodeURIComponent(newestBid.id || '') + '&to=' + encodeURIComponent(newestBid.providerId || '') + '" style="display:inline-flex; align-items:center;">View messages</a>'
+                : '<span class="btn btn-outline btn-sm" style="opacity:.5; pointer-events:none;">View messages</span>';
             return [
                 '<tr class="customer-quote-row' + (isHi ? ' customer-quote-row--highlight' : '') + '" data-form-id="' + escapeHtml(String(q.formId || '')) + '">',
                 '<td><strong>' + escapeHtml(fid) + '</strong></td>',
@@ -241,10 +241,54 @@
                 '<div class="customer-msg-meta"><span class="customer-msg-dir">' + dir + '</span> · ' + escapeHtml(when) + '</div>',
                 '<h4 class="customer-msg-title">' + title + '</h4>',
                 '<p class="customer-msg-text">' + preview + '</p>',
-                '<a class="btn btn-outline btn-sm" href="' + openHref + '">Open chatroom</a>',
+                '<a class="btn btn-secondary btn-sm" href="' + openHref + '" style="display:inline-flex; align-items:center; margin-top:8px;">View message</a>',
                 '</article>'
             ].join('');
         }).join('');
+    }
+
+    function getIncomingMessageTimestamps(userId, messages) {
+        return (messages || [])
+            .filter(function (m) {
+                return String(m && m.toUserId || '') === String(userId || '');
+            })
+            .map(function (m) {
+                return new Date(m && m.createdAt || 0).getTime() || 0;
+            })
+            .filter(function (ts) { return ts > 0; });
+    }
+
+    function getMessageSeenStorageKey(userId) {
+        return 'anytransport_customer_msg_seen_ts_' + String(userId || '').trim();
+    }
+
+    function getLastSeenMessageTs(userId) {
+        try {
+            return Number(localStorage.getItem(getMessageSeenStorageKey(userId)) || 0) || 0;
+        } catch (_e) {
+            return 0;
+        }
+    }
+
+    function setLastSeenMessageTs(userId, ts) {
+        try {
+            localStorage.setItem(getMessageSeenStorageKey(userId), String(Number(ts || 0) || 0));
+        } catch (_e) {}
+    }
+
+    function renderNavbarMessageBadge(userId, messages) {
+        const badge = document.getElementById('notification-badge');
+        if (!badge) return;
+        const incomingTs = getIncomingMessageTimestamps(userId, messages);
+        const lastSeenTs = getLastSeenMessageTs(userId);
+        const unread = incomingTs.filter(function (ts) { return ts > lastSeenTs; }).length;
+        if (unread > 0) {
+            badge.style.display = 'inline-flex';
+            badge.textContent = unread > 99 ? '99+' : String(unread);
+        } else {
+            badge.style.display = 'none';
+            badge.textContent = '0';
+        }
     }
 
     function loadMessagesForUser(userId) {
@@ -384,6 +428,7 @@
 
         let messages = loadMessagesForUser(user.id);
         renderMessages(user.id, messages);
+        renderNavbarMessageBadge(user.id, messages);
         wireAccountSettings(authRef, user);
 
         const quotesBody = document.getElementById('customer-quotes-body');
@@ -406,7 +451,14 @@
                     p.classList.toggle('active', p.getAttribute('data-panel') === tab);
                 });
                 if (tab === 'messages') {
-                    renderMessages(user.id, loadMessagesForUser(user.id));
+                    const latestMessages = loadMessagesForUser(user.id);
+                    renderMessages(user.id, latestMessages);
+                    const incomingTs = getIncomingMessageTimestamps(user.id, latestMessages);
+                    const newest = incomingTs.length ? Math.max.apply(null, incomingTs) : 0;
+                    if (newest > 0) {
+                        setLastSeenMessageTs(user.id, newest);
+                    }
+                    renderNavbarMessageBadge(user.id, latestMessages);
                 }
             });
         });
