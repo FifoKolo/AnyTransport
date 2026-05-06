@@ -27,6 +27,7 @@
         activeTab: '',
         adminReviewQuery: '',
         adminShowRejected: false,
+        adminExpandedReportGroups: {},
         adminReviewRefreshTimer: null
     };
 
@@ -897,6 +898,16 @@
                 return;
             }
 
+            const reportGroupToggleBtn = event.target.closest('.admin-report-group-toggle');
+            if (reportGroupToggleBtn) {
+                const key = String(reportGroupToggleBtn.getAttribute('data-group-key') || '').trim();
+                if (key) {
+                    state.adminExpandedReportGroups[key] = !state.adminExpandedReportGroups[key];
+                    renderAdminReviewQueue();
+                }
+                return;
+            }
+
             const clearSearchBtn = event.target.closest('.admin-provider-search-clear');
             if (clearSearchBtn) {
                 state.adminReviewQuery = '';
@@ -1451,32 +1462,75 @@
                 ].join('');
             }).join('') : '<div class="empty-inventory">No forms found.</div>';
 
-            const reportRows = openReports.length ? openReports.map((report) => {
+            const groupedReportsByForm = {};
+            openReports.forEach((report) => {
                 const quoteId = String(report && report.quoteId || '').trim();
-                const formId = escapeHtml(firstText(report && report.formId, '—'));
-                const reason = escapeHtml(firstText(report && report.reason, '—').replace(/_/g, ' '));
-                const details = escapeHtml(firstText(report && report.details, 'No details'));
-                const reportedBy = escapeHtml(firstText(report && report.reportedByEmail, report && report.reportedByUserId, 'Unknown'));
-                const createdAt = escapeHtml(formatDateTime(report && report.createdAt || ''));
+                const formIdValue = String(firstText(report && report.formId, quoteId, '—')).trim();
+                const groupKey = quoteId || formIdValue;
+                if (!groupKey) return;
+                if (!groupedReportsByForm[groupKey]) {
+                    groupedReportsByForm[groupKey] = {
+                        key: groupKey,
+                        quoteId: quoteId,
+                        formId: formIdValue,
+                        reports: []
+                    };
+                }
+                groupedReportsByForm[groupKey].reports.push(report);
+            });
+
+            const groupedReports = Object.keys(groupedReportsByForm).map((key) => {
+                const group = groupedReportsByForm[key];
+                group.reports = group.reports.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+                return group;
+            }).sort((a, b) => {
+                const aDate = a.reports.length ? new Date(a.reports[0].createdAt || 0).getTime() : 0;
+                const bDate = b.reports.length ? new Date(b.reports[0].createdAt || 0).getTime() : 0;
+                return bDate - aDate;
+            });
+
+            const reportRows = groupedReports.length ? groupedReports.map((group) => {
+                const latest = group.reports[0] || {};
+                const quoteId = String(group.quoteId || '').trim();
+                const formId = escapeHtml(firstText(group.formId, '—'));
+                const reportedBy = escapeHtml(firstText(latest.reportedByEmail, latest.reportedByUserId, 'Unknown'));
+                const createdAt = escapeHtml(formatDateTime(latest.createdAt || ''));
+                const reason = escapeHtml(firstText(latest.reason, '—').replace(/_/g, ' '));
+                const isExpanded = !!state.adminExpandedReportGroups[group.key];
+                const detailsMarkup = isExpanded ? group.reports.map((report) => {
+                    const reportReason = escapeHtml(firstText(report && report.reason, '—').replace(/_/g, ' '));
+                    const reportDetails = escapeHtml(firstText(report && report.details, 'No details'));
+                    const reportBy = escapeHtml(firstText(report && report.reportedByEmail, report && report.reportedByUserId, 'Unknown'));
+                    const reportAt = escapeHtml(formatDateTime(report && report.createdAt || ''));
+                    return [
+                        '<div style="padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin-top:8px; background:#f8fafc;">',
+                        '<div class="listing-sub"><strong>Reason:</strong> ' + reportReason + '</div>',
+                        '<div class="listing-sub">' + reportDetails + '</div>',
+                        '<div class="listing-sub" style="margin-top:6px;">By: ' + reportBy + ' • ' + reportAt + '</div>',
+                        '<button type="button" class="btn btn-outline admin-resolve-report-btn" data-report-id="' + escapeHtml(String(report && report.id || '')) + '" style="margin-top:8px;">Mark resolved</button>',
+                        '</div>'
+                    ].join('');
+                }).join('') : '';
                 return [
                     '<article class="provider-listing" style="margin-bottom:12px;">',
-                    '<div class="listing-row body" style="grid-template-columns: 180px 1fr 1fr;">',
+                    '<div class="listing-row body" style="grid-template-columns: 200px 1fr 1fr;">',
                     '<div class="listing-cell">',
                     '<div class="listing-title">Form ' + formId + '</div>',
-                    '<div class="listing-sub">' + createdAt + '</div>',
+                    '<div class="listing-sub">Latest: ' + createdAt + '</div>',
                     '<div class="listing-sub">By: ' + reportedBy + '</div>',
                     '</div>',
                     '<div class="listing-cell">',
-                    '<div class="listing-sub"><strong>Reason:</strong> ' + reason + '</div>',
-                    '<div class="listing-sub">' + details + '</div>',
+                    '<div class="listing-sub"><strong>Latest reason:</strong> ' + reason + '</div>',
+                    '<div class="listing-sub"><strong>Total reports:</strong> ' + group.reports.length + '</div>',
                     '</div>',
                     '<div class="listing-cell review-actions-cell">',
                     '<div class="actions review-actions" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
                     '<button type="button" class="btn btn-primary admin-view-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">View form</button>',
-                    '<button type="button" class="btn btn-outline admin-resolve-report-btn" data-report-id="' + escapeHtml(String(report && report.id || '')) + '">Mark resolved</button>',
+                    '<button type="button" class="btn btn-outline admin-report-group-toggle" data-group-key="' + escapeHtml(group.key) + '">' + (isExpanded ? 'Hide reports' : 'Expand reports') + '</button>',
                     '</div>',
                     '</div>',
                     '</div>',
+                    detailsMarkup,
                     '</article>'
                 ].join('');
             }).join('') : '<div class="empty-inventory">No open reports from providers.</div>';
