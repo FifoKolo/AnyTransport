@@ -97,7 +97,7 @@
         if (role !== 'provider') return false;
         const status = String(user && user.identityReviewStatus || '').trim();
         if (status === '') return true;
-        return status === 'pending_review' || status === 'rejected';
+        return status === 'pending_review';
     }
 
     function getPendingProvidersForReview() {

@@ -130,6 +130,20 @@ function send_json($payload, $status = 200) {
     exit;
 }
 
+function send_json_and_continue($payload, $status = 200) {
+    http_response_code($status);
+    echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if (function_exists('fastcgi_finish_request')) {
+        @fastcgi_finish_request();
+    } else {
+        if (function_exists('ignore_user_abort')) {
+            @ignore_user_abort(true);
+        }
+        @ob_flush();
+        @flush();
+    }
+}
+
 function read_store($storeFile) {
     if (!file_exists($storeFile)) {
         return default_store();
@@ -616,7 +630,8 @@ function send_provider_review_email($provider, $status, $notes = '') {
         $subject = 'Your AnyTransport provider application was not approved';
         $body .= "We reviewed your provider application and, at this time, it was not approved.\n\n";
         $body .= "Reason from admin:\n" . $notes . "\n\n";
-        $body .= "If you have additional information to share, please reply to this email.\n\n";
+        $body .= "Please do not reply to this email address.\n";
+        $body .= "If you have additional information to share, sign in and use dashboard messages.\n\n";
         $body .= "Regards,\nAnyTransport";
     } else {
         return false;
@@ -1628,7 +1643,7 @@ switch ($action) {
         $queue = array_values(array_filter($store['users'], function ($user) {
             $role = strtolower(trim((string) ($user['role'] ?? '')));
             $status = trim((string) ($user['identityReviewStatus'] ?? ''));
-            return $role === 'provider' && in_array($status, array('pending_review', 'rejected'), true);
+            return $role === 'provider' && in_array($status, array('pending_review'), true);
         }));
 
         send_json(array('ok' => true, 'providers' => sanitize_users_for_client($queue)));
@@ -1677,6 +1692,8 @@ switch ($action) {
         $store['users'][$index] = $updatedProvider;
         write_store($storeFile, $store);
 
+        send_json_and_continue(array('ok' => true, 'provider' => sanitize_user_for_client($updatedProvider)));
+
         if (in_array($status, array('approved', 'rejected', 'pending_review'), true)) {
             try {
                 send_provider_review_email($updatedProvider, $status, $notes);
@@ -1685,7 +1702,7 @@ switch ($action) {
             }
         }
 
-        send_json(array('ok' => true, 'provider' => sanitize_user_for_client($updatedProvider)));
+        exit;
 
     case 'identity.photos.upload':
         // Upload one or more identity photos to Stripe and attach metadata in the user record.
