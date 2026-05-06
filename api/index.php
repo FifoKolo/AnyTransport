@@ -4,8 +4,9 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
 
-$storeDir = __DIR__ . '/data';
-$storeFile = $storeDir . '/anytransport-store.json';
+$preferredStoreDir = __DIR__ . '/data';
+$storeDir = '';
+$storeFile = '';
 $action = isset($_GET['action']) ? trim((string) $_GET['action']) : '';
 $method = isset($_SERVER['REQUEST_METHOD']) ? strtoupper((string) $_SERVER['REQUEST_METHOD']) : 'GET';
 $localStripeConfig = array();
@@ -18,9 +19,37 @@ if (file_exists($localStripeConfigFile)) {
     }
 }
 
-if (!is_dir($storeDir)) {
-    @mkdir($storeDir, 0775, true);
+function resolve_store_dir($preferredDir) {
+    $candidates = array();
+    $envDir = trim((string) getenv('ANYTRANSPORT_STORE_DIR'));
+    if ($envDir !== '') {
+        $candidates[] = $envDir;
+    }
+    $candidates[] = $preferredDir;
+    $candidates[] = __DIR__ . '/tmp';
+    $sysTmp = function_exists('sys_get_temp_dir') ? trim((string) sys_get_temp_dir()) : '';
+    if ($sysTmp !== '') {
+        $candidates[] = rtrim($sysTmp, '/\\') . '/anytransport-data';
+    }
+
+    foreach ($candidates as $dir) {
+        $dir = rtrim((string) $dir, '/\\');
+        if ($dir === '') {
+            continue;
+        }
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        if (is_dir($dir) && is_writable($dir)) {
+            return $dir;
+        }
+    }
+
+    return rtrim((string) $preferredDir, '/\\');
 }
+
+$storeDir = resolve_store_dir($preferredStoreDir);
+$storeFile = $storeDir . '/anytransport-store.json';
 
 function default_store() {
     return array(
