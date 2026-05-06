@@ -58,16 +58,45 @@ function bootstrap_store_from_fallback($targetStoreFile, $fallbackStoreFile) {
     if ($target === '' || $fallback === '' || $target === $fallback) {
         return;
     }
-    if (file_exists($target)) {
-        return;
-    }
     if (!file_exists($fallback) || !is_readable($fallback)) {
         return;
     }
-    $raw = @file_get_contents($fallback);
-    if ($raw === false || trim((string) $raw) === '') {
+    $fallbackRaw = @file_get_contents($fallback);
+    if ($fallbackRaw === false || trim((string) $fallbackRaw) === '') {
         return;
     }
+    $fallbackParsed = json_decode($fallbackRaw, true);
+    if (!is_array($fallbackParsed)) {
+        return;
+    }
+
+    $targetExists = file_exists($target);
+    $targetParsed = array();
+    if ($targetExists) {
+        $targetRaw = @file_get_contents($target);
+        $decoded = json_decode((string) $targetRaw, true);
+        if (is_array($decoded)) {
+            $targetParsed = $decoded;
+        }
+    }
+
+    $targetUsers = isset($targetParsed['users']) && is_array($targetParsed['users']) ? count($targetParsed['users']) : 0;
+    $targetQuotes = isset($targetParsed['quotes']) && is_array($targetParsed['quotes']) ? count($targetParsed['quotes']) : 0;
+    $targetBids = isset($targetParsed['bids']) && is_array($targetParsed['bids']) ? count($targetParsed['bids']) : 0;
+    $fallbackUsers = isset($fallbackParsed['users']) && is_array($fallbackParsed['users']) ? count($fallbackParsed['users']) : 0;
+    $fallbackQuotes = isset($fallbackParsed['quotes']) && is_array($fallbackParsed['quotes']) ? count($fallbackParsed['quotes']) : 0;
+    $fallbackBids = isset($fallbackParsed['bids']) && is_array($fallbackParsed['bids']) ? count($fallbackParsed['bids']) : 0;
+
+    $shouldBootstrap = !$targetExists;
+    if ($targetExists) {
+        $targetLooksEmpty = ($targetUsers + $targetQuotes + $targetBids) <= 1;
+        $fallbackHasData = ($fallbackUsers + $fallbackQuotes + $fallbackBids) > ($targetUsers + $targetQuotes + $targetBids);
+        $shouldBootstrap = $targetLooksEmpty && $fallbackHasData;
+    }
+    if (!$shouldBootstrap) {
+        return;
+    }
+
     $dir = dirname($target);
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
@@ -75,8 +104,8 @@ function bootstrap_store_from_fallback($targetStoreFile, $fallbackStoreFile) {
     if (!is_dir($dir) || !is_writable($dir)) {
         return;
     }
-    if (@file_put_contents($target, $raw, LOCK_EX) !== false) {
-        @file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | store_bootstrap_copied from={$fallback} to={$target}\n", FILE_APPEND | LOCK_EX);
+    if (@file_put_contents($target, $fallbackRaw, LOCK_EX) !== false) {
+        @file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | store_bootstrap_copied from={$fallback} to={$target} fallback_users={$fallbackUsers} target_users={$targetUsers}\n", FILE_APPEND | LOCK_EX);
     }
 }
 
