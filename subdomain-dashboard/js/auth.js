@@ -1549,21 +1549,11 @@ function showConfirmationModal() {
 
         const dashboardBtn = document.getElementById('confirmation-view-dashboard-btn');
         if (dashboardBtn) {
-            const useProviderBoard = (auth.isProvider && auth.isProvider()) || (auth.isAdmin && auth.isAdmin());
-            if (useProviderBoard) {
-                dashboardBtn.textContent = 'View provider dashboard';
-                const rolePath = '#provider-board';
-                const target = formIdText ? ('dashboard.html?newFormId=' + encodeURIComponent(formIdText) + rolePath) : ('dashboard.html' + rolePath);
-                dashboardBtn.onclick = function () {
-                    window.location.href = target;
-                };
-            } else {
-                dashboardBtn.textContent = 'View my profile';
-                const target = formIdText ? ('customer-dashboard.html?highlightForm=' + encodeURIComponent(formIdText)) : 'customer-dashboard.html';
-                dashboardBtn.onclick = function () {
-                    window.location.href = target;
-                };
-            }
+            dashboardBtn.textContent = 'View my requests';
+            const target = formIdText ? ('customer-dashboard.html?highlightForm=' + encodeURIComponent(formIdText)) : 'customer-dashboard.html';
+            dashboardBtn.onclick = function () {
+                window.location.href = target;
+            };
         }
 
         modal.classList.add('show');
