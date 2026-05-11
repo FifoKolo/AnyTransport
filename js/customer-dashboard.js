@@ -266,6 +266,43 @@
         }).join('');
     }
 
+    function renderMessageGroupsIndex(quotes, bids) {
+        const el = document.getElementById('customer-messages-list');
+        if (!el) return;
+        const list = Array.isArray(quotes) ? quotes.slice() : [];
+        if (!list.length) {
+            el.innerHTML = '<p class="customer-empty">No forms yet. Submit a request to receive provider bids.</p>';
+            return;
+        }
+
+        const rows = list.map(function (quote) {
+            const quoteId = String(quote && quote.id || '').trim();
+            if (!quoteId) return '';
+            const activeBids = getActiveBidsForQuote(quoteId, bids);
+            const latestBid = activeBids.length ? activeBids[0] : null;
+            const formLabel = getQuoteLabel(quote);
+            const summaryText = latestBid
+                ? firstLine(latestBid.message, 150)
+                : 'No bids yet for this form.';
+            const latestWhen = latestBid ? formatWhen(latestBid.createdAt) : formatWhen(quote.submittedAt || quote.createdAt);
+            return [
+                '<article class="customer-msg-card customer-msg-card--in" style="margin-bottom:12px;">',
+                '<div class="customer-msg-meta">Form ' + escapeHtml(formLabel) + ' · ' + escapeHtml(latestWhen) + '</div>',
+                '<h4 class="customer-msg-title">' + escapeHtml(getServiceTitle(quote)) + '</h4>',
+                '<p class="customer-msg-text">' + escapeHtml(summaryText) + '</p>',
+                '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">',
+                '<span class="customer-bid-count">' + activeBids.length + '</span>',
+                '<button type="button" class="btn btn-secondary btn-sm customer-open-form-group-btn" data-quote-id="' + escapeHtml(quoteId) + '" data-form-id="' + escapeHtml(formLabel) + '">Open group</button>',
+                '</div>',
+                '</article>'
+            ].join('');
+        }).filter(Boolean);
+
+        el.innerHTML = rows.length
+            ? rows.join('')
+            : '<p class="customer-empty">No grouped bid messages found yet.</p>';
+    }
+
     function activateTab(tabName) {
         document.querySelectorAll('.customer-tab-btn').forEach(function (b) {
             b.classList.toggle('active', b.getAttribute('data-tab') === tabName);
@@ -291,6 +328,7 @@
                 '<div class="customer-msg-meta">Form ' + escapeHtml(formLabel) + '</div>',
                 '<h4 class="customer-msg-title">No bids yet</h4>',
                 '<p class="customer-msg-text">This form has no active bids/messages yet.</p>',
+                '<button type="button" class="btn btn-outline btn-sm customer-back-to-groups-btn" style="margin-top:8px;">Back to grouped forms</button>',
                 '</article>'
             ].join('');
             return;
@@ -300,6 +338,7 @@
             '<div class="customer-msg-meta">Grouped by form</div>',
             '<h4 class="customer-msg-title">Form ' + escapeHtml(formLabel) + ' · ' + groupedBids.length + ' bid' + (groupedBids.length === 1 ? '' : 's') + '</h4>',
             '<p class="customer-msg-text">All bid messages for this form are listed below.</p>',
+            '<button type="button" class="btn btn-outline btn-sm customer-back-to-groups-btn" style="margin-top:8px;">Back to grouped forms</button>',
             '</article>',
             groupedBids.map(function (bid) {
                 const incoming = String(bid && bid.providerId || '') !== String(userId || '');
@@ -504,7 +543,7 @@
         renderQuotes(quotes, bids, highlightFormId);
 
         let messages = loadMessagesForUser(user.id);
-        renderMessages(user.id, messages);
+        renderMessageGroupsIndex(quotes, bids);
         renderNavbarMessageBadge(user.id, messages);
         wireAccountSettings(authRef, user);
 
@@ -522,6 +561,7 @@
                 if (!groupedBtn) return;
                 const quoteId = String(groupedBtn.getAttribute('data-quote-id') || '').trim();
                 const formId = String(groupedBtn.getAttribute('data-form-id') || '').trim();
+                const latestQuotes = loadQuotesMerged(user.id, user.email || '');
                 const latestBids = loadAllBids();
                 renderGroupedMessagesForQuote(user.id, quoteId, formId, latestBids);
                 activateTab('inbox');
@@ -534,13 +574,34 @@
             });
         }
 
+        const inboxList = document.getElementById('customer-messages-list');
+        if (inboxList) {
+            inboxList.addEventListener('click', function (event) {
+                const backBtn = event.target.closest('.customer-back-to-groups-btn');
+                if (backBtn) {
+                    const latestQuotes = loadQuotesMerged(user.id, user.email || '');
+                    const latestBids = loadAllBids();
+                    renderMessageGroupsIndex(latestQuotes, latestBids);
+                    return;
+                }
+                const openGroupBtn = event.target.closest('.customer-open-form-group-btn');
+                if (!openGroupBtn) return;
+                const quoteId = String(openGroupBtn.getAttribute('data-quote-id') || '').trim();
+                const formId = String(openGroupBtn.getAttribute('data-form-id') || '').trim();
+                const latestBids = loadAllBids();
+                renderGroupedMessagesForQuote(user.id, quoteId, formId, latestBids);
+            });
+        }
+
         document.querySelectorAll('.customer-tab-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 const tab = btn.getAttribute('data-tab');
                 activateTab(tab);
                 if (tab === 'inbox') {
+                    const latestQuotes = loadQuotesMerged(user.id, user.email || '');
+                    const latestBids = loadAllBids();
                     const latestMessages = loadMessagesForUser(user.id);
-                    renderMessages(user.id, latestMessages);
+                    renderMessageGroupsIndex(latestQuotes, latestBids);
                     const incomingTs = getIncomingMessageTimestamps(user.id, latestMessages);
                     const newest = incomingTs.length ? Math.max.apply(null, incomingTs) : 0;
                     if (newest > 0) {
