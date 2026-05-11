@@ -81,6 +81,33 @@
         });
     }
 
+    function sortGroupedBids(activeBids, sortMode) {
+        const mode = String(sortMode || 'newest').trim().toLowerCase();
+        const sorted = Array.isArray(activeBids) ? activeBids.slice() : [];
+        if (mode === 'lowest') {
+            sorted.sort(function (a, b) {
+                return (Number(a && a.amount) || 0) - (Number(b && b.amount) || 0);
+            });
+            return sorted;
+        }
+        if (mode === 'highest') {
+            sorted.sort(function (a, b) {
+                return (Number(b && b.amount) || 0) - (Number(a && a.amount) || 0);
+            });
+            return sorted;
+        }
+        if (mode === 'provider') {
+            sorted.sort(function (a, b) {
+                return getBidProviderLabel(a).localeCompare(getBidProviderLabel(b), undefined, { sensitivity: 'base' });
+            });
+            return sorted;
+        }
+        sorted.sort(function (a, b) {
+            return new Date(b && b.createdAt || 0) - new Date(a && a.createdAt || 0);
+        });
+        return sorted;
+    }
+
     function getBidProviderLabel(bid) {
         if (!bid || typeof bid !== 'object') return 'Provider';
         return firstLine(
@@ -312,16 +339,17 @@
         });
     }
 
-    function renderGroupedMessagesForQuote(userId, quoteId, formIdLabel, bids) {
+    function renderGroupedMessagesForQuote(userId, quoteId, formIdLabel, bids, sortMode) {
         const el = document.getElementById('customer-messages-list');
         if (!el) return;
         const qid = String(quoteId || '').trim();
         const formLabel = String(formIdLabel || '').trim() || '—';
+        const activeSortMode = String(sortMode || 'newest').trim().toLowerCase();
         if (!qid) {
             el.innerHTML = '<p class="customer-empty">Unable to load grouped messages for this form.</p>';
             return;
         }
-        const groupedBids = getActiveBidsForQuote(qid, bids);
+        const groupedBids = sortGroupedBids(getActiveBidsForQuote(qid, bids), activeSortMode);
         if (!groupedBids.length) {
             el.innerHTML = [
                 '<article class="customer-msg-card customer-msg-card--in">',
@@ -338,6 +366,15 @@
             '<div class="customer-msg-meta">Grouped by form</div>',
             '<h4 class="customer-msg-title">Form ' + escapeHtml(formLabel) + ' · ' + groupedBids.length + ' bid' + (groupedBids.length === 1 ? '' : 's') + '</h4>',
             '<p class="customer-msg-text">All bid messages for this form are listed below.</p>',
+            '<div style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">',
+            '<label for="customer-group-sort-select" style="font-size:12px; color:#334155; font-weight:600;">Sort bids</label>',
+            '<select id="customer-group-sort-select" class="form-input customer-group-sort-select" data-quote-id="' + escapeHtml(qid) + '" data-form-id="' + escapeHtml(formLabel) + '" style="max-width:240px;">',
+            '<option value="newest"' + (activeSortMode === 'newest' ? ' selected' : '') + '>Newest bid</option>',
+            '<option value="lowest"' + (activeSortMode === 'lowest' ? ' selected' : '') + '>Lowest bid</option>',
+            '<option value="highest"' + (activeSortMode === 'highest' ? ' selected' : '') + '>Highest bid</option>',
+            '<option value="provider"' + (activeSortMode === 'provider' ? ' selected' : '') + '>Provider name</option>',
+            '</select>',
+            '</div>',
             '<button type="button" class="btn btn-outline btn-sm customer-back-to-groups-btn" style="margin-top:8px;">Back to grouped forms</button>',
             '</article>',
             groupedBids.map(function (bid) {
@@ -479,7 +516,7 @@
                 const quoteId = String(groupedBtn.getAttribute('data-quote-id') || '').trim();
                 const formId = String(groupedBtn.getAttribute('data-form-id') || '').trim();
                 const latestBids = loadAllBids();
-                renderGroupedMessagesForQuote(user.id, quoteId, formId, latestBids);
+                renderGroupedMessagesForQuote(user.id, quoteId, formId, latestBids, 'newest');
                 activateTab('inbox');
                 const incomingTs = getIncomingMessageTimestamps(user.id, loadMessagesForUser(user.id));
                 const newest = incomingTs.length ? Math.max.apply(null, incomingTs) : 0;
@@ -505,7 +542,16 @@
                 const quoteId = String(openGroupBtn.getAttribute('data-quote-id') || '').trim();
                 const formId = String(openGroupBtn.getAttribute('data-form-id') || '').trim();
                 const latestBids = loadAllBids();
-                renderGroupedMessagesForQuote(user.id, quoteId, formId, latestBids);
+                renderGroupedMessagesForQuote(user.id, quoteId, formId, latestBids, 'newest');
+            });
+            inboxList.addEventListener('change', function (event) {
+                const sortSelect = event.target.closest('.customer-group-sort-select');
+                if (!sortSelect) return;
+                const quoteId = String(sortSelect.getAttribute('data-quote-id') || '').trim();
+                const formId = String(sortSelect.getAttribute('data-form-id') || '').trim();
+                const sortMode = String(sortSelect.value || 'newest').trim().toLowerCase();
+                const latestBids = loadAllBids();
+                renderGroupedMessagesForQuote(user.id, quoteId, formId, latestBids, sortMode);
             });
         }
 
