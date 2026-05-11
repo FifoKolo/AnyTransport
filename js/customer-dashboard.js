@@ -71,6 +71,63 @@
         return active[0];
     }
 
+    function getActiveBidsForQuote(quoteId, bids) {
+        const id = String(quoteId || '').trim();
+        if (!id || !Array.isArray(bids)) return [];
+        return bids.filter(function (b) {
+            return String(b.quoteId || '') === id && String(b.status || 'active') === 'active';
+        }).sort(function (a, b) {
+            return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+        });
+    }
+
+    function getBidProviderLabel(bid) {
+        if (!bid || typeof bid !== 'object') return 'Provider';
+        return firstLine(
+            bid.providerName
+            || bid.providerUsername
+            || bid.providerNickname
+            || bid.providerEmail
+            || bid.providerId
+            || 'Provider',
+            80
+        );
+    }
+
+    function createFormMessageThreadsMarkup(quoteId, activeBids) {
+        const qid = String(quoteId || '').trim();
+        if (!qid) return '';
+        if (!Array.isArray(activeBids) || !activeBids.length) {
+            return '<div class="customer-form-msg-empty" style="margin-top:8px; color:#64748b; font-size:12px;">No bid messages yet for this form.</div>';
+        }
+        return [
+            '<div class="customer-form-msg-threads" style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">',
+            activeBids.map(function (bid) {
+                const amount = Number(bid && bid.amount);
+                const amountLabel = Number.isFinite(amount) ? ('€' + amount.toFixed(2)) : '—';
+                const providerLabel = escapeHtml(getBidProviderLabel(bid));
+                const bidMessage = escapeHtml(firstLine(bid && bid.message, 160) || 'No bid note provided.');
+                const bidWhen = escapeHtml(formatWhen(bid && bid.createdAt));
+                const toUserId = String((bid && bid.providerId) || '').trim();
+                const bidId = String((bid && bid.id) || '').trim();
+                const openHref = 'messages.html?quoteId=' + encodeURIComponent(qid)
+                    + '&bidId=' + encodeURIComponent(bidId)
+                    + '&to=' + encodeURIComponent(toUserId);
+                return [
+                    '<div class="customer-form-msg-thread" style="padding:8px; border:1px solid #e2e8f0; border-radius:8px; background:#fff;">',
+                    '<div style="display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap;">',
+                    '<strong style="font-size:12px; color:#0f172a;">' + providerLabel + '</strong>',
+                    '<span style="font-size:12px; color:#475569;">' + escapeHtml(amountLabel) + ' · ' + bidWhen + '</span>',
+                    '</div>',
+                    '<div style="font-size:12px; color:#334155; margin-top:4px;">' + bidMessage + '</div>',
+                    '<a class="btn btn-secondary btn-sm" href="' + openHref + '" style="display:inline-flex; align-items:center; margin-top:8px;">Open chat</a>',
+                    '</div>'
+                ].join('');
+            }).join(''),
+            '</div>'
+        ].join('');
+    }
+
     function loadAllBids() {
         if (!window.anytransportApi || typeof window.anytransportApi.getBids !== 'function') {
             return [];
@@ -162,11 +219,9 @@
             const fid = getQuoteLabel(q);
             const isHi = highlightFormId && String(q.formId || '').trim() === highlightFormId;
             const bidN = countBidsForQuote(q.id, bids);
-            const newestBid = getNewestActiveBidForQuote(q.id, bids);
+            const activeBids = getActiveBidsForQuote(q.id, bids);
             const status = escapeHtml(String(q.status || 'pending'));
-            const messagesAction = newestBid
-                ? '<a class="btn btn-secondary btn-sm" href="messages.html?quoteId=' + encodeURIComponent(q.id) + '&bidId=' + encodeURIComponent(newestBid.id || '') + '&to=' + encodeURIComponent(newestBid.providerId || '') + '" style="display:inline-flex; align-items:center;">View messages</a>'
-                : '<span class="btn btn-outline btn-sm" style="opacity:.5; pointer-events:none;">View messages</span>';
+            const messagesAction = createFormMessageThreadsMarkup(q.id, activeBids);
             return [
                 '<tr class="customer-quote-row' + (isHi ? ' customer-quote-row--highlight' : '') + '" data-form-id="' + escapeHtml(String(q.formId || '')) + '">',
                 '<td><strong>' + escapeHtml(fid) + '</strong></td>',
