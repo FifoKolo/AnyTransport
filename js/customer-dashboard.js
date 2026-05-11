@@ -94,40 +94,6 @@
         );
     }
 
-    function createFormMessageThreadsMarkup(quoteId, activeBids) {
-        const qid = String(quoteId || '').trim();
-        if (!qid) return '';
-        if (!Array.isArray(activeBids) || !activeBids.length) {
-            return '<div class="customer-form-msg-empty" style="margin-top:8px; color:#64748b; font-size:12px;">No bid messages yet for this form.</div>';
-        }
-        return [
-            '<div class="customer-form-msg-threads" style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">',
-            activeBids.map(function (bid) {
-                const amount = Number(bid && bid.amount);
-                const amountLabel = Number.isFinite(amount) ? ('€' + amount.toFixed(2)) : '—';
-                const providerLabel = escapeHtml(getBidProviderLabel(bid));
-                const bidMessage = escapeHtml(firstLine(bid && bid.message, 160) || 'No bid note provided.');
-                const bidWhen = escapeHtml(formatWhen(bid && bid.createdAt));
-                const toUserId = String((bid && bid.providerId) || '').trim();
-                const bidId = String((bid && bid.id) || '').trim();
-                const openHref = 'messages.html?quoteId=' + encodeURIComponent(qid)
-                    + '&bidId=' + encodeURIComponent(bidId)
-                    + '&to=' + encodeURIComponent(toUserId);
-                return [
-                    '<div class="customer-form-msg-thread" style="padding:8px; border:1px solid #e2e8f0; border-radius:8px; background:#fff;">',
-                    '<div style="display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap;">',
-                    '<strong style="font-size:12px; color:#0f172a;">' + providerLabel + '</strong>',
-                    '<span style="font-size:12px; color:#475569;">' + escapeHtml(amountLabel) + ' · ' + bidWhen + '</span>',
-                    '</div>',
-                    '<div style="font-size:12px; color:#334155; margin-top:4px;">' + bidMessage + '</div>',
-                    '<a class="btn btn-secondary btn-sm" href="' + openHref + '" style="display:inline-flex; align-items:center; margin-top:8px;">Open chat</a>',
-                    '</div>'
-                ].join('');
-            }).join(''),
-            '</div>'
-        ].join('');
-    }
-
     function loadAllBids() {
         if (!window.anytransportApi || typeof window.anytransportApi.getBids !== 'function') {
             return [];
@@ -219,9 +185,7 @@
             const fid = getQuoteLabel(q);
             const isHi = highlightFormId && String(q.formId || '').trim() === highlightFormId;
             const bidN = countBidsForQuote(q.id, bids);
-            const activeBids = getActiveBidsForQuote(q.id, bids);
             const status = escapeHtml(String(q.status || 'pending'));
-            const messagesAction = createFormMessageThreadsMarkup(q.id, activeBids);
             return [
                 '<tr class="customer-quote-row' + (isHi ? ' customer-quote-row--highlight' : '') + '" data-form-id="' + escapeHtml(String(q.formId || '')) + '">',
                 '<td><strong>' + escapeHtml(fid) + '</strong></td>',
@@ -234,7 +198,7 @@
                 '<a class="btn btn-outline btn-sm" href="listing-details.html?quoteId=' + encodeURIComponent(q.id) + '">View</a> ',
                 '<a class="btn btn-primary btn-sm" href="create-job.html?editQuote=' + encodeURIComponent(q.id) + '">Edit</a> ',
                 '<button type="button" class="btn btn-danger btn-sm customer-delete-quote-btn" data-quote-id="' + escapeHtml(String(q.id || '')) + '">Delete</button> ',
-                messagesAction,
+                '<button type="button" class="btn btn-secondary btn-sm customer-open-form-messages-btn" data-quote-id="' + escapeHtml(String(q.id || '')) + '" data-form-id="' + escapeHtml(String(fid || '')) + '" style="display:inline-flex; align-items:center; margin-top:8px;">View grouped messages</button>',
                 '</td></tr>'
             ].join('');
         }).join('');
@@ -300,6 +264,64 @@
                 '</article>'
             ].join('');
         }).join('');
+    }
+
+    function activateTab(tabName) {
+        document.querySelectorAll('.customer-tab-btn').forEach(function (b) {
+            b.classList.toggle('active', b.getAttribute('data-tab') === tabName);
+        });
+        document.querySelectorAll('.customer-tab-panel').forEach(function (p) {
+            p.classList.toggle('active', p.getAttribute('data-panel') === tabName);
+        });
+    }
+
+    function renderGroupedMessagesForQuote(userId, quoteId, formIdLabel, bids) {
+        const el = document.getElementById('customer-messages-list');
+        if (!el) return;
+        const qid = String(quoteId || '').trim();
+        const formLabel = String(formIdLabel || '').trim() || '—';
+        if (!qid) {
+            el.innerHTML = '<p class="customer-empty">Unable to load grouped messages for this form.</p>';
+            return;
+        }
+        const groupedBids = getActiveBidsForQuote(qid, bids);
+        if (!groupedBids.length) {
+            el.innerHTML = [
+                '<article class="customer-msg-card customer-msg-card--in">',
+                '<div class="customer-msg-meta">Form ' + escapeHtml(formLabel) + '</div>',
+                '<h4 class="customer-msg-title">No bids yet</h4>',
+                '<p class="customer-msg-text">This form has no active bids/messages yet.</p>',
+                '</article>'
+            ].join('');
+            return;
+        }
+        el.innerHTML = [
+            '<article class="customer-msg-card customer-msg-card--in">',
+            '<div class="customer-msg-meta">Grouped by form</div>',
+            '<h4 class="customer-msg-title">Form ' + escapeHtml(formLabel) + ' · ' + groupedBids.length + ' bid' + (groupedBids.length === 1 ? '' : 's') + '</h4>',
+            '<p class="customer-msg-text">All bid messages for this form are listed below.</p>',
+            '</article>',
+            groupedBids.map(function (bid) {
+                const incoming = String(bid && bid.providerId || '') !== String(userId || '');
+                const providerLabel = escapeHtml(getBidProviderLabel(bid));
+                const amount = Number(bid && bid.amount);
+                const amountLabel = Number.isFinite(amount) ? ('€' + amount.toFixed(2)) : '—';
+                const preview = escapeHtml(firstLine(bid && bid.message, 220) || 'No bid note provided.');
+                const when = escapeHtml(formatWhen(bid && bid.createdAt));
+                const dir = incoming ? 'In' : 'Out';
+                const openHref = 'messages.html?quoteId=' + encodeURIComponent(qid)
+                    + '&bidId=' + encodeURIComponent(String(bid && bid.id || ''))
+                    + '&to=' + encodeURIComponent(String(bid && bid.providerId || ''));
+                return [
+                    '<article class="customer-msg-card customer-msg-card--' + (incoming ? 'in' : 'out') + '">',
+                    '<div class="customer-msg-meta"><span class="customer-msg-dir">' + dir + '</span> · ' + when + ' · ' + escapeHtml(amountLabel) + '</div>',
+                    '<h4 class="customer-msg-title">' + providerLabel + '</h4>',
+                    '<p class="customer-msg-text">' + preview + '</p>',
+                    '<a class="btn btn-secondary btn-sm" href="' + openHref + '" style="display:inline-flex; align-items:center; margin-top:8px;">Open chat</a>',
+                    '</article>'
+                ].join('');
+            }).join('')
+        ].join('');
     }
 
     function getIncomingMessageTimestamps(userId, messages) {
@@ -490,22 +512,33 @@
         if (quotesBody) {
             quotesBody.addEventListener('click', function (event) {
                 const deleteBtn = event.target.closest('.customer-delete-quote-btn');
-                if (!deleteBtn) return;
-                const quoteId = String(deleteBtn.getAttribute('data-quote-id') || '').trim();
-                deleteQuoteForUser(authRef, user, quoteId);
+                if (deleteBtn) {
+                    const quoteId = String(deleteBtn.getAttribute('data-quote-id') || '').trim();
+                    deleteQuoteForUser(authRef, user, quoteId);
+                    return;
+                }
+
+                const groupedBtn = event.target.closest('.customer-open-form-messages-btn');
+                if (!groupedBtn) return;
+                const quoteId = String(groupedBtn.getAttribute('data-quote-id') || '').trim();
+                const formId = String(groupedBtn.getAttribute('data-form-id') || '').trim();
+                const latestBids = loadAllBids();
+                renderGroupedMessagesForQuote(user.id, quoteId, formId, latestBids);
+                activateTab('inbox');
+                const incomingTs = getIncomingMessageTimestamps(user.id, loadMessagesForUser(user.id));
+                const newest = incomingTs.length ? Math.max.apply(null, incomingTs) : 0;
+                if (newest > 0) {
+                    setLastSeenMessageTs(user.id, newest);
+                }
+                renderNavbarMessageBadge(user.id, loadMessagesForUser(user.id));
             });
         }
 
         document.querySelectorAll('.customer-tab-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 const tab = btn.getAttribute('data-tab');
-                document.querySelectorAll('.customer-tab-btn').forEach(function (b) {
-                    b.classList.toggle('active', b === btn);
-                });
-                document.querySelectorAll('.customer-tab-panel').forEach(function (p) {
-                    p.classList.toggle('active', p.getAttribute('data-panel') === tab);
-                });
-                if (tab === 'messages') {
+                activateTab(tab);
+                if (tab === 'inbox') {
                     const latestMessages = loadMessagesForUser(user.id);
                     renderMessages(user.id, latestMessages);
                     const incomingTs = getIncomingMessageTimestamps(user.id, latestMessages);
