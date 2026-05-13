@@ -553,7 +553,7 @@
                         <div id="industrial-section" class="card-section" data-form-step="2" style="display: none;">
                             <h2 class="section-title">Step 2: Industrial Details</h2>
                             <label for="what-being-transported" class="form-label">What is being transported</label>
-                            <textarea id="what-being-transported" class="form-input" placeholder="Describe what you need transported" rows="4"></textarea>
+                            <textarea id="what-being-transported" class="form-input" placeholder="Describe what you need transported" rows="4" data-contact-digit-limit></textarea>
                         </div>
                         
                         <div id="industrial-weight-section" class="card-section" data-form-step="2" style="display: none;">
@@ -1241,7 +1241,7 @@
                                         <p id="freight-dimension-preset-note" class="freight-dimension-preset-note" style="display:none;"></p>
 
                                         <label for="freight3-description" class="form-label" style="margin:0;">Add description <span class="required-text">(required)</span></label>
-                                        <textarea id="freight3-description" class="dimension-description form-input" rows="2" placeholder="Enter item description here (what is inside the pallets/containers)" data-required="true" aria-required="true"></textarea>
+                                        <textarea id="freight3-description" class="dimension-description form-input" rows="2" placeholder="Enter item description here (what is inside the pallets/containers)" data-required="true" aria-required="true" data-contact-digit-limit></textarea>
 
                                         <div class="dimension-inputs freight-dimension-inputs">
                                             <div class="dimension-field-stack">
@@ -1288,7 +1288,7 @@
 
                                         <div class="freight-step3-field freight-step3-field--wide">
                                             <label for="freight3-notes" class="form-label">Access / loading notes (optional)</label>
-                                            <textarea id="freight3-notes" class="dimension-description form-input" rows="2" placeholder="e.g. Tail-lift required at delivery, loading bay closes at 17:30" data-optional="true"></textarea>
+                                            <textarea id="freight3-notes" class="dimension-description form-input" rows="2" placeholder="e.g. Tail-lift required at delivery, loading bay closes at 17:30" data-optional="true" data-contact-digit-limit></textarea>
                                         </div>
 
                                         <button type="button" id="freight-add-item-btn" class="btn-add-dimension">
@@ -1363,7 +1363,7 @@
                                         </div>
 
                                         <label for="clearance3-description" class="form-label" style="margin-top:4px;">Add clearance details <span class="required-text">(required)</span></label>
-                                        <textarea id="clearance3-description" data-clearance-field="description" class="dimension-description form-input" rows="2" placeholder="Enter what needs to be cleared (e.g. sofa, old fridge, boxes, loose items)" data-required="true" aria-required="true"></textarea>
+                                        <textarea id="clearance3-description" data-clearance-field="description" class="dimension-description form-input" rows="2" placeholder="Enter what needs to be cleared (e.g. sofa, old fridge, boxes, loose items)" data-required="true" aria-required="true" data-contact-digit-limit></textarea>
 
                                         <div class="dimension-inputs clearance-dimension-inputs">
                                             <select id="clearance3-weight-range" data-clearance-field="weight" class="dimension-field form-input" data-required="true" aria-required="true">
@@ -1427,7 +1427,7 @@
 
                             <div id="office-generic-description-card" class="card-section">
                                 <label for="office-removal-description" class="form-label">Enter the job you need done</label>
-                                <textarea id="office-removal-description" class="form-input" placeholder="e.g. Moving office desks and chairs" rows="4"></textarea>
+                                <textarea id="office-removal-description" class="form-input" placeholder="e.g. Moving office desks and chairs" rows="4" data-contact-digit-limit></textarea>
                             </div>
                         </div>
                         
@@ -1435,7 +1435,7 @@
                         <div id="manpower-job-description-section" data-form-step="2" style="display: none;">
                             <div class="card-section">
                                 <label for="manpower-job-description" class="form-label">Enter the job you need done</label>
-                                <textarea id="manpower-job-description" class="form-input" placeholder="e.g. Moving a pool table 2 floors" rows="4"></textarea>
+                                <textarea id="manpower-job-description" class="form-input" placeholder="e.g. Moving a pool table 2 floors" rows="4" data-contact-digit-limit></textarea>
                             </div>
                         </div>
 
@@ -1443,7 +1443,7 @@
                         <div id="other-job-description-section" data-form-step="2" style="display: none;">
                             <div class="card-section">
                                 <label for="other-job-description" class="form-label">Enter the job you need done</label>
-                                <textarea id="other-job-description" class="form-input" placeholder="e.g. Describe what you need moved" rows="4"></textarea>
+                                <textarea id="other-job-description" class="form-input" placeholder="e.g. Describe what you need moved" rows="4" data-contact-digit-limit></textarea>
                             </div>
                         </div>
                         
@@ -2101,7 +2101,7 @@
                                         </label>
                                     </div>
                                     <div class="service-requirement-input">
-                                        <textarea id="service-special-instructions" name="service-special-instructions" class="form-input" rows="4" data-optional="true" placeholder="Add any additional notes for services that the Transport Provider should know." style="width:100%; resize:vertical;"></textarea>
+                                        <textarea id="service-special-instructions" name="service-special-instructions" class="form-input" rows="4" data-optional="true" data-contact-digit-limit placeholder="Add any additional notes for services that the Transport Provider should know." style="width:100%; resize:vertical;"></textarea>
                                         
                                     </div>
                                 </div>

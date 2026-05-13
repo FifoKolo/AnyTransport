@@ -13,6 +13,10 @@ const contactBlocker = {
         return !this.blockedInputTypes.has(inputType);
     },
 
+    isDigitLimitField(target) {
+        return this.isEligibleTarget(target) && target.hasAttribute && target.hasAttribute('data-contact-digit-limit');
+    },
+
     // Keep only the first 5 numeric tokens while preserving other characters.
     trimToMaxDigits(value, maxDigits = this.maxDigitsPerField) {
         if (!value) return '';
@@ -54,7 +58,7 @@ const contactBlocker = {
     },
 
     enforceMaxDigitCount(target, options = {}) {
-        if (!this.isEligibleTarget(target)) return false;
+        if (!this.isDigitLimitField(target)) return false;
         const value = String(target.value || '');
         const trimmed = this.trimToMaxDigits(value, this.maxDigitsPerField);
         if (trimmed === value) return false;
@@ -81,9 +85,9 @@ const contactBlocker = {
     }
 };
 
-const bindGlobalDigitLimit = () => {
+const bindContactDigitLimitFields = () => {
     const applyDigitLimit = (target) => {
-        if (!contactBlocker.isEligibleTarget(target)) return;
+        if (!contactBlocker.isDigitLimitField(target)) return;
         contactBlocker.enforceMaxDigitCount(target, { silent: true });
     };
 
@@ -97,19 +101,19 @@ const bindGlobalDigitLimit = () => {
 
     document.addEventListener('paste', (event) => {
         const target = event.target;
-        if (!contactBlocker.isEligibleTarget(target)) return;
+        if (!contactBlocker.isDigitLimitField(target)) return;
         setTimeout(() => applyDigitLimit(target), 0);
     }, true);
 
-    document.querySelectorAll('input[type="text"], input[type="number"], input[type="tel"], textarea').forEach((field) => {
+    document.querySelectorAll('[data-contact-digit-limit]').forEach((field) => {
         applyDigitLimit(field);
     });
 };
 
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindGlobalDigitLimit, { once: true });
+    document.addEventListener('DOMContentLoaded', bindContactDigitLimitFields, { once: true });
 } else {
-    bindGlobalDigitLimit();
+    bindContactDigitLimitFields();
 }
 
 const getStorageDatesSummaryText = () => {
@@ -27962,7 +27966,7 @@ function renderMultiStopOfficeInventory(stopId) {
             ${isAddMore && isSelected ? `
                 <div class="custom-items-input">
                     <label>Please describe the items you need to move</label>
-                    <textarea class="multi-stop-office-custom" data-stop-id="${stopId}" placeholder="e.g., 2x Whiteboards" rows="3">${state.customItems || ''}</textarea>
+                    <textarea class="multi-stop-office-custom" data-stop-id="${stopId}" data-contact-digit-limit placeholder="e.g., 2x Whiteboards" rows="3">${state.customItems || ''}</textarea>
                 </div>
             ` : ''}
         `;
@@ -28587,7 +28591,7 @@ function renderOfficeInventory() {
         html += `
             <div class="form-group" style="margin-top: 14px;">
                 <label for="office-custom-items-description" class="form-label">Please describe extra office items</label>
-                <textarea class="form-input" id="office-custom-items-description" placeholder="e.g., 2x Whiteboards, 1x Water cooler, 3x Office plants..." rows="4" data-optional="true" oninput="updateOfficeCustomItems(this.value)">${activeOffice.customItems || ''}</textarea>
+                <textarea class="form-input" id="office-custom-items-description" placeholder="e.g., 2x Whiteboards, 1x Water cooler, 3x Office plants..." rows="4" data-optional="true" data-contact-digit-limit oninput="updateOfficeCustomItems(this.value)">${activeOffice.customItems || ''}</textarea>
             </div>
         `;
     }
@@ -32967,7 +32971,7 @@ function openOverviewEditModal(valueId) {
         body.innerHTML = `
             <div class="overview-editor-field">
                 <label for="overview-edit-notes">Special Instructions</label>
-                <textarea id="overview-edit-notes" rows="4">${escapeOverviewHtml(notesValue)}</textarea>
+                <textarea id="overview-edit-notes" rows="4" data-contact-digit-limit>${escapeOverviewHtml(notesValue)}</textarea>
             </div>
         `;
         onSave = () => {

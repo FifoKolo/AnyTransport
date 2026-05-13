@@ -1235,37 +1235,48 @@ if (loginForm) {
         const password = this.querySelector('input[type="password"]').value;
 
         if (email && password) {
-            const loginResult = auth.login(email, password);
-            const currentUser = getUserFromAuthResult(loginResult);
-            const isAdmin = currentUser && ((Array.isArray(currentUser.roles) && currentUser.roles.includes('admin')) || String(currentUser.role || '').toLowerCase() === 'admin');
+            try {
+                const loginResult = auth.login(email, password);
+                const currentUser = getUserFromAuthResult(loginResult);
+                const isAdmin = currentUser && ((Array.isArray(currentUser.roles) && currentUser.roles.includes('admin')) || String(currentUser.role || '').toLowerCase() === 'admin');
 
-            if (currentUser && String(currentUser.role || '') === 'provider') {
-                if (startProviderStripeOnboarding(currentUser)) {
-                    return;
+                if (currentUser && String(currentUser.role || '') === 'provider') {
+                    if (startProviderStripeOnboarding(currentUser)) {
+                        return;
+                    }
                 }
-            }
 
-            closeLoginModal();
-            
-            // Check if we're redirecting after form submission
-            const pendingQuote = sessionStorage.getItem('pending_quote_submission') || localStorage.getItem('pending_quote_submission');
-            if (pendingQuote) {
-                sessionStorage.removeItem('pending_quote_submission');
-                localStorage.removeItem('pending_quote_submission');
-                showConfirmationModal();
-            } else {
-                if (isAdmin) {
-                    sessionStorage.removeItem('anytransport_auth_return_url');
-                    window.location.href = 'dashboard.html#verification-review';
-                    return;
+                closeLoginModal();
+
+                // Check if we're redirecting after form submission
+                const pendingQuote = sessionStorage.getItem('pending_quote_submission') || localStorage.getItem('pending_quote_submission');
+                if (pendingQuote) {
+                    sessionStorage.removeItem('pending_quote_submission');
+                    localStorage.removeItem('pending_quote_submission');
+                    showConfirmationModal();
+                } else {
+                    if (isAdmin) {
+                        sessionStorage.removeItem('anytransport_auth_return_url');
+                        window.location.href = 'dashboard.html#verification-review';
+                        return;
+                    }
+                    const returnUrl = sessionStorage.getItem('anytransport_auth_return_url');
+                    if (returnUrl) {
+                        sessionStorage.removeItem('anytransport_auth_return_url');
+                        window.location.href = returnUrl;
+                        return;
+                    }
+                    // Stay on the current page so the landing page remains the default.
                 }
-                const returnUrl = sessionStorage.getItem('anytransport_auth_return_url');
-                if (returnUrl) {
-                    sessionStorage.removeItem('anytransport_auth_return_url');
-                    window.location.href = returnUrl;
-                    return;
+            } catch (error) {
+                const message = error && error.message ? error.message : 'Unable to log in.';
+                const notice = document.getElementById('login-modal-notice');
+                if (notice) {
+                    notice.textContent = message;
+                    notice.style.display = 'block';
+                } else {
+                    alert(message);
                 }
-                // Stay on the current page so the landing page remains the default.
             }
         }
     });
