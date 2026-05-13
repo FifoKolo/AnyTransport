@@ -372,6 +372,46 @@ function normalize_user($user) {
         $normalized['muteInviteEmails'] = false;
     }
 
+    // Keep paymentMethods and legacy flat flags aligned so the provider profile UI persists reliably.
+    $pm = isset($normalized['paymentMethods']) && is_array($normalized['paymentMethods']) ? $normalized['paymentMethods'] : array();
+    foreach (array('cash', 'cheque', 'visa', 'mastercard', 'paypal', 'americanExpress', 'bankTransfer') as $pmKey) {
+        if (!array_key_exists($pmKey, $pm)) {
+            $pm[$pmKey] = false;
+        } else {
+            $pm[$pmKey] = !empty($pm[$pmKey]);
+        }
+    }
+    if (!empty($normalized['acceptsCash']) || !empty($normalized['cash'])) {
+        $pm['cash'] = true;
+    }
+    if (!empty($normalized['cheque'])) {
+        $pm['cheque'] = true;
+    }
+    if (!empty($normalized['visa'])) {
+        $pm['visa'] = true;
+    }
+    if (!empty($normalized['mastercard'])) {
+        $pm['mastercard'] = true;
+    }
+    if (!empty($normalized['paypal'])) {
+        $pm['paypal'] = true;
+    }
+    if (!empty($normalized['americanExpress'])) {
+        $pm['americanExpress'] = true;
+    }
+    if (!empty($normalized['bankTransfer'])) {
+        $pm['bankTransfer'] = true;
+    }
+    $normalized['paymentMethods'] = $pm;
+    $normalized['acceptsCash'] = !empty($pm['cash']);
+    $normalized['cash'] = !empty($pm['cash']);
+    $normalized['cheque'] = !empty($pm['cheque']);
+    $normalized['visa'] = !empty($pm['visa']);
+    $normalized['mastercard'] = !empty($pm['mastercard']);
+    $normalized['paypal'] = !empty($pm['paypal']);
+    $normalized['americanExpress'] = !empty($pm['americanExpress']);
+    $normalized['bankTransfer'] = !empty($pm['bankTransfer']);
+
     return $normalized;
 }
 
@@ -894,6 +934,27 @@ function find_user_by_email($users, $email) {
         }
     }
     return null;
+}
+
+function message_contains_contact_details($text) {
+    $value = trim((string) $text);
+    if ($value === '') {
+        return false;
+    }
+
+    $patterns = array(
+        '/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i',
+        '/(?:\+?\d[\d\s().\-]{6,}\d)/',
+        '/(?:https?:\/\/|www\.)\S+/i',
+        '/\b(?:whatsapp|telegram|viber|wechat|snapchat|instagram|facebook|messenger|discord|skype|call me|text me)\b/i'
+    );
+
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $value)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function update_user_record(&$store, $userId, $updates) {
@@ -2624,13 +2685,17 @@ switch ($action) {
         if ($toUserId === '' || $text === '') {
             send_json(array('ok' => false, 'error' => 'Message must include toUserId and text.'), 400);
         }
+        $messageTitle = trim((string) ($message['title'] ?? ''));
+        if (message_contains_contact_details($text) || message_contains_contact_details($messageTitle)) {
+            send_json(array('ok' => false, 'error' => 'Contact details are not allowed in customer/provider messages.'), 422);
+        }
 
         $savedMessage = array(
             'id' => !empty($message['id']) ? (string) $message['id'] : make_id('msg'),
             'fromUserId' => $fromUserId,
             'toUserId' => $toUserId,
             'text' => $text,
-            'title' => trim((string) ($message['title'] ?? '')) ?: mb_substr($text, 0, 50),
+            'title' => $messageTitle !== '' ? $messageTitle : mb_substr($text, 0, 50),
             'createdAt' => !empty($message['createdAt']) ? (string) $message['createdAt'] : gmdate('c')
         );
 
@@ -2730,6 +2795,9 @@ switch ($action) {
 
         if ($fromEmail === '' || $to === '' || $text === '') {
             send_json(array('ok' => false, 'error' => 'Missing inbound email fields.'), 400);
+        }
+        if (message_contains_contact_details($text) || message_contains_contact_details($subject)) {
+            send_json(array('ok' => false, 'error' => 'Contact details are not allowed in customer/provider messages.'), 422);
         }
 
         // extract token from to address (reply+TOKEN@domain)

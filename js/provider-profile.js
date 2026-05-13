@@ -136,11 +136,33 @@
     function renderProvider(u) {
         setText('provider-name', firstText(u.businessName, u.name, u.nickname, u.username, u.email));
         setText('provider-role', u.role ? capitalize(String(u.role)) : 'Transport Provider');
-        setText('provider-description', firstText(u.description, u.businessDescription, u.about, 'No description provided.'));
-        setText('provider-city', firstText(u.city, u.town, u.location, 'Not provided'));
-        const contact = revealContact(u) || 'Not provided';
-        setText('provider-contact', contact);
-        setText('provider-about', firstText(u.bio, u.summary, '—'));
+        const descEl = document.getElementById('provider-description');
+        const descText = firstText(u.description, u.businessDescription, u.about, u.bio, u.summary, '');
+        if (descEl) {
+            if (descText) {
+                descEl.innerHTML = '<p style="margin:0;">' + escapeHtml(descText) + '</p>';
+            } else {
+                descEl.innerHTML = '<p class="provider-empty-hint" style="margin:0;">No business description yet. Add one in the editor below to help customers choose you with confidence.</p>';
+            }
+        }
+        const loc = firstText(u.city, u.town, u.location, '');
+        const cityEl = document.getElementById('provider-city');
+        if (cityEl) {
+            if (loc) cityEl.textContent = loc;
+            else cityEl.innerHTML = '<span class="provider-empty-hint">Not added yet</span>';
+        }
+        const contact = revealContact(u) || '';
+        const contactEl = document.getElementById('provider-contact');
+        if (contactEl) {
+            if (contact) contactEl.textContent = contact;
+            else contactEl.innerHTML = '<span class="provider-empty-hint">Not provided</span>';
+        }
+        const aboutCombined = firstText(u.bio, u.summary, descText, '');
+        const aboutEl = document.getElementById('provider-about');
+        if (aboutEl) {
+            if (aboutCombined) aboutEl.textContent = aboutCombined;
+            else aboutEl.innerHTML = '<span class="provider-empty-hint">Tell customers what makes your service reliable and professional.</span>';
+        }
 
         renderServices(u);
         renderPayments(u);
@@ -180,29 +202,56 @@
         if (!el) return;
         const services = u.services || u.categories || u.skills || [];
         if (Array.isArray(services) && services.length) {
-            el.innerHTML = '<ul>' + services.map(s => '<li>' + escapeHtml(String(s)) + '</li>').join('') + '</ul>';
+            el.innerHTML = '<ul class="provider-services-list">' + services.map(s => '<li>' + escapeHtml(String(s)) + '</li>').join('') + '</ul>';
             return;
         }
-        // try to infer from user fields
-        const text = firstText(u.service, u.specialities, 'Not provided');
-        el.textContent = String(text || 'Not provided');
+        const text = firstText(u.service, u.specialities, '');
+        if (text) {
+            el.textContent = String(text);
+            return;
+        }
+        el.innerHTML = '<span class="provider-empty-hint">Add specialties in the editor below so customers see what you offer.</span>';
+    }
+
+    function paymentMethodLabel(key) {
+        const map = {
+            cash: 'Cash',
+            cheque: 'Cheque',
+            visa: 'Visa',
+            mastercard: 'Mastercard',
+            paypal: 'PayPal',
+            americanExpress: 'American Express',
+            bankTransfer: 'Bank transfer'
+        };
+        return map[key] || capitalize(String(key || '').replace(/([A-Z])/g, ' $1').trim());
     }
 
     function renderPayments(u) {
         const el = document.getElementById('provider-payments');
         if (!el) return;
         const pm = u.paymentMethods || {};
-        if (typeof pm === 'object' && Object.keys(pm).length) {
+        if (typeof pm === 'object' && pm !== null && Object.keys(pm).length) {
             const parts = [];
-            Object.keys(pm).forEach(function (k) { if (pm[k]) parts.push(capitalize(k)); });
-            el.textContent = parts.length ? parts.join(', ') : 'Not provided';
-            return;
+            Object.keys(pm).forEach(function (k) {
+                if (pm[k]) parts.push(paymentMethodLabel(k));
+            });
+            if (parts.length) {
+                el.textContent = parts.join(' · ');
+                return;
+            }
         }
         const inferred = [];
-        if (u.acceptsCash) inferred.push('Cash');
+        if (u.acceptsCash || u.cash) inferred.push('Cash');
         if (u.paypal) inferred.push('PayPal');
-        if (u.card || u.visa) inferred.push('Card');
-        el.textContent = inferred.length ? inferred.join(', ') : 'Not provided';
+        if (u.card || u.visa || u.mastercard) inferred.push('Card');
+        if (u.cheque) inferred.push('Cheque');
+        if (u.bankTransfer) inferred.push('Bank transfer');
+        if (u.americanExpress) inferred.push('American Express');
+        if (inferred.length) {
+            el.textContent = inferred.join(' · ');
+            return;
+        }
+        el.innerHTML = '<span class="provider-empty-hint">Select how you get paid in the editor below.</span>';
     }
 
     function renderPhotos(u) {
@@ -238,27 +287,35 @@
         root.innerHTML = '';
 
         const reviewStatus = String(u.identityReviewStatus || '').trim();
-        const reviewLabel = reviewStatus === 'approved'
-            ? 'Verified by AnyTransport'
-            : reviewStatus === 'rejected'
-                ? 'Identity review rejected'
-                : 'Identity review pending';
         const statusBadge = document.createElement('div');
-        statusBadge.className = 'profile-value';
-        statusBadge.style.marginBottom = '8px';
-        statusBadge.textContent = reviewLabel;
+        statusBadge.style.marginBottom = '10px';
+        if (reviewStatus === 'approved') {
+            statusBadge.className = 'provider-verified-badge';
+            statusBadge.innerHTML = '<span aria-hidden="true">\u2713</span> Verified by AnyTransport';
+        } else if (reviewStatus === 'rejected') {
+            statusBadge.className = 'provider-verified-badge provider-verified-badge--rejected';
+            statusBadge.textContent = 'Identity review rejected';
+        } else {
+            statusBadge.className = 'provider-verified-badge provider-verified-badge--pending';
+            statusBadge.textContent = 'Verification pending — complete onboarding in your dashboard';
+        }
         root.appendChild(statusBadge);
 
-        const btnMessage = document.createElement('a');
-        btnMessage.className = 'btn btn-outline';
-        btnMessage.href = 'messages.html?to=' + encodeURIComponent(u.id);
-        btnMessage.textContent = 'Message Provider';
-        root.appendChild(btnMessage);
+        const viewer = getViewer();
+        const isOwn = viewer && String(viewer.id) === String(u.id);
+
+        if (!isOwn) {
+            const btnMessage = document.createElement('a');
+            btnMessage.className = 'btn btn-outline';
+            btnMessage.href = 'messages.html?to=' + encodeURIComponent(u.id);
+            btnMessage.textContent = 'Message provider';
+            root.appendChild(btnMessage);
+        }
 
         const btnListings = document.createElement('a');
         btnListings.className = 'btn btn-primary';
         btnListings.href = 'dashboard.html?provider=' + encodeURIComponent(u.id);
-        btnListings.textContent = 'View Listings';
+        btnListings.textContent = isOwn ? 'My listings' : 'View listings';
         root.appendChild(btnListings);
     }
 
@@ -316,10 +373,10 @@
             '    </div>',
             '  </div>',
             '<div class="profile-workspace">',
+            '  <form id="provider-profile-form" class="profile-editor-form profile-workspace-form" novalidate>',
             '  <div class="profile-workspace-grid">',
             '    <div class="profile-workspace-left">',
             '      <h3 class="profile-section-title">My details</h3>',
-            '      <form id="provider-profile-form" class="profile-editor-form">',
             '        <div class="profile-form-row">',
             '          <div class="profile-form-label">Business name:</div>',
             '          <div>',
@@ -331,15 +388,15 @@
             '          <div class="profile-form-label">Business description:</div>',
             '          <div>',
             '            <textarea id="profile-about" class="form-input" rows="7"' + disabledAttr + '>' + escapeHtml(firstText(u.description, u.businessDescription, u.about, u.bio, u.summary, '')) + '</textarea>',
-            '            <div class="profile-help">You have 400 words left</div>',
+            '            <div id="profile-about-wordcount" class="profile-help">Up to 400 words</div>',
             '          </div>',
             '        </div>',
             '        <div class="profile-form-row profile-upload-card">',
             '          <div class="profile-form-label">Photos</div>',
             '          <div>',
-            '            <div class="profile-help">Upload an image, formats accepted are JPEG and GIF (max file size: 8MB)</div>',
+            '            <div class="profile-help">Upload images (JPEG, PNG, GIF, WebP — max 8MB each)</div>',
             '            <div id="profile-photo-previews"></div>',
-            isEditable ? '            <label class="profile-button" for="profile-photo-input" style="cursor:pointer; margin-top:10px;">BROWSE</label>' : '            <span class="profile-button" style="margin-top:10px; opacity:.65; cursor:not-allowed;">BROWSE</span>',
+            isEditable ? '            <label class="profile-button" for="profile-photo-input" style="cursor:pointer; margin-top:10px;">Browse files</label>' : '            <span class="profile-button" style="margin-top:10px; opacity:.65; cursor:not-allowed;">Browse files</span>',
             '            <input id="profile-photo-input" type="file" accept="image/*" multiple style="display:none;"' + disabledAttr + '>',
             '          </div>',
             '        </div>',
@@ -361,18 +418,20 @@
             '          <div class="profile-form-label">Website</div>',
             '          <div><input id="profile-website" class="form-input" type="url" value="' + escapeAttribute(firstText(u.website, u.url, '')) + '"' + disabledAttr + '></div>',
             '        </div>',
-            '        <div class="profile-footer-actions" aria-hidden="true"></div>',
+            '        <div class="profile-footer-actions">',
+            '          <span id="profile-save-status" class="profile-save-status" aria-live="polite"></span>',
+            '        </div>',
             '    </div>',
             '    <div class="profile-workspace-right">',
             '      <h3 class="profile-section-title">Payment methods you accept</h3>',
             '      <div class="profile-check-grid">',
-            buildCheckbox('cash', 'Cash', paymentMethods.cash),
-            buildCheckbox('cheque', 'Cheque', paymentMethods.cheque),
-            buildCheckbox('visa', 'Visa card', paymentMethods.visa),
-            buildCheckbox('mastercard', 'Mastercard', paymentMethods.mastercard),
-            buildCheckbox('paypal', 'Paypal', paymentMethods.paypal),
-            buildCheckbox('americanExpress', 'American Express', paymentMethods.americanExpress),
-            buildCheckbox('bankTransfer', 'Bank Transfer', paymentMethods.bankTransfer),
+            buildCheckbox('cash', 'Cash', paymentMethods.cash, disabledAttr),
+            buildCheckbox('cheque', 'Cheque', paymentMethods.cheque, disabledAttr),
+            buildCheckbox('visa', 'Visa card', paymentMethods.visa, disabledAttr),
+            buildCheckbox('mastercard', 'Mastercard', paymentMethods.mastercard, disabledAttr),
+            buildCheckbox('paypal', 'Paypal', paymentMethods.paypal, disabledAttr),
+            buildCheckbox('americanExpress', 'American Express', paymentMethods.americanExpress, disabledAttr),
+            buildCheckbox('bankTransfer', 'Bank Transfer', paymentMethods.bankTransfer, disabledAttr),
             '      </div>',
             '      <h3 class="profile-section-title" style="margin-top:20px;">Jobs you specialise in</h3>',
             '      <div class="profile-muted">Select the categories you specialise in. Please limit to your top 8 (only due to space - it won\'t affect anything). Leaving them blank we will automatically use your job history.</div>',
@@ -387,25 +446,19 @@
             buildCheckbox('blockInvites', 'Stop allowing customers to invite me to jobs', !!u.blockInvites, disabledAttr),
             buildCheckbox('muteEmails', 'Stop sending me job invitation emails, but allow customers to invite me', !!u.muteInviteEmails, disabledAttr),
             '      </div>',
-            '      </form>',
             '    </div>',
             '  </div>',
+            '  </form>',
+            '</div>',
             '</div>'
         ].join('');
 
         const form = document.getElementById('provider-profile-form');
         const photoInput = document.getElementById('profile-photo-input');
         const previewRoot = document.getElementById('profile-photo-previews');
-        const saveBadge = root.querySelector('.profile-pill');
-        const checkboxAutosaveSelectors = [
-            'input[type="checkbox"]',
-            '#profile-business-name',
-            '#profile-about',
-            '#profile-company-type',
-            '#profile-city',
-            '#profile-contact',
-            '#profile-website'
-        ];
+        const saveStatusEl = document.getElementById('profile-save-status');
+        const aboutField = document.getElementById('profile-about');
+        const aboutWordCountEl = document.getElementById('profile-about-wordcount');
         let lastSavedSignature = '';
 
         function renderPhotoPreviews() {
@@ -443,6 +496,7 @@
                 contact: String(document.getElementById('profile-contact')?.value || '').trim(),
                 website: String(document.getElementById('profile-website')?.value || '').trim(),
                 description: String(document.getElementById('profile-about')?.value || '').trim(),
+                businessDescription: String(document.getElementById('profile-about')?.value || '').trim(),
                 about: String(document.getElementById('profile-about')?.value || '').trim(),
                 services: services,
                 categories: services,
@@ -471,12 +525,23 @@
             return payloadSignature(buildPayload()) !== lastSavedSignature;
         }
 
-        function setSaveBadge(text, isError) {
-            if (!saveBadge) return;
-            saveBadge.textContent = text;
-            saveBadge.style.background = isError ? '#fee2e2' : '';
-            saveBadge.style.color = isError ? '#991b1b' : '';
-            saveBadge.style.borderColor = isError ? '#fecaca' : '';
+        function setSaveBadge(text, state) {
+            if (!saveStatusEl) return;
+            saveStatusEl.textContent = text || '';
+            saveStatusEl.classList.remove('is-saving', 'is-error');
+            if (state === 'error') saveStatusEl.classList.add('is-error');
+            else if (state === 'saving') saveStatusEl.classList.add('is-saving');
+        }
+
+        function updateAboutWordCount() {
+            if (!aboutField || !aboutWordCountEl) return;
+            const raw = String(aboutField.value || '');
+            const words = raw.trim() ? raw.trim().split(/\s+/).length : 0;
+            const maxWords = 400;
+            const left = Math.max(0, maxWords - words);
+            aboutWordCountEl.textContent = words > maxWords
+                ? (words - maxWords) + ' words over limit — shorten to save cleanly'
+                : left + ' words remaining (max ' + maxWords + ')';
         }
 
         function saveProfile(options) {
@@ -487,11 +552,11 @@
             }
 
             if (signature === lastSavedSignature) {
-                setSaveBadge('Saved just now', false);
+                setSaveBadge('All changes saved', 'saved');
                 return Promise.resolve();
             }
 
-            setSaveBadge('Saving...', false);
+            setSaveBadge('Saving…', 'saving');
             try {
                 console.info('[Provider Profile] autosave payload', {
                     userId: payload.id,
@@ -502,15 +567,39 @@
                 });
             } catch (_err) {}
 
-            return Promise.resolve(window.anytransportApi.saveUser(payload)).then(function () {
+            return Promise.resolve(window.anytransportApi.saveUser(payload)).then(function (serverUser) {
                 lastSavedSignature = signature;
-                setSaveBadge('Saved just now', false);
+                setSaveBadge('All changes saved', 'saved');
+                if (serverUser && typeof serverUser === 'object' && serverUser.id) {
+                    Object.assign(u, serverUser);
+                    try {
+                        renderPayments(u);
+                        renderServices(u);
+                    } catch (_e) {}
+                    if (window.auth && typeof window.auth.getUser === 'function') {
+                        const viewer = getViewer();
+                        if (viewer && String(viewer.id) === String(serverUser.id)) {
+                            const users = typeof window.auth.loadUsers === 'function' ? window.auth.loadUsers() : [];
+                            const merged = typeof window.auth.normalizeUserRecord === 'function'
+                                ? window.auth.normalizeUserRecord(Object.assign({}, viewer, serverUser), users)
+                                : Object.assign({}, viewer, serverUser);
+                            window.auth.currentUser = merged;
+                            if (typeof window.auth.setStoredCurrentUser === 'function') {
+                                window.auth.setStoredCurrentUser(merged);
+                            }
+                            if (typeof window.auth.initAuth === 'function') {
+                                window.auth.initAuth();
+                            }
+                        }
+                    }
+                }
                 if (!options || !options.silent) {
-                    alert('Profile updated successfully.');
-                    window.location.reload();
+                    try {
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    } catch (_e) {}
                 }
             }).catch(function (error) {
-                setSaveBadge('Save failed', true);
+                setSaveBadge(error && error.message ? error.message : 'Save failed — try again', 'error');
                 throw error;
             });
         }
@@ -527,22 +616,6 @@
                     console.error(error);
                 });
             }, 150);
-        }
-
-        function bindAutosave(node) {
-            if (!node) return;
-            node.addEventListener('change', function () {
-                if (node.tagName === 'INPUT' && node.type === 'checkbox') {
-                    saveProfile({ silent: true }).catch(function (error) {
-                        console.error(error);
-                    });
-                    return;
-                }
-                queueAutosave();
-            });
-            if ((node.tagName === 'INPUT' && node.type === 'text') || node.tagName === 'TEXTAREA') {
-                node.addEventListener('input', queueAutosave);
-            }
         }
 
         if (photoInput && isEditable) {
@@ -580,32 +653,35 @@
 
         renderPhotoPreviews();
         lastSavedSignature = payloadSignature(buildPayload());
-
-        if (isEditable) {
-            root.querySelectorAll(checkboxAutosaveSelectors.join(',')).forEach(bindAutosave);
-        }
-        root.addEventListener('change', function (event) {
-            if (!isEditable) return;
-            const target = event.target;
-            if (target && target.matches && target.matches('input[data-service-label], #cash, #cheque, #visa, #mastercard, #paypal, #americanExpress, #bankTransfer, #blockInvites, #muteEmails')) {
-                saveProfile({ silent: true }).catch(function (error) {
-                    console.error(error);
-                });
-                return;
-            }
-            if (event.target && event.target.matches && (event.target.matches('#profile-business-name') || event.target.matches('#profile-about') || event.target.matches('#profile-company-type') || event.target.matches('#profile-city') || event.target.matches('#profile-contact') || event.target.matches('#profile-website'))) {
-                queueAutosave();
-            }
-        });
+        updateAboutWordCount();
 
         if (form && isEditable) {
+            form.addEventListener('change', function (event) {
+                const target = event.target;
+                if (!target) return;
+                if (target.matches && target.matches('input[type="checkbox"]')) {
+                    saveProfile({ silent: true }).catch(function (error) {
+                        console.error(error);
+                    });
+                    return;
+                }
+                queueAutosave();
+            });
+            form.addEventListener('input', function (event) {
+                const target = event.target;
+                if (!target) return;
+                if (target.id === 'profile-about') {
+                    updateAboutWordCount();
+                }
+                if (target.matches && target.matches('#profile-business-name, #profile-about, #profile-company-type, #profile-city, #profile-contact, #profile-website')) {
+                    queueAutosave();
+                }
+            });
             form.addEventListener('submit', function (event) {
                 event.preventDefault();
-                try {
-                    saveProfile({ silent: false });
-                } catch (error) {
+                saveProfile({ silent: false }).catch(function (error) {
                     alert(error && error.message ? error.message : 'Unable to save profile.');
-                }
+                });
             });
         }
     }
@@ -626,8 +702,8 @@
     function normalizePaymentMethods(u) {
         const methods = u && typeof u.paymentMethods === 'object' && u.paymentMethods ? u.paymentMethods : {};
         return {
-            cash: !!(methods.cash || u.acceptsCash),
-            cheque: !!methods.cheque,
+            cash: !!(methods.cash || u.acceptsCash || u.cash),
+            cheque: !!(methods.cheque || u.cheque),
             visa: !!(methods.visa || u.visa),
             mastercard: !!(methods.mastercard || u.mastercard),
             paypal: !!(methods.paypal || u.paypal),

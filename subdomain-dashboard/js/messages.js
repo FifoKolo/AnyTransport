@@ -28,6 +28,18 @@
         return '';
     }
 
+    function containsContactDetails(text) {
+        var value = String(text == null ? '' : text).trim();
+        if (!value) return false;
+        var checks = [
+            /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
+            /(?:\+?\d[\d\s().-]{6,}\d)/,
+            /(?:https?:\/\/|www\.)\S+/i,
+            /\b(?:whatsapp|telegram|viber|wechat|snapchat|instagram|facebook|messenger|discord|skype|call me|text me)\b/i
+        ];
+        return checks.some(function (pattern) { return pattern.test(value); });
+    }
+
     function getAllBids() {
         if (!window.anytransportApi || typeof window.anytransportApi.getBids !== 'function') return [];
         try {
@@ -169,6 +181,10 @@
             var title = String(titleInput && titleInput.value || '').trim();
             if (!text) {
                 if (status) status.textContent = 'Write a message before sending.';
+                return;
+            }
+            if (containsContactDetails(text) || containsContactDetails(title)) {
+                if (status) status.textContent = 'Contact details are not allowed in customer/provider messages.';
                 return;
             }
 

@@ -18,21 +18,38 @@
         .profile-page-switch .provider-mode-btn { flex: 1; border-right: 1px solid #cfddea; }
         .profile-page-switch .provider-mode-btn:last-child { border-right: 0; }
         .profile-page-switch .provider-mode-btn.active { background: linear-gradient(180deg, #1971a2 0%, #115b86 100%); color: #fff; box-shadow: inset 0 -1px 0 rgba(255,255,255,.12); }
-        .provider-profile { display: grid; grid-template-columns: minmax(0, 1.08fr) 390px; gap: 22px; align-items: start; }
-        .provider-card { background: #fff; padding: 20px; border-radius: 18px; box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08); border: 1px solid #e5edf5; }
-        .provider-header { display:flex; gap:16px; align-items:center; }
-        .provider-avatar { width:96px; height:96px; border-radius:18px; background: linear-gradient(180deg, #eaf3fb 0%, #d8e8f4 100%); display:flex; align-items:center; justify-content:center; font-size:28px; color:#0f5f8f; font-weight:800; box-shadow: inset 0 0 0 1px rgba(255,255,255,.55); }
-        .provider-name { font-size:20px; margin:0; color:#0f172a; letter-spacing:-0.01em; }
-        .provider-meta { color:#64748b; font-size:14px; margin-top:2px; }
+        .provider-profile { display: grid; grid-template-columns: minmax(0, 1.08fr) 360px; gap: 22px; align-items: start; }
+        .provider-card { background: #fff; padding: 22px 24px; border-radius: 18px; box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08); border: 1px solid #e5edf5; }
+        .provider-card--hero { background: linear-gradient(165deg, #ffffff 0%, #f4f9fd 55%, #eef5fb 100%); border-color: #d8e4ef; }
+        .provider-aside-card h3 { margin: 0 0 12px; font-size: 1rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; }
+        .provider-header { display:flex; gap:18px; align-items:flex-start; }
+        .provider-avatar { width:96px; height:96px; flex-shrink: 0; border-radius:18px; background: linear-gradient(180deg, #eaf3fb 0%, #d8e8f4 100%); display:flex; align-items:center; justify-content:center; font-size:28px; color:#0f5f8f; font-weight:800; box-shadow: inset 0 0 0 1px rgba(255,255,255,.55); }
+        .provider-name { font-size:22px; margin:0; color:#0f172a; letter-spacing:-0.01em; }
+        .provider-meta { color:#64748b; font-size:14px; margin-top:4px; }
+        .provider-verified-badge { display:inline-flex; align-items:center; gap:6px; margin-top:10px; padding:6px 12px; border-radius:999px; background:#ecfdf5; border:1px solid #a7f3d0; color:#047857; font-size:13px; font-weight:700; }
+        .provider-verified-badge--pending { background:#fffbeb; border-color:#fde68a; color:#b45309; }
+        .provider-verified-badge--rejected { background:#fef2f2; border-color:#fecaca; color:#b91c1c; }
+        .provider-lede { margin-top:14px; padding:14px 16px; border-radius:14px; background:#f8fafc; border:1px solid #e2e8f0; color:#334155; line-height:1.55; font-size:15px; }
+        .provider-lede:empty { display:none; }
+        .provider-details-grid { margin-top:18px; display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:14px 20px; }
+        .provider-detail-block .label { margin-top:0; font-size:12px; letter-spacing:0.04em; text-transform:uppercase; color:#64748b; }
+        .provider-detail-block .profile-value { margin-top:4px; font-size:15px; line-height:1.45; }
+        .provider-empty-hint { color:#94a3b8; font-style:italic; font-size:14px; }
+        .provider-services-list { margin:0; padding-left:1.15rem; color:#334155; line-height:1.55; }
+        .provider-services-list li { margin-bottom:4px; }
         .provider-photos { display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; }
         .provider-photos img { width:120px; height:80px; object-fit:cover; border-radius:10px; border:1px solid #dbe5ef; }
-        .profile-actions { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+        .profile-actions { margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
         .label { font-weight:700; color:#334155; margin-top:10px; display:block; }
         .profile-value { color:#1e293b; }
         .profile-editor-card { margin-top:0; }
-        .profile-editor-form { margin-top:12px; display:grid; gap:10px; }
+        .profile-editor-form { margin-top:0; display:block; width:100%; }
+        .profile-workspace-form .profile-workspace-grid { margin-top: 0; }
         .profile-editor-form .form-input { width:100%; box-sizing:border-box; }
         .profile-workspace { margin-top: 20px; width: 100%; }
+        .profile-save-status { font-size:13px; font-weight:700; color:#15803d; min-height:1.25em; }
+        .profile-save-status.is-saving { color:#2563eb; }
+        .profile-save-status.is-error { color:#b91c1c; }
         .profile-editor-shell { display: grid; gap: 16px; }
         .profile-editor-header { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; padding: 20px 22px; background: linear-gradient(135deg, #f8fbff 0%, #eef5fb 100%); border:1px solid #d8e4ef; border-radius: 18px; box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05); }
         .profile-editor-kicker { font-size: .8rem; letter-spacing: .14em; text-transform: uppercase; color:#3b82b6; font-weight:800; margin-bottom: 8px; }
@@ -139,39 +156,43 @@
         </section>
 
         <div class="provider-profile">
-            <div class="provider-card" id="provider-main">
+            <div class="provider-card provider-card--hero" id="provider-main">
                 <div class="provider-header">
                     <div class="provider-avatar" id="provider-avatar">P</div>
-                    <div>
+                    <div style="min-width:0;">
                         <h2 class="provider-name" id="provider-name">Loading...</h2>
                         <div class="provider-meta" id="provider-role">Transport Provider</div>
                         <div class="profile-actions" id="provider-actions"></div>
                     </div>
                 </div>
 
-                <div id="provider-description" style="margin-top:16px; color:#333;"> </div>
+                <div id="provider-description" class="provider-lede" aria-live="polite"></div>
 
                 <div id="provider-photos" class="provider-photos" aria-hidden="true"></div>
 
-                <div id="provider-details" style="margin-top:16px;">
-                    <span class="label">Location</span>
-                    <div class="profile-value" id="provider-city">—</div>
-
-                    <span class="label">Contact</span>
-                    <div class="profile-value" id="provider-contact">—</div>
-
-                    <span class="label">About</span>
-                    <div class="profile-value" id="provider-about">—</div>
+                <div id="provider-details" class="provider-details-grid">
+                    <div class="provider-detail-block">
+                        <span class="label">Location</span>
+                        <div class="profile-value" id="provider-city">—</div>
+                    </div>
+                    <div class="provider-detail-block">
+                        <span class="label">Contact</span>
+                        <div class="profile-value" id="provider-contact">—</div>
+                    </div>
+                    <div class="provider-detail-block" style="grid-column: 1 / -1;">
+                        <span class="label">About</span>
+                        <div class="profile-value" id="provider-about">—</div>
+                    </div>
                 </div>
             </div>
 
             <aside>
-                <div class="provider-card">
-                    <h3>Services & Skills</h3>
+                <div class="provider-card provider-aside-card">
+                    <h3>Services &amp; skills</h3>
                     <div id="provider-services">Loading…</div>
                 </div>
 
-                <div class="provider-card" style="margin-top:12px;">
+                <div class="provider-card provider-aside-card" style="margin-top:14px;">
                     <h3>Payment methods</h3>
                     <div id="provider-payments">—</div>
                 </div>
@@ -182,6 +203,6 @@
     </main>
 
     <script src="js/auth.js?v=20260503-6"></script>
-    <script src="js/provider-profile.js?v=20260428-1"></script>
+    <script src="js/provider-profile.js?v=20260513-1"></script>
 </body>
 </html>
