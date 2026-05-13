@@ -11,6 +11,15 @@
         custom: ''
     };
 
+    const DEFAULT_SEARCH_CATEGORY_INNERHTML = [
+        '<option value="">All categories</option>',
+        '<option value="house removal">House Removal</option>',
+        '<option value="office relocation">Office Relocation</option>',
+        '<option value="apartment move">Apartment Move</option>',
+        '<option value="single room move">Single Room Move</option>',
+        '<option value="man and van">Man &amp; Van</option>'
+    ].join('');
+
     const state = {
         activeProviderMode: 'dashboard',
         dashboardScope: 'watching',
@@ -1150,9 +1159,128 @@
         }
     }
 
+    function normalizeProfileSpecialtyLabel(value) {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/&/g, ' and ')
+            .replace(/[^a-z0-9]+/g, ' ')
+            .trim();
+    }
+
+    const PROFILE_SPECIALTY_SYNONYM_GROUPS = [
+        ['office removals', 'office relocation', 'office removal', 'office move'],
+        ['house removals', 'house removal', 'home removals', 'home removal'],
+        ['man power only', 'man and van', 'man with van', 'manpower only'],
+        ['specialist antiques', 'specialist and antiques', 'antiques'],
+        ['customized items', 'specialized items', 'custom items'],
+        ['caravan trailer transport', 'caravan transport', 'trailer transport'],
+        ['campervan car transport', 'car transport', 'campervan transport', 'vehicle transport'],
+        ['motorbike transport', 'motorbike', 'motorcycle'],
+        ['piano transport', 'piano'],
+        ['vehicle parts', 'vehicle part'],
+        ['pets', 'pet transport', 'pet'],
+        ['boats', 'boat transport', 'boat'],
+        ['clearance', 'house clearance'],
+        ['industrial', 'industrial removals'],
+        ['freight', 'freight forwarding']
+    ];
+
+    function profileSpecialtyNormalizedMatchesBlob(normSpec, blob) {
+        if (!normSpec || !blob) return false;
+        if (blob.includes(normSpec)) return true;
+        const words = normSpec.split(' ').filter((w) => w.length > 2);
+        if (words.length && words.every((w) => blob.includes(w))) return true;
+        for (let i = 0; i < PROFILE_SPECIALTY_SYNONYM_GROUPS.length; i += 1) {
+            const group = PROFILE_SPECIALTY_SYNONYM_GROUPS[i];
+            if (group.indexOf(normSpec) < 0) continue;
+            return group.some((g) => blob.includes(g));
+        }
+        return false;
+    }
+
+    function collectProviderProfileSpecialties(user) {
+        if (!user || typeof user !== 'object') return [];
+        const raw = [];
+        const pushUnique = (entry) => {
+            const v = String(entry || '').trim();
+            if (!v) return;
+            const lower = v.toLowerCase();
+            if (raw.some((existing) => String(existing).toLowerCase() === lower)) return;
+            raw.push(v);
+        };
+        ['services', 'categories', 'skills'].forEach((key) => {
+            const arr = user[key];
+            if (Array.isArray(arr)) arr.forEach(pushUnique);
+        });
+        if (typeof user.service === 'string' && user.service.trim()) {
+            user.service.split(/[,;]+/).map((s) => s.trim()).filter(Boolean).forEach(pushUnique);
+        }
+        if (typeof user.specialities === 'string' && user.specialities.trim()) {
+            user.specialities.split(/[,;]+/).map((s) => s.trim()).filter(Boolean).forEach(pushUnique);
+        }
+        return raw.filter((label) => normalizeProfileSpecialtyLabel(label) !== 'other');
+    }
+
+    function getQuoteProfileSpecialtyBlob(quote) {
+        const parts = [
+            quote && quote.serviceType,
+            quote && quote.service,
+            quote && quote.selectedService,
+            quote && quote.serviceName,
+            quote && quote.transportType,
+            quote && quote.itemType,
+            quote && quote.itemDescription,
+            quote && quote.title,
+            quote && quote.category,
+            getQuoteTitle(quote),
+            quote && quote.formId,
+            quote && quote.overviewNotes,
+            quote && quote.summaryNotes
+        ];
+        return normalizeProfileSpecialtyLabel(parts.filter(Boolean).join(' '));
+    }
+
+    function quoteMatchesProviderProfileSpecialties(quote, user) {
+        const specs = collectProviderProfileSpecialties(user);
+        if (!specs.length) return true;
+        const blob = getQuoteProfileSpecialtyBlob(quote);
+        if (!blob) return true;
+        return specs.some((label) => profileSpecialtyNormalizedMatchesBlob(normalizeProfileSpecialtyLabel(label), blob));
+    }
+
+    function syncProviderSearchCategorySelect(user) {
+        const sel = document.getElementById('search-category');
+        if (!sel) return;
+        const previous = String(sel.value || '').trim().toLowerCase();
+        const specs = collectProviderProfileSpecialties(user);
+        if (specs.length) {
+            let html = '<option value="">All categories (your specialties)</option>';
+            specs.forEach((label) => {
+                const val = normalizeProfileSpecialtyLabel(label).replace(/\s+/g, ' ').trim();
+                html += '<option value="' + escapeHtml(val) + '">' + escapeHtml(label) + '</option>';
+            });
+            sel.innerHTML = html;
+        } else {
+            sel.innerHTML = DEFAULT_SEARCH_CATEGORY_INNERHTML;
+        }
+        let matched = false;
+        Array.prototype.forEach.call(sel.options, (opt) => {
+            if (String(opt.value || '').trim().toLowerCase() === previous) matched = true;
+        });
+        if (matched && previous) {
+            sel.value = previous;
+            state.searchCategory = previous;
+        } else {
+            sel.value = '';
+            state.searchCategory = '';
+        }
+    }
+
     function renderProviderListings(user) {
         const container = document.getElementById('provider-listings');
         if (!container) return;
+
+        syncProviderSearchCategorySelect(user);
 
         const quotes = getAllQuotes();
         const bids = getAllBids();
@@ -1169,6 +1297,8 @@
         updateDashboardScopeCounts(watchedQuoteIds.size, myBidQuoteIds.size, wonQuoteIds.size);
 
         const searchFilteredQuotes = quotes.filter((quote) => {
+            if (!quoteMatchesProviderProfileSpecialties(quote, user)) return false;
+
             if (state.searchListingId && !matchesListingIdFilter(quote, state.searchListingId)) return false;
 
             if (state.searchCategory) {
@@ -1296,11 +1426,15 @@
             const modeLabel = state.activeProviderMode === 'dashboard'
                 ? ('No listings in ' + state.dashboardScope + ' right now')
                 : 'No listings match your search filters';
+            const profileSpecs = collectProviderProfileSpecialties(user);
+            const profileHint = profileSpecs.length && state.activeProviderMode !== 'dashboard'
+                ? '<p class="muted-text" style="margin-top:10px">Open jobs are limited to the types you selected under <strong>Jobs you specialise in</strong> on your <a href="../provider-profile.html">Profile</a>. Clear the category filter or add specialties there to see more listings.</p>'
+                : '<p>Try a different tab or adjust your filters.</p>';
             container.innerHTML = [
                 header,
                 '<div class="empty-state">',
                 '<h3>' + escapeHtml(modeLabel) + '</h3>',
-                '<p>Try a different tab or adjust your filters.</p>',
+                profileHint,
                 '</div>'
             ].join('');
             return;

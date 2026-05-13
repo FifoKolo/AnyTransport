@@ -434,7 +434,7 @@
             buildCheckbox('bankTransfer', 'Bank Transfer', paymentMethods.bankTransfer, disabledAttr),
             '      </div>',
             '      <h3 class="profile-section-title" style="margin-top:20px;">Jobs you specialise in</h3>',
-            '      <div class="profile-muted">Select the categories you specialise in. Please limit to your top 8 (only due to space - it won\'t affect anything). Leaving them blank we will automatically use your job history.</div>',
+            '      <div class="profile-muted">These specialties also control which open jobs appear on your provider dashboard. Select the categories you specialise in. Please limit to your top 8 (only due to space - it won\'t affect anything). Leaving them blank we will automatically use your job history.</div>',
             '      <div class="profile-check-grid">',
             serviceOptions.map(function (option) {
                 return buildCheckbox('service_' + option.replace(/[^a-z0-9]+/ig, '_').toLowerCase(), option, serviceMatches(option, u), ' data-service-label="' + escapeAttribute(option) + '"' + disabledAttr);
