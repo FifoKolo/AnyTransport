@@ -1278,8 +1278,14 @@
         const pickupAddress = getPickupLabel(quote);
         const deliveryAddress = getDeliveryLabel(quote);
 
-        const pickupCoord = await geocodeAddress(pickupAddress);
-        const deliveryCoord = await geocodeAddress(deliveryAddress);
+        let pickupCoord = resolveQuoteCoordinates(quote, 'pickup');
+        let deliveryCoord = resolveQuoteCoordinates(quote, 'delivery');
+        if (!pickupCoord) {
+            pickupCoord = await geocodeAddress(pickupAddress);
+        }
+        if (!deliveryCoord) {
+            deliveryCoord = await geocodeAddress(deliveryAddress);
+        }
 
         const fallbackCenter = [-8.24389, 53.41291];
         const center = pickupCoord || deliveryCoord || fallbackCenter;
@@ -1312,7 +1318,15 @@
             }
 
             if (pickupCoord && deliveryCoord) {
-                await drawRouteLine(map, pickupCoord, deliveryCoord);
+                let routeGeometry = parseStoredRouteGeometry(quote);
+                if (!routeGeometry) {
+                    routeGeometry = await fetchRouteGeometry(pickupCoord, deliveryCoord);
+                }
+                if (routeGeometry) {
+                    drawRouteGeometry(map, routeGeometry);
+                } else {
+                    await drawRouteLine(map, pickupCoord, deliveryCoord);
+                }
             }
 
             if (pickupCoord && deliveryCoord) {
@@ -1324,13 +1338,31 @@
     }
 
     async function geocodeAddress(addressText) {
-        const query = String(addressText || '').trim();
-        if (!query || !window.mapboxgl || !mapboxgl.accessToken) return null;
+        const queries = buildGeocodeQueryVariants(addressText);
+        if (!queries.length || !window.mapboxgl || !mapboxgl.accessToken) return null;
 
+        for (let i = 0; i < queries.length; i += 1) {
+            const result = await geocodeAddressQuery(queries[i]);
+            if (result) return result;
+        }
+        return null;
+    }
+
+    function buildGeocodeQueryVariants(addressText) {
+        const base = String(addressText || '').trim();
+        if (!base || base.toLowerCase() === 'not provided') return [];
+        const variants = [base];
+        if (!/ireland|éire|\bie\b/i.test(base)) {
+            variants.push(base + ', Ireland');
+        }
+        return variants;
+    }
+
+    async function geocodeAddressQuery(query) {
         const url = 'https://api.mapbox.com/geocoding/v5/mapbox.places/' +
             encodeURIComponent(query) +
             '.json?access_token=' + encodeURIComponent(mapboxgl.accessToken) +
-            '&limit=1&country=ie&types=postcode,address,place';
+            '&limit=1&country=ie,gb&types=postcode,address,place,locality';
 
         try {
             const response = await fetch(url);
@@ -1343,6 +1375,11 @@
         } catch (_error) {
             return null;
         }
+    }
+
+    async function fetchRouteGeometry(fromCoord, toCoord) {
+        const route = await fetchRouteDetails(fromCoord, toCoord);
+        return route && route.geometry ? route.geometry : null;
     }
 
     async function drawRouteLine(map, fromCoord, toCoord) {
@@ -2215,7 +2252,7 @@
                 const floorItems = source[floorName];
                 if (!floorItems || typeof floorItems !== 'object') return;
                 Object.keys(floorItems).forEach(function (itemName) {
-                    addToFloorMap(pickupMap, floorName, itemName, floorItems[itemName]);
+                    addToFloorMap(pickupMap, floorName, normalizeAssignmentItemKey(itemName), floorItems[itemName]);
                 });
             });
         };
@@ -2245,15 +2282,17 @@
 
         if (assignments && typeof assignments === 'object') {
             Object.keys(assignments).forEach(function (itemKey) {
-                const baseName = String(itemKey || '').split('||')[0] || itemKey;
+                const baseName = normalizeAssignmentItemKey(itemKey);
                 const perFloor = assignments[itemKey];
-                if (!perFloor || typeof perFloor !== 'object') return;
+                if (!perFloor || typeof perFloor !== 'object' || !baseName) return;
 
                 Object.keys(perFloor).forEach(function (deliveryFloor) {
                     addToFloorMap(deliveryMap, deliveryFloor, baseName, perFloor[deliveryFloor]);
                 });
             });
         }
+
+        populatePickupInventoryFallback(quote, pickupMap, deliveryMap, addToFloorMap);
 
         const hasPickup = Object.keys(pickupMap).length > 0;
         const hasDelivery = Object.keys(deliveryMap).length > 0;
@@ -2512,23 +2551,25 @@
 
             const houseInventory = block && block.houseInventory;
             if (houseInventory && typeof houseInventory === 'object') {
-                collectFlatInventoryItems(houseInventory.items, function (item, qty) {
-                    addEntry('General', item, qty, pickupFloor, resolveDeliveryFloorForItem(quote, item));
+                const houseItems = firstNonEmptyObject(houseInventory.items, houseInventory.itemQuantities);
+                collectFlatInventoryItems(houseItems, function (item, qty) {
+                    addEntry('General', normalizeAssignmentItemKey(item), qty, pickupFloor, resolveDeliveryFloorForItem(quote, item));
                 });
 
                 collectNestedRoomItems(houseInventory.subRoomQuantities, function (room, item, qty) {
-                    addEntry(room, item, qty, pickupFloor, resolveDeliveryFloorForItem(quote, item));
+                    addEntry(room, normalizeAssignmentItemKey(item), qty, pickupFloor, resolveDeliveryFloorForItem(quote, item));
                 });
             }
 
             const officeInventory = block && block.officeInventory;
             if (officeInventory && typeof officeInventory === 'object') {
-                collectFlatInventoryItems(officeInventory.items, function (item, qty) {
-                    addEntry('Office', item, qty, pickupFloor, resolveDeliveryFloorForItem(quote, item));
+                const officeItems = firstNonEmptyObject(officeInventory.items, officeInventory.itemQuantities, officeInventory.quantities);
+                collectFlatInventoryItems(officeItems, function (item, qty) {
+                    addEntry('Office', normalizeAssignmentItemKey(item), qty, pickupFloor, resolveDeliveryFloorForItem(quote, item));
                 });
 
                 collectNestedRoomItems(officeInventory.subRoomQuantities, function (room, item, qty) {
-                    addEntry(room, item, qty, pickupFloor, resolveDeliveryFloorForItem(quote, item));
+                    addEntry(room, normalizeAssignmentItemKey(item), qty, pickupFloor, resolveDeliveryFloorForItem(quote, item));
                 });
             }
         });
@@ -2665,8 +2706,16 @@
             quote.pickupItemFloorAssignments,
             quote.pickupFloorAssignments
         );
-        if (assignments && itemKey && assignments[itemKey]) {
-            return firstText(assignments[itemKey]);
+        if (assignments && itemKey) {
+            if (assignments[itemKey]) {
+                return firstText(assignments[itemKey]);
+            }
+            const matchKey = Object.keys(assignments).find(function (key) {
+                return normalizeAssignmentItemKey(key).toLowerCase() === itemKey;
+            });
+            if (matchKey) {
+                return firstText(assignments[matchKey]);
+            }
         }
         return firstText(quote.pickupFloorSelect, quote.pickupFloor, quote.fromFloor);
     }
@@ -2679,15 +2728,23 @@
             quote.deliveryFloorAssignments,
             quote.floorAssignments
         );
-        if (assignments && itemKey && assignments[itemKey]) {
-            const assignment = assignments[itemKey];
-            if (assignment && typeof assignment === 'object') {
-                const firstFloor = Object.keys(assignment).find(function (floorKey) {
-                    return Number(assignment[floorKey]) > 0;
+        if (assignments && itemKey) {
+            let assignment = assignments[itemKey];
+            if (!assignment) {
+                const matchKey = Object.keys(assignments).find(function (key) {
+                    return normalizeAssignmentItemKey(key).toLowerCase() === itemKey;
                 });
-                if (firstFloor) return firstFloor;
+                if (matchKey) assignment = assignments[matchKey];
             }
-            return firstText(assignment);
+            if (assignment) {
+                if (assignment && typeof assignment === 'object') {
+                    const firstFloor = Object.keys(assignment).find(function (floorKey) {
+                        return Number(assignment[floorKey]) > 0;
+                    });
+                    if (firstFloor) return firstFloor;
+                }
+                return firstText(assignment);
+            }
         }
         return firstText(quote.deliveryFloorSelect, quote.deliveryFloor, quote.dropoffFloor);
     }
@@ -3140,8 +3197,15 @@
             mapboxgl.accessToken = ANYTRANSPORT_MAPBOX_TOKEN;
         }
 
-        geocodeAddress(pickupAddress).then(function (pickupCoord) {
-            return geocodeAddress(deliveryAddress).then(function (deliveryCoord) {
+        const pickupCoordPromise = resolveQuoteCoordinates(quote, 'pickup')
+            ? Promise.resolve(resolveQuoteCoordinates(quote, 'pickup'))
+            : geocodeAddress(pickupAddress);
+        const deliveryCoordPromise = resolveQuoteCoordinates(quote, 'delivery')
+            ? Promise.resolve(resolveQuoteCoordinates(quote, 'delivery'))
+            : geocodeAddress(deliveryAddress);
+
+        pickupCoordPromise.then(function (pickupCoord) {
+            return deliveryCoordPromise.then(function (deliveryCoord) {
                 const fallbackCenter = [-8.24389, 53.41291];
                 const center = pickupCoord || deliveryCoord || fallbackCenter;
 
@@ -3168,8 +3232,15 @@
                     }
 
                     if (pickupCoord && deliveryCoord) {
+                        const storedGeometry = parseStoredRouteGeometry(quote);
+                        if (storedGeometry) {
+                            drawRouteGeometry(map, storedGeometry);
+                        }
                         fetchRouteDetails(pickupCoord, deliveryCoord).then(function (routeDetails) {
                             renderInlineRouteDetails(routeDetails, pickupAddress, deliveryAddress);
+                            if (routeDetails && routeDetails.geometry) {
+                                drawRouteGeometry(map, routeDetails.geometry);
+                            }
                         });
                         map.fitBounds(bounds, { padding: 30, maxZoom: 12 });
                     } else if (!bounds.isEmpty()) {
@@ -3468,14 +3539,26 @@
             .replace(/\b\w/g, function (char) { return char.toUpperCase(); });
     }
 
-    function getPickupLabel(quote) {
+    function formatFullLocationLabel(quote, kind) {
+        const isPickup = kind === 'pickup';
+        const address = String(isPickup ? quote.pickupAddress : quote.deliveryAddress || '').trim();
+        const city = String(isPickup ? quote.pickupCity : quote.deliveryCity || '').trim();
+        const postcode = String(isPickup ? quote.pickupPostcode : quote.deliveryPostcode || '').trim();
+        const parts = [address, city, postcode].filter(Boolean);
+        if (parts.length) {
+            return parts.join(', ');
+        }
         return firstText(
-            quote.pickupAddress,
-            quote.pickupCity,
-            quote.pickupLocation,
-            quote.pickupTown,
+            isPickup ? quote.pickupLocation : quote.deliveryLocation,
+            isPickup ? quote.pickupTown : quote.deliveryTown,
+            isPickup ? quote.pickupAddress : quote.deliveryAddress,
+            isPickup ? quote.pickupCity : quote.deliveryCity,
             'Not provided'
         );
+    }
+
+    function getPickupLabel(quote) {
+        return formatFullLocationLabel(quote, 'pickup');
     }
 
     function getPickupDisplayLabel(quote) {
@@ -3486,13 +3569,113 @@
     }
 
     function getDeliveryLabel(quote) {
-        return firstText(
-            quote.deliveryAddress,
-            quote.deliveryCity,
-            quote.deliveryLocation,
-            quote.deliveryTown,
-            'Not provided'
-        );
+        return formatFullLocationLabel(quote, 'delivery');
+    }
+
+    function parseCoordinatePair(value) {
+        if (Array.isArray(value) && value.length >= 2) {
+            const lng = Number(value[0]);
+            const lat = Number(value[1]);
+            if (Number.isFinite(lng) && Number.isFinite(lat)) {
+                return [lng, lat];
+            }
+        }
+        if (typeof value === 'string' && value.indexOf(',') >= 0) {
+            const parts = value.split(',').map(function (part) { return parseFloat(String(part).trim()); });
+            if (parts.length >= 2 && parts.every(function (n) { return Number.isFinite(n); })) {
+                return [parts[0], parts[1]];
+            }
+        }
+        if (value && typeof value === 'object') {
+            const lng = Number(value.lng != null ? value.lng : (value.lon != null ? value.lon : value.longitude));
+            const lat = Number(value.lat != null ? value.lat : value.latitude);
+            if (Number.isFinite(lng) && Number.isFinite(lat)) {
+                return [lng, lat];
+            }
+        }
+        return null;
+    }
+
+    function resolveQuoteCoordinates(quote, kind) {
+        const isPickup = kind === 'pickup';
+        const candidates = isPickup
+            ? [quote.pickupCoords, quote.pickupCoordinates, quote.pickupLngLat]
+            : [quote.deliveryCoords, quote.deliveryCoordinates, quote.deliveryLngLat];
+        for (let i = 0; i < candidates.length; i += 1) {
+            const parsed = parseCoordinatePair(candidates[i]);
+            if (parsed) return parsed;
+        }
+        return null;
+    }
+
+    function parseStoredRouteGeometry(quote) {
+        const candidates = [quote.routeGeometry, quote.overviewRouteGeometry];
+        for (let i = 0; i < candidates.length; i += 1) {
+            const candidate = candidates[i];
+            if (!candidate) continue;
+            if (candidate.type === 'LineString' && Array.isArray(candidate.coordinates)) {
+                return candidate;
+            }
+            if (candidate.geometry && candidate.geometry.type === 'LineString') {
+                return candidate.geometry;
+            }
+        }
+        return null;
+    }
+
+    function normalizeAssignmentItemKey(itemKey) {
+        const raw = String(itemKey || '').trim();
+        if (!raw) return '';
+        const parts = raw.split('||');
+        return formatItemLabel(parts[parts.length - 1] || raw);
+    }
+
+    function populatePickupInventoryFallback(quote, pickupMap, deliveryMap, addToFloorMap) {
+        if (Object.keys(pickupMap).length > 0) {
+            return;
+        }
+
+        const floorBlocks = Array.isArray(quote.floorBlocks) ? quote.floorBlocks : [];
+        floorBlocks.forEach(function (block) {
+            const pickupFloor = firstText(
+                block && block.floor,
+                block && block.pickupFloor,
+                block && block.floorLabel,
+                quote.pickupFloorSelect,
+                quote.pickupFloor,
+                'Ground'
+            );
+            [block && block.houseInventory, block && block.officeInventory].forEach(function (inventory) {
+                if (!inventory || typeof inventory !== 'object') return;
+                const flatItems = firstNonEmptyObject(inventory.items, inventory.itemQuantities, inventory.quantities);
+                if (!flatItems) return;
+                Object.keys(flatItems).forEach(function (itemKey) {
+                    const qty = parseInt(flatItems[itemKey], 10) || 0;
+                    if (qty > 0) {
+                        addToFloorMap(pickupMap, pickupFloor, normalizeAssignmentItemKey(itemKey), qty);
+                    }
+                });
+                collectNestedRoomItems(inventory.subRoomQuantities, function (room, item, qty) {
+                    addToFloorMap(pickupMap, pickupFloor, normalizeAssignmentItemKey(item), qty);
+                });
+            });
+        });
+
+        if (Object.keys(pickupMap).length > 0) {
+            return;
+        }
+
+        const defaultPickupFloor = firstText(quote.pickupFloorSelect, quote.pickupFloor, quote.fromFloor, 'Ground');
+        Object.keys(deliveryMap).forEach(function (deliveryFloor) {
+            const floorItems = deliveryMap[deliveryFloor];
+            if (!floorItems || typeof floorItems !== 'object') return;
+            Object.keys(floorItems).forEach(function (itemName) {
+                const qty = parseInt(floorItems[itemName], 10) || 0;
+                if (qty <= 0) return;
+                const pickupFloor = firstText(resolvePickupFloorForItem(quote, itemName), defaultPickupFloor);
+                addToFloorMap(pickupMap, pickupFloor, itemName, qty);
+            });
+        });
     }
 
     function getDeliveryDisplayLabel(quote) {

@@ -24712,6 +24712,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 transportDate: getElementValue('service-transport-date'),
                 routeDistanceKm: parseFloat(getElementValue('route-distance-km')) || null,
                 routeDurationText: getElementValue('route-duration-text'),
+                pickupCoords: (function () {
+                    const input = document.getElementById('pickup-address');
+                    return input ? parseStoredCoords(input) : null;
+                })(),
+                deliveryCoords: (function () {
+                    const input = document.getElementById('delivery-address');
+                    return input ? parseStoredCoords(input) : null;
+                })(),
+                routeGeometry: typeof overviewRouteGeometry !== 'undefined' ? overviewRouteGeometry : null,
                 submittedAt: new Date().toISOString()
             };
 
