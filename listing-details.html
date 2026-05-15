@@ -148,6 +148,24 @@
                                 <button type="button" class="expand-btn">(Expand) <strong>+</strong></button>
                             </div>
 
+                            <div class="form-group bid-autobid-group">
+                                <label class="bid-autobid-toggle">
+                                    <input type="checkbox" id="bid-autobid-enabled">
+                                    <span>Enable auto-bid on this listing</span>
+                                </label>
+                                <small class="helper-text">When another provider undercuts you, we automatically lower your bid by your chosen increment, down to your minimum.</small>
+                                <div id="bid-autobid-fields" class="bid-autobid-fields" hidden>
+                                    <div class="form-group" style="margin-top:10px;">
+                                        <label for="bid-autobid-increment">Bid drop increment (€)</label>
+                                        <input type="number" id="bid-autobid-increment" class="form-input" min="1" step="1" value="5">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="bid-autobid-floor">Minimum price — auto-bid floor (€)</label>
+                                        <input type="number" id="bid-autobid-floor" class="form-input" min="0" step="0.01" placeholder="Lowest you will go">
+                                    </div>
+                                </div>
+                            </div>
+
                             <button type="submit" class="btn bid-submit-btn">Quote</button>
 
                             <p class="bid-note">Your quote is binding. Your quote is incl <strong>VAT</strong>. There are no added extras. This is the flat fee for the job.</p>

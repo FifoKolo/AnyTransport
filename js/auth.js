@@ -364,6 +364,18 @@ window.anytransportApi = window.anytransportApi || (function () {
             const response = request('bids.create', 'POST', { bid: bid || {} });
             return response.bid || bid || null;
         },
+        getAutoBidEvents: function (quoteId) {
+            try {
+                const params = quoteId ? { quoteId: String(quoteId) } : {};
+                const response = request('autobid.events.list', 'GET', null, params);
+                return Array.isArray(response.events) ? response.events : [];
+            } catch (err) {
+                if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                    console.debug('[AnyTransport API] getAutoBidEvents failed', err);
+                }
+                return [];
+            }
+        },
         createFormReport: function (payload) {
             const response = request('reports.create', 'POST', payload || {});
             return response.report || null;

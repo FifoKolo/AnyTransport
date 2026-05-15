@@ -121,7 +121,10 @@ function default_store() {
         'replyTokens' => array(),
         'notifications' => array(),
         'quoteMedia' => array(),
-        'formReports' => array()
+        'formReports' => array(),
+        'autoBidEvents' => array(),
+        'customerBidEmailQueue' => array(),
+        'autoBidCooldowns' => array()
     );
 }
 
@@ -370,6 +373,19 @@ function normalize_user($user) {
 
     if (!isset($normalized['muteInviteEmails'])) {
         $normalized['muteInviteEmails'] = false;
+    }
+
+    if (!isset($normalized['autoBidCooldownSeconds'])) {
+        $normalized['autoBidCooldownSeconds'] = 20;
+    } else {
+        $normalized['autoBidCooldownSeconds'] = max(1, (int) $normalized['autoBidCooldownSeconds']);
+    }
+
+    if (!isset($normalized['autoBidSubscriptionEnabled'])) {
+        $role = strtolower(trim((string) ($normalized['role'] ?? 'customer')));
+        $normalized['autoBidSubscriptionEnabled'] = ($role === 'provider');
+    } else {
+        $normalized['autoBidSubscriptionEnabled'] = !empty($normalized['autoBidSubscriptionEnabled']);
     }
 
     // Keep paymentMethods and legacy flat flags aligned so the provider profile UI persists reliably.
@@ -1156,7 +1172,669 @@ function normalize_bid($bid) {
     if (!isset($normalized['status']) || trim((string) $normalized['status']) === '') {
         $normalized['status'] = 'active';
     }
+    $normalized['autoBidEnabled'] = !empty($normalized['autoBidEnabled']);
+    $normalized['autoBidFloor'] = max(0, (float) ($normalized['autoBidFloor'] ?? 0));
+    $increment = (float) ($normalized['autoBidIncrement'] ?? 0);
+    $normalized['autoBidIncrement'] = $increment > 0 ? $increment : ($normalized['autoBidEnabled'] ? 1.0 : 0);
+    $source = strtolower(trim((string) ($normalized['bidSource'] ?? 'manual')));
+    $normalized['bidSource'] = $source === 'auto' ? 'auto' : 'manual';
     return $normalized;
+}
+
+function bid_amount_value($bid) {
+    if (!is_array($bid)) {
+        return 0.0;
+    }
+    $amount = (float) ($bid['amount'] ?? 0);
+    if ($amount <= 0) {
+        $amount = (float) ($bid['price'] ?? 0);
+    }
+    return $amount;
+}
+
+function is_active_bid_record($bid) {
+    if (!is_array($bid)) {
+        return false;
+    }
+    return strtolower(trim((string) ($bid['status'] ?? 'active'))) === 'active';
+}
+
+function ensure_store_auto_bid_collections(&$store) {
+    if (!isset($store['autoBidEvents']) || !is_array($store['autoBidEvents'])) {
+        $store['autoBidEvents'] = array();
+    }
+    if (!isset($store['customerBidEmailQueue']) || !is_array($store['customerBidEmailQueue'])) {
+        $store['customerBidEmailQueue'] = array();
+    }
+    if (!isset($store['autoBidCooldowns']) || !is_array($store['autoBidCooldowns'])) {
+        $store['autoBidCooldowns'] = array();
+    }
+}
+
+function get_active_quote_bids($store, $quoteId) {
+    $quoteId = trim((string) $quoteId);
+    $bids = isset($store['bids']) && is_array($store['bids']) ? $store['bids'] : array();
+    return array_values(array_filter($bids, function ($bid) use ($quoteId) {
+        if (!is_array($bid) || !is_active_bid_record($bid)) {
+            return false;
+        }
+        return trim((string) ($bid['quoteId'] ?? '')) === $quoteId;
+    }));
+}
+
+function get_provider_bid_for_quote($store, $quoteId, $providerId) {
+    $quoteId = trim((string) $quoteId);
+    $providerId = trim((string) $providerId);
+    foreach (get_active_quote_bids($store, $quoteId) as $bid) {
+        if (trim((string) ($bid['providerId'] ?? '')) === $providerId) {
+            return $bid;
+        }
+    }
+    return null;
+}
+
+function get_lowest_competitor_bid_for_provider($bids, $providerId) {
+    $providerId = trim((string) $providerId);
+    $lowest = null;
+    foreach ($bids as $bid) {
+        if (!is_array($bid)) {
+            continue;
+        }
+        if (trim((string) ($bid['providerId'] ?? '')) === $providerId) {
+            continue;
+        }
+        $amount = bid_amount_value($bid);
+        if ($amount <= 0) {
+            continue;
+        }
+        if ($lowest === null || $amount < bid_amount_value($lowest)) {
+            $lowest = $bid;
+        }
+    }
+    return $lowest;
+}
+
+function provider_has_auto_bid_subscription($user) {
+    if (!is_array($user)) {
+        return false;
+    }
+    $role = strtolower(trim((string) ($user['role'] ?? '')));
+    if ($role !== 'provider') {
+        return false;
+    }
+    if (!array_key_exists('autoBidSubscriptionEnabled', $user)) {
+        return true;
+    }
+    return !empty($user['autoBidSubscriptionEnabled']);
+}
+
+function get_auto_bid_cooldown_seconds($user) {
+    $seconds = (int) ($user['autoBidCooldownSeconds'] ?? 20);
+    return $seconds > 0 ? $seconds : 20;
+}
+
+function get_auto_bid_last_at($store, $providerId, $quoteId) {
+    ensure_store_auto_bid_collections($store);
+    $key = trim((string) $providerId) . ':' . trim((string) $quoteId);
+    return trim((string) ($store['autoBidCooldowns'][$key] ?? ''));
+}
+
+function set_auto_bid_last_at(&$store, $providerId, $quoteId) {
+    ensure_store_auto_bid_collections($store);
+    $key = trim((string) $providerId) . ':' . trim((string) $quoteId);
+    $store['autoBidCooldowns'][$key] = gmdate('c');
+}
+
+function append_auto_bid_event(&$store, $event) {
+    ensure_store_auto_bid_collections($store);
+    if (!is_array($event)) {
+        return;
+    }
+    if (!isset($event['id']) || trim((string) $event['id']) === '') {
+        $event['id'] = make_id('abe');
+    }
+    if (!isset($event['createdAt'])) {
+        $event['createdAt'] = gmdate('c');
+    }
+    array_unshift($store['autoBidEvents'], $event);
+    $store['autoBidEvents'] = array_slice($store['autoBidEvents'], 0, 2000);
+}
+
+function find_store_user_by_id($store, $userId) {
+    $userId = trim((string) $userId);
+    if ($userId === '') {
+        return null;
+    }
+    foreach ($store['users'] as $user) {
+        if (!is_array($user)) {
+            continue;
+        }
+        if (trim((string) ($user['id'] ?? '')) === $userId) {
+            return normalize_user($user);
+        }
+    }
+    return null;
+}
+
+function find_store_quote_by_id($store, $quoteId) {
+    $quoteId = trim((string) $quoteId);
+    foreach ($store['quotes'] as $quote) {
+        if (!is_array($quote)) {
+            continue;
+        }
+        if (trim((string) ($quote['id'] ?? '')) === $quoteId) {
+            return $quote;
+        }
+    }
+    return null;
+}
+
+function provider_public_name($user, $fallback = 'Provider') {
+    if (!is_array($user)) {
+        return $fallback;
+    }
+    $name = trim((string) ($user['username'] ?? $user['nickname'] ?? $user['name'] ?? $user['email'] ?? ''));
+    return $name !== '' ? $name : $fallback;
+}
+
+function listing_details_url_for_quote($quoteId) {
+    return get_app_url('listing-details.html?quoteId=' . rawurlencode(trim((string) $quoteId)));
+}
+
+function resolve_quote_owner_context($store, $quote) {
+    $quoteOwnerId = '';
+    $quoteOwnerEmail = '';
+    if (!is_array($quote)) {
+        return array('ownerId' => '', 'owner' => null, 'quoteLabel' => '');
+    }
+    $quoteId = trim((string) ($quote['id'] ?? ''));
+    $quoteOwnerId = trim((string) ($quote['userId'] ?? $quote['createdBy'] ?? ''));
+    $quoteOwnerEmail = strtolower(trim((string) ($quote['customerEmail'] ?? '')));
+    $quoteLabel = trim((string) ($quote['formId'] ?? $quoteId));
+
+    if ($quoteOwnerEmail !== '') {
+        $emailMatches = array_values(array_filter($store['users'], function ($u) use ($quoteOwnerEmail) {
+            return strtolower(trim((string) ($u['email'] ?? ''))) === $quoteOwnerEmail;
+        }));
+        if (!empty($emailMatches)) {
+            usort($emailMatches, function ($a, $b) {
+                $aCreated = strtotime((string) ($a['createdAt'] ?? '')) ?: 0;
+                $bCreated = strtotime((string) ($b['createdAt'] ?? '')) ?: 0;
+                return $bCreated <=> $aCreated;
+            });
+            $preferred = null;
+            foreach ($emailMatches as $candidate) {
+                $role = strtolower(trim((string) ($candidate['role'] ?? 'customer')));
+                if ($role === 'customer' || $role === '') {
+                    $preferred = $candidate;
+                    break;
+                }
+            }
+            if ($preferred === null) {
+                $preferred = $emailMatches[0];
+            }
+            $candidateId = trim((string) ($preferred['id'] ?? ''));
+            if ($candidateId !== '') {
+                $quoteOwnerId = $candidateId;
+            }
+        }
+    }
+
+    $owner = $quoteOwnerId !== '' ? find_store_user_by_id($store, $quoteOwnerId) : null;
+    return array(
+        'ownerId' => $quoteOwnerId,
+        'owner' => $owner,
+        'quoteLabel' => $quoteLabel !== '' ? $quoteLabel : $quoteId
+    );
+}
+
+function add_user_notification(&$store, $userId, $title, $message, $type, $data = array()) {
+    if (trim((string) $userId) === '') {
+        return;
+    }
+    if (!isset($store['notifications']) || !is_array($store['notifications'])) {
+        $store['notifications'] = array();
+    }
+    $store['notifications'][] = array(
+        'id' => make_id('ntf'),
+        'userId' => trim((string) $userId),
+        'title' => trim((string) $title),
+        'message' => trim((string) $message),
+        'type' => trim((string) $type),
+        'read' => false,
+        'createdAt' => gmdate('c'),
+        'data' => is_array($data) ? $data : array()
+    );
+    $store['notifications'] = array_slice($store['notifications'], 0, 500);
+}
+
+function send_customer_low_bid_email($owner, $providerName, $quoteLabel, $quoteId, $amount, $isFollowUp = false) {
+    if (!is_array($owner) || empty($owner['email'])) {
+        return false;
+    }
+    $amountText = number_format((float) $amount, 2, '.', '');
+    $subject = $isFollowUp
+        ? 'Updated low bid on listing ' . $quoteLabel
+        : 'New low bid on listing ' . $quoteLabel;
+    $body = "Hi " . (string) ($owner['name'] ?? $owner['username'] ?? '') . ",\n\n";
+    if ($isFollowUp) {
+        $body .= $providerName . " has updated their bid to €" . $amountText . " on your listing " . $quoteLabel . ".\n\n";
+    } else {
+        $body .= "You have a new low bid by " . $providerName . " — €" . $amountText . " on listing " . $quoteLabel . ".\n\n";
+    }
+    $body .= "View your listing: " . listing_details_url_for_quote($quoteId) . "\n\n";
+    $body .= "This inbox is not monitored. Please use the link above to view bids.\n";
+    return send_email_simple($owner['email'], $subject, $body);
+}
+
+function send_provider_auto_bid_used_email($provider, $quoteLabel, $quoteId, $amount, $competitorAmount) {
+    if (!is_array($provider) || empty($provider['email'])) {
+        return false;
+    }
+    $name = provider_public_name($provider, 'there');
+    $subject = 'Auto-bid placed on listing ' . $quoteLabel;
+    $body = "Hi " . $name . ",\n\n";
+    $body .= "Your auto-bid placed a new quote of €" . number_format((float) $amount, 2, '.', '') . " on listing " . $quoteLabel . ".";
+    if ($competitorAmount > 0) {
+        $body .= " Another provider was at €" . number_format((float) $competitorAmount, 2, '.', '') . ".";
+    }
+    $body .= "\n\nOpen the listing: " . listing_details_url_for_quote($quoteId) . "\n";
+    return send_email_simple($provider['email'], $subject, $body);
+}
+
+function send_provider_auto_bid_floor_email($provider, $quoteLabel, $quoteId, $floor, $competitorAmount) {
+    if (!is_array($provider) || empty($provider['email'])) {
+        return false;
+    }
+    $name = provider_public_name($provider, 'there');
+    $subject = 'Auto-bid stopped — minimum reached on ' . $quoteLabel;
+    $body = "Hi " . $name . ",\n\n";
+    $body .= "Your auto-bid has reached your minimum of €" . number_format((float) $floor, 2, '.', '') . " on listing " . $quoteLabel . ".";
+    if ($competitorAmount > 0) {
+        $body .= " The current competing bid is €" . number_format((float) $competitorAmount, 2, '.', '') . ".";
+    }
+    $body .= " We will not place further automatic bids on this listing unless you update your quote or floor.\n\n";
+    $body .= "Review the listing: " . listing_details_url_for_quote($quoteId) . "\n";
+    return send_email_simple($provider['email'], $subject, $body);
+}
+
+function customer_bid_queue_key($quoteId, $providerId) {
+    return trim((string) $quoteId) . ':' . trim((string) $providerId);
+}
+
+function queue_customer_bid_email_after_auto(&$store, $quoteId, $providerId, $amount) {
+    ensure_store_auto_bid_collections($store);
+    $key = customer_bid_queue_key($quoteId, $providerId);
+    $store['customerBidEmailQueue'][$key] = array(
+        'quoteId' => trim((string) $quoteId),
+        'providerId' => trim((string) $providerId),
+        'pendingAmount' => (float) $amount,
+        'lastAutoBidAt' => gmdate('c'),
+        'awaitingQuietPeriod' => true
+    );
+}
+
+function clear_customer_bid_email_queue(&$store, $quoteId, $providerId) {
+    ensure_store_auto_bid_collections($store);
+    $key = customer_bid_queue_key($quoteId, $providerId);
+    if (isset($store['customerBidEmailQueue'][$key])) {
+        unset($store['customerBidEmailQueue'][$key]);
+    }
+}
+
+function process_customer_bid_email_queue(&$store) {
+    ensure_store_auto_bid_collections($store);
+    $quietSeconds = 600;
+    $now = time();
+    $keys = array_keys($store['customerBidEmailQueue']);
+    foreach ($keys as $key) {
+        $entry = $store['customerBidEmailQueue'][$key];
+        if (!is_array($entry) || empty($entry['awaitingQuietPeriod'])) {
+            continue;
+        }
+        $lastAt = strtotime((string) ($entry['lastAutoBidAt'] ?? ''));
+        if ($lastAt <= 0 || ($now - $lastAt) < $quietSeconds) {
+            continue;
+        }
+        $quoteId = trim((string) ($entry['quoteId'] ?? ''));
+        $providerId = trim((string) ($entry['providerId'] ?? ''));
+        $amount = (float) ($entry['pendingAmount'] ?? 0);
+        if ($quoteId === '' || $providerId === '' || $amount <= 0) {
+            unset($store['customerBidEmailQueue'][$key]);
+            continue;
+        }
+        $quote = find_store_quote_by_id($store, $quoteId);
+        if (!is_array($quote)) {
+            unset($store['customerBidEmailQueue'][$key]);
+            continue;
+        }
+        $ownerContext = resolve_quote_owner_context($store, $quote);
+        $owner = $ownerContext['owner'];
+        $provider = find_store_user_by_id($store, $providerId);
+        if (is_array($owner) && is_array($provider)) {
+            send_customer_low_bid_email(
+                $owner,
+                provider_public_name($provider),
+                $ownerContext['quoteLabel'],
+                $quoteId,
+                $amount,
+                true
+            );
+            add_user_notification(
+                $store,
+                $ownerContext['ownerId'],
+                'Updated low bid',
+                provider_public_name($provider) . ' updated their bid to €' . number_format($amount, 2, '.', '') . ' on listing ' . $ownerContext['quoteLabel'] . '.',
+                'bid_received',
+                array('quoteId' => $quoteId, 'fromUserId' => $providerId)
+            );
+        }
+        unset($store['customerBidEmailQueue'][$key]);
+    }
+}
+
+function notify_customer_manual_bid(&$store, $quote, $provider, $amount) {
+    $ownerContext = resolve_quote_owner_context($store, $quote);
+    $ownerId = $ownerContext['ownerId'];
+    $owner = $ownerContext['owner'];
+    $providerId = trim((string) ($provider['id'] ?? ''));
+    if ($ownerId === '' || $providerId === '' || $ownerId === $providerId || !is_array($owner)) {
+        return;
+    }
+    $quoteId = trim((string) ($quote['id'] ?? ''));
+    clear_customer_bid_email_queue($store, $quoteId, $providerId);
+    $providerName = provider_public_name($provider);
+    send_customer_low_bid_email($owner, $providerName, $ownerContext['quoteLabel'], $quoteId, $amount, false);
+    add_user_notification(
+        $store,
+        $ownerId,
+        'New low bid',
+        'New low bid by ' . $providerName . ' — €' . number_format((float) $amount, 2, '.', '') . ' on listing ' . $ownerContext['quoteLabel'] . '.',
+        'bid_received',
+        array('quoteId' => $quoteId, 'fromUserId' => $providerId)
+    );
+}
+
+function notify_provider_auto_bid_used(&$store, $provider, $quote, $bid, $newAmount, $competitorAmount) {
+    $providerId = trim((string) ($provider['id'] ?? ''));
+    $quoteId = trim((string) ($quote['id'] ?? ''));
+    $quoteLabel = trim((string) ($quote['formId'] ?? $quoteId));
+    add_user_notification(
+        $store,
+        $providerId,
+        'Auto-bid placed',
+        'Your auto-bid placed €' . number_format((float) $newAmount, 2, '.', '') . ' on listing ' . $quoteLabel . '.',
+        'auto_bid_used',
+        array(
+            'quoteId' => $quoteId,
+            'bidId' => trim((string) ($bid['id'] ?? ''))
+        )
+    );
+    send_provider_auto_bid_used_email($provider, $quoteLabel, $quoteId, $newAmount, $competitorAmount);
+}
+
+function notify_provider_auto_bid_floor(&$store, $provider, $quote, $floor, $competitorAmount, $bidId = '') {
+    $providerId = trim((string) ($provider['id'] ?? ''));
+    $quoteId = trim((string) ($quote['id'] ?? ''));
+    $quoteLabel = trim((string) ($quote['formId'] ?? $quoteId));
+    add_user_notification(
+        $store,
+        $providerId,
+        'Auto-bid minimum reached',
+        'Auto-bid stopped at your floor of €' . number_format((float) $floor, 2, '.', '') . ' on listing ' . $quoteLabel . '.',
+        'auto_bid_floor',
+        array(
+            'quoteId' => $quoteId,
+            'bidId' => $bidId
+        )
+    );
+    send_provider_auto_bid_floor_email($provider, $quoteLabel, $quoteId, $floor, $competitorAmount);
+    append_auto_bid_event($store, array(
+        'quoteId' => $quoteId,
+        'providerId' => $providerId,
+        'type' => 'floor_reached',
+        'amount' => (float) $floor,
+        'competitorAmount' => (float) $competitorAmount
+    ));
+}
+
+function upsert_bid_record(&$store, $normalized) {
+    $quoteId = trim((string) ($normalized['quoteId'] ?? ''));
+    $providerId = trim((string) ($normalized['providerId'] ?? ''));
+    $previous = get_provider_bid_for_quote($store, $quoteId, $providerId);
+    if (is_array($previous)) {
+        if (trim((string) ($normalized['createdAt'] ?? '')) === '') {
+            $normalized['createdAt'] = (string) ($previous['createdAt'] ?? gmdate('c'));
+        }
+        if (empty($normalized['message']) && !empty($previous['message'])) {
+            $normalized['message'] = $previous['message'];
+        }
+    }
+
+    $providerRecord = find_store_user_by_id($store, $providerId);
+    if (is_array($providerRecord)) {
+        $displayName = provider_public_name($providerRecord);
+        $normalized['providerUsername'] = $displayName;
+        $normalized['providerNickname'] = $displayName;
+        $normalized['providerName'] = trim((string) ($providerRecord['name'] ?? $displayName));
+        if (empty($normalized['providerEmail'])) {
+            $normalized['providerEmail'] = trim((string) ($providerRecord['email'] ?? ''));
+        }
+    }
+
+    if (!isset($store['bids']) || !is_array($store['bids'])) {
+        $store['bids'] = array();
+    }
+    $store['bids'] = array_values(array_filter($store['bids'], function ($existing) use ($quoteId, $providerId) {
+        return !(trim((string) ($existing['quoteId'] ?? '')) === $quoteId && trim((string) ($existing['providerId'] ?? '')) === $providerId);
+    }));
+    $store['bids'][] = $normalized;
+    return $normalized;
+}
+
+function create_bid_in_store(&$store, $bidInput, $options = array()) {
+    $options = is_array($options) ? $options : array();
+    $skipAutoBid = !empty($options['skipAutoBid']);
+    $skipCustomerNotify = !empty($options['skipCustomerNotify']);
+
+    ensure_store_auto_bid_collections($store);
+    process_customer_bid_email_queue($store);
+
+    $normalized = normalize_bid($bidInput);
+    $quoteId = trim((string) ($normalized['quoteId'] ?? ''));
+    $providerId = trim((string) ($normalized['providerId'] ?? ''));
+    if ($quoteId === '' || $providerId === '') {
+        return array('ok' => false, 'error' => 'Bid must include a quoteId and providerId.');
+    }
+
+    $isAutoBid = ((string) ($normalized['bidSource'] ?? '')) === 'auto';
+    $previous = get_provider_bid_for_quote($store, $quoteId, $providerId);
+    $previousAmount = is_array($previous) ? bid_amount_value($previous) : 0.0;
+
+    $providerRecord = find_store_user_by_id($store, $providerId);
+    if (!is_array($providerRecord)) {
+        return array('ok' => false, 'error' => 'Provider not found.');
+    }
+
+    if ($isAutoBid) {
+        $normalized['autoBidEnabled'] = !empty($previous['autoBidEnabled']);
+        $normalized['autoBidFloor'] = (float) ($previous['autoBidFloor'] ?? $normalized['autoBidFloor']);
+        $normalized['autoBidIncrement'] = (float) ($previous['autoBidIncrement'] ?? $normalized['autoBidIncrement']);
+    }
+
+    upsert_bid_record($store, $normalized);
+
+    $quote = find_store_quote_by_id($store, $quoteId);
+    $newAmount = bid_amount_value($normalized);
+
+    if (!$skipCustomerNotify && is_array($quote)) {
+        if ($isAutoBid) {
+            queue_customer_bid_email_after_auto($store, $quoteId, $providerId, $newAmount);
+        } else {
+            $shouldNotifyCustomer = ($previousAmount <= 0) || ($newAmount < $previousAmount);
+            if ($shouldNotifyCustomer) {
+                notify_customer_manual_bid($store, $quote, $providerRecord, $newAmount);
+            }
+        }
+    }
+
+    if (!$isAutoBid && is_array($quote)) {
+        $ownerContext = resolve_quote_owner_context($store, $quote);
+        $ownerId = $ownerContext['ownerId'];
+        if ($ownerId !== '' && $ownerId !== $providerId) {
+            $quoteLabel = $ownerContext['quoteLabel'];
+            $providerName = provider_public_name($providerRecord);
+            $bidTextParts = array();
+            if ($newAmount > 0) {
+                $bidTextParts[] = 'Price: €' . number_format($newAmount, 2, '.', '');
+            }
+            if (!empty($normalized['message'])) {
+                $bidTextParts[] = 'Message: ' . trim((string) $normalized['message']);
+            }
+            $bidText = $bidTextParts ? implode("\n", $bidTextParts) : '(no details)';
+            $messageText = "New bid from " . $providerName . " on your listing " . $quoteLabel . ":\n\n" . $bidText;
+            $savedMessage = array(
+                'id' => make_id('msg'),
+                'fromUserId' => $providerId,
+                'toUserId' => $ownerId,
+                'text' => $messageText,
+                'title' => 'New bid on listing ' . $quoteLabel,
+                'createdAt' => gmdate('c')
+            );
+            if (!isset($store['messages']) || !is_array($store['messages'])) {
+                $store['messages'] = array();
+            }
+            array_unshift($store['messages'], $savedMessage);
+            $store['messages'] = array_slice($store['messages'], 0, 200);
+
+            if (!isset($store['replyTokens']) || !is_array($store['replyTokens'])) {
+                $store['replyTokens'] = array();
+            }
+            $token = generate_reply_token();
+            $store['replyTokens'][$token] = array(
+                'fromUserId' => $providerId,
+                'toUserId' => $ownerId,
+                'messageId' => $savedMessage['id'],
+                'quoteId' => $quoteId,
+                'bidId' => trim((string) ($normalized['id'] ?? '')),
+                'createdAt' => gmdate('c')
+            );
+        }
+    }
+
+    if (!$skipAutoBid) {
+        process_auto_bids_for_quote($store, $quoteId, $providerId);
+    }
+
+    process_customer_bid_email_queue($store);
+
+    return array('ok' => true, 'bid' => $normalized);
+}
+
+function process_auto_bids_for_quote(&$store, $quoteId, $triggeringProviderId) {
+    $quoteId = trim((string) $quoteId);
+    $triggeringProviderId = trim((string) $triggeringProviderId);
+    $quote = find_store_quote_by_id($store, $quoteId);
+    if (!is_array($quote)) {
+        return;
+    }
+
+    $maxRounds = 16;
+    for ($round = 0; $round < $maxRounds; $round++) {
+        $changed = false;
+        $activeBids = get_active_quote_bids($store, $quoteId);
+        foreach ($activeBids as $bid) {
+            $providerId = trim((string) ($bid['providerId'] ?? ''));
+            if ($providerId === '' || $providerId === $triggeringProviderId) {
+                continue;
+            }
+            if (empty($bid['autoBidEnabled'])) {
+                continue;
+            }
+            $provider = find_store_user_by_id($store, $providerId);
+            if (!is_array($provider) || !provider_has_auto_bid_subscription($provider)) {
+                continue;
+            }
+
+            $myAmount = bid_amount_value($bid);
+            if ($myAmount <= 0) {
+                continue;
+            }
+
+            $competitor = get_lowest_competitor_bid_for_provider($activeBids, $providerId);
+            if (!is_array($competitor)) {
+                continue;
+            }
+            $competitorAmount = bid_amount_value($competitor);
+            if ($competitorAmount <= 0 || $myAmount <= $competitorAmount) {
+                continue;
+            }
+
+            $increment = (float) ($bid['autoBidIncrement'] ?? 1);
+            if ($increment <= 0) {
+                $increment = 1;
+            }
+            $floor = (float) ($bid['autoBidFloor'] ?? 0);
+            $targetAmount = round($competitorAmount - $increment, 2);
+            if ($targetAmount >= $myAmount) {
+                continue;
+            }
+
+            $cooldownSeconds = get_auto_bid_cooldown_seconds($provider);
+            $lastAutoAt = get_auto_bid_last_at($store, $providerId, $quoteId);
+            if ($lastAutoAt !== '') {
+                $elapsed = time() - (strtotime($lastAutoAt) ?: 0);
+                if ($elapsed < $cooldownSeconds) {
+                    continue;
+                }
+            }
+
+            if ($targetAmount < $floor) {
+                if (empty($bid['autoBidFloorNotified'])) {
+                    notify_provider_auto_bid_floor($store, $provider, $quote, $floor, $competitorAmount, trim((string) ($bid['id'] ?? '')));
+                    foreach ($store['bids'] as $idx => $storedBid) {
+                        if (!is_array($storedBid)) {
+                            continue;
+                        }
+                        if (trim((string) ($storedBid['id'] ?? '')) === trim((string) ($bid['id'] ?? ''))) {
+                            $store['bids'][$idx]['autoBidFloorNotified'] = true;
+                            break;
+                        }
+                    }
+                }
+                continue;
+            }
+
+            $autoBid = array_merge($bid, array(
+                'amount' => $targetAmount,
+                'bidSource' => 'auto',
+                'updatedAt' => gmdate('c')
+            ));
+            $result = create_bid_in_store($store, $autoBid, array(
+                'skipAutoBid' => true,
+                'skipCustomerNotify' => false
+            ));
+            if (!empty($result['ok'])) {
+                set_auto_bid_last_at($store, $providerId, $quoteId);
+                notify_provider_auto_bid_used($store, $provider, $quote, $result['bid'], $targetAmount, $competitorAmount);
+                append_auto_bid_event($store, array(
+                    'quoteId' => $quoteId,
+                    'providerId' => $providerId,
+                    'type' => 'auto_counter',
+                    'amount' => $targetAmount,
+                    'competitorAmount' => $competitorAmount,
+                    'competitorProviderId' => trim((string) ($competitor['providerId'] ?? '')),
+                    'bidId' => trim((string) ($result['bid']['id'] ?? ''))
+                ));
+                $changed = true;
+                $triggeringProviderId = $providerId;
+            }
+        }
+        if (!$changed) {
+            break;
+        }
+        $activeBids = get_active_quote_bids($store, $quoteId);
+    }
 }
 
 function is_https_request() {
@@ -1393,6 +2071,12 @@ $input = read_json_input();
 
 switch ($action) {
     case 'auth.me':
+        ensure_store_auto_bid_collections($store);
+        $queueBefore = json_encode($store['customerBidEmailQueue']);
+        process_customer_bid_email_queue($store);
+        if (json_encode($store['customerBidEmailQueue']) !== $queueBefore) {
+            write_store($storeFile, $store);
+        }
         $user = get_session_user($store);
         if (is_array($user)) {
             refresh_session_cookie();
@@ -1682,6 +2366,7 @@ switch ($action) {
                 'services', 'categories', 'skills', 'photos', 'avatar', 'coverImage',
                 'website', 'companyType', 'paymentMethods', 'acceptsCash', 'paypal', 'visa', 'mastercard', 'bankTransfer', 'americanExpress', 'cheque', 'cash',
                 'blockInvites', 'muteInviteEmails',
+                'autoBidCooldownSeconds', 'autoBidSubscriptionEnabled',
                 'instagram', 'facebook', 'x', 'twitter', 'tiktok', 'linkedin'
             );
             $sanitized = array();
@@ -2421,6 +3106,7 @@ switch ($action) {
         send_json(array('ok' => true, 'report' => $updated));
 
     case 'bids.list':
+        process_customer_bid_email_queue($store);
         $quoteId = trim((string) ($_GET['quoteId'] ?? ''));
         $bids = array_values($store['bids']);
         if ($quoteId !== '') {
@@ -2430,154 +3116,56 @@ switch ($action) {
         }
         send_json(array('ok' => true, 'bids' => $bids));
 
+    case 'autobid.events.list':
+        $currentUser = get_current_user_record($store);
+        $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
+        if ($currentUserId === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        ensure_store_auto_bid_collections($store);
+        $quoteIdFilter = trim((string) ($_GET['quoteId'] ?? ''));
+        $events = array_values(array_filter($store['autoBidEvents'], function ($event) use ($currentUserId, $quoteIdFilter) {
+            if (!is_array($event)) {
+                return false;
+            }
+            if (trim((string) ($event['providerId'] ?? '')) !== $currentUserId) {
+                return false;
+            }
+            if ($quoteIdFilter !== '' && trim((string) ($event['quoteId'] ?? '')) !== $quoteIdFilter) {
+                return false;
+            }
+            return true;
+        }));
+        usort($events, function ($a, $b) {
+            $aTime = strtotime((string) ($a['createdAt'] ?? '')) ?: 0;
+            $bTime = strtotime((string) ($b['createdAt'] ?? '')) ?: 0;
+            return $bTime <=> $aTime;
+        });
+        send_json(array('ok' => true, 'events' => array_slice($events, 0, 200)));
+
     case 'bids.create':
         $bid = is_array($input['bid'] ?? null) ? $input['bid'] : array();
-        $normalized = normalize_bid($bid);
-        $quoteId = trim((string) ($normalized['quoteId'] ?? ''));
-        $providerId = trim((string) ($normalized['providerId'] ?? ''));
-
-        if ($quoteId === '' || $providerId === '') {
-            send_json(array('ok' => false, 'error' => 'Bid must include a quoteId and providerId.'), 400);
-        }
-
-        $providerRecord = null;
-        foreach ($store['users'] as $u) {
-            if (trim((string) ($u['id'] ?? '')) === $providerId) {
-                $providerRecord = normalize_user($u);
-                break;
+        $providerId = trim((string) ($bid['providerId'] ?? ''));
+        if (!empty($bid['autoBidEnabled'])) {
+            $floor = (float) ($bid['autoBidFloor'] ?? 0);
+            $increment = (float) ($bid['autoBidIncrement'] ?? 0);
+            $amount = (float) ($bid['amount'] ?? 0);
+            if ($floor <= 0) {
+                send_json(array('ok' => false, 'error' => 'Auto-bid requires a minimum price (floor).'), 400);
+            }
+            if ($increment <= 0) {
+                send_json(array('ok' => false, 'error' => 'Auto-bid requires a bid increment greater than zero.'), 400);
+            }
+            if ($amount > 0 && $floor >= $amount) {
+                send_json(array('ok' => false, 'error' => 'Auto-bid floor must be lower than your quote amount.'), 400);
             }
         }
-        if (is_array($providerRecord)) {
-            $displayName = trim((string) ($providerRecord['username'] ?? $providerRecord['nickname'] ?? $providerRecord['name'] ?? $providerRecord['email'] ?? ''));
-            $normalized['providerUsername'] = $displayName;
-            $normalized['providerNickname'] = $displayName;
-            $normalized['providerName'] = trim((string) ($providerRecord['name'] ?? $displayName));
+        $result = create_bid_in_store($store, $bid);
+        if (empty($result['ok'])) {
+            send_json(array('ok' => false, 'error' => (string) ($result['error'] ?? 'Unable to save bid.')), 400);
         }
-
-        $store['bids'] = array_values(array_filter($store['bids'], function ($existing) use ($quoteId, $providerId) {
-            return !(trim((string) ($existing['quoteId'] ?? '')) === $quoteId && trim((string) ($existing['providerId'] ?? '')) === $providerId);
-        }));
-        $store['bids'][] = $normalized;
         write_store($storeFile, $store);
-
-        // Notify quote owner about the new bid by creating an internal message and sending email
-        $quoteOwnerId = '';
-        $quoteOwnerEmail = '';
-        foreach ($store['quotes'] as $q) {
-            if (trim((string) ($q['id'] ?? '')) === $quoteId) {
-                $quoteOwnerId = trim((string) ($q['userId'] ?? $q['createdBy'] ?? ''));
-                $quoteOwnerEmail = strtolower(trim((string) ($q['customerEmail'] ?? '')));
-                break;
-            }
-        }
-
-        if ($quoteOwnerEmail !== '') {
-            // Prefer the newest customer-like account for this email so messages land in the
-            // account the user is most likely actively using (helps when duplicate test accounts exist).
-            $emailMatches = array_values(array_filter($store['users'], function ($u) use ($quoteOwnerEmail) {
-                return strtolower(trim((string) ($u['email'] ?? ''))) === $quoteOwnerEmail;
-            }));
-            if (!empty($emailMatches)) {
-                usort($emailMatches, function ($a, $b) {
-                    $aCreated = strtotime((string) ($a['createdAt'] ?? '')) ?: 0;
-                    $bCreated = strtotime((string) ($b['createdAt'] ?? '')) ?: 0;
-                    return $bCreated <=> $aCreated;
-                });
-                $preferred = null;
-                foreach ($emailMatches as $candidate) {
-                    $role = strtolower(trim((string) ($candidate['role'] ?? 'customer')));
-                    if ($role === 'customer' || $role === '') {
-                        $preferred = $candidate;
-                        break;
-                    }
-                }
-                if ($preferred === null) {
-                    $preferred = $emailMatches[0];
-                }
-                $candidateId = trim((string) ($preferred['id'] ?? ''));
-                if ($candidateId !== '') {
-                    $quoteOwnerId = $candidateId;
-                }
-            }
-        }
-
-        if ($quoteOwnerId !== '' && $quoteOwnerId !== $providerId) {
-            // find provider and owner records
-            $provider = null;
-            $owner = null;
-            foreach ($store['users'] as $u) {
-                if (trim((string) ($u['id'] ?? '')) === $providerId) $provider = $u;
-                if (trim((string) ($u['id'] ?? '')) === $quoteOwnerId) $owner = $u;
-            }
-
-            $providerName = $provider ? (string) ($provider['name'] ?? $provider['username'] ?? $provider['email']) : $providerId;
-            $quoteLabel = '';
-            foreach ($store['quotes'] as $q) {
-                if (trim((string) ($q['id'] ?? '')) === $quoteId) {
-                    $quoteLabel = trim((string) ($q['formId'] ?? $q['id']));
-                    break;
-                }
-            }
-
-            $bidTextParts = array();
-            if (!empty($normalized['price'])) $bidTextParts[] = 'Price: ' . trim((string) $normalized['price']);
-            if (!empty($normalized['message'])) $bidTextParts[] = 'Message: ' . trim((string) $normalized['message']);
-            $bidText = $bidTextParts ? implode("\n", $bidTextParts) : '(no details)';
-
-            $messageText = "New bid from " . $providerName . " on your listing " . $quoteLabel . ":\n\n" . $bidText;
-
-            $savedMessage = array(
-                'id' => make_id('msg'),
-                'fromUserId' => $providerId,
-                'toUserId' => $quoteOwnerId,
-                'text' => $messageText,
-                'title' => 'New bid on listing ' . $quoteLabel,
-                'createdAt' => gmdate('c')
-            );
-
-            array_unshift($store['messages'], $savedMessage);
-            $store['messages'] = array_slice($store['messages'], 0, 200);
-
-            // Add in-app notification for the customer so navbar bell can open the right context.
-            $store['notifications'][] = array(
-                'id' => make_id('ntf'),
-                'userId' => $quoteOwnerId,
-                'title' => 'New bid received',
-                'message' => 'You received a new bid on listing ' . $quoteLabel . '.',
-                'type' => 'bid_received',
-                'read' => false,
-                'createdAt' => gmdate('c'),
-                'data' => array(
-                    'quoteId' => $quoteId,
-                    'bidId' => trim((string) ($normalized['id'] ?? '')),
-                    'fromUserId' => $providerId
-                )
-            );
-
-            // create reply token
-            $token = generate_reply_token();
-            $store['replyTokens'][$token] = array(
-                'fromUserId' => $providerId,
-                'toUserId' => $quoteOwnerId,
-                'messageId' => $savedMessage['id'],
-                'quoteId' => $quoteId,
-                'bidId' => trim((string) ($normalized['id'] ?? '')),
-                'createdAt' => gmdate('c')
-            );
-
-            // send email notification
-            if ($owner && !empty($owner['email'])) {
-                $subject = 'New bid on your listing ' . $quoteLabel;
-                $body = "Hi " . (string) ($owner['name'] ?? $owner['username'] ?? '') . ",\n\n";
-                $body .= $messageText . "\n\n";
-                $body .= "View and respond in your dashboard: " . get_app_url('messages.html?reply=' . rawurlencode($token)) . "\n";
-                $body .= "This inbox is not monitored. Please use the link above to reply.\n";
-                send_email_simple($owner['email'], $subject, $body);
-            }
-
-            write_store($storeFile, $store);
-        }
-        send_json(array('ok' => true, 'bid' => $normalized));
+        send_json(array('ok' => true, 'bid' => $result['bid']));
 
     case 'bids.replaceAll':
         $currentUser = get_current_user_record($store);

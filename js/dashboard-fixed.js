@@ -2882,10 +2882,39 @@
             quotesById[quote.id] = quote;
         });
 
+        let autoBidEvents = [];
+        if (window.anytransportApi && typeof window.anytransportApi.getAutoBidEvents === 'function') {
+            try {
+                autoBidEvents = window.anytransportApi.getAutoBidEvents() || [];
+            } catch (_e) {
+                autoBidEvents = [];
+            }
+        }
+        const eventsByQuote = {};
+        autoBidEvents.forEach((event) => {
+            const qid = String(event && event.quoteId || '').trim();
+            if (!qid) return;
+            if (!eventsByQuote[qid]) eventsByQuote[qid] = [];
+            eventsByQuote[qid].push(event);
+        });
+
         container.innerHTML = bids.map((bid) => {
             const quote = quotesById[bid.quoteId] || null;
             const statusLabel = bid.status === 'active' ? 'Active' : 'Withdrawn';
             const title = quote ? getQuoteTitle(quote) : ('Listing ' + bid.quoteId);
+            const autoLabel = bid.autoBidEnabled
+                ? ('Auto-bid on • floor €' + Number(bid.autoBidFloor || 0).toFixed(2) + ' • step €' + Number(bid.autoBidIncrement || 0).toFixed(2))
+                : 'Auto-bid off';
+            const quoteEvents = eventsByQuote[bid.quoteId] || [];
+            const historyHtml = quoteEvents.length
+                ? '<details class="autobid-history" style="margin-top:10px;"><summary>Auto-bid activity (' + quoteEvents.length + ')</summary><ul class="autobid-history-list">' + quoteEvents.slice(0, 8).map((ev) => {
+                    const type = String(ev.type || 'event');
+                    const label = type === 'floor_reached' ? 'Floor reached' : 'Auto counter-bid';
+                    const amt = ev.amount != null ? ('€' + Number(ev.amount).toFixed(2)) : '';
+                    const when = ev.createdAt ? formatDateTime(ev.createdAt) : '';
+                    return '<li>' + escapeHtml(label) + (amt ? ' — ' + escapeHtml(amt) : '') + (when ? ' <span class="muted-text">(' + escapeHtml(when) + ')</span>' : '') + '</li>';
+                }).join('') + '</ul></details>'
+                : '';
 
             return [
                 '<article class="my-bid-card">',
@@ -2893,12 +2922,17 @@
                 '<div class="my-bid-meta">',
                 '<div>Listing ID: ' + escapeHtml(getFormIdByQuoteId(bid.quoteId, quotesById)) + '</div>',
                 '<div>Amount: €' + Number(bid.amount).toFixed(2) + ' • Status: ' + escapeHtml(statusLabel) + '</div>',
+                '<div>' + escapeHtml(autoLabel) + '</div>',
                 '<div>Expires: ' + escapeHtml(formatDateTime(bid.expiresAt)) + '</div>',
                 '</div>',
                 '<p style="margin-top: 8px;">' + escapeHtml(bid.message || '') + '</p>',
+                historyHtml,
+                '<div class="job-actions" style="margin-top: 10px; display:flex; gap:8px; flex-wrap:wrap;">',
+                '<a class="ghost-btn" href="listing-details.html?quoteId=' + encodeURIComponent(bid.quoteId) + '">View listing</a>',
                 bid.status === 'active'
-                    ? '<div class="job-actions" style="margin-top: 10px;"><button type="button" class="ghost-btn withdraw-bid-btn" data-bid-id="' + escapeHtml(bid.id) + '">Withdraw bid</button></div>'
+                    ? '<button type="button" class="ghost-btn withdraw-bid-btn" data-bid-id="' + escapeHtml(bid.id) + '">Withdraw bid</button>'
                     : '',
+                '</div>',
                 '</article>'
             ].join('');
         }).join('');
