@@ -16,17 +16,17 @@
 <body>
     <nav class="navbar">
         <div class="navbar-container">
-            <a class="navbar-logo" href="dashboard.html" aria-label="Go to dashboard">
+            <a class="navbar-logo" href="index.html" aria-label="Go to landing page">
                 <img src="assets/logo.jpeg" alt="AnyTransport Logo" class="logo-img">
                 <span class="logo-text">AnyTransport</span>
             </a>
             <div class="navbar-menu">
-                <a href="https://anytransport.ie/#about" class="nav-link">About Us</a>
-                <a href="https://anytransport.ie/#services" class="nav-link">Our Services</a>
-                <a href="https://anytransport.ie/#how-it-works" class="nav-link">How it Works</a>
-                <a href="https://anytransport.ie/#pricing" class="nav-link">Pricing</a>
-                <a href="https://anytransport.ie/#faq" class="nav-link">FAQ</a>
-                <a href="https://anytransport.ie/#contact" class="nav-link">Contact Us</a>
+                <a href="index.html#about" class="nav-link">About Us</a>
+                <a href="index.html#services" class="nav-link">Our Services</a>
+                <a href="index.html#how-it-works" class="nav-link">How it Works</a>
+                <a href="index.html#pricing" class="nav-link">Pricing</a>
+                <a href="index.html#faq" class="nav-link">FAQ</a>
+                <a href="index.html#contact" class="nav-link">Contact Us</a>
             </div>
             <div class="navbar-right">
                 <div id="auth-menu" style="display: flex;">
@@ -51,7 +51,7 @@
                             </div>
                         </div>
                     </div>
-                    <a href="dashboard.html" style="text-decoration: none;">
+                    <a id="navbar-avatar-home-link" href="customer-dashboard.html" style="text-decoration: none;">
                         <div class="navbar-avatar" id="navbar-user-avatar">U</div>
                     </a>
                     <button class="btn btn-primary" onclick="logout()" style="margin-left: 10px;">Logout</button>
@@ -148,6 +148,24 @@
                                 <button type="button" class="expand-btn">(Expand) <strong>+</strong></button>
                             </div>
 
+                            <div class="form-group bid-autobid-group">
+                                <label class="bid-autobid-toggle">
+                                    <input type="checkbox" id="bid-autobid-enabled">
+                                    <span>Enable auto-bid on this listing</span>
+                                </label>
+                                <small class="helper-text">When another provider undercuts you, we automatically lower your bid by your chosen increment, down to your minimum.</small>
+                                <div id="bid-autobid-fields" class="bid-autobid-fields" hidden>
+                                    <div class="form-group" style="margin-top:10px;">
+                                        <label for="bid-autobid-increment">Bid drop increment (€)</label>
+                                        <input type="number" id="bid-autobid-increment" class="form-input" min="1" step="1" value="5">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="bid-autobid-floor">Minimum price — auto-bid floor (€)</label>
+                                        <input type="number" id="bid-autobid-floor" class="form-input" min="0" step="0.01" placeholder="Lowest you will go">
+                                    </div>
+                                </div>
+                            </div>
+
                             <button type="submit" class="btn bid-submit-btn">Quote</button>
 
                             <p class="bid-note">Your quote is binding. Your quote is incl <strong>VAT</strong>. There are no added extras. This is the flat fee for the job.</p>
@@ -159,7 +177,7 @@
 
     </main>
 
-    <script src="js/auth.js?v=20260417-5"></script>
+    <script src="js/auth.js?v=20260503-6"></script>
     <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/listing-details.js?v=20260503-1"></script>
 </body>

@@ -294,6 +294,10 @@ window.anytransportApi = window.anytransportApi || (function () {
             const response = request('users.upsert', 'POST', { user: user || {} });
             return response.user || user || null;
         },
+        updateAccountSettings: function (payload) {
+            const response = request('users.account.update', 'POST', payload || {});
+            return response.user || null;
+        },
         getQuotes: function (userId) {
             try {
                 const response = request('quotes.list', 'GET', null, userId ? { userId: userId } : {});
@@ -359,6 +363,18 @@ window.anytransportApi = window.anytransportApi || (function () {
         saveBid: function (bid) {
             const response = request('bids.create', 'POST', { bid: bid || {} });
             return response.bid || bid || null;
+        },
+        getAutoBidEvents: function (quoteId) {
+            try {
+                const params = quoteId ? { quoteId: String(quoteId) } : {};
+                const response = request('autobid.events.list', 'GET', null, params);
+                return Array.isArray(response.events) ? response.events : [];
+            } catch (err) {
+                if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                    console.debug('[AnyTransport API] getAutoBidEvents failed', err);
+                }
+                return [];
+            }
         },
         createFormReport: function (payload) {
             const response = request('reports.create', 'POST', payload || {});
@@ -532,6 +548,26 @@ class AuthManager {
             normalized.nickname = normalized.username;
         }
 
+        if (!normalized.identityReviewStatus) {
+            normalized.identityReviewStatus = normalized.role === 'provider' ? 'pending_review' : 'not_required';
+        }
+
+        if (!Array.isArray(normalized.identityPhotos)) {
+            normalized.identityPhotos = [];
+        }
+
+        if (!normalized.identityReviewSubmittedAt) {
+            normalized.identityReviewSubmittedAt = '';
+        }
+
+        if (!normalized.identityReviewedAt) {
+            normalized.identityReviewedAt = '';
+        }
+
+        if (!normalized.identityReviewedBy) {
+            normalized.identityReviewedBy = '';
+        }
+
         return normalized;
     }
 
@@ -636,6 +672,10 @@ class AuthManager {
         }
     }
 
+    /**
+     * Customers only see Profile (hub: forms + messages) and the quote flow — not the provider dashboard.
+     * Providers and admins keep Dashboard + provider profile + optional My requests.
+     */
     scheduleSyncNavigationForRole() {
         const run = () => this.syncNavigationForRole();
         if (document.readyState === 'loading') {
@@ -742,7 +782,6 @@ class AuthManager {
         if (navbarUserAvatar && displayName) {
             navbarUserAvatar.textContent = displayName.charAt(0).toUpperCase();
         }
-
         this.syncNavigationForRole();
     }
 
@@ -863,7 +902,8 @@ class AuthManager {
         const normalizedUser = this.normalizeUserRecord(user, users);
 
         // When a server API is available, let the server enforce username uniqueness
-        // to avoid false-positives caused by duplicate entries in the store.
+        // because the server has authoritative user data and may already contain
+        // legitimate entries that cause false positives locally.
         if (!window.anytransportApi) {
             if (this.isUsernameTaken(normalizedUser.username, targetId)) {
                 throw new Error('That username is already in use. Please choose another one.');
@@ -871,8 +911,9 @@ class AuthManager {
         }
 
         if (window.anytransportApi) {
-            // Avoid calling server users.upsert for users that already have an id
-            // to prevent 409 conflicts. Only call API save for new users.
+            // If the API is available and the user already has a server id, avoid
+            // calling users.upsert to prevent optimistic client conflicts (409).
+            // Server is authoritative — local state will be synchronized by API responses.
             if (!normalizedUser.id) {
                 const savedUser = window.anytransportApi.saveUser(normalizedUser);
                 if (savedUser && savedUser.id) {
@@ -882,6 +923,7 @@ class AuthManager {
                     return;
                 }
             } else {
+                // simply persist locally and trust server copy
                 this.currentUser = normalizedUser;
                 this.setStoredCurrentUser(this.currentUser);
                 this.initAuth();
@@ -1072,17 +1114,75 @@ function closeLoginModal() {
     }
 }
 
-function openSignupModal() {
-    document.getElementById('signup-modal').classList.add('show');
+function openSignupModal(role) {
+    const modal = document.getElementById('signup-modal');
+    if (!modal) {
+        return;
+    }
+
+    const roleHidden = document.getElementById('signup-role');
+    const title = document.getElementById('signup-modal-title');
+    const modeNote = document.getElementById('signup-role-note');
+    const identitySection = document.getElementById('provider-identity-section');
+    const selectedRole = role === 'provider' ? 'provider' : 'customer';
+
+    if (roleHidden) {
+        roleHidden.value = selectedRole;
+    }
+
+    if (title) {
+        title.textContent = selectedRole === 'provider' ? 'Transport Provider Sign Up' : 'Sign Up';
+    }
+
+    if (modeNote) {
+        modeNote.textContent = selectedRole === 'provider'
+            ? 'Provider account only'
+            : 'Customer account signup';
+    }
+
+    if (identitySection) {
+        identitySection.style.display = selectedRole === 'provider' ? 'block' : 'none';
+    }
+
+    modal.setAttribute('data-signup-role', selectedRole);
+    modal.classList.add('show');
 }
 
 function closeSignupModal() {
-    document.getElementById('signup-modal').classList.remove('show');
+    const modal = document.getElementById('signup-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+
+    const roleHidden = document.getElementById('signup-role');
+    const title = document.getElementById('signup-modal-title');
+    const modeNote = document.getElementById('signup-role-note');
+    const identitySection = document.getElementById('provider-identity-section');
+
+    if (roleHidden) {
+        roleHidden.value = 'customer';
+    }
+
+    if (title) {
+        title.textContent = 'Sign Up';
+    }
+
+    if (modeNote) {
+        modeNote.textContent = 'Customer account signup';
+    }
+
+    if (identitySection) {
+        identitySection.style.display = 'none';
+    }
+
+    if (modal) {
+        modal.setAttribute('data-signup-role', 'customer');
+    }
 }
 
-function switchToSignup() {
+function switchToSignup(role) {
     closeLoginModal();
-    openSignupModal();
+    openSignupModal(role);
 }
 
 function switchToLogin() {
@@ -1429,15 +1529,29 @@ if (signupForm) {
 }
 
 function initSignupRoleSelector() {
+    const modal = document.getElementById('signup-modal');
     const roleHidden = document.getElementById('signup-role');
-    if (!roleHidden) return;
+    if (!modal || !roleHidden) return;
 
     const roleButtons = Array.from(document.querySelectorAll('[data-signup-role]'));
-    if (!roleButtons.length) return;
+    const title = document.getElementById('signup-modal-title');
+    const modeNote = document.getElementById('signup-role-note');
 
     const applyRole = (value) => {
         const selected = value === 'provider' ? 'provider' : 'customer';
         roleHidden.value = selected;
+        modal.setAttribute('data-signup-role', selected);
+
+        if (title) {
+            title.textContent = selected === 'provider' ? 'Transport Provider Sign Up' : 'Sign Up';
+        }
+
+        if (modeNote) {
+            modeNote.textContent = selected === 'provider'
+                ? 'Provider account only'
+                : 'Customer account signup';
+        }
+
         roleButtons.forEach((btn) => {
             const isActive = btn.getAttribute('data-signup-role') === selected;
             btn.classList.toggle('active', isActive);
@@ -1451,7 +1565,7 @@ function initSignupRoleSelector() {
         });
     });
 
-    applyRole(roleHidden.value || 'customer');
+    applyRole(modal.getAttribute('data-signup-role') || roleHidden.value || 'customer');
 }
 
 if (document.readyState === 'loading') {

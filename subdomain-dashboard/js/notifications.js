@@ -234,6 +234,10 @@
                                     window.location.href = msgUrl;
                                     return;
                                 }
+                                if ((notifType === 'auto_bid_used' || notifType === 'auto_bid_floor' || notifType === 'bid_received') && quoteId) {
+                                    window.location.href = 'listing-details.html?quoteId=' + encodeURIComponent(quoteId);
+                                    return;
+                                }
                                 if (quoteId) {
                                     window.location.href = 'listing-details.html?quoteId=' + encodeURIComponent(quoteId);
                                 }

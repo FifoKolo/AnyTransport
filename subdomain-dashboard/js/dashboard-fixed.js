@@ -205,6 +205,7 @@
         }
 
         const user = auth.getUser();
+        // provider-mode 'profile' has been removed from the UI; no action required here
         if (!user) {
             alert('Session expired. Please sign in again.');
             window.location.href = 'index.html';
@@ -222,6 +223,14 @@
             return;
         }
 
+        const adminReviewNav = document.getElementById('admin-review-nav');
+        if (adminReviewNav) {
+            adminReviewNav.style.display = auth.isAdmin && auth.isAdmin() ? '' : 'none';
+        }
+
+        // If the inline nav only contains one visible item (e.g. only "Profile"), hide it to avoid a lonely pill.
+        consolidateInlineNav();
+
         loadUserInfo(user);
         wireTabs();
         wireProviderControls(user);
@@ -230,9 +239,6 @@
         ensureDemoListingsExist();
         applyFocusedFormContext();
         renderAll(user);
-
-        // If the inline nav only contains one visible item (e.g. only "Profile"), hide it to avoid a lonely pill.
-        consolidateInlineNav();
 
         if (canBeProvider) {
             showTab('provider-board');
@@ -258,6 +264,9 @@
             consolidateInlineNav();
             return;
         }
+
+        // Re-check inline nav visibility after provider-only tabs may have been hidden
+        consolidateInlineNav();
 
         if (state.focusedFormId && auth.isProvider && auth.isProvider()) {
             requestAnimationFrame(() => focusHighlightedProviderListing());
@@ -581,6 +590,16 @@
                 if (t) t.setAttribute('aria-expanded', 'false');
             });
         });
+        // wire profile back button if present
+        const backBtn = document.getElementById('profile-back-btn');
+        if (backBtn) {
+            backBtn.addEventListener('click', function () {
+                showTab('provider-board');
+                // also ensure the provider board mode is visible
+                const modeBtn = document.querySelector('.provider-mode-btn[data-mode="dashboard"]');
+                if (modeBtn) modeBtn.click();
+            });
+        }
     }
 
     function showTab(tabName) {
@@ -593,6 +612,23 @@
 
         const navItem = document.querySelector('[data-tab="' + tabName + '"]');
         if (navItem) navItem.classList.add('active');
+        // If profile tab opened, navigate to full profile page so dropdown and tab show identical view
+        if (tabName === 'profile') {
+            try {
+                const current = auth && auth.getUser ? auth.getUser() : null;
+                if (current && current.id) {
+                    window.location.href = 'provider-profile.html?userId=' + encodeURIComponent(current.id);
+                    return;
+                }
+                // fallback: render inline if no current user
+                if (typeof window.renderProviderProfileInto === 'function') {
+                    try {
+                        window.renderProviderProfileInto('dashboard-profile-container', '').catch(() => {});
+                    } catch (_e) {}
+                }
+            } catch (_e) {}
+        }
+
         if (tabName === 'profile') {
             const modeSwitch = document.getElementById('provider-mode-switch');
             if (modeSwitch) {
@@ -664,6 +700,7 @@
                     renderProviderMessages(user);
                     return;
                 }
+                // ensure listing rendering only for dashboard/search modes
                 renderProviderListings(user);
             });
         }
@@ -871,6 +908,7 @@
                 const notesField = reviewCard ? reviewCard.querySelector('.review-notes') : null;
                 const notes = notesField ? String(notesField.value || '').trim() : '';
 
+                // If admin is declining, require a note
                 if (status === 'rejected' && (!notes || String(notes).trim() === '')) {
                     alert('Please add a review note explaining the reason for declining this provider.');
                     if (notesField) notesField.focus();
@@ -1428,7 +1466,7 @@
                 : 'No listings match your search filters';
             const profileSpecs = collectProviderProfileSpecialties(user);
             const profileHint = profileSpecs.length && state.activeProviderMode !== 'dashboard'
-                ? '<p class="muted-text" style="margin-top:10px">Open jobs are limited to the types you selected under <strong>Jobs you specialise in</strong> on your <a href="../provider-profile.html">Profile</a>. Clear the category filter or add specialties there to see more listings.</p>'
+                ? '<p class="muted-text" style="margin-top:10px">Open jobs are limited to the types you selected under <strong>Jobs you specialise in</strong> on your <a href="provider-profile.html">Profile</a>. Clear the category filter or add specialties there to see more listings.</p>'
                 : '<p>Try a different tab or adjust your filters.</p>';
             container.innerHTML = [
                 header,
@@ -1504,7 +1542,7 @@
             } catch (_error) {
                 openReports = [];
             }
-            const apiBase = String(window.ANYTRANSPORT_API_URL || '../api/index.php');
+
             const pendingMarkup = providers.length ? providers.map((provider) => {
                 const name = escapeHtml(firstText(provider.businessName, provider.name, provider.nickname, provider.username, provider.email));
                 const email = escapeHtml(firstText(provider.email, 'Not provided'));
@@ -1512,10 +1550,7 @@
                 const notes = escapeHtml(firstText(provider.identityReviewNotes, ''));
                 const photos = Array.isArray(provider.identityPhotos) ? provider.identityPhotos : [];
                 const photoMarkup = photos.length ? photos.map((photo) => {
-                    const stripePhotoSrc = photo.stripeFile
-                        ? (apiBase + (apiBase.indexOf('?') >= 0 ? '&' : '?') + 'action=stripe.file.get&fileId=' + encodeURIComponent(photo.stripeFile))
-                        : '';
-                    const src = escapeHtml(firstText(photo.previewDataUrl, photo.dataUrl, photo.originalUrl, stripePhotoSrc));
+                    const src = escapeHtml(firstText(photo.previewDataUrl, photo.dataUrl, photo.originalUrl, (photo.stripeFile ? ('api/index.php?action=stripe.file.get&fileId=' + encodeURIComponent(photo.stripeFile)) : '')));
                     const label = escapeHtml(firstText(photo.label, photo.name, 'Identity photo'));
                     return '<figure style="margin:0; width:140px;">' +
                         '<img src="' + src + '" alt="' + label + '" style="width:140px; height:100px; object-fit:cover; border-radius:10px; border:1px solid #dbeafe;">' +
@@ -1766,27 +1801,27 @@
         const isFocused = !!state.focusedFormId && formId === state.focusedFormId;
 
         const quickQuoteText = lowest ? ('€' + Number(lowest.amount).toFixed(2)) : 'No bids';
-            return [
-                '<article class="provider-listing' + (isFocused ? ' is-focused-form' : '') + '" data-quote-id="' + escapeHtml(quote.id) + '" data-form-id="' + escapeHtml(formId) + '">',
-                '<div class="listing-row body listing-row-toggle" role="button" tabindex="0" aria-expanded="false">',
-                '<div class="listing-cell">' + escapeHtml(timeAgoLabel(quote.submittedAt)) + '</div>',
-                '<div class="listing-cell">',
-                '<div class="listing-title">' + escapeHtml(getQuoteTitle(quote)) + '</div>',
-                '<div class="listing-sub">Listing ' + escapeHtml(getFormIdLabel(quote)) + ' • ' + escapeHtml(quote.itemDescription || 'General move') + '</div>',
-                '</div>',
-                '<div class="listing-cell">' + escapeHtml(getFromLabel(quote)) + '</div>',
-                '<div class="listing-cell">' + escapeHtml(getToLabel(quote)) + '</div>',
-                '<div class="listing-cell">' + escapeHtml(getPickupLabel(quote)) + '</div>',
-                '<div class="listing-cell">' + quoteBids.length + '</div>',
-                '<div class="listing-cell"><span class="listing-amount">' + escapeHtml(quickQuoteText) + '</span></div>',
-                '<div class="listing-cell actions"><button type="button" class="get-details-btn" data-quote-id="' + escapeHtml(quote.id) + '" data-form-id="' + escapeHtml(getFormIdLabel(quote)) + '">Get Details</button></div>',
-                '</div>',
-                '<div class="listing-details">',
-                '<div class="details-layout">',
-                createQuickInfoPanel(quote),
-                '</div>',
-                '</div>',
-                '</article>'
+        return [
+            '<article class="provider-listing' + (isFocused ? ' is-focused-form' : '') + '" data-quote-id="' + escapeHtml(quote.id) + '" data-form-id="' + escapeHtml(formId) + '">',
+            '<div class="listing-row body listing-row-toggle" role="button" tabindex="0" aria-expanded="false">',
+            '<div class="listing-cell">' + escapeHtml(timeAgoLabel(quote.submittedAt)) + '</div>',
+            '<div class="listing-cell">',
+            '<div class="listing-title">' + escapeHtml(getQuoteTitle(quote)) + '</div>',
+            '<div class="listing-sub">Listing ' + escapeHtml(getFormIdLabel(quote)) + ' • ' + escapeHtml(quote.itemDescription || 'General move') + '</div>',
+            '</div>',
+            '<div class="listing-cell">' + escapeHtml(getFromLabel(quote)) + '</div>',
+            '<div class="listing-cell">' + escapeHtml(getToLabel(quote)) + '</div>',
+            '<div class="listing-cell">' + escapeHtml(getPickupLabel(quote)) + '</div>',
+            '<div class="listing-cell">' + quoteBids.length + '</div>',
+            '<div class="listing-cell"><span class="listing-amount">' + escapeHtml(quickQuoteText) + '</span></div>',
+            '<div class="listing-cell actions"><button type="button" class="get-details-btn" data-quote-id="' + escapeHtml(quote.id) + '" data-form-id="' + escapeHtml(getFormIdLabel(quote)) + '">Get Details</button></div>',
+            '</div>',
+            '<div class="listing-details">',
+            '<div class="details-layout">',
+            createQuickInfoPanel(quote),
+            '</div>',
+            '</div>',
+            '</article>'
         ].join('');
     }
 
@@ -2847,10 +2882,39 @@
             quotesById[quote.id] = quote;
         });
 
+        let autoBidEvents = [];
+        if (window.anytransportApi && typeof window.anytransportApi.getAutoBidEvents === 'function') {
+            try {
+                autoBidEvents = window.anytransportApi.getAutoBidEvents() || [];
+            } catch (_e) {
+                autoBidEvents = [];
+            }
+        }
+        const eventsByQuote = {};
+        autoBidEvents.forEach((event) => {
+            const qid = String(event && event.quoteId || '').trim();
+            if (!qid) return;
+            if (!eventsByQuote[qid]) eventsByQuote[qid] = [];
+            eventsByQuote[qid].push(event);
+        });
+
         container.innerHTML = bids.map((bid) => {
             const quote = quotesById[bid.quoteId] || null;
             const statusLabel = bid.status === 'active' ? 'Active' : 'Withdrawn';
             const title = quote ? getQuoteTitle(quote) : ('Listing ' + bid.quoteId);
+            const autoLabel = bid.autoBidEnabled
+                ? ('Auto-bid on • floor €' + Number(bid.autoBidFloor || 0).toFixed(2) + ' • step €' + Number(bid.autoBidIncrement || 0).toFixed(2))
+                : 'Auto-bid off';
+            const quoteEvents = eventsByQuote[bid.quoteId] || [];
+            const historyHtml = quoteEvents.length
+                ? '<details class="autobid-history" style="margin-top:10px;"><summary>Auto-bid activity (' + quoteEvents.length + ')</summary><ul class="autobid-history-list">' + quoteEvents.slice(0, 8).map((ev) => {
+                    const type = String(ev.type || 'event');
+                    const label = type === 'floor_reached' ? 'Floor reached' : 'Auto counter-bid';
+                    const amt = ev.amount != null ? ('€' + Number(ev.amount).toFixed(2)) : '';
+                    const when = ev.createdAt ? formatDateTime(ev.createdAt) : '';
+                    return '<li>' + escapeHtml(label) + (amt ? ' — ' + escapeHtml(amt) : '') + (when ? ' <span class="muted-text">(' + escapeHtml(when) + ')</span>' : '') + '</li>';
+                }).join('') + '</ul></details>'
+                : '';
 
             return [
                 '<article class="my-bid-card">',
@@ -2858,12 +2922,17 @@
                 '<div class="my-bid-meta">',
                 '<div>Listing ID: ' + escapeHtml(getFormIdByQuoteId(bid.quoteId, quotesById)) + '</div>',
                 '<div>Amount: €' + Number(bid.amount).toFixed(2) + ' • Status: ' + escapeHtml(statusLabel) + '</div>',
+                '<div>' + escapeHtml(autoLabel) + '</div>',
                 '<div>Expires: ' + escapeHtml(formatDateTime(bid.expiresAt)) + '</div>',
                 '</div>',
                 '<p style="margin-top: 8px;">' + escapeHtml(bid.message || '') + '</p>',
+                historyHtml,
+                '<div class="job-actions" style="margin-top: 10px; display:flex; gap:8px; flex-wrap:wrap;">',
+                '<a class="ghost-btn" href="listing-details.html?quoteId=' + encodeURIComponent(bid.quoteId) + '">View listing</a>',
                 bid.status === 'active'
-                    ? '<div class="job-actions" style="margin-top: 10px;"><button type="button" class="ghost-btn withdraw-bid-btn" data-bid-id="' + escapeHtml(bid.id) + '">Withdraw bid</button></div>'
+                    ? '<button type="button" class="ghost-btn withdraw-bid-btn" data-bid-id="' + escapeHtml(bid.id) + '">Withdraw bid</button>'
                     : '',
+                '</div>',
                 '</article>'
             ].join('');
         }).join('');

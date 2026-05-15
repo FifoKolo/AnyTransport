@@ -421,6 +421,53 @@
         if (customExpiryGroup) {
             customExpiryGroup.hidden = !modeEl || modeEl.value !== 'custom';
         }
+
+        updateAutoBidFieldsVisibility();
+        preloadAutoBidSettings(quote);
+    }
+
+    function updateAutoBidFieldsVisibility() {
+        const enabledEl = document.getElementById('bid-autobid-enabled');
+        const fieldsEl = document.getElementById('bid-autobid-fields');
+        if (!fieldsEl || !enabledEl) return;
+        fieldsEl.hidden = !enabledEl.checked;
+    }
+
+    function preloadAutoBidSettings(quote) {
+        const enabledEl = document.getElementById('bid-autobid-enabled');
+        const incrementEl = document.getElementById('bid-autobid-increment');
+        const floorEl = document.getElementById('bid-autobid-floor');
+        if (!enabledEl || !quote) return;
+
+        const user = getActiveUser();
+        if (!user || !user.id) return;
+
+        let myBid = null;
+        if (window.anytransportApi && typeof window.anytransportApi.getBids === 'function') {
+            try {
+                const bids = window.anytransportApi.getBids(quote.id) || [];
+                myBid = bids.find(function (bid) {
+                    return String(bid && bid.providerId || '') === String(user.id) && String(bid.status || 'active') === 'active';
+                }) || null;
+            } catch (_error) {
+                myBid = null;
+            }
+        }
+
+        if (myBid) {
+            enabledEl.checked = !!myBid.autoBidEnabled;
+            if (incrementEl && myBid.autoBidIncrement) {
+                incrementEl.value = String(myBid.autoBidIncrement);
+            }
+            if (floorEl && myBid.autoBidFloor) {
+                floorEl.value = String(myBid.autoBidFloor);
+            }
+        } else {
+            enabledEl.checked = false;
+            if (incrementEl && !incrementEl.value) incrementEl.value = '5';
+            if (floorEl) floorEl.value = '';
+        }
+        updateAutoBidFieldsVisibility();
     }
 
     function updateBidExpiryModeVisibility() {
@@ -2830,6 +2877,8 @@
                 const amount = Number(bid.amount || 0).toFixed(2);
                 const expiry = getBidExpiryLabel(bid);
                 const comment = getBidCommentLabel(bid);
+                var providerId = firstText(bid.providerId, bid.bidderId, bid.provider || '');
+                var profileLink = providerId ? ('<a class="legacy-bids-view-link" href="provider-profile.html?userId=' + encodeURIComponent(providerId) + '" target="_blank">View profile</a>') : '';
                 return '<tr>' +
                     '<td class="legacy-bidder-cell"><span class="legacy-bidder-icon">+</span>' + escapeHtml(bidder) + '</td>' +
                     '<td>€' + amount + '</td>' +
@@ -2837,7 +2886,7 @@
                     '<td><strong>P:</strong> ' + escapeHtml(dateLabel) + '<br><strong>D:</strong> ' + escapeHtml(dateLabel) + '</td>' +
                     '<td>' + escapeHtml(expiry) + '</td>' +
                     '<td class="legacy-bid-comment">' + escapeHtml(comment) + '</td>' +
-                    '<td><button type="button" class="legacy-bids-view-btn">VIEW</button></td>' +
+                    '<td>' + profileLink + ' <button type="button" class="legacy-bids-view-btn">VIEW</button></td>' +
                     '</tr>';
             }).join('') +
             '</tbody></table>';
@@ -2898,6 +2947,12 @@
             });
         }
 
+        const autoBidEnabledEl = document.getElementById('bid-autobid-enabled');
+        if (autoBidEnabledEl) {
+            autoBidEnabledEl.addEventListener('change', updateAutoBidFieldsVisibility);
+        }
+        preloadAutoBidSettings(quote);
+
         form.addEventListener('submit', function (evt) {
             evt.preventDefault();
 
@@ -2919,6 +2974,27 @@
             }
 
             const messageText = messageEl ? String(messageEl.value || '') : '';
+            const autoBidEnabledElSubmit = document.getElementById('bid-autobid-enabled');
+            const autoBidIncrementEl = document.getElementById('bid-autobid-increment');
+            const autoBidFloorEl = document.getElementById('bid-autobid-floor');
+            const autoBidEnabled = !!(autoBidEnabledElSubmit && autoBidEnabledElSubmit.checked);
+            const autoBidIncrement = autoBidIncrementEl ? Number(autoBidIncrementEl.value) : 0;
+            const autoBidFloor = autoBidFloorEl ? Number(autoBidFloorEl.value) : 0;
+
+            if (autoBidEnabled) {
+                if (!Number.isFinite(autoBidIncrement) || autoBidIncrement <= 0) {
+                    alert('Enter a valid auto-bid increment (€).');
+                    return;
+                }
+                if (!Number.isFinite(autoBidFloor) || autoBidFloor <= 0) {
+                    alert('Enter your minimum auto-bid price (floor).');
+                    return;
+                }
+                if (autoBidFloor >= amount) {
+                    alert('Your auto-bid floor must be lower than your quote amount.');
+                    return;
+                }
+            }
 
             const newBid = {
                 id: 'bid-' + Date.now(),
@@ -2934,6 +3010,10 @@
                 bidExpiryMode: expiryModeValue || 'listingEnds',
                 bidExpiryDate: expiryModeValue === 'custom' && expireDateEl ? String(expireDateEl.value || '') : '',
                 bidExpiryTime: expiryModeValue === 'custom' && expireTimeEl ? String(expireTimeEl.value || '') : '',
+                autoBidEnabled: autoBidEnabled,
+                autoBidIncrement: autoBidEnabled ? autoBidIncrement : 0,
+                autoBidFloor: autoBidEnabled ? autoBidFloor : 0,
+                bidSource: 'manual',
                 status: 'active',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -2961,22 +3041,6 @@
                     'Your quote of €' + Number(amount).toFixed(2) + ' has been submitted for ' + (quote.title || 'a job'),
                     { quoteId: quoteId, bidAmount: amount, quoteName: quote.title }
                 );
-            }
-
-            // Notification for customer (new bid received)
-            const quoteCreator = quote.createdBy ? { id: quote.createdBy } : null;
-            if (quoteCreator && quoteCreator.id) {
-                try {
-                    if (typeof window.notificationSystem === 'object' && window.notificationSystem.addNotification) {
-                        window.notificationSystem.addNotification(quoteCreator, 'quote-added',
-                            'New Quote from ' + providerName,
-                            'You received a quote of €' + Number(amount).toFixed(2) + ' for ' + (quote.title || 'your job'),
-                            { quoteId: quoteId, bidderId: user.id, bidAmount: amount }
-                        );
-                    }
-                } catch (_error) {
-                    // Silently fail if we can't create notification for customer
-                }
             }
 
             // Save message if checkbox is checked

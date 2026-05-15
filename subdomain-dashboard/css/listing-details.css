@@ -2473,3 +2473,29 @@ body.listing-details--customer .details-workspace {
         text-align: left;
     }
 }
+
+#bid-form-section .bid-autobid-group {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed #d5e0ea;
+}
+
+#bid-form-section .bid-autobid-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    color: #0f172a;
+    cursor: pointer;
+}
+
+#bid-form-section .bid-autobid-fields {
+    margin-top: 8px;
+}
+
+.autobid-history-list {
+    margin: 8px 0 0;
+    padding-left: 1.2rem;
+    color: #334155;
+    font-size: 0.92rem;
+}
