@@ -191,6 +191,10 @@ let lastAutoAdvancedFloor = '';
 let lastAutoAdvancedlift = '';
 
 function clearNextMissingHighlights() {
+    if (typeof window.clearInlineValidationNotice === 'function') {
+        window.clearInlineValidationNotice();
+    }
+    document.querySelectorAll('#dimensions-list .field-error-message').forEach((node) => node.remove());
     document.querySelectorAll('.next-missing-highlight').forEach((node) => {
         node.classList.remove('next-missing-highlight');
         node.classList.remove('input-error');
@@ -198,7 +202,207 @@ function clearNextMissingHighlights() {
     });
 }
 
+function setDimensionFieldValidationMessage(field, message) {
+    if (!field || field.nodeType !== 1) return;
+
+    const stack = field.closest('.dimension-field-stack');
+    if (!stack) return;
+
+    const text = String(message || '').trim();
+    let node = stack.querySelector('.field-error-message');
+    if (!text) {
+        if (node) node.remove();
+        return;
+    }
+
+    if (!node) {
+        node = document.createElement('div');
+        node.className = 'field-error-message';
+        node.setAttribute('role', 'alert');
+        stack.appendChild(node);
+    }
+    node.textContent = text;
+    node.style.display = 'block';
+}
+
 window.clearNextMissingHighlights = clearNextMissingHighlights;
+window.setDimensionFieldValidationMessage = setDimensionFieldValidationMessage;
+
+function getCustomizedItemFieldValidationMessage(field) {
+    if (!field || field.nodeType !== 1) {
+        return 'Please complete the required field before continuing.';
+    }
+
+    const row = field.closest('.dimension-item');
+    const rows = row && row.parentElement
+        ? Array.from(row.parentElement.querySelectorAll('.dimension-item'))
+        : [];
+    const rowIndex = rows.indexOf(row);
+    const prefix = rowIndex >= 0 ? `Custom item ${rowIndex + 1}` : 'Custom item';
+
+    if (field.classList.contains('dimension-description')) {
+        return `${prefix}: Description is required`;
+    }
+    if (field.classList.contains('dimension-width')) {
+        return `${prefix}: Width is required`;
+    }
+    if (field.classList.contains('dimension-depth')) {
+        return `${prefix}: Depth is required`;
+    }
+    if (field.classList.contains('dimension-height')) {
+        return `${prefix}: Height is required`;
+    }
+    if (field.classList.contains('dimension-weight')) {
+        return `${prefix}: Weight is required`;
+    }
+    if (field.classList.contains('dimension-source-floor')) {
+        return `${prefix}: Pickup floor is required`;
+    }
+    if (field.classList.contains('specialist-item-custom-value')) {
+        return `${prefix}: Enter the custom estimated value`;
+    }
+    if (field.closest('.specialist-item-value-nav')) {
+        return `${prefix}: Estimated value is required`;
+    }
+
+    return `${prefix}: This field is required`;
+}
+
+function showCustomizedItemValidationFeedback(field, message) {
+    if (!field || field.nodeType !== 1) {
+        return false;
+    }
+
+    const text = String(message || '').trim() || getCustomizedItemFieldValidationMessage(field);
+
+    if (typeof revealCustomizedItemsInventorySection === 'function') {
+        revealCustomizedItemsInventorySection();
+    }
+    if (typeof ensureMissingFieldSectionVisible === 'function') {
+        ensureMissingFieldSectionVisible(field);
+    }
+
+    field.classList.add('input-error');
+    field.setAttribute('aria-invalid', 'true');
+
+    const stack = field.closest('.dimension-field-stack');
+    if (stack) {
+        stack.classList.add('next-missing-highlight');
+    } else {
+        field.classList.add('next-missing-highlight');
+    }
+
+    if (typeof setDimensionFieldValidationMessage === 'function') {
+        setDimensionFieldValidationMessage(field, text);
+    }
+
+    if (typeof window.showInlineValidationNotice === 'function') {
+        window.showInlineValidationNotice(field, text, { variant: 'warning' });
+    }
+
+    const liveRegion = document.getElementById('validation-live-region');
+    if (liveRegion) {
+        liveRegion.textContent = text;
+    }
+
+    if (typeof field.scrollIntoView === 'function') {
+        field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    if (typeof field.focus === 'function') {
+        setTimeout(() => {
+            try {
+                field.focus({ preventScroll: true });
+            } catch (_error) {
+                field.focus();
+            }
+        }, 120);
+    }
+
+    return true;
+}
+
+function scanDimensionsListForMissingField() {
+    const dimensionsList = document.getElementById('dimensions-list');
+    if (!dimensionsList) {
+        return null;
+    }
+
+    const isSpecialistService = String(getActiveServiceValue() || '').trim().toLowerCase() === 'specialist & antiques';
+    const rows = Array.from(dimensionsList.querySelectorAll('.dimension-item'));
+    const requiredSelectors = [
+        '.dimension-description',
+        '.dimension-width',
+        '.dimension-depth',
+        '.dimension-height',
+        '.dimension-weight'
+    ];
+
+    for (const row of rows) {
+        for (const selector of requiredSelectors) {
+            const field = row.querySelector(selector);
+            if (field && !String(field.value || '').trim()) {
+                return field;
+            }
+        }
+
+        if (isSpecialistService) {
+            const specialistHidden = row.querySelector('.specialist-item-value-hidden');
+            const specialistValue = String(specialistHidden?.value || '').trim();
+            if (!specialistValue) {
+                return row.querySelector('.specialist-item-value-nav .option-nav-btn') || row;
+            }
+            if (specialistValue === 'other') {
+                const customValueField = row.querySelector('.specialist-item-custom-value');
+                if (!String(customValueField?.value || '').trim()) {
+                    return customValueField || row;
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+/** Returns false when customized-style Step 3 items are incomplete (blocks Next). */
+function blockIfCustomizedItemsIncomplete() {
+    if (typeof isCustomizedInventoryService !== 'function' || !isCustomizedInventoryService(getActiveServiceValue())) {
+        return true;
+    }
+
+    const step = parseInt(document.body.dataset.formStep || document.body.dataset.currentStep || '1', 10);
+    if (step !== 3) {
+        return true;
+    }
+
+    if (typeof window.updateCustomizedItemsHiddenValue === 'function') {
+        window.updateCustomizedItemsHiddenValue();
+    }
+
+    let missingField = null;
+    if (typeof window.getFirstIncompleteCustomizedItemField === 'function') {
+        missingField = window.getFirstIncompleteCustomizedItemField();
+    }
+    if (!missingField) {
+        missingField = scanDimensionsListForMissingField();
+    }
+    if (!missingField) {
+        return true;
+    }
+
+    const message = getCustomizedItemFieldValidationMessage(missingField);
+    showCustomizedItemValidationFeedback(missingField, message);
+
+    if (!document.querySelector('.inline-validation-notice, #dimensions-list .field-error-message')) {
+        window.alert(message);
+    }
+
+    return false;
+}
+
+window.getCustomizedItemFieldValidationMessage = getCustomizedItemFieldValidationMessage;
+window.showCustomizedItemValidationFeedback = showCustomizedItemValidationFeedback;
+window.blockIfCustomizedItemsIncomplete = blockIfCustomizedItemsIncomplete;
 
 /**
  * Validate City Area or Eircode input for Step 1 pickup and delivery.
@@ -1707,12 +1911,27 @@ function syncCreateJobGridMapLayout() {
     if (!formGrid) return;
 
     const sideMapPanel = formGrid.querySelector('.form-v2-map');
-    if (!sideMapPanel) return;
+    if (!sideMapPanel) {
+        formGrid.classList.add('no-side-map');
+        return;
+    }
 
     // Treat the panel as present only when it has actual element children.
     const hasSidePanelContent = sideMapPanel.children && sideMapPanel.children.length > 0;
     formGrid.classList.toggle('no-side-map', !hasSidePanelContent);
+
+    if (typeof map !== 'undefined' && map && typeof map.resize === 'function') {
+        requestAnimationFrame(() => {
+            try {
+                map.resize();
+            } catch (_error) {
+                // Ignore map resize failures during layout sync.
+            }
+        });
+    }
 }
+
+window.syncCreateJobGridMapLayout = syncCreateJobGridMapLayout;
 
 // Attach plus/minus logic to all inventory items (default and custom) after DOM loads
 
@@ -1721,6 +1940,8 @@ function syncCreateJobGridMapLayout() {
 document.addEventListener('DOMContentLoaded', function () {
     initTransportDatePicker();
     syncCreateJobGridMapLayout();
+    syncTransportFormPanelTheme();
+    window.addEventListener('resize', syncCreateJobGridMapLayout);
 
     function handleInventoryPlusMinus(container) {
         if (!container) return;
@@ -2573,6 +2794,128 @@ function getActiveServiceValue() {
     );
 }
 
+/** Toggles body classes used to exclude House / Office removal from transport blue-panel styling. */
+function syncTransportFormPanelTheme(serviceValue) {
+    const normalized = normalizeServiceValue(serviceValue || getActiveServiceValue());
+    const body = document.body;
+    if (!body) return;
+    body.classList.toggle('office-removals-active', normalized === 'Office Removals');
+}
+
+/** Maps a missing field (often hidden) to the visible control users should fix. */
+function resolveMissingFieldTarget(field) {
+    if (!field || field.nodeType !== 1) {
+        return field || null;
+    }
+
+    const fieldId = String(field.id || '').trim();
+
+    const targetMap = {
+        'pickup-property-type': 'property-type-icon-grid',
+        'delivery-property-type': 'delivery-property-type-icon-grid',
+        'pickup-lift-available': 'pickup-lift-option-container',
+        'delivery-lift-available': 'delivery-lift-option-container',
+        'pickup-floor-select': 'pickup-floors-selector',
+        'delivery-floor-select': 'delivery-floors-selector',
+        'service-transport-date': 'transport-date-trigger'
+    };
+
+    const mappedId = targetMap[fieldId];
+    if (mappedId) {
+        const mappedEl = document.getElementById(mappedId);
+        if (mappedEl) {
+            return mappedEl;
+        }
+    }
+
+    if (fieldId.endsWith('-entry-hidden')) {
+        const visibleField = document.getElementById(fieldId.replace('-entry-hidden', '-visible'));
+        if (visibleField && !visibleField.disabled && visibleField.offsetParent !== null) {
+            return visibleField.matches('select')
+                ? (visibleField.closest('.vehicle-select-shell') || visibleField)
+                : visibleField;
+        }
+    }
+
+    if (field.type === 'hidden' && fieldId) {
+        const optionNav = document.querySelector(`.option-nav[data-option-nav-for="${fieldId}"]`);
+        if (optionNav && optionNav.offsetParent !== null) {
+            return optionNav;
+        }
+    }
+
+    if (field.matches?.('select') && field.offsetParent !== null) {
+        return field.closest('.vehicle-select-shell') || field;
+    }
+
+    if (field.classList?.contains('option-nav') || field.classList?.contains('location-nav')) {
+        return field;
+    }
+
+    if (field.classList?.contains('movers-confirm-btn')) {
+        return field.closest('.service-requirement-card') || field;
+    }
+
+    return field;
+}
+
+/** Ensures step sections containing the field are visible before scroll/highlight. */
+function ensureMissingFieldSectionVisible(field) {
+    if (!field || typeof field.closest !== 'function') {
+        return;
+    }
+
+    const revealIds = new Set([
+        'pickup-room-list-wrapper',
+        'car-transport-section',
+        'motorbike-transport-section',
+        'trailer-campervan-section',
+        'piano-delivery-section',
+        'pets-transport-section',
+        'freight-step3-form',
+        'clearance-step3-form',
+        'customized-items-inventory-section',
+        'inventory-card-container'
+    ]);
+
+    let node = field;
+    while (node && node !== document.body) {
+        if (node.id && revealIds.has(node.id)) {
+            node.classList.remove('step-hidden');
+            if (node.style && node.style.display === 'none') {
+                node.style.display = '';
+            }
+        }
+        if (node.hasAttribute?.('data-form-step')) {
+            node.classList.remove('step-hidden');
+        }
+        node = node.parentElement;
+    }
+}
+
+/** Shows the customized / specialist items panel (hidden until floors are confirmed). */
+function revealCustomizedItemsInventorySection() {
+    const section = document.getElementById('customized-items-inventory-section');
+    const container = document.getElementById('inventory-card-container');
+    if (section) {
+        section.classList.add('customized-revealed');
+        section.classList.remove('step-hidden');
+        if (section.style.display === 'none') {
+            section.style.display = 'block';
+        }
+    }
+    if (container) {
+        container.classList.remove('step-hidden');
+        if (container.style.display === 'none') {
+            container.style.display = 'block';
+        }
+    }
+}
+
+window.resolveMissingFieldTarget = resolveMissingFieldTarget;
+window.ensureMissingFieldSectionVisible = ensureMissingFieldSectionVisible;
+window.revealCustomizedItemsInventorySection = revealCustomizedItemsInventorySection;
+
 function isVehicleTransportService(serviceValue) {
     return VEHICLE_TRANSPORT_SERVICES.has(normalizeServiceValue(serviceValue));
 }
@@ -2658,23 +3001,53 @@ function getPetsStep3MissingRequiredField(forAddAction = false) {
     }
 
     const petsJsonInput = document.getElementById('pets-json-hidden');
-    const addPetBtn = document.getElementById('add-pet-btn');
+    const continueHidden = document.getElementById('pet-continue-with-saved-hidden');
+    const continueBtn = document.getElementById('pet-continue-with-saved-btn');
     const ownerLiftField = document.getElementById('pet-owner-lift-hidden');
     const ownerLiftValue = (ownerLiftField?.value || '').trim();
+    const continueWithSavedChosen = String(continueHidden?.value || '').trim() === '1'
+        && continueBtn
+        && (continueBtn.style.display === 'none' || continueBtn.hidden);
 
+    let savedPetCount = 0;
     const rawPets = (petsJsonInput?.value || '').trim();
-    if (rawPets && !forAddAction) {
+    if (rawPets) {
         try {
             const parsedPets = JSON.parse(rawPets);
-            if (Array.isArray(parsedPets) && parsedPets.length > 0) {
-                if (!ownerLiftValue) {
-                    return ownerLiftField || section;
-                }
-                return null;
+            if (Array.isArray(parsedPets)) {
+                savedPetCount = parsedPets.length;
             }
         } catch (error) {
-            // Fall through and validate current form fields.
+            savedPetCount = 0;
         }
+    }
+
+    const hasPetDraftInProgress = () => {
+        const typeValue = (document.getElementById('pet-animal-type')?.value || '').trim().toLowerCase();
+        if (typeValue) return true;
+        if (String(document.getElementById('pet-other-name')?.value || '').trim()) return true;
+        if (String(document.getElementById('pet-weight-hidden')?.value || '').trim()) return true;
+        if (String(document.getElementById('pet-weight-custom')?.value || '').trim()) return true;
+        if (String(document.getElementById('pet-tank-length')?.value || '').trim()) return true;
+        if (String(document.getElementById('pet-media-hidden')?.value || '').trim()) return true;
+        return false;
+    };
+
+    const hasDraftInProgress = hasPetDraftInProgress();
+    const hasSavedPets = savedPetCount > 0;
+
+    if (hasSavedPets && !hasDraftInProgress) {
+        if (!ownerLiftValue) {
+            return ownerLiftField || section;
+        }
+        return null;
+    }
+
+    if (hasSavedPets && hasDraftInProgress && continueWithSavedChosen) {
+        if (!ownerLiftValue) {
+            return ownerLiftField || section;
+        }
+        return null;
     }
 
     const typeField = document.getElementById('pet-animal-type');
@@ -2687,7 +3060,9 @@ function getPetsStep3MissingRequiredField(forAddAction = false) {
 
     const typeValue = (typeField?.value || '').trim().toLowerCase();
     if (!typeValue) {
-        return typeField || section;
+        return document.querySelector('.option-nav[data-option-nav-for="pet-animal-type"]')
+            || typeField
+            || section;
     }
 
     const needsOtherName = typeValue === 'other';
@@ -2712,7 +3087,9 @@ function getPetsStep3MissingRequiredField(forAddAction = false) {
 
     const weightValue = (weightField?.value || '').trim();
     if (!weightValue) {
-        return weightField || section;
+        return document.querySelector('.option-nav[data-option-nav-for="pet-weight-hidden"]')
+            || weightField
+            || section;
     }
 
     if (weightValue === '81kg+') {
@@ -2723,10 +3100,12 @@ function getPetsStep3MissingRequiredField(forAddAction = false) {
     }
 
     if (!ownerLiftValue) {
-        return ownerLiftField || section;
+        return document.querySelector('.option-nav[data-option-nav-for="pet-owner-lift-hidden"]')
+            || ownerLiftField
+            || section;
     }
 
-    return forAddAction ? null : (addPetBtn || section);
+    return forAddAction ? null : (document.getElementById('pet-add-another-btn') || section);
 }
 
 function getOptionNavLabel(hiddenId) {
@@ -3569,6 +3948,20 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             const serviceValue = getActiveServiceValue();
+            const vehiclePrefixForSync = isCarCamperTransportService(serviceValue)
+                ? 'car'
+                : serviceValue === 'Motorbike Transport'
+                    ? 'motorbike'
+                    : (isCaravanTrailerTransportService(serviceValue) || serviceValue === 'Boats')
+                        ? 'trailer'
+                        : null;
+            if (
+                vehiclePrefixForSync
+                && window.multiItemsManager
+                && typeof window.multiItemsManager.syncVisibleVehicleFieldsToHidden === 'function'
+            ) {
+                window.multiItemsManager.syncVisibleVehicleFieldsToHidden(vehiclePrefixForSync);
+            }
             const jsonFieldId = isCarCamperTransportService(serviceValue)
                 ? 'car-json-hidden'
                 : serviceValue === 'Motorbike Transport'
@@ -3682,6 +4075,24 @@ document.addEventListener('DOMContentLoaded', function () {
                     return directValue;
                 }
 
+                if (field.type === 'hidden' && fieldId.endsWith('-entry-hidden')) {
+                    const visibleId = fieldId.replace('-entry-hidden', '-visible');
+                    const visibleField = document.getElementById(visibleId);
+                    if (visibleField && !visibleField.disabled) {
+                        let visibleValue = String(visibleField.value || '').trim();
+                        if (fieldId.endsWith('-year-entry-hidden')) {
+                            visibleValue = visibleValue.replace(/\D+/g, '').slice(0, 4);
+                            if (visibleField.value !== visibleValue) {
+                                visibleField.value = visibleValue;
+                            }
+                        }
+                        if (visibleValue) {
+                            field.value = visibleValue;
+                            return visibleValue;
+                        }
+                    }
+                }
+
                 if (field.type === 'hidden') {
                     const optionNav = document.querySelector(`.option-nav[data-option-nav-for="${fieldId}"]`);
                     if (optionNav) {
@@ -3722,10 +4133,14 @@ document.addEventListener('DOMContentLoaded', function () {
             const continueWithSavedChosen = String(continueWithSavedHidden?.value || '').trim() === '1'
                 && continueWithSavedBtnHidden;
 
-            const isSimpleCarMode = vehiclePrefix === 'car'
-                && !!(window.multiItemsManager && window.multiItemsManager.__simpleCarModePatched);
+            const isSimpleVehicleMode = !!(
+                window.multiItemsManager
+                && (window.multiItemsManager.__simpleVehicleModePatched || window.multiItemsManager.__simpleCarModePatched)
+                && window.multiItemsManager.commitSimpleVehicleDraft
+                && typeof window.multiItemsManager.commitSimpleVehicleDraft[vehiclePrefix] === 'function'
+            );
 
-            if (isSimpleCarMode) {
+            if (isSimpleVehicleMode) {
                 if (hasSavedVehicles && !hasDraftInProgress) {
                     return null;
                 }
@@ -3827,14 +4242,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 };
 
                 const beforeCount = parseVehicleCount(raw);
-                if (isSimpleCarMode) {
-                    const canCommitSimpleDraft = !!(
-                        window.multiItemsManager
-                        && typeof window.multiItemsManager.commitSimpleCarDraft === 'function'
-                    );
+                if (isSimpleVehicleMode) {
+                    const commitSimpleDraft = window.multiItemsManager.commitSimpleVehicleDraft?.[vehiclePrefix]
+                        || (vehiclePrefix === 'car' ? window.multiItemsManager.commitSimpleCarDraft : null);
+                    const canCommitSimpleDraft = typeof commitSimpleDraft === 'function';
 
                     if (canCommitSimpleDraft) {
-                        const committed = window.multiItemsManager.commitSimpleCarDraft({
+                        const committed = commitSimpleDraft({
                             showAlert: false,
                             focusOnMissing: false,
                             clearAfterSave: true
@@ -4070,11 +4484,41 @@ document.addEventListener('DOMContentLoaded', function () {
             );
             const hasDraftInProgress = hasCoreDraft || hasUnknownDraftExtras || hasCustomDraftExtras;
 
+            const continueWithSavedHidden = document.getElementById('piano-continue-with-saved-hidden');
+            const continueWithSavedBtn = document.getElementById('piano-continue-with-saved-btn');
+            const continueWithSavedBtnHidden = continueWithSavedBtn
+                ? (continueWithSavedBtn.style.display === 'none' || continueWithSavedBtn.hidden === true)
+                : false;
+            const continueWithSavedChosen = String(continueWithSavedHidden?.value || '').trim() === '1'
+                && continueWithSavedBtnHidden;
+
+            let savedPianoCount = 0;
+            if (pianoData) {
+                try {
+                    const parsed = JSON.parse(pianoData);
+                    if (Array.isArray(parsed)) {
+                        savedPianoCount = parsed.length;
+                    }
+                } catch (_e) {
+                    savedPianoCount = 0;
+                }
+            }
+
+            if (savedPianoCount > 0 && !hasDraftInProgress) {
+                return null;
+            }
+
+            if (savedPianoCount > 0 && hasDraftInProgress && continueWithSavedChosen) {
+                return null;
+            }
+
             if (!pianoData) {
                 // No pianos added yet - check if there's at least one in the form being entered
                 // If neither is filled, return the section to prompt user
                 if (!typeValue && !sizeValue) {
-                    return pianoJsonInput;
+                    return document.querySelector('.option-nav[data-option-nav-for="piano-type-entry-hidden"]')
+                        || typeInput
+                        || pianoJsonInput;
                 }
                 
                 // Check for "I don't know" (unknown) type
@@ -4128,12 +4572,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 
                 // If type is filled but size is missing, return size field
                 if (typeValue && !sizeValue) {
-                    return sizeInput || pianoJsonInput;
+                    return document.querySelector('.option-nav[data-option-nav-for="piano-size-entry-hidden"]')
+                        || sizeInput
+                        || pianoJsonInput;
                 }
                 
                 // If size is filled but type is missing, return type field
                 if (!typeValue && sizeValue) {
-                    return typeInput || pianoJsonInput;
+                    return document.querySelector('.option-nav[data-option-nav-for="piano-type-entry-hidden"]')
+                        || typeInput
+                        || pianoJsonInput;
                 }
                 
                 // Both are filled
@@ -4146,36 +4594,24 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             // If there's a draft in progress, attempt to auto-save it
-            if (hasDraftInProgress) {
-                const addPianoBtn = document.getElementById('add-piano-btn');
-                if (addPianoBtn && typeof addPianoBtn.click === 'function') {
-                    // Auto-save the draft
-                    addPianoBtn.click();
-                    
-                    // Check if it was successfully added
-                    const updatedPianoData = pianoJsonInput.value.trim();
-                    if (updatedPianoData !== pianoData) {
-                        // Successfully saved, allow progression
+            if (hasDraftInProgress && !continueWithSavedChosen) {
+                const manager = window.multiItemsManager;
+                if (manager && typeof manager.commitPianoDraft === 'function') {
+                    const committed = manager.commitPianoDraft({
+                        showAlert: false,
+                        focusOnMissing: false,
+                        clearAfterSave: true
+                    });
+                    if (committed) {
                         return null;
                     }
-                    
-                    // If save failed, return the first incomplete field to alert user
-                    if (!typeValue) return typeInput;
-                    if (!sizeValue) return sizeInput;
-                    
-                    // If basic fields are filled, check custom details if needed
-                    const customSection = document.getElementById('piano-custom-section');
-                    if (customSection && customSection.style.display !== 'none') {
-                        const customNameInput = document.getElementById('piano-custom-name');
-                        const customNameValue = (customNameInput?.value || '').trim();
-                        if (!customNameValue) return customNameInput;
-                    }
-                    
-                    return null;
                 }
+
+                const missing = manager?.getMissingPianoField?.(manager.collectPianoDraft?.());
+                if (missing) return missing;
+                return pianoJsonInput || section;
             }
 
-            // Piano(s) saved, no incomplete draft
             return null;
         };
 
@@ -4270,6 +4706,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
 
                     if (window.step3PickupFloorsConfirmed !== true) {
+                        return false;
+                    }
+
+                    if (
+                        (typeof window.getFirstIncompleteCustomizedItemField === 'function' && window.getFirstIncompleteCustomizedItemField())
+                        || (typeof getFirstIncompleteCustomizedItemField === 'function' && getFirstIncompleteCustomizedItemField())
+                    ) {
                         return false;
                     }
 
@@ -4673,7 +5116,8 @@ document.addEventListener('DOMContentLoaded', function () {
             };
         }
 
-        function highlightAndFocusMissingTarget(target) {
+        function highlightAndFocusMissingTarget(target, options = {}) {
+            const preserveValidation = !!options.preserveValidation;
             if (!target) return false;
 
             const scrollElementToTop = (element) => {
@@ -4740,7 +5184,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
 
-            window.clearNextMissingHighlights();
+            if (!preserveValidation) {
+                window.clearNextMissingHighlights();
+            } else {
+                document.querySelectorAll('.next-missing-highlight').forEach((node) => {
+                    node.classList.remove('next-missing-highlight');
+                });
+            }
 
             const visibleTarget = getVisibleMissingTarget(target) || getParentElement(target) || target;
             const visibleTargetElement = isDomElement(visibleTarget) ? visibleTarget : getParentElement(visibleTarget);
@@ -4828,15 +5278,41 @@ document.addEventListener('DOMContentLoaded', function () {
             return true;
         }
 
+        window.__highlightAndFocusMissingTarget = highlightAndFocusMissingTarget;
+
         function getMissingFieldDisplayName(field) {
             if (!field) return 'required field';
+
+            const presentationField = resolveMissingFieldTarget(field) || field;
 
             const cleanLabel = (text) => String(text || '')
                 .replace(/\(required\)/ig, '')
                 .replace(/\s+/g, ' ')
                 .trim();
 
-            const fieldId = field.id || '';
+            const fieldId = presentationField.id || field.id || '';
+
+            const getItemEntryPrefix = (targetField, fallbackLabel) => {
+                const entryForm = targetField?.closest?.('[data-item-entry-form], [data-vehicle-entry-form]');
+                const titleText = cleanLabel(entryForm?.querySelector?.('.custom-item-title')?.textContent);
+                if (titleText) return titleText;
+
+                const listIdMap = {
+                    piano: 'pianos-list',
+                    pet: 'pets-list',
+                    car: 'car-list',
+                    motorbike: 'motorbike-list',
+                    trailer: 'trailer-list'
+                };
+                const entryType = entryForm?.getAttribute?.('data-item-entry-form')
+                    || entryForm?.getAttribute?.('data-vehicle-entry-form')
+                    || '';
+                const list = entryType ? document.getElementById(listIdMap[entryType] || '') : null;
+                const itemIndex = (list && list.children.length > 0) ? list.children.length + 1 : 1;
+                if (entryType === 'piano') return `Piano ${itemIndex}`;
+                if (entryType === 'pet') return `Pet ${itemIndex}`;
+                return fallbackLabel || '';
+            };
 
             const getVehicleFieldPrefix = (targetField) => {
                 if (!targetField) return '';
@@ -4856,10 +5332,19 @@ document.addEventListener('DOMContentLoaded', function () {
                 const isVehicleField = /^(car|motorbike|trailer)-/.test(String(targetField?.id || fieldId));
                 if (!isVehicleField) return baseLabel;
 
-                const prefix = getVehicleFieldPrefix(targetField || field);
+                const prefix = getVehicleFieldPrefix(targetField || presentationField);
                 if (!prefix) return baseLabel;
 
                 const compactLabel = baseLabel.replace(/^(Car\/Campervan|Motorbike|Trailer\/Caravan|Boat)\s+/i, '');
+                return `${prefix}: ${compactLabel}`;
+            };
+
+            const toItemEntryScopedLabel = (targetField, label) => {
+                const baseLabel = cleanLabel(label);
+                if (!baseLabel) return '';
+                const prefix = getItemEntryPrefix(targetField || presentationField, '');
+                if (!prefix) return baseLabel;
+                const compactLabel = baseLabel.replace(/^(Piano|Pet)\s+/i, '');
                 return `${prefix}: ${compactLabel}`;
             };
 
@@ -4872,7 +5357,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 const rows = Array.from(row.parentElement?.querySelectorAll('.dimension-item') || []);
                 const rowIndex = rows.indexOf(row) + 1;
-                const rowPrefix = rowIndex > 0 ? `Customized item ${rowIndex}` : 'Customized item';
+                const rowPrefix = rowIndex > 0 ? `Custom item ${rowIndex}` : 'Custom item';
 
                 if (targetField.classList?.contains('dimension-description')) return `${rowPrefix} description`;
                 if (targetField.classList?.contains('dimension-quantity')) return `${rowPrefix} quantity`;
@@ -5055,7 +5540,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const isBoatsServiceActive = normalizeServiceValue(getActiveServiceValue()) === 'Boats';
             if (isBoatsServiceActive && fieldId && boatFieldLabels[fieldId]) {
-                return toVehicleScopedLabel(field, boatFieldLabels[fieldId]);
+                return toVehicleScopedLabel(presentationField, boatFieldLabels[fieldId]);
+            }
+
+            if (presentationField.closest?.('[data-item-entry-form="piano"]') || fieldId.startsWith('piano-')) {
+                if (fieldId && explicitFieldLabels[fieldId]) {
+                    return toItemEntryScopedLabel(presentationField, explicitFieldLabels[fieldId]);
+                }
+                const groupLabel = cleanLabel(presentationField.closest?.('.form-group')?.querySelector('.form-label')?.textContent);
+                if (groupLabel) return toItemEntryScopedLabel(presentationField, groupLabel);
+            }
+
+            if (presentationField.closest?.('[data-item-entry-form="pet"]') || fieldId.startsWith('pet-')) {
+                if (fieldId && explicitFieldLabels[fieldId]) {
+                    return toItemEntryScopedLabel(presentationField, explicitFieldLabels[fieldId]);
+                }
+                const groupLabel = cleanLabel(presentationField.closest?.('.form-group')?.querySelector('.form-label')?.textContent);
+                if (groupLabel) return toItemEntryScopedLabel(presentationField, groupLabel);
             }
 
             if (fieldId && explicitFieldLabels[fieldId]) {
@@ -5067,10 +5568,10 @@ document.addEventListener('DOMContentLoaded', function () {
                         return `Inventory details (missing: ${missingFloors.join(', ')})`;
                     }
                 }
-                return toVehicleScopedLabel(field, explicitFieldLabels[fieldId]);
+                return toVehicleScopedLabel(presentationField, explicitFieldLabels[fieldId]);
             }
 
-            if (field.classList?.contains('movers-confirm-btn')) {
+            if (presentationField.classList?.contains('movers-confirm-btn')) {
                 const targetInput = (field.getAttribute('data-target-input') || '').trim();
                 if (targetInput === 'service-pickup-movers') return 'Pickup movers confirmation';
                 if (targetInput === 'service-delivery-movers') return 'Delivery movers confirmation';
@@ -5080,34 +5581,38 @@ document.addEventListener('DOMContentLoaded', function () {
             if (fieldId) {
                 const directLabel = document.querySelector(`label[for="${fieldId}"]`);
                 const directText = cleanLabel(directLabel?.textContent);
-                if (directText) return directText;
+                if (directText) return toVehicleScopedLabel(presentationField, directText) || toItemEntryScopedLabel(presentationField, directText) || directText;
             }
 
-            if (field.type === 'hidden' && fieldId) {
+            if ((presentationField.type === 'hidden' || field.type === 'hidden') && fieldId) {
                 const optionNav = document.querySelector(`.option-nav[data-option-nav-for="${fieldId}"]`);
                 if (optionNav) {
                     const navAria = cleanLabel(optionNav.getAttribute('aria-label'));
-                    if (navAria) return navAria;
+                    if (navAria) return toItemEntryScopedLabel(presentationField, navAria) || navAria;
 
                     const navLabel = cleanLabel(
                         optionNav.closest('.custom-dropdown-wrapper')?.previousElementSibling?.textContent
                     );
-                    if (navLabel) return navLabel;
+                    if (navLabel) return toItemEntryScopedLabel(presentationField, navLabel) || navLabel;
                 }
             }
 
-            const groupLabel = cleanLabel(field.closest?.('.form-group')?.querySelector('.form-label')?.textContent);
-            if (groupLabel) return toVehicleScopedLabel(field, groupLabel);
+            const groupLabel = cleanLabel(presentationField.closest?.('.form-group')?.querySelector('.form-label')?.textContent);
+            if (groupLabel) {
+                return toVehicleScopedLabel(presentationField, groupLabel)
+                    || toItemEntryScopedLabel(presentationField, groupLabel)
+                    || groupLabel;
+            }
 
             const sectionHeading = cleanLabel(
-                field.querySelector?.('h2, h3, .section-title, .form-label')?.textContent
+                presentationField.querySelector?.('h2, h3, .section-title, .form-label')?.textContent
             );
             if (sectionHeading) return sectionHeading;
 
-            const ariaLabel = cleanLabel(field.getAttribute?.('aria-label'));
+            const ariaLabel = cleanLabel(presentationField.getAttribute?.('aria-label'));
             if (ariaLabel) return ariaLabel;
 
-            const placeholder = cleanLabel(field.placeholder);
+            const placeholder = cleanLabel(presentationField.placeholder);
             if (placeholder) return placeholder;
 
             return 'required field';
@@ -5130,35 +5635,72 @@ document.addEventListener('DOMContentLoaded', function () {
             const skipAlert = !!options.skipAlert;
             const customMessage = String(options.alertMessage || '').trim();
 
+            if (field.closest?.('#dimensions-list, #customized-items-inventory-section')) {
+                if (typeof revealCustomizedItemsInventorySection === 'function') {
+                    revealCustomizedItemsInventorySection();
+                }
+            }
+
+            ensureMissingFieldSectionVisible(field);
+            const resolvedField = resolveMissingFieldTarget(field) || field;
+
+            const message = alertMissingRestriction(resolvedField, customMessage);
+
+            if (!skipAlert && message && resolvedField.closest?.('#dimensions-list, #customized-items-inventory-section')) {
+                if (typeof window.showCustomizedItemValidationFeedback === 'function') {
+                    window.showCustomizedItemValidationFeedback(resolvedField, shortenValidationMessageFallback(message));
+                    return message;
+                }
+            }
+
+            if (!skipAlert && message) {
+                if (typeof window.setDimensionFieldValidationMessage === 'function' && resolvedField.closest?.('.dimension-field-stack')) {
+                    window.setDimensionFieldValidationMessage(resolvedField, shortenValidationMessageFallback(message));
+                }
+                if (typeof window.showInlineValidationNotice === 'function') {
+                    window.showInlineValidationNotice(resolvedField, message, {
+                        variant: options.alertVariant || 'warning'
+                    });
+                }
+            }
+
             let highlighted = false;
             if (typeof highlightAndFocusMissingTarget === 'function') {
-                highlighted = !!highlightAndFocusMissingTarget(field);
+                highlighted = !!highlightAndFocusMissingTarget(resolvedField, { preserveValidation: true });
             }
 
-            if (!highlighted && typeof scrollToField === 'function') {
-                scrollToField(field);
+            if (!highlighted && typeof resolvedField.scrollIntoView === 'function') {
+                resolvedField.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
 
-            const message = alertMissingRestriction(field, customMessage);
-            if (!skipAlert && message) {
-                setTimeout(() => {
-                    alert(message);
-                }, alertDelayMs);
+            if (!skipAlert && message && !document.querySelector('.inline-validation-notice, #dimensions-list .field-error-message')) {
+                if (typeof window.showAppAlert === 'function') {
+                    window.showAppAlert(message, {
+                        anchorEl: resolvedField,
+                        preferInline: true,
+                        variant: options.alertVariant || 'warning'
+                    });
+                } else {
+                    alert(shortenValidationMessageFallback(message));
+                }
             }
 
             return message;
         }
 
+        function shortenValidationMessageFallback(message) {
+            const text = String(message || '').trim();
+            const scoped = text.replace(/^Please fill in the required field:\s*/i, '').replace(/^Please complete the required field:\s*/i, '');
+            const match = scoped.match(/^[^:]+:\s*(.+)$/);
+            if (match && match[1]) {
+                return `${match[1].trim()} is required`;
+            }
+            return scoped || 'This field is required';
+        }
+
         window.revealMissingFieldBeforeAlert = revealMissingFieldBeforeAlert;
 
         function getFirstMissingTargetForStep(step) {
-            if (typeof validateRequiredFieldsInStep === 'function') {
-                const missingFromValidator = validateRequiredFieldsInStep(step);
-                if (missingFromValidator) {
-                    return missingFromValidator;
-                }
-            }
-
             const serviceValue = getActiveServiceValue();
             const isVehicleService = isVehicleLikeStepFlowService(serviceValue);
             const isClearance = isClearanceService(serviceValue);
@@ -5471,8 +6013,12 @@ document.addEventListener('DOMContentLoaded', function () {
             const dimensionsList = document.getElementById('dimensions-list');
             const isSpecialistService = String(getActiveServiceValue() || '').trim().toLowerCase() === 'specialist & antiques';
 
-            if (!customizedSection || customizedSection.offsetParent === null) {
+            if (!customizedSection) {
                 return null;
+            }
+
+            if (typeof revealCustomizedItemsInventorySection === 'function') {
+                revealCustomizedItemsInventorySection();
             }
 
             const rows = Array.from(dimensionsList?.querySelectorAll('.dimension-item') || []);
@@ -5487,7 +6033,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 const descField = descriptionFields[i];
                 const descValue = String(descField.value || '').trim();
                 if (!descValue) {
-                    console.error(`BLOCKING: Custom item ${i + 1} has empty description`);
                     return descField;
                 }
             }
@@ -5527,8 +6072,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (!field) continue;
                     const value = String(field.value || '').trim();
                     if (!value) {
-                        const fieldName = fieldNameMap[selector] || selector;
-                        console.warn(`Missing required field in custom item ${rowIndex + 1}: ${selector}`);
                         return field;
                     }
                 }
@@ -5566,6 +6109,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
             return null;
         }
+
+        window.getFirstIncompleteCustomizedItemField = getFirstIncompleteCustomizedItemField;
+
         // Scroll/visibility logic
         function updateStickyNextBtnVisibility() {
             const step = getEffectiveCurrentStep();
@@ -5784,56 +6330,38 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (step >= totalSteps) {
                     return;
                 }
-                
-                // EXTRA VALIDATION FOR CUSTOMIZED ITEMS ON STEP 3
-                if (step === 3 && isCustomizedInventoryService(getActiveServiceValue())) {
-                    console.log('STEP 3 CUSTOMIZED ITEMS - Running extra validation');
-                    const dimensionsList = document.getElementById('dimensions-list');
-                    const customItems = dimensionsList?.querySelectorAll('.dimension-item') || [];
-                    console.log(`Found ${customItems.length} custom items`);
-                    
-                    const fieldNameMap = {
-                        'dimension-description': 'Description',
-                        'dimension-width': 'Width',
-                        'dimension-depth': 'Depth',
-                        'dimension-height': 'Height',
-                        'dimension-weight': 'Weight',
-                        'dimension-source-floor': 'Pickup Floor'
-                    };
-                    
-                    const requiredFields = ['dimension-description', 'dimension-width', 'dimension-depth', 'dimension-height', 'dimension-weight'];
-                    
-                    // Check every custom item for all required fields
-                    for (let i = 0; i < customItems.length; i++) {
-                        const item = customItems[i];
-                        
-                        for (const fieldClass of requiredFields) {
-                            const field = item.querySelector(`.${fieldClass}`);
-                            if (!field) continue;
-                            
-                            const fieldValue = String(field.value || '').trim();
-                            const fieldName = fieldNameMap[fieldClass] || fieldClass;
-                            console.log(`Custom item ${i + 1} ${fieldName}: "${fieldValue}"`);
-                            
-                            if (!fieldValue) {
-                                console.error(`BLOCKING: Custom item ${i + 1} ${fieldName} is missing`);
-                                if (typeof window.revealMissingFieldBeforeAlert === 'function') {
-                                    window.revealMissingFieldBeforeAlert(field, {
-                                        alertDelayMs: 320,
-                                        alertMessage: `❌ Custom Item ${i + 1} is incomplete.\n\n${fieldName} is required.\n\nPlease fill in the ${fieldName} field before proceeding to the next step.`
-                                    });
-                                }
-                                return;
-                            }
-                        }
-                    }
+
+                if (typeof window.blockIfCustomizedItemsIncomplete === 'function' && !window.blockIfCustomizedItemsIncomplete()) {
+                    return;
                 }
                 
                 if (!requirementsMetForStep(step)) {
-                    const missingTarget = getFirstMissingTargetForStep(step);
+                    let missingTarget = getFirstMissingTargetForStep(step);
+                    if (!missingTarget && step === 3 && isCustomizedInventoryService(getActiveServiceValue())) {
+                        missingTarget = getFirstIncompleteCustomizedItemField();
+                    }
                     if (missingTarget) {
+                        const missingLabel = typeof getMissingFieldDisplayName === 'function'
+                            ? getMissingFieldDisplayName(missingTarget)
+                            : '';
                         if (typeof window.revealMissingFieldBeforeAlert === 'function') {
-                            window.revealMissingFieldBeforeAlert(missingTarget);
+                            window.revealMissingFieldBeforeAlert(missingTarget, {
+                                alertDelayMs: 0,
+                                alertMessage: missingLabel
+                                    ? `${missingLabel} is required.`
+                                    : 'Please complete the required field before continuing.'
+                            });
+                        } else if (typeof window.setDimensionFieldValidationMessage === 'function') {
+                            window.setDimensionFieldValidationMessage(
+                                missingTarget,
+                                missingLabel ? `${missingLabel} is required.` : 'This field is required.'
+                            );
+                            missingTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            if (typeof missingTarget.focus === 'function') {
+                                missingTarget.focus();
+                            }
+                        } else {
+                            alert(missingLabel ? `${missingLabel} is required.` : 'Please complete the required field before continuing.');
                         }
                     }
                     return;
@@ -18763,6 +19291,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    window.updateCustomizedItemsHiddenValue = updateCustomizedItemsHiddenValue;
+
     const renumberCustomizedItemTitles = () => {
         if (!dimensionsList) return;
         const items = Array.from(dimensionsList.querySelectorAll('.dimension-item'));
@@ -18930,10 +19460,21 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (dimensionsList) {
+        let specialistPlacementTimer = null;
         const specialistPlacementObserver = new MutationObserver(() => {
-            placeSpecialistValueInsideBlueForm();
+            const service = String(getActiveServiceValue() || '').trim().toLowerCase();
+            if (service !== 'specialist & antiques') {
+                return;
+            }
+            if (specialistPlacementTimer) {
+                clearTimeout(specialistPlacementTimer);
+            }
+            specialistPlacementTimer = setTimeout(() => {
+                specialistPlacementTimer = null;
+                placeSpecialistValueInsideBlueForm();
+            }, 80);
         });
-        specialistPlacementObserver.observe(dimensionsList, { childList: true, subtree: true });
+        specialistPlacementObserver.observe(dimensionsList, { childList: true });
     }
 
     window.placeSpecialistValueInsideBlueForm = placeSpecialistValueInsideBlueForm;
@@ -18984,9 +19525,21 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         dimensionsList.addEventListener('input', (e) => {
-            if (e.target.closest('.dimension-item')) {
-                updateCustomizedItemsHiddenValue();
+            if (!e.target.closest('.dimension-item')) return;
+            if (
+                e.target.classList.contains('dimension-width')
+                || e.target.classList.contains('dimension-depth')
+                || e.target.classList.contains('dimension-height')
+                || e.target.classList.contains('dimension-weight')
+                || e.target.classList.contains('dimension-description')
+            ) {
+                if (typeof window.setDimensionFieldValidationMessage === 'function') {
+                    window.setDimensionFieldValidationMessage(e.target, '');
+                }
+                e.target.classList.remove('input-error');
+                e.target.removeAttribute('aria-invalid');
             }
+            updateCustomizedItemsHiddenValue();
         });
 
         dimensionsList.addEventListener('change', (e) => {
@@ -19186,8 +19739,12 @@ document.addEventListener('DOMContentLoaded', function() {
             clearInlineError(cjHidden);
         }
         if (hasValue) {
+            syncTransportFormPanelTheme(value);
             setActiveServiceIcon(value);
             hideOtherSection();
+            if (typeof syncCreateJobGridMapLayout === 'function') {
+                syncCreateJobGridMapLayout();
+            }
             applyRequiredRules();
             updateLocationSections();
             updateLocationDetails();
@@ -19832,6 +20389,29 @@ document.addEventListener('DOMContentLoaded', function() {
         // validateStep1AreaOrEircode is now defined at module level, no need to redefine
 
         const validateRequiredFieldsInStep = (step) => {
+            const activeServiceValue = getActiveServiceValue();
+
+            const markAndReturnMissing = (missingField) => {
+                if (!missingField) return null;
+                const resolved = resolveMissingFieldTarget(missingField) || missingField;
+                markFieldError(resolved);
+                markFieldError(missingField);
+                setInlineError(resolved, getInlineRequiredMessage(resolved, quoteForm));
+                if (missingField.type === 'hidden') {
+                    const wrapperToggle = missingField.closest('.custom-dropdown-wrapper')?.querySelector('.dropdown-toggle');
+                    markFieldError(wrapperToggle);
+                }
+                return resolved;
+            };
+
+            // Service-aware checks first so alerts/scroll target the right control (floors before item forms, etc.).
+            if (typeof getFirstMissingTargetForStep === 'function') {
+                const orderedMissing = getFirstMissingTargetForStep(step);
+                if (orderedMissing) {
+                    return markAndReturnMissing(orderedMissing);
+                }
+            }
+
             const stepFields = [];
             stepTargets.forEach((el) => {
                 if (isStepMatch(el, step)) {
@@ -19840,7 +20420,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             let firstInvalid = null;
-            const activeServiceValue = getActiveServiceValue();
             const isVehicleStep = step === 3 && isVehicleTransportService(activeServiceValue);
 
             const isFieldInSavedVehicleList = (field) => {
@@ -20206,10 +20785,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (stepNextBtn) {
             stepNextBtn.addEventListener('click', () => {
                 applyRequiredRules();
-                const firstInvalid = validateRequiredFieldsInStep(currentStep);
-                if (firstInvalid) {
-                    if (typeof window.revealMissingFieldBeforeAlert === 'function') {
-                        window.revealMissingFieldBeforeAlert(firstInvalid);
+                if (typeof window.blockIfCustomizedItemsIncomplete === 'function' && !window.blockIfCustomizedItemsIncomplete()) {
+                    return;
+                }
+                if (!requirementsMetForStep(currentStep)) {
+                    const missingTarget = getFirstMissingTargetForStep(currentStep)
+                        || validateRequiredFieldsInStep(currentStep);
+                    if (missingTarget && typeof revealMissingFieldBeforeAlert === 'function') {
+                        revealMissingFieldBeforeAlert(missingTarget);
                     }
                     return;
                 }
@@ -20218,7 +20801,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     ? window.getStorageSelectionErrorMessage()
                     : '';
                 if (storageErrorMessage) {
-                    alert(storageErrorMessage);
+                    const storageAnchor = document.getElementById('service-storage-start-datetime')
+                        || document.getElementById('transport-date-trigger');
+                    if (typeof window.showInlineValidationNotice === 'function' && storageAnchor) {
+                        window.showInlineValidationNotice(storageAnchor, storageErrorMessage, { variant: 'warning' });
+                    } else if (typeof window.showAppAlert === 'function') {
+                        window.showAppAlert(storageErrorMessage, { title: 'Storage dates required', variant: 'warning' });
+                    } else {
+                        alert(storageErrorMessage);
+                    }
                     const storageStart = document.getElementById('service-storage-start-datetime');
                     const storageEnd = document.getElementById('service-storage-end-datetime');
                     const approxStartTo = document.getElementById('service-storage-start-approx-to');
@@ -20252,10 +20843,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     applyRequiredRules();
-                    const firstInvalid = validateRequiredFieldsInStep(currentStep);
-                    if (firstInvalid) {
-                        if (typeof window.revealMissingFieldBeforeAlert === 'function') {
-                            window.revealMissingFieldBeforeAlert(firstInvalid);
+                    if (!requirementsMetForStep(currentStep)) {
+                        const missingTarget = getFirstMissingTargetForStep(currentStep)
+                            || validateRequiredFieldsInStep(currentStep);
+                        if (missingTarget && typeof revealMissingFieldBeforeAlert === 'function') {
+                            revealMissingFieldBeforeAlert(missingTarget);
                         }
                         return;
                     }
@@ -20733,6 +21325,12 @@ document.addEventListener('DOMContentLoaded', function() {
             return {
                 title: 'Customized Items',
                 description: 'Add each custom item with photos, dimensions, and weight.'
+            };
+        }
+        if (normalized === 'Specialist & Antiques') {
+            return {
+                title: 'Specialist & Antiques',
+                description: 'Add each item with photos, dimensions, weight, and estimated value.'
             };
         }
         return {
@@ -21244,9 +21842,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     };
 
-    const resetPetEntryFields = () => {
+    const resetPetEntryFields = (options = {}) => {
+        const { keepOwnerLift = true } = options;
         clearOptionNavSelection('pet-animal-type');
         clearOptionNavSelection('pet-weight-hidden');
+        if (!keepOwnerLift) {
+            clearOptionNavSelection('pet-owner-lift-hidden');
+        }
         const petOtherName = document.getElementById('pet-other-name');
         const tankLength = document.getElementById('pet-tank-length');
         const tankWidth = document.getElementById('pet-tank-width');
@@ -21303,6 +21905,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        const ownerLiftValue = (document.getElementById('pet-owner-lift-hidden')?.value || '').trim();
+
         return {
             typeValue,
             typeLabel,
@@ -21314,16 +21918,60 @@ document.addEventListener('DOMContentLoaded', function() {
             weightValue,
             weightLabel,
             weightCustom,
+            ownerLiftValue,
+            ownerLiftLabel: getOptionNavLabel('pet-owner-lift-hidden'),
             media
         };
+    };
+
+    const hasPetDraftInProgress = () => {
+        const typeValue = (document.getElementById('pet-animal-type')?.value || '').trim().toLowerCase();
+        if (typeValue) return true;
+        if (String(document.getElementById('pet-other-name')?.value || '').trim()) return true;
+        if (String(document.getElementById('pet-weight-hidden')?.value || '').trim()) return true;
+        if (String(document.getElementById('pet-weight-custom')?.value || '').trim()) return true;
+        if (String(document.getElementById('pet-tank-length')?.value || '').trim()) return true;
+        if (String(document.getElementById('pet-media-hidden')?.value || '').trim()) return true;
+        return false;
+    };
+
+    const syncPetDraftUi = () => {
+        const deleteFormBtn = document.getElementById('pet-delete-form-btn');
+        const addAnotherBtn = document.getElementById('pet-add-another-btn');
+        const continueBtn = document.getElementById('pet-continue-with-saved-btn');
+        const continueHidden = document.getElementById('pet-continue-with-saved-hidden');
+        const savedCount = parsePetsList().length;
+        const hasSaved = savedCount > 0;
+        const hasDraft = hasPetDraftInProgress();
+        const isEditing = editingPetIndex !== null;
+
+        if (continueBtn && continueHidden) {
+            continueBtn.style.display = (hasSaved && hasDraft && !isEditing) ? '' : 'none';
+            if (!(hasSaved && hasDraft && !isEditing) && continueHidden.value) {
+                continueHidden.value = '';
+                continueHidden.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }
+        if (deleteFormBtn) {
+            deleteFormBtn.style.display = (hasDraft || isEditing) ? '' : 'none';
+            deleteFormBtn.textContent = isEditing ? 'Cancel edit' : 'Clear form';
+        }
+        if (addAnotherBtn) {
+            addAnotherBtn.style.display = isEditing ? 'none' : '';
+            addAnotherBtn.textContent = '+ Add Another Pet';
+        }
     };
 
     const addCurrentPetEntry = () => {
         const missingField = getPetsStep3MissingRequiredField(true);
         if (missingField) {
-            if (missingField.id !== 'add-pet-btn') {
-                markFieldError(missingField);
-                setInlineError(missingField, getInlineRequiredMessage(missingField, quoteForm));
+            if (missingField.id !== 'add-pet-btn' && missingField.id !== 'pet-add-another-btn') {
+                if (typeof window.revealMissingFieldBeforeAlert === 'function') {
+                    window.revealMissingFieldBeforeAlert(missingField);
+                } else {
+                    markFieldError(missingField);
+                    setInlineError(missingField, getInlineRequiredMessage(missingField, quoteForm));
+                }
             }
             return false;
         }
@@ -21338,7 +21986,8 @@ document.addEventListener('DOMContentLoaded', function() {
         setPetsList(pets);
         renderPetsList();
         clearPetEditState();
-        resetPetEntryFields();
+        resetPetEntryFields({ keepOwnerLift: true });
+        syncPetDraftUi();
         return true;
     };
 
@@ -21520,6 +22169,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const itemIndex = dimensionsList.querySelectorAll('.dimension-item').length + 1;
         const item = document.createElement('div');
         item.className = 'dimension-item';
+        item.setAttribute('data-item-entry-form', 'custom');
         item.innerHTML = `
             <div class="custom-item-title" style="font-size:1.5rem; font-weight:800; color:#0f172a; margin:0 0 10px;">Custom item ${itemIndex}</div>
             <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
@@ -21588,15 +22238,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input type="number" class="form-input dimension-field dimension-quantity" placeholder="Qty" aria-label="Quantity" min="1" step="1" value="1" data-required="true" aria-required="true">
                 </div>
                 <div class="dimension-field-stack">
-                    <span class="dimension-input-label">Width</span>
+                    <span class="dimension-input-label">Width <span class="required-text">(required)</span></span>
                     <input type="number" class="form-input dimension-field dimension-width" placeholder="Width" aria-label="Width" min="0" step="0.1">
                 </div>
                 <div class="dimension-field-stack">
-                    <span class="dimension-input-label">Depth</span>
+                    <span class="dimension-input-label">Depth <span class="required-text">(required)</span></span>
                     <input type="number" class="form-input dimension-field dimension-depth" placeholder="Depth" aria-label="Depth" min="0" step="0.1">
                 </div>
                 <div class="dimension-field-stack">
-                    <span class="dimension-input-label">Height</span>
+                    <span class="dimension-input-label">Height <span class="required-text">(required)</span></span>
                     <input type="number" class="form-input dimension-field dimension-height" placeholder="Height" aria-label="Height" min="0" step="0.1">
                 </div>
                 <div class="dimension-field-stack">
@@ -21610,7 +22260,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     </select>
                 </div>
                 <div class="dimension-field-stack">
-                    <span class="dimension-input-label">Weight</span>
+                    <span class="dimension-input-label">Weight <span class="required-text">(required)</span></span>
                     <input type="number" class="form-input dimension-field dimension-weight" placeholder="Weight" aria-label="Weight" min="0" step="0.1">
                 </div>
                 <div class="dimension-field-stack">
@@ -21902,19 +22552,96 @@ document.addEventListener('DOMContentLoaded', function() {
     if (petWeightRangeField) petWeightRangeField.addEventListener('change', syncPetsStep3Fields);
 
     const addPetBtn = document.getElementById('add-pet-btn');
+    const petAddAnotherBtn = document.getElementById('pet-add-another-btn');
+    const petDeleteFormBtn = document.getElementById('pet-delete-form-btn');
+    const petContinueBtn = document.getElementById('pet-continue-with-saved-btn');
+    const petContinueHidden = document.getElementById('pet-continue-with-saved-hidden');
+
     if (addPetBtn) {
-        setPetAddButtonLabel();
-        addPetBtn.addEventListener('click', () => {
-            addCurrentPetEntry();
+        addPetBtn.style.display = 'none';
+    }
+
+    const persistPetFormState = () => {
+        syncPetsStep3Fields();
+        syncPetDraftUi();
+        if (typeof window.updateNextButtonState === 'function') {
+            window.updateNextButtonState();
+        }
+    };
+
+    ['pet-animal-type', 'pet-weight-hidden', 'pet-owner-lift-hidden', 'pet-other-name',
+        'pet-tank-length', 'pet-tank-width', 'pet-tank-height', 'pet-weight-custom', 'pet-media-hidden']
+        .forEach((fieldId) => {
+            const field = document.getElementById(fieldId);
+            if (!field || field.dataset.petDraftBound === '1') return;
+            field.dataset.petDraftBound = '1';
+            field.addEventListener('input', persistPetFormState);
+            field.addEventListener('change', persistPetFormState);
+        });
+
+    document.querySelectorAll('.option-nav[data-option-nav-for="pet-animal-type"], .option-nav[data-option-nav-for="pet-weight-hidden"], .option-nav[data-option-nav-for="pet-owner-lift-hidden"]')
+        .forEach((nav) => {
+            if (nav.dataset.petDraftBound === '1') return;
+            nav.dataset.petDraftBound = '1';
+            nav.addEventListener('click', () => setTimeout(persistPetFormState, 0));
+        });
+
+    const petMediaInput = document.getElementById('pet-media-input');
+    if (petMediaInput && petMediaInput.dataset.petDraftBound !== '1') {
+        petMediaInput.dataset.petDraftBound = '1';
+        petMediaInput.addEventListener('change', () => {
+            if (window.multiItemsManager?.syncVehicleMediaFromInput) {
+                window.multiItemsManager.syncVehicleMediaFromInput('pet');
+            }
+            persistPetFormState();
+        });
+    }
+
+    if (petAddAnotherBtn && petAddAnotherBtn.dataset.petDraftBound !== '1') {
+        petAddAnotherBtn.dataset.petDraftBound = '1';
+        petAddAnotherBtn.addEventListener('click', async () => {
+            if (window.multiItemsManager?.pendingVehicleMediaSync?.pet) {
+                await window.multiItemsManager.pendingVehicleMediaSync.pet;
+            }
+            if (window.multiItemsManager?.resolveVehicleMediaForSave) {
+                await window.multiItemsManager.resolveVehicleMediaForSave('pet');
+            }
+            if (!addCurrentPetEntry()) return;
             if (typeof window.updateFormSummary === 'function') {
                 window.updateFormSummary();
             }
-            // Keep the Add button from staying in a focused/pressed visual state after click.
-            if (typeof addPetBtn.blur === 'function') {
-                addPetBtn.blur();
+            petAddAnotherBtn.blur?.();
+        });
+    }
+
+    if (petDeleteFormBtn && petDeleteFormBtn.dataset.petDraftBound !== '1') {
+        petDeleteFormBtn.dataset.petDraftBound = '1';
+        petDeleteFormBtn.addEventListener('click', () => {
+            if (editingPetIndex !== null) {
+                editingPetIndex = null;
+                setPetAddButtonLabel();
+            }
+            resetPetEntryFields({ keepOwnerLift: true });
+            syncPetDraftUi();
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
             }
         });
     }
+
+    if (petContinueBtn && petContinueHidden && petContinueBtn.dataset.petDraftBound !== '1') {
+        petContinueBtn.dataset.petDraftBound = '1';
+        petContinueBtn.addEventListener('click', () => {
+            petContinueHidden.value = '1';
+            petContinueHidden.dispatchEvent(new Event('change', { bubbles: true }));
+            syncPetDraftUi();
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
+        });
+    }
+
+    syncPetDraftUi();
 
     const petsListEl = document.getElementById('pets-list');
     if (petsListEl) {
@@ -21924,6 +22651,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const index = parseInt(editBtn.getAttribute('data-edit-pet-index'), 10);
                 if (!Number.isFinite(index)) return;
                 startEditingPetEntry(index);
+                syncPetDraftUi();
                 return;
             }
 
@@ -21939,6 +22667,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 editingPetIndex = null;
                 setPetAddButtonLabel();
             }
+            syncPetDraftUi();
             if (typeof window.updateFormSummary === 'function') {
                 window.updateFormSummary();
             }
@@ -23399,6 +24128,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             document.body.classList.remove('house-removals-active');
         }
+        syncTransportFormPanelTheme(serviceValue);
 
         if (isCustomizedItems) {
             if (inventoryCardContainer && currentStep === '3') {
@@ -24496,21 +25226,17 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             console.log('[QUOTE FORM] Auth OK, user:', currentUser.email);
 
-            const showSubmitValidationError = (message, targetEl, fieldForAlert) => {
+            const showSubmitValidationError = (message, targetEl) => {
                 const text = String(message || '').trim();
                 if (formErrorSummary && text) {
                     formErrorSummary.textContent = text;
                     formErrorSummary.style.display = 'block';
                 }
 
-                if (targetEl && typeof targetEl.scrollIntoView === 'function') {
-                    targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-
-                if (fieldForAlert) {
-                    setTimeout(() => {
-                        alertMissingRestriction(fieldForAlert);
-                    }, 240);
+                if (targetEl && typeof revealMissingFieldBeforeAlert === 'function') {
+                    revealMissingFieldBeforeAlert(targetEl, {
+                        alertMessage: text || undefined
+                    });
                 }
             };
 
@@ -24539,22 +25265,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     ? getMissingFieldDisplayName(firstInvalidField)
                     : 'required field';
                 console.log('[QUOTE FORM] Step validation error, cannot submit');
-                showSubmitValidationError(`Please complete the required field: ${missingFieldLabel}.`, firstInvalidField);
-
                 if (typeof window.setFormStep === 'function') {
                     window.setFormStep(stepValidationFailure.step);
                 }
 
-                if (typeof window.revealMissingFieldBeforeAlert === 'function') {
-                    window.revealMissingFieldBeforeAlert(firstInvalidField);
-                }
-                const serviceGrid = document.getElementById('service-icon-grid');
-                if (firstInvalidField.id === 'item-description-hidden' && serviceGrid) {
-                    markFieldError(serviceGrid);
-                    serviceGrid.querySelector('.service-icon-btn')?.focus();
-                } else if (typeof firstInvalidField.focus === 'function') {
-                    firstInvalidField.focus();
-                }
+                showSubmitValidationError(
+                    `Please complete the required field: ${missingFieldLabel}.`,
+                    firstInvalidField
+                );
                 return;
             }
 
@@ -24944,7 +25662,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!isMultiStopMode && isPetsService(itemTypeValue)) {
                 const missingPetsField = getPetsStep3MissingRequiredField();
                 if (missingPetsField) {
-                    showSubmitValidationError('Please complete all required pet transport details.', document.getElementById('pets-transport-section'), missingPetsField);
+                    showSubmitValidationError(
+                        'Please complete all required pet transport details.',
+                        missingPetsField || document.getElementById('pets-transport-section')
+                    );
                     return;
                 }
 
@@ -26479,23 +27200,34 @@ function hideSpecialistAntiquesSection() {
 }
 
 function showSpecialistAntiquesSection() {
-    const specialistSection = document.getElementById('office-removal-description-section');
+    // Same Step 3 path as Customized Items. Never show #office-removal-description-section here —
+    // it wraps freight/clearance step-3 UIs and breaks the grid when set to display:block.
+    const officeDescSection = document.getElementById('office-removal-description-section');
     const specialistValueSection = document.getElementById('specialist-antiques-value-section');
     const deliveryLocationCol = document.getElementById('delivery-location-col');
     const officeGenericCard = document.getElementById('office-generic-description-card');
 
-    if (specialistSection) {
-        specialistSection.setAttribute('data-form-step', '3');
-        specialistSection.style.display = 'block';
+    if (officeDescSection) {
+        officeDescSection.setAttribute('data-form-step', '2');
+        officeDescSection.style.display = 'none';
+        officeDescSection.classList.add('step-hidden');
     }
+
+    const freightStep3 = document.getElementById('freight-step3-form');
+    if (freightStep3) {
+        freightStep3.style.display = 'none';
+    }
+
     if (specialistValueSection) {
-        specialistValueSection.style.display = 'block';
+        specialistValueSection.style.display = 'none';
     }
+
     const valueHidden = document.getElementById('specialist-value-hidden');
     if (valueHidden) {
-        valueHidden.setAttribute('data-required', 'true');
-        valueHidden.setAttribute('aria-required', 'true');
+        valueHidden.setAttribute('data-required', 'false');
+        valueHidden.setAttribute('aria-required', 'false');
     }
+
     if (officeGenericCard) {
         officeGenericCard.style.display = 'none';
     }
@@ -26503,9 +27235,14 @@ function showSpecialistAntiquesSection() {
         deliveryLocationCol.style.display = '';
     }
 
+    document.body.classList.add('customized-items-active');
+
     setupSpecialistValueListeners();
     if (typeof window.placeSpecialistValueInsideBlueForm === 'function') {
         window.placeSpecialistValueInsideBlueForm();
+    }
+    if (typeof window.syncSpecialistItemValueFields === 'function') {
+        window.syncSpecialistItemValueFields();
     }
 }
 

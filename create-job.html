@@ -9,7 +9,7 @@
     <title>Request a Quote - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260420-4">
-    <link rel="stylesheet" href="css/create-job.css?v=20260503-5">
+    <link rel="stylesheet" href="css/create-job.css?v=20260518-11">
     <link rel="stylesheet" href="css/house-removal.css?v=20260422-2">
     <link rel="stylesheet" href="css/sticky-next-btn.css?v=20260503-1">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
@@ -138,8 +138,10 @@
         </div>
     </div>
 
+    <div id="validation-live-region" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
     <main class="job-form v2">
-        <div class="form-v2-grid">
+        <div class="form-v2-grid no-side-map">
                 <aside class="form-stepper" id="form-stepper">
                     <div class="stepper-card">
                         <span class="stepper-eyebrow">Step-by-step</span>
@@ -213,7 +215,7 @@
                         <!-- Step 1: Destinations (Map) -->
                         <div class="card-section map-step-card" data-form-step="1">
                             <h2 class="section-title">Step 1: Select Destinations</h2>
-                            <div class="map-card" id="route-map" style="width: 100%; height: 100%;"></div>
+                            <div class="map-card" id="route-map" aria-label="Route map"></div>
                             <div class="map-info">
                                 <div class="map-summary">
                                     <div class="map-route-label"><span id="pickup-label"></span> &rarr; <span id="delivery-label"></span></div>
@@ -619,7 +621,8 @@
                                 <input type="hidden" id="pianos-json-hidden" name="pianos-data" value="">
 
                                 <!-- Piano entry form -->
-                                <div style="border: 1px solid #dbeafe; border-radius: 10px; padding: 16px; background: #f8fbff; margin-bottom: 16px;">
+                                <div data-item-entry-form="piano" class="transport-item-panel dimension-item" style="margin-bottom: 16px;">
+                                    <button type="button" id="piano-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">Clear form</button>
                                     <div class="form-group" style="margin-bottom: 16px;">
                                         <label class="form-label">Piano type <span class="required-text">(required)</span></label>
                                         <div class="custom-dropdown-wrapper has-option-nav">
@@ -660,7 +663,7 @@
                                             <input type="hidden" id="piano-size-entry-hidden" value="">
                                         </div>
                                         <!-- Measurement inputs shown when piano type is "I don't know" -->
-                                        <div id="piano-unknown-measurements" style="display: none; margin-top: 14px; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #f0f9ff;">
+                                        <div id="piano-unknown-measurements" class="transport-item-subpanel" style="display: none; margin-top: 14px;">
                                             <p style="margin: 0 0 12px; color: #64748b; font-size: 0.9rem;">Please provide approximate piano measurements:</p>
                                             <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px;">
                                                 <div class="form-group" style="margin-bottom: 0;">
@@ -688,7 +691,7 @@
                                         </div>
                                     </div>
 
-                                    <div id="piano-custom-section" style="display: none; margin-top: 10px; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #fff;">
+                                    <div id="piano-custom-section" class="transport-item-subpanel" style="display: none; margin-top: 10px;">
                                         <h4 style="margin: 0 0 10px; color: #0f172a; font-size: 1rem;">Custom Piano Details</h4>
                                         <div class="form-group" style="margin-bottom: 12px;">
                                             <label class="form-label" for="piano-custom-name">Piano name / model <span id="piano-custom-name-required" class="required-text" style="display:none;">(required)</span></label>
@@ -720,7 +723,7 @@
                                     </div>
 
                                     <!-- Photo/Video Upload Section -->
-                                    <div id="piano-photo-section" style="margin-bottom: 16px; margin-top: 16px; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #f8fbff;">
+                                    <div id="piano-photo-section" class="transport-item-subpanel" style="margin-bottom: 16px; margin-top: 16px;">
                                         <div class="clearance-section-label-wrap">
                                             <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add piano photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span> <span id="piano-media-required" class="required-text" style="display:none;">(required)</span></label>
                                         </div>
@@ -733,7 +736,10 @@
                                         </div>
                                     </div>
 
-                                    <button type="button" id="add-piano-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Save Piano</button>
+                                    <button type="button" id="add-piano-btn" style="display:none; margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Save Piano</button>
+                                    <button type="button" id="piano-add-another-btn" style="margin-top: 16px; padding: 10px 20px; background: #ffffff; color: #1d4ed8; border: 1px solid #93c5fd; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">+ Add Another Piano</button>
+                                    <button type="button" id="piano-continue-with-saved-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">Continue with saved pianos</button>
+                                    <input type="hidden" id="piano-continue-with-saved-hidden" value="">
                                 </div>
                             </div>
                         </div>
@@ -746,6 +752,9 @@
 
                                 <div id="pets-list" style="margin-bottom: 16px;"></div>
                                 <input type="hidden" id="pets-json-hidden" name="pets-data" value="">
+
+                                <div data-item-entry-form="pet" class="transport-item-panel dimension-item">
+                                <button type="button" id="pet-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">Clear form</button>
 
                                 <div class="form-group" style="margin-bottom: 16px;">
                                     <label class="form-label" for="pet-animal-type">Animal type <span class="required-text">(required)</span></label>
@@ -847,7 +856,7 @@
                                 </div>
 
                                 <!-- Photo/Video Upload Section (for Pets) -->
-                                <div id="pet-photo-section" style="margin-top: 16px; margin-bottom: 0; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #f8fbff;">
+                                <div id="pet-photo-section" class="transport-item-subpanel" style="margin-top: 16px; margin-bottom: 0;">
                                     <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add pet photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
                                     <p style="margin: 6px 0 12px; color: #64748b; font-size: 0.9rem;">Photos or videos help providers understand the animal and any handling needs.</p>
                                     <input type="file" id="pet-media-input" class="form-input" accept="image/*,video/*" multiple>
@@ -855,7 +864,11 @@
                                     <div id="pet-media-preview" style="margin-top: 8px; display: none;"></div>
                                 </div>
 
-                                <button type="button" id="add-pet-btn" style="margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Add Pet</button>
+                                <button type="button" id="add-pet-btn" style="display:none; margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Add Pet</button>
+                                <button type="button" id="pet-add-another-btn" style="margin-top: 16px; padding: 10px 20px; background: #ffffff; color: #1d4ed8; border: 1px solid #93c5fd; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">+ Add Another Pet</button>
+                                <button type="button" id="pet-continue-with-saved-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">Continue with saved pets</button>
+                                <input type="hidden" id="pet-continue-with-saved-hidden" value="">
+                                </div>
                             </div>
                         </div>
 
@@ -1585,7 +1598,7 @@
                                 <div id="car-list" style="margin-bottom: 32px;"></div>
                                 <input type="hidden" id="car-json-hidden" name="car-data" value="">
                                 <div data-vehicle-entry-form="car" class="dimension-item" style="margin-bottom: 16px; position: relative;">
-                                    <button type="button" id="car-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">Delete</button>
+                                    <button type="button" id="car-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">Clear form</button>
                                     <div class="custom-item-title" style="font-size:1.5rem; font-weight:800; color:#0f172a; margin:0 0 10px;">Vehicle item</div>
                                     <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
                                         <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
@@ -1681,7 +1694,7 @@
                                 <div id="motorbike-list" style="margin-bottom: 32px;"></div>
                                 <input type="hidden" id="motorbike-json-hidden" name="motorbike-data" value="">
                                 <div data-vehicle-entry-form="motorbike" class="dimension-item" style="margin-bottom: 16px; position: relative;">
-                                    <button type="button" id="motorbike-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">Delete</button>
+                                    <button type="button" id="motorbike-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">Clear form</button>
                                     <div class="custom-item-title" style="font-size:1.5rem; font-weight:800; color:#0f172a; margin:0 0 10px;">Vehicle item</div>
                                     <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
                                         <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
@@ -1760,7 +1773,7 @@
                                 <div id="trailer-list" style="margin-bottom: 32px;"></div>
                                 <input type="hidden" id="trailer-json-hidden" name="trailer-data" value="">
                                 <div data-vehicle-entry-form="trailer" class="dimension-item" style="margin-bottom: 16px; position: relative;">
-                                    <button type="button" id="trailer-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">Delete</button>
+                                    <button type="button" id="trailer-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">Clear form</button>
                                     <div class="custom-item-title" style="font-size:1.5rem; font-weight:800; color:#0f172a; margin:0 0 10px;">Vehicle item</div>
                                     <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
                                         <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
@@ -2388,6 +2401,24 @@
         </div>
     </main>
 
+    <!-- Form validation / notice dialog -->
+    <div id="app-alert-modal" class="modal app-alert-modal" role="alertdialog" aria-modal="true" aria-hidden="true" aria-labelledby="app-alert-title" aria-describedby="app-alert-message">
+        <div class="modal-content app-alert-modal__panel" data-variant="warning">
+            <div class="app-alert-modal__icon" data-variant="warning" aria-hidden="true">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <circle cx="12" cy="16.5" r="0.6" fill="currentColor" stroke="none"></circle>
+                </svg>
+            </div>
+            <h2 id="app-alert-title" class="app-alert-modal__title">Action required</h2>
+            <p id="app-alert-message" class="app-alert-modal__message"></p>
+            <div class="app-alert-modal__actions">
+                <button type="button" class="btn btn-primary app-alert-modal__ok">OK</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Confirmation Modal -->
     <div id="confirmation-modal" class="modal">
         <div class="modal-content">
@@ -2418,7 +2449,8 @@
     <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/house-removal.js?v=20260322-1"></script>
     <script src="js/multi-items-handler.js?v=20260328-44"></script>
-    <script src="js/create-job.js?v=20260503-5"></script>
+    <script src="js/form-alert.js?v=20260518-3"></script>
+    <script src="js/create-job.js?v=20260518-10"></script>
     <script src="js/quote-edit-bootstrap.js?v=20260502-4"></script>
 
 <script>
