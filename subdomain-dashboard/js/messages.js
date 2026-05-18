@@ -28,16 +28,71 @@
         return '';
     }
 
+    var CONTACT_CHECKS = [
+        {
+            pattern: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
+            warning: 'Email addresses are not allowed. Keep all communication on AnyTransport.'
+        },
+        {
+            pattern: /\d{5,}/,
+            warning: 'Phone numbers are not allowed. Do not share contact details in messages.'
+        },
+        {
+            pattern: /(?:\+?\d[\d\s().-]{6,}\d)/,
+            warning: 'Phone numbers are not allowed. Do not share contact details in messages.'
+        },
+        {
+            pattern: /(?:https?:\/\/|www\.)\S+/i,
+            warning: 'Links are not allowed in messages.'
+        },
+        {
+            pattern: /\b(?:whatsapp|telegram|viber|wechat|snapchat|instagram|facebook|messenger|discord|skype|call me|text me|dm me|message me on)\b/i,
+            warning: 'External contact apps are not allowed. Keep all communication on AnyTransport.'
+        }
+    ];
+
+    function getContactDetailsWarning(text) {
+        var value = String(text == null ? '' : text);
+        if (!value.trim()) return '';
+        for (var i = 0; i < CONTACT_CHECKS.length; i += 1) {
+            if (CONTACT_CHECKS[i].pattern.test(value)) return CONTACT_CHECKS[i].warning;
+        }
+        return '';
+    }
+
     function containsContactDetails(text) {
-        var value = String(text == null ? '' : text).trim();
-        if (!value) return false;
-        var checks = [
-            /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
-            /(?:\+?\d[\d\s().-]{6,}\d)/,
-            /(?:https?:\/\/|www\.)\S+/i,
-            /\b(?:whatsapp|telegram|viber|wechat|snapchat|instagram|facebook|messenger|discord|skype|call me|text me)\b/i
-        ];
-        return checks.some(function (pattern) { return pattern.test(value); });
+        return !!getContactDetailsWarning(text);
+    }
+
+    function setComposerContactWarning(statusEl, titleInput, textInput, warningText) {
+        var hasWarning = !!warningText;
+        if (statusEl) {
+            statusEl.textContent = warningText || '';
+            statusEl.classList.toggle('messages-status--warning', hasWarning);
+            statusEl.classList.toggle('messages-status--ok', !hasWarning && statusEl.textContent === 'Message sent.');
+        }
+        [titleInput, textInput].forEach(function (el) {
+            if (!el) return;
+            el.classList.toggle('messages-input--warning', hasWarning);
+            el.setAttribute('aria-invalid', hasWarning ? 'true' : 'false');
+        });
+    }
+
+    function bindContactWarnings(titleInput, textInput, statusEl) {
+        function refreshContactWarning() {
+            var warning = getContactDetailsWarning(titleInput && titleInput.value) ||
+                getContactDetailsWarning(textInput && textInput.value);
+            setComposerContactWarning(statusEl, titleInput, textInput, warning);
+        }
+
+        [titleInput, textInput].forEach(function (el) {
+            if (!el) return;
+            el.addEventListener('input', refreshContactWarning);
+            el.addEventListener('paste', function () {
+                setTimeout(refreshContactWarning, 0);
+            });
+        });
+        refreshContactWarning();
     }
 
     function getAllBids() {
@@ -174,17 +229,24 @@
         var status = document.getElementById('messages-status');
         if (!form) return;
 
+        bindContactWarnings(titleInput, textInput, status);
+
         form.addEventListener('submit', function (event) {
             event.preventDefault();
 
             var text = String(textInput && textInput.value || '').trim();
             var title = String(titleInput && titleInput.value || '').trim();
             if (!text) {
-                if (status) status.textContent = 'Write a message before sending.';
+                setComposerContactWarning(status, titleInput, textInput, '');
+                if (status) {
+                    status.textContent = 'Write a message before sending.';
+                    status.classList.remove('messages-status--warning');
+                }
                 return;
             }
-            if (containsContactDetails(text) || containsContactDetails(title)) {
-                if (status) status.textContent = 'Contact details are not allowed in customer/provider messages.';
+            var contactWarning = getContactDetailsWarning(text) || getContactDetailsWarning(title);
+            if (contactWarning) {
+                setComposerContactWarning(status, titleInput, textInput, contactWarning);
                 return;
             }
 
@@ -197,7 +259,12 @@
                 var sent = window.anytransportApi.sendMessage(me.id, toUserId, text, title || 'Message');
                 if (!sent) throw new Error('No response from API');
                 if (textInput) textInput.value = '';
-                if (status) status.textContent = 'Message sent.';
+                setComposerContactWarning(status, titleInput, textInput, '');
+                if (status) {
+                    status.textContent = 'Message sent.';
+                    status.classList.add('messages-status--ok');
+                    status.classList.remove('messages-status--warning');
+                }
                 conversation.push(sent);
                 renderThread(me.id, conversation);
             } catch (_e) {
