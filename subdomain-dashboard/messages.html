@@ -30,8 +30,14 @@
             padding: 10px;
             font: inherit;
         }
-        .messages-actions { display: flex; gap: 10px; align-items: center; }
-        .messages-status { font-size: 13px; color: #334155; }
+        .messages-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .messages-status { font-size: 13px; color: #334155; flex: 1 1 100%; }
+        .messages-status--warning { color: #b45309; font-weight: 600; }
+        .messages-status--ok { color: #047857; }
+        .messages-composer .messages-input--warning {
+            border-color: #f59e0b;
+            box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+        }
     </style>
 </head>
 <body>
@@ -73,6 +79,6 @@
     </main>
 
     <script src="js/auth.js?v=20260503-7"></script>
-    <script src="js/messages.js?v=20260504-1"></script>
+    <script src="js/messages.js?v=20260518-1"></script>
 </body>
 </html>

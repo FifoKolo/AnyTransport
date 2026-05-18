@@ -960,9 +960,10 @@ function message_contains_contact_details($text) {
 
     $patterns = array(
         '/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i',
+        '/\d{5,}/',
         '/(?:\+?\d[\d\s().\-]{6,}\d)/',
         '/(?:https?:\/\/|www\.)\S+/i',
-        '/\b(?:whatsapp|telegram|viber|wechat|snapchat|instagram|facebook|messenger|discord|skype|call me|text me)\b/i'
+        '/\b(?:whatsapp|telegram|viber|wechat|snapchat|instagram|facebook|messenger|discord|skype|call me|text me|dm me|message me on)\b/i'
     );
 
     foreach ($patterns as $pattern) {
