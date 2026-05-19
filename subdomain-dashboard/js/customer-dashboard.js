@@ -287,7 +287,7 @@
                 '<div class="customer-msg-meta"><span class="customer-msg-dir">' + dir + '</span> · ' + escapeHtml(when) + '</div>',
                 '<h4 class="customer-msg-title">' + title + '</h4>',
                 '<p class="customer-msg-text">' + preview + '</p>',
-                '<a class="btn btn-secondary btn-sm" href="' + openHref + '" style="display:inline-flex; align-items:center; margin-top:8px;">View message</a>',
+                '<a class="btn btn-secondary btn-sm" href="' + openHref + '" onclick="if(window.setNavbarReturnUrl){setNavbarReturnUrl(window.location.href);}" style="display:inline-flex; align-items:center; margin-top:8px;">View message</a>',
                 '</article>'
             ].join('');
         }).join('');
@@ -393,7 +393,7 @@
                     '<div class="customer-msg-meta"><span class="customer-msg-dir">' + dir + '</span> · ' + when + ' · ' + escapeHtml(amountLabel) + '</div>',
                     '<h4 class="customer-msg-title">' + providerLabel + '</h4>',
                     '<p class="customer-msg-text">' + preview + '</p>',
-                    '<a class="btn btn-secondary btn-sm" href="' + openHref + '" style="display:inline-flex; align-items:center; margin-top:8px;">Open chat</a>',
+                    '<a class="btn btn-secondary btn-sm" href="' + openHref + '" onclick="if(window.setNavbarReturnUrl){setNavbarReturnUrl(window.location.href);}" style="display:inline-flex; align-items:center; margin-top:8px;">Open chat</a>',
                     '</article>'
                 ].join('');
             }).join('')

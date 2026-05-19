@@ -10,27 +10,7 @@
     <link rel="stylesheet" href="css/dashboard.css?v=20260502-1">
 </head>
 <body>
-    <nav class="navbar">
-        <div class="navbar-container">
-            <a class="navbar-logo" href="index.html" aria-label="Go to landing page">
-                <img src="assets/logo.jpeg" alt="AnyTransport Logo" class="logo-img">
-                <span class="logo-text">AnyTransport</span>
-            </a>
-            <div class="navbar-menu">
-                <a href="index.html#services" class="nav-link">Services</a>
-                <a href="index.html#services" class="nav-link">Request a quote</a>
-            </div>
-            <div class="navbar-right">
-                <div id="auth-menu" style="display: flex;">
-                    <button class="btn btn-outline" onclick="openLoginModal()">Login</button>
-                </div>
-                <div id="user-menu" style="display: none; align-items: center; gap: 10px;">
-                    <a id="provider-dashboard-link" href="dashboard.html" class="nav-link" style="font-size: 0.9rem;">Provider dashboard</a>
-                    <button class="btn btn-primary" onclick="logout()">Logout</button>
-                </div>
-            </div>
-        </div>
-    </nav>
+    <div id="site-navbar-mount"></div>
 
     <main class="container dashboard-container customer-dashboard-wrap">
         <header class="customer-dashboard-header">
@@ -104,6 +84,7 @@
     <script src="js/cache-maintenance.js?v=20260322-2"></script>
     <script src="js/auth.js?v=20260503-7"></script>
     <script src="js/notifications.js?v=20260420-4"></script>
+    <script src="js/site-navbar.js?v=20260519-1"></script>
     <script src="js/customer-dashboard.js?v=20260511-4"></script>
 </body>
 </html>
