@@ -169,6 +169,11 @@
     background: rgba(255, 255, 255, 0.14);
 }
 
+.navbar-return-btn {
+    margin-right: 8px;
+    white-space: nowrap;
+}
+
 .navbar-right {
     display: flex;
     align-items: center;
