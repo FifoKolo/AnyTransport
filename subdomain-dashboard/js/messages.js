@@ -122,85 +122,77 @@
         return html;
     }
 
-    function ensureInputHighlightLayer(inputEl) {
-        if (!inputEl || inputEl.dataset.messagesHighlightReady === '1') {
-            return inputEl && inputEl.closest('.messages-input-highlight-wrap');
-        }
-        var wrap = document.createElement('div');
-        wrap.className = 'messages-input-highlight-wrap';
-        inputEl.parentNode.insertBefore(wrap, inputEl);
-        wrap.appendChild(inputEl);
-
-        var backdrop = document.createElement('div');
-        backdrop.className = 'messages-input-highlight-backdrop';
-        backdrop.setAttribute('aria-hidden', 'true');
-
-        var content = document.createElement('div');
-        content.className = 'messages-input-highlight-content';
-        backdrop.appendChild(content);
-        wrap.insertBefore(backdrop, inputEl);
-
-        inputEl.dataset.messagesHighlightReady = '1';
-
-        inputEl.addEventListener('scroll', function () {
-            backdrop.scrollTop = inputEl.scrollTop;
-            backdrop.scrollLeft = inputEl.scrollLeft;
-        });
-
-        return wrap;
+    function unwrapLegacyHighlightLayer(inputEl) {
+        if (!inputEl) return;
+        var wrap = inputEl.closest('.messages-input-highlight-wrap');
+        if (!wrap || !wrap.parentNode) return;
+        wrap.parentNode.insertBefore(inputEl, wrap);
+        wrap.remove();
+        delete inputEl.dataset.messagesHighlightReady;
+        inputEl.classList.remove('messages-input--highlighted');
     }
 
-    function syncInputHighlightLayer(inputEl) {
-        if (!inputEl || inputEl.dataset.messagesHighlightReady !== '1') return;
-        var wrap = inputEl.closest('.messages-input-highlight-wrap');
-        if (!wrap) return;
-        var backdrop = wrap.querySelector('.messages-input-highlight-backdrop');
-        var content = wrap.querySelector('.messages-input-highlight-content');
-        if (!backdrop || !content) return;
+    function syncFlagPreview(previewEl, inputEl) {
+        if (!previewEl || !inputEl) return;
+        var bodyEl = previewEl.querySelector('.messages-flag-preview-body');
+        if (!bodyEl) return;
 
         var matches = findContactMatches(inputEl.value);
-        var hasMatches = matches.length > 0;
-        wrap.classList.toggle('messages-input-highlight-wrap--active', hasMatches);
-        inputEl.classList.toggle('messages-input--highlighted', hasMatches);
-
-        if (!hasMatches) {
-            content.innerHTML = '';
+        if (!matches.length) {
+            previewEl.hidden = true;
+            bodyEl.innerHTML = '';
             return;
         }
 
-        content.innerHTML = buildHighlightedMarkup(inputEl.value, matches) +
-            (inputEl.tagName === 'TEXTAREA' ? '\n' : '');
-        backdrop.scrollTop = inputEl.scrollTop;
-        backdrop.scrollLeft = inputEl.scrollLeft;
+        previewEl.hidden = false;
+        bodyEl.innerHTML = buildHighlightedMarkup(inputEl.value, matches);
     }
 
-    function setComposerContactWarning(statusEl, titleInput, textInput, warningText) {
+    function getMessagePreviewEls() {
+        return {
+            title: document.getElementById('messages-title-flag-preview'),
+            text: document.getElementById('messages-flag-preview')
+        };
+    }
+
+    function setComposerContactWarning(statusEl, titleInput, textInput, warningText, previewEls) {
         var hasWarning = !!warningText;
+        var previews = previewEls || getMessagePreviewEls();
+
         if (statusEl) {
             statusEl.textContent = warningText || '';
             statusEl.classList.toggle('messages-status--warning', hasWarning);
             statusEl.classList.toggle('messages-status--ok', !hasWarning && statusEl.textContent === 'Message sent.');
         }
-        [titleInput, textInput].forEach(function (el) {
-            if (!el) return;
-            ensureInputHighlightLayer(el);
-            var fieldWarning = getContactDetailsWarning(el.value);
-            var fieldHasIssue = hasWarning && !!fieldWarning;
-            el.classList.toggle('messages-input--warning', fieldHasIssue);
-            el.setAttribute('aria-invalid', fieldHasIssue ? 'true' : 'false');
-            syncInputHighlightLayer(el);
-        });
+
+        if (titleInput) {
+            unwrapLegacyHighlightLayer(titleInput);
+            var titleHasIssue = hasWarning && !!getContactDetailsWarning(titleInput.value);
+            titleInput.classList.toggle('messages-input--warning', titleHasIssue);
+            titleInput.setAttribute('aria-invalid', titleHasIssue ? 'true' : 'false');
+            syncFlagPreview(previews.title, titleInput);
+        }
+
+        if (textInput) {
+            unwrapLegacyHighlightLayer(textInput);
+            var textHasIssue = hasWarning && !!getContactDetailsWarning(textInput.value);
+            textInput.classList.toggle('messages-input--warning', textHasIssue);
+            textInput.setAttribute('aria-invalid', textHasIssue ? 'true' : 'false');
+            syncFlagPreview(previews.text, textInput);
+        }
     }
 
-    function bindContactWarnings(titleInput, textInput, statusEl) {
+    function bindContactWarnings(titleInput, textInput, statusEl, previewEls) {
+        var previews = previewEls || getMessagePreviewEls();
+
         [titleInput, textInput].forEach(function (el) {
-            if (el) ensureInputHighlightLayer(el);
+            if (el) unwrapLegacyHighlightLayer(el);
         });
 
         function refreshContactWarning() {
             var warning = getContactDetailsWarning(titleInput && titleInput.value) ||
                 getContactDetailsWarning(textInput && textInput.value);
-            setComposerContactWarning(statusEl, titleInput, textInput, warning);
+            setComposerContactWarning(statusEl, titleInput, textInput, warning, previews);
         }
 
         [titleInput, textInput].forEach(function (el) {
@@ -347,7 +339,10 @@
         var status = document.getElementById('messages-status');
         if (!form) return;
 
-        bindContactWarnings(titleInput, textInput, status);
+        bindContactWarnings(titleInput, textInput, status, {
+            title: document.getElementById('messages-title-flag-preview'),
+            text: document.getElementById('messages-flag-preview')
+        });
 
         form.addEventListener('submit', function (event) {
             event.preventDefault();
@@ -355,7 +350,10 @@
             var text = String(textInput && textInput.value || '').trim();
             var title = String(titleInput && titleInput.value || '').trim();
             if (!text) {
-                setComposerContactWarning(status, titleInput, textInput, '');
+                setComposerContactWarning(status, titleInput, textInput, '', {
+                    title: document.getElementById('messages-title-flag-preview'),
+                    text: document.getElementById('messages-flag-preview')
+                });
                 if (status) {
                     status.textContent = 'Write a message before sending.';
                     status.classList.remove('messages-status--warning');
@@ -364,7 +362,10 @@
             }
             var contactWarning = getContactDetailsWarning(text) || getContactDetailsWarning(title);
             if (contactWarning) {
-                setComposerContactWarning(status, titleInput, textInput, contactWarning);
+                setComposerContactWarning(status, titleInput, textInput, contactWarning, {
+                    title: document.getElementById('messages-title-flag-preview'),
+                    text: document.getElementById('messages-flag-preview')
+                });
                 return;
             }
 
@@ -377,7 +378,10 @@
                 var sent = window.anytransportApi.sendMessage(me.id, toUserId, text, title || 'Message');
                 if (!sent) throw new Error('No response from API');
                 if (textInput) textInput.value = '';
-                setComposerContactWarning(status, titleInput, textInput, '');
+                setComposerContactWarning(status, titleInput, textInput, '', {
+                    title: document.getElementById('messages-title-flag-preview'),
+                    text: document.getElementById('messages-flag-preview')
+                });
                 if (status) {
                     status.textContent = 'Message sent.';
                     status.classList.add('messages-status--ok');
