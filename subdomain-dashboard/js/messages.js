@@ -51,6 +51,45 @@
         }
     ];
 
+    function findContactMatches(text) {
+        var value = String(text == null ? '' : text);
+        if (!value) return [];
+        var matches = [];
+        for (var i = 0; i < CONTACT_CHECKS.length; i += 1) {
+            var check = CONTACT_CHECKS[i];
+            var pattern = check.pattern;
+            var flags = pattern.flags.indexOf('g') >= 0 ? pattern.flags : pattern.flags + 'g';
+            var re = new RegExp(pattern.source, flags);
+            var match;
+            while ((match = re.exec(value)) !== null) {
+                matches.push({
+                    start: match.index,
+                    end: match.index + match[0].length,
+                    warning: check.warning
+                });
+                if (match[0].length === 0) {
+                    re.lastIndex += 1;
+                }
+            }
+        }
+        if (!matches.length) return [];
+        matches.sort(function (a, b) {
+            return a.start - b.start || a.end - b.end;
+        });
+        var merged = [];
+        matches.forEach(function (entry) {
+            var last = merged[merged.length - 1];
+            if (!last || entry.start > last.end) {
+                merged.push({ start: entry.start, end: entry.end });
+                return;
+            }
+            if (entry.end > last.end) {
+                last.end = entry.end;
+            }
+        });
+        return merged;
+    }
+
     function getContactDetailsWarning(text) {
         var value = String(text == null ? '' : text);
         if (!value.trim()) return '';
@@ -64,6 +103,70 @@
         return !!getContactDetailsWarning(text);
     }
 
+    function buildHighlightedMarkup(text, matches) {
+        var value = String(text == null ? '' : text);
+        if (!value) return '';
+        if (!matches || !matches.length) {
+            return escapeHtml(value);
+        }
+        var html = '';
+        var cursor = 0;
+        matches.forEach(function (match) {
+            html += escapeHtml(value.slice(cursor, match.start));
+            html += '<mark class="messages-flagged-text">' +
+                escapeHtml(value.slice(match.start, match.end)) +
+                '</mark>';
+            cursor = match.end;
+        });
+        html += escapeHtml(value.slice(cursor));
+        return html;
+    }
+
+    function ensureInputHighlightLayer(inputEl) {
+        if (!inputEl || inputEl.dataset.messagesHighlightReady === '1') {
+            return inputEl && inputEl.closest('.messages-input-highlight-wrap');
+        }
+        var wrap = document.createElement('div');
+        wrap.className = 'messages-input-highlight-wrap';
+        inputEl.parentNode.insertBefore(wrap, inputEl);
+        wrap.appendChild(inputEl);
+
+        var backdrop = document.createElement('div');
+        backdrop.className = 'messages-input-highlight-backdrop';
+        backdrop.setAttribute('aria-hidden', 'true');
+
+        var content = document.createElement('div');
+        content.className = 'messages-input-highlight-content';
+        backdrop.appendChild(content);
+        wrap.insertBefore(backdrop, inputEl);
+
+        inputEl.classList.add('messages-input--highlighted');
+        inputEl.dataset.messagesHighlightReady = '1';
+
+        inputEl.addEventListener('scroll', function () {
+            backdrop.scrollTop = inputEl.scrollTop;
+            backdrop.scrollLeft = inputEl.scrollLeft;
+        });
+
+        return wrap;
+    }
+
+    function syncInputHighlightLayer(inputEl) {
+        if (!inputEl || inputEl.dataset.messagesHighlightReady !== '1') return;
+        var wrap = inputEl.closest('.messages-input-highlight-wrap');
+        if (!wrap) return;
+        var backdrop = wrap.querySelector('.messages-input-highlight-backdrop');
+        var content = wrap.querySelector('.messages-input-highlight-content');
+        if (!backdrop || !content) return;
+
+        var matches = findContactMatches(inputEl.value);
+        var hasMatches = matches.length > 0;
+        wrap.classList.toggle('messages-input-highlight-wrap--active', hasMatches);
+        content.innerHTML = buildHighlightedMarkup(inputEl.value, matches) + (inputEl.tagName === 'TEXTAREA' ? '\n' : '');
+        backdrop.scrollTop = inputEl.scrollTop;
+        backdrop.scrollLeft = inputEl.scrollLeft;
+    }
+
     function setComposerContactWarning(statusEl, titleInput, textInput, warningText) {
         var hasWarning = !!warningText;
         if (statusEl) {
@@ -73,12 +176,20 @@
         }
         [titleInput, textInput].forEach(function (el) {
             if (!el) return;
-            el.classList.toggle('messages-input--warning', hasWarning);
-            el.setAttribute('aria-invalid', hasWarning ? 'true' : 'false');
+            ensureInputHighlightLayer(el);
+            var fieldWarning = getContactDetailsWarning(el.value);
+            var fieldHasIssue = hasWarning && !!fieldWarning;
+            el.classList.toggle('messages-input--warning', fieldHasIssue);
+            el.setAttribute('aria-invalid', fieldHasIssue ? 'true' : 'false');
+            syncInputHighlightLayer(el);
         });
     }
 
     function bindContactWarnings(titleInput, textInput, statusEl) {
+        [titleInput, textInput].forEach(function (el) {
+            if (el) ensureInputHighlightLayer(el);
+        });
+
         function refreshContactWarning() {
             var warning = getContactDetailsWarning(titleInput && titleInput.value) ||
                 getContactDetailsWarning(textInput && textInput.value);
