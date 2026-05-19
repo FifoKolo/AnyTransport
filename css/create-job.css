@@ -24,6 +24,74 @@ body.customized-items-active #step3-title-wrapper {
     display: none !important;
 }
 
+/* === Pets transport (Step 3) — match Other Items layout === */
+body.pets-transport-active[data-form-step="3"] #pets-transport-section,
+body.pets-transport-active[data-current-step="3"] #pets-transport-section {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-top: 2rem;
+}
+body.pets-transport-active #step3-title-wrapper {
+    display: none !important;
+}
+#pets-transport-inventory-section {
+    margin-top: 2rem;
+}
+.dimensions-list-empty {
+    padding: 12px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+.pet-saved-item-summary {
+    color: #1f2937;
+    font-size: 0.92rem;
+    margin: 0 0 10px;
+}
+.pet-saved-item-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.pet-saved-edit-btn,
+.pet-saved-remove-btn {
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 0.88rem;
+}
+.pet-saved-edit-btn {
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+.pet-saved-remove-btn {
+    border: 1px solid #fecaca;
+    background: #fff1f2;
+    color: #b91c1c;
+}
+.pet-uploaded-files-label {
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 8px;
+}
+#pet-continue-with-saved-btn {
+    display: none;
+    margin-top: 10px;
+    padding: 10px 20px;
+    background: #fff7ed;
+    color: #9a3412;
+    border: 1px solid #fdba74;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    width: 100%;
+}
+
 /* Style for new custom item button */
 #custom-item-btn {
     display: block;
@@ -4225,6 +4293,8 @@ body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"
 body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #pickup-room-list,
 body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #dimensions-list .dimension-item,
 body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #dimensions-list .dimension-item,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #pets-list .dimension-item,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #pets-list .dimension-item,
 body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] .dimension-item.freight-customized-card,
 body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] .dimension-item.clearance-customized-card,
 body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] .dimension-item.freight-customized-card,

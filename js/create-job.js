@@ -3105,7 +3105,7 @@ function getPetsStep3MissingRequiredField(forAddAction = false) {
             || section;
     }
 
-    return forAddAction ? null : (document.getElementById('pet-add-another-btn') || section);
+    return null;
 }
 
 function getOptionNavLabel(hiddenId) {
@@ -20460,6 +20460,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         const pickupLift = document.getElementById('pickup-lift-available');
                         hasValue = !hasNonGroundFloor || !!(pickupLift && pickupLift.value && pickupLift.value.trim());
                     }
+                    if (field.id === 'pets-json-hidden' && isPetsService(activeServiceValue)) {
+                        hasValue = getPetsStep3MissingRequiredField(true) === null
+                            || !!(field.value && field.value.trim());
+                    }
                 }
 
                 if (field.type === 'checkbox' || field.type === 'radio') {
@@ -20783,7 +20787,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (stepNextBtn) {
-            stepNextBtn.addEventListener('click', () => {
+            stepNextBtn.addEventListener('click', async () => {
+                if (currentStep === 3 && isPetsService(getActiveServiceValue())) {
+                    if (typeof window.ensurePetsJsonIncludesCurrentDraft === 'function') {
+                        await window.ensurePetsJsonIncludesCurrentDraft();
+                    }
+                }
                 applyRequiredRules();
                 if (typeof window.blockIfCustomizedItemsIncomplete === 'function' && !window.blockIfCustomizedItemsIncomplete()) {
                     return;
@@ -20828,7 +20837,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         stepLinks.forEach((link) => {
-            link.addEventListener('click', (event) => {
+            link.addEventListener('click', async (event) => {
                 if (event) {
                     event.preventDefault();
                 }
@@ -20840,6 +20849,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     const isAttemptingImmediateNext = targetStep === getNextAvailableStep(currentStep);
                     if (!isAttemptingImmediateNext) {
                         return;
+                    }
+
+                    if (currentStep === 3 && isPetsService(getActiveServiceValue())) {
+                        if (typeof window.ensurePetsJsonIncludesCurrentDraft === 'function') {
+                            await window.ensurePetsJsonIncludesCurrentDraft();
+                        }
                     }
 
                     applyRequiredRules();
@@ -21638,6 +21653,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         section.style.display = shouldShow ? 'block' : 'none';
 
+        document.body.classList.toggle('pets-transport-active', isPetsService(serviceValue) && isStep3);
+
         if (!shouldShow) {
             return;
         }
@@ -21698,6 +21715,252 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     let editingPetIndex = null;
+    let petPhotoGridInitialized = false;
+
+    const getPetEntryForm = () => document.querySelector('[data-item-entry-form="pet"]');
+
+    const updatePetEntryTitle = () => {
+        const title = document.getElementById('pet-entry-title');
+        if (!title) return;
+        const savedCount = parsePetsList().length;
+        const labelIndex = editingPetIndex !== null ? editingPetIndex + 1 : savedCount + 1;
+        title.textContent = `Pet ${labelIndex}`;
+    };
+
+    const syncPetMediaHiddenFromPhotoGrid = async () => {
+        const form = getPetEntryForm();
+        const hidden = document.getElementById('pet-media-hidden');
+        if (!form || !hidden) return [];
+
+        const fileToDataUrl = window.multiItemsManager?.fileToDataUrl
+            ? (file) => window.multiItemsManager.fileToDataUrl(file)
+            : (file) => new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+                reader.onerror = () => resolve('');
+                reader.readAsDataURL(file);
+            });
+
+        const media = [];
+        const inputs = Array.from(form.querySelectorAll('.photo-input'));
+        for (const input of inputs) {
+            const savedName = String(input.dataset.savedName || '').trim();
+            const savedType = String(input.dataset.savedType || '').trim();
+            const savedPreview = String(input.dataset.savedPreview || '').trim();
+
+            if (input.files && input.files.length > 0) {
+                const file = input.files[0];
+                let dataUrl = savedPreview;
+                if (!dataUrl) {
+                    dataUrl = await fileToDataUrl(file);
+                    if (dataUrl) input.dataset.savedPreview = dataUrl;
+                }
+                media.push({
+                    name: String(file?.name || savedName || '').trim(),
+                    type: String(file?.type || savedType || '').trim(),
+                    size: Number(file?.size || 0) || 0,
+                    dataUrl: String(dataUrl || '').trim()
+                });
+            } else if (savedName) {
+                media.push({
+                    name: savedName,
+                    type: savedType,
+                    size: 0,
+                    dataUrl: savedPreview
+                });
+            }
+        }
+
+        hidden.value = media.length > 0 ? JSON.stringify(media) : '';
+        hidden.dispatchEvent(new Event('change', { bubbles: true }));
+        return media.filter((item) => item.name);
+    };
+
+    const applyPetMediaToPhotoGrid = (mediaItems) => {
+        const form = getPetEntryForm();
+        if (!form) return;
+
+        const media = Array.isArray(mediaItems) ? mediaItems : [];
+        const inputs = Array.from(form.querySelectorAll('.photo-input'));
+        inputs.forEach((input, index) => {
+            input.value = '';
+            delete input.dataset.savedName;
+            delete input.dataset.savedType;
+            delete input.dataset.savedPreview;
+            const item = media[index];
+            if (item && String(item?.name || '').trim()) {
+                input.dataset.savedName = String(item.name || '').trim();
+                input.dataset.savedType = String(item?.type || '').trim();
+                input.dataset.savedPreview = String(item?.dataUrl || '').trim();
+            }
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    };
+
+    const initPetEntryPhotoGrid = () => {
+        const form = getPetEntryForm();
+        if (!form || petPhotoGridInitialized) return;
+        petPhotoGridInitialized = true;
+
+        const photoList = form.querySelector('#pet-dimension-photos-list') || form.querySelector('.dimension-photos-list');
+        const photoInputs = Array.from(form.querySelectorAll('.photo-input'));
+        const clearPhotosButton = form.querySelector('#pet-delete-photos-top') || form.querySelector('.btn-delete-photos-top');
+
+        const renderPhotosForPet = () => {
+            if (!photoList) return;
+
+            const uploadedPhotos = photoInputs.map((input) => {
+                if (input.files && input.files.length > 0) {
+                    const file = input.files[0];
+                    return {
+                        input,
+                        file,
+                        name: String(file?.name || '').trim(),
+                        type: String(file?.type || '').trim(),
+                        previewDataUrl: String(input.dataset.savedPreview || '').trim()
+                    };
+                }
+
+                const savedName = String(input.dataset.savedName || '').trim();
+                const savedType = String(input.dataset.savedType || '').trim();
+                const savedPreviewDataUrl = String(input.dataset.savedPreview || '').trim();
+                if (savedName || savedType || savedPreviewDataUrl) {
+                    return {
+                        input,
+                        file: null,
+                        name: savedName,
+                        type: savedType,
+                        previewDataUrl: savedPreviewDataUrl
+                    };
+                }
+                return null;
+            }).filter(Boolean);
+
+            if (uploadedPhotos.length === 0) {
+                photoList.style.display = 'none';
+                photoList.innerHTML = '';
+                return;
+            }
+
+            photoList.innerHTML = `
+                <div class="pet-uploaded-files-label">Uploaded Files</div>
+                <div class="customized-photo-chip-list" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+            `;
+            const chipsWrap = photoList.querySelector('.customized-photo-chip-list');
+
+            uploadedPhotos.forEach((entry) => {
+                const chip = document.createElement('div');
+                chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid #dbeafe;border-radius:999px;background:#eff6ff;font-size:0.78rem;color:#1e3a8a;';
+                chip.textContent = entry.name || 'Uploaded media';
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.textContent = '✕';
+                removeBtn.style.cssText = 'background:none;border:none;padding:0;cursor:pointer;color:#ef4444;font-size:1rem;line-height:1;margin-left:4px;';
+                removeBtn.title = 'Delete this file';
+                removeBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    entry.input.value = '';
+                    delete entry.input.dataset.savedName;
+                    delete entry.input.dataset.savedType;
+                    delete entry.input.dataset.savedPreview;
+                    renderPhotosForPet();
+                    syncPetMediaHiddenFromPhotoGrid().then(() => persistPetFormState());
+                });
+
+                chip.appendChild(removeBtn);
+                chipsWrap.appendChild(chip);
+            });
+            photoList.style.display = '';
+        };
+
+        const clearAllPhotosForPet = () => {
+            photoInputs.forEach((input) => {
+                input.value = '';
+                delete input.dataset.savedName;
+                delete input.dataset.savedType;
+                delete input.dataset.savedPreview;
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            renderPhotosForPet();
+            syncPetMediaHiddenFromPhotoGrid().then(() => persistPetFormState());
+        };
+
+        const setCompressedImagePreview = (input, file) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const img = new Image();
+                img.onload = () => {
+                    const maxEdge = 720;
+                    const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.max(1, Math.round(img.width * scale));
+                    canvas.height = Math.max(1, Math.round(img.height * scale));
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        input.dataset.savedPreview = '';
+                        renderPhotosForPet();
+                        syncPetMediaHiddenFromPhotoGrid().then(() => persistPetFormState());
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    let preview = canvas.toDataURL('image/jpeg', 0.72);
+                    if (preview.length > 280000) {
+                        preview = canvas.toDataURL('image/jpeg', 0.55);
+                    }
+                    input.dataset.savedPreview = preview;
+                    renderPhotosForPet();
+                    syncPetMediaHiddenFromPhotoGrid().then(() => persistPetFormState());
+                };
+                img.onerror = () => {
+                    input.dataset.savedPreview = '';
+                    renderPhotosForPet();
+                    syncPetMediaHiddenFromPhotoGrid().then(() => persistPetFormState());
+                };
+                img.src = String(reader.result || '');
+            };
+            reader.onerror = () => {
+                input.dataset.savedPreview = '';
+                renderPhotosForPet();
+                syncPetMediaHiddenFromPhotoGrid().then(() => persistPetFormState());
+            };
+            reader.readAsDataURL(file);
+        };
+
+        photoInputs.forEach((input) => {
+            input.addEventListener('change', () => {
+                const file = input.files && input.files[0];
+                if (!file) {
+                    if (!input.dataset.savedName && !input.dataset.savedType && !input.dataset.savedPreview) {
+                        delete input.dataset.savedPreview;
+                    }
+                    renderPhotosForPet();
+                    syncPetMediaHiddenFromPhotoGrid().then(() => persistPetFormState());
+                    return;
+                }
+                input.dataset.savedName = String(file.name || '');
+                input.dataset.savedType = String(file.type || '');
+                if (String(file.type || '').startsWith('image/')) {
+                    setCompressedImagePreview(input, file);
+                    return;
+                }
+                input.dataset.savedPreview = '';
+                renderPhotosForPet();
+                syncPetMediaHiddenFromPhotoGrid().then(() => persistPetFormState());
+            });
+        });
+
+        if (clearPhotosButton) {
+            clearPhotosButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                clearAllPhotosForPet();
+            });
+        }
+
+        bindPhotoUploadHandlers(form);
+        renderPhotosForPet();
+    };
 
     const setPetAddButtonLabel = () => {
         const addPetBtn = document.getElementById('add-pet-btn');
@@ -21716,17 +21979,11 @@ document.addEventListener('DOMContentLoaded', function() {
             : [];
 
         const hidden = document.getElementById('pet-media-hidden');
-        const input = document.getElementById('pet-media-input');
         if (hidden) {
             hidden.value = media.length > 0 ? JSON.stringify(media) : '';
             hidden.dispatchEvent(new Event('change', { bubbles: true }));
         }
-        if (input) {
-            input.value = '';
-        }
-        if (window.multiItemsManager?.renderVehicleMediaPreview) {
-            window.multiItemsManager.renderVehicleMediaPreview('pet', media);
-        }
+        applyPetMediaToPhotoGrid(media);
     };
 
     const populatePetEntryIntoForm = (pet) => {
@@ -21796,7 +22053,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const pets = parsePetsList();
         if (pets.length === 0) {
-            petsList.innerHTML = '<div style="padding: 12px; border: 1px dashed #cbd5e1; border-radius: 10px; color: #64748b; font-size: 0.9rem;">No pets added yet. Fill details below and click + Add Pet.</div>';
+            petsList.innerHTML = '<div class="dimensions-list-empty">No pets added yet. Fill in the form below and click <strong>Add Another Pet</strong>.</div>';
             return;
         }
 
@@ -21819,11 +22076,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             return `
-                <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff; margin-bottom:8px;">
-                    <div style="color:#1f2937; font-size:0.92rem;"><strong>Pet ${index + 1}</strong><br>${parts.join(' | ')}</div>
-                    <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
-                        <button type="button" data-edit-pet-index="${index}" style="border:1px solid #bfdbfe; background:#eff6ff; color:#1d4ed8; border-radius:8px; padding:6px 10px; font-weight:700; cursor:pointer;">Edit</button>
-                        <button type="button" data-remove-pet-index="${index}" style="border:1px solid #fecaca; background:#fff1f2; color:#b91c1c; border-radius:8px; padding:6px 10px; font-weight:700; cursor:pointer;">Remove</button>
+                <div class="dimension-item pet-saved-item">
+                    <div class="custom-item-title">Pet ${index + 1}</div>
+                    <p class="pet-saved-item-summary">${parts.join(' · ')}</p>
+                    <div class="pet-saved-item-actions">
+                        <button type="button" class="pet-saved-edit-btn" data-edit-pet-index="${index}">Edit</button>
+                        <button type="button" class="pet-saved-remove-btn" data-remove-pet-index="${index}">Remove</button>
                     </div>
                 </div>
             `;
@@ -21855,21 +22113,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const tankHeight = document.getElementById('pet-tank-height');
         const tankUnit = document.getElementById('pet-tank-size-unit');
         const weightCustom = document.getElementById('pet-weight-custom');
-        const petMediaInput = document.getElementById('pet-media-input');
-        const petMediaHidden = document.getElementById('pet-media-hidden');
-        const petMediaPreview = document.getElementById('pet-media-preview');
         if (petOtherName) petOtherName.value = '';
         if (tankLength) tankLength.value = '';
         if (tankWidth) tankWidth.value = '';
         if (tankHeight) tankHeight.value = '';
         if (tankUnit) tankUnit.value = 'cm';
         if (weightCustom) weightCustom.value = '';
-        if (petMediaInput) petMediaInput.value = '';
-        if (petMediaHidden) petMediaHidden.value = '';
-        if (petMediaPreview) {
-            petMediaPreview.innerHTML = '';
-            petMediaPreview.style.display = 'none';
-        }
+        setPetMediaState([]);
+        updatePetEntryTitle();
         syncPetsStep3Fields();
     };
 
@@ -21954,11 +22205,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (deleteFormBtn) {
             deleteFormBtn.style.display = (hasDraft || isEditing) ? '' : 'none';
-            deleteFormBtn.textContent = isEditing ? 'Cancel edit' : 'Clear form';
+            Array.from(deleteFormBtn.childNodes).forEach((node) => {
+                if (node.nodeType === Node.TEXT_NODE && String(node.textContent || '').trim()) {
+                    node.textContent = isEditing ? ' Cancel edit' : ' Clear form';
+                }
+            });
         }
         if (addAnotherBtn) {
             addAnotherBtn.style.display = isEditing ? 'none' : '';
-            addAnotherBtn.textContent = '+ Add Another Pet';
         }
     };
 
@@ -21987,9 +22241,53 @@ document.addEventListener('DOMContentLoaded', function() {
         renderPetsList();
         clearPetEditState();
         resetPetEntryFields({ keepOwnerLift: true });
+        updatePetEntryTitle();
         syncPetDraftUi();
         return true;
     };
+
+    const ensurePetsJsonIncludesCurrentDraft = async () => {
+        if (!isPetsService(getActiveServiceValue())) {
+            return false;
+        }
+        if (typeof syncPetMediaHiddenFromPhotoGrid === 'function') {
+            await syncPetMediaHiddenFromPhotoGrid();
+        }
+        if (getPetsStep3MissingRequiredField(true) !== null) {
+            return false;
+        }
+
+        const pets = parsePetsList();
+        const hasDraft = hasPetDraftInProgress();
+        if (!hasDraft && pets.length > 0) {
+            return true;
+        }
+
+        const continueHidden = document.getElementById('pet-continue-with-saved-hidden');
+        const continueBtn = document.getElementById('pet-continue-with-saved-btn');
+        const continueVisible = !!(
+            continueBtn
+            && continueBtn.style.display !== 'none'
+            && !continueBtn.hidden
+        );
+        const continueWithSavedChosen = continueVisible
+            && String(continueHidden?.value || '').trim() === '1';
+        if (pets.length > 0 && hasDraft && continueWithSavedChosen) {
+            return true;
+        }
+
+        const entry = buildPetEntryFromForm();
+        if (editingPetIndex !== null && editingPetIndex >= 0 && editingPetIndex < pets.length) {
+            pets[editingPetIndex] = entry;
+        } else {
+            pets.push(entry);
+        }
+        setPetsList(pets);
+        renderPetsList();
+        return true;
+    };
+
+    window.ensurePetsJsonIncludesCurrentDraft = ensurePetsJsonIncludesCurrentDraft;
 
     const syncBoatsTransportLabels = () => {
         const serviceValue = (
@@ -22586,26 +22884,12 @@ document.addEventListener('DOMContentLoaded', function() {
             nav.addEventListener('click', () => setTimeout(persistPetFormState, 0));
         });
 
-    const petMediaInput = document.getElementById('pet-media-input');
-    if (petMediaInput && petMediaInput.dataset.petDraftBound !== '1') {
-        petMediaInput.dataset.petDraftBound = '1';
-        petMediaInput.addEventListener('change', () => {
-            if (window.multiItemsManager?.syncVehicleMediaFromInput) {
-                window.multiItemsManager.syncVehicleMediaFromInput('pet');
-            }
-            persistPetFormState();
-        });
-    }
+    initPetEntryPhotoGrid();
 
     if (petAddAnotherBtn && petAddAnotherBtn.dataset.petDraftBound !== '1') {
         petAddAnotherBtn.dataset.petDraftBound = '1';
         petAddAnotherBtn.addEventListener('click', async () => {
-            if (window.multiItemsManager?.pendingVehicleMediaSync?.pet) {
-                await window.multiItemsManager.pendingVehicleMediaSync.pet;
-            }
-            if (window.multiItemsManager?.resolveVehicleMediaForSave) {
-                await window.multiItemsManager.resolveVehicleMediaForSave('pet');
-            }
+            await syncPetMediaHiddenFromPhotoGrid();
             if (!addCurrentPetEntry()) return;
             if (typeof window.updateFormSummary === 'function') {
                 window.updateFormSummary();
@@ -22710,6 +22994,8 @@ document.addEventListener('DOMContentLoaded', function() {
     syncPianoStep3Visibility();
     syncPianoCustomFields();
     syncPetsStep3Fields();
+    initPetEntryPhotoGrid();
+    updatePetEntryTitle();
     renderPetsList();
     syncBoatsTransportLabels();
     initVehicleTextfieldDigitRestriction();
@@ -25660,6 +25946,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (!isMultiStopMode && isPetsService(itemTypeValue)) {
+                if (typeof window.ensurePetsJsonIncludesCurrentDraft === 'function') {
+                    await window.ensurePetsJsonIncludesCurrentDraft();
+                }
                 const missingPetsField = getPetsStep3MissingRequiredField();
                 if (missingPetsField) {
                     showSubmitValidationError(

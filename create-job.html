@@ -9,7 +9,7 @@
     <title>Request a Quote - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260420-4">
-    <link rel="stylesheet" href="css/create-job.css?v=20260518-11">
+    <link rel="stylesheet" href="css/create-job.css?v=20260519-1">
     <link rel="stylesheet" href="css/house-removal.css?v=20260422-2">
     <link rel="stylesheet" href="css/sticky-next-btn.css?v=20260503-1">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
@@ -746,15 +746,48 @@
 
                         <!-- Pets Transport Section (shown only for Pets service) -->
                         <div id="pets-transport-section" data-form-step="3" style="display: none;">
-                            <div class="card-section">
-                                <h3 style="margin-bottom: 10px; color: var(--text-primary);">Pet Transport Details</h3>
-                                <p style="margin: 0 0 14px; color: #64748b; font-size: 0.92rem;">Tell us what pet you're moving so transport providers can prepare safely.</p>
+                            <div class="card-section" id="pets-transport-inventory-section">
+                                <h3 style="margin-bottom: 10px; color: var(--text-primary);">Pet Transport <span class="required-text" data-required-for="pets-json-hidden">(required)</span></h3>
+                                <p style="margin: 0 0 14px; color: #64748b; font-size: 0.9rem;">Add each pet with photos, type, weight, and handling details so providers can quote accurately.</p>
 
-                                <div id="pets-list" style="margin-bottom: 16px;"></div>
-                                <input type="hidden" id="pets-json-hidden" name="pets-data" value="">
+                                <input type="hidden" id="pets-json-hidden" name="pets-data" data-required="true" value="">
+                                <div id="pets-list" class="dimensions-list"></div>
 
-                                <div data-item-entry-form="pet" class="transport-item-panel dimension-item">
-                                <button type="button" id="pet-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">Clear form</button>
+                                <div data-item-entry-form="pet" class="dimension-item">
+                                <div id="pet-entry-title" class="custom-item-title" style="font-size:1.5rem; font-weight:800; color:#0f172a; margin:0 0 10px;">Pet 1</div>
+                                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+                                    <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
+                                    <button type="button" id="pet-delete-photos-top" class="btn-delete-photos-top" style="border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:6px;padding:5px 10px;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap;">Delete photos</button>
+                                </div>
+                                <div class="photo-upload-grid vehicle-photo-upload-grid custom-item-photo-grid pet-photo-grid">
+                                    <div class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area">
+                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                        <span>Drag photo or video here <strong>upload</strong></span>
+                                        <input type="file" class="photo-input" accept="image/*,video/*" id="pet-photo-1">
+                                    </div>
+                                    <div class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area">
+                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                        <span>Drag photo or video here <strong>upload</strong></span>
+                                        <input type="file" class="photo-input" accept="image/*,video/*" id="pet-photo-2">
+                                    </div>
+                                    <div class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area">
+                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                        <span>Drag photo or video here <strong>upload</strong></span>
+                                        <input type="file" class="photo-input" accept="image/*,video/*" id="pet-photo-3">
+                                    </div>
+                                    <div class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area">
+                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                        <span>Drag photo or video here <strong>upload</strong></span>
+                                        <input type="file" class="photo-input" accept="image/*,video/*" id="pet-photo-4">
+                                    </div>
+                                    <div class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area">
+                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                        <span>Drag photo or video here <strong>upload</strong></span>
+                                        <input type="file" class="photo-input" accept="image/*,video/*" id="pet-photo-5">
+                                    </div>
+                                </div>
+                                <div id="pet-dimension-photos-list" class="dimension-photos-list" style="display:none; margin-top:12px;"></div>
+                                <input type="hidden" id="pet-media-hidden" value="">
 
                                 <div class="form-group" style="margin-bottom: 16px;">
                                     <label class="form-label" for="pet-animal-type">Animal type <span class="required-text">(required)</span></label>
@@ -798,24 +831,24 @@
                                     <input type="text" id="pet-other-name" name="pet-other-name" class="form-input" maxlength="120" placeholder="e.g. Bearded dragon, tarantula, exotic fish">
                                 </div>
 
-                                <div id="pet-tank-dimensions-wrap" style="display:none; margin-bottom: 16px; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #f8fbff;">
-                                    <h4 style="margin: 0 0 10px; color: #0f172a; font-size: 1rem;">Tank Dimensions</h4>
-                                    <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px;">
-                                        <div class="form-group" style="margin-bottom: 0;">
-                                            <label class="form-label" for="pet-tank-length">Length <span id="pet-tank-length-required" class="required-text" style="display:none;">(required)</span></label>
-                                            <input type="number" id="pet-tank-length" name="pet-tank-length" class="form-input" min="0.1" step="0.1" placeholder="Length">
+                                <div id="pet-tank-dimensions-wrap" class="transport-item-subpanel" style="display:none; margin-bottom: 16px;">
+                                    <label class="form-label" style="margin:0 0 8px;">Tank dimensions <span class="required-text">(required for aquarium / tank pets)</span></label>
+                                    <div class="dimension-inputs pet-tank-dimension-inputs">
+                                        <div class="dimension-field-stack">
+                                            <span class="dimension-input-label">Length <span id="pet-tank-length-required" class="required-text" style="display:none;">(required)</span></span>
+                                            <input type="number" id="pet-tank-length" name="pet-tank-length" class="form-input dimension-field" min="0.1" step="0.1" placeholder="Length" aria-label="Tank length">
                                         </div>
-                                        <div class="form-group" style="margin-bottom: 0;">
-                                            <label class="form-label" for="pet-tank-width">Width <span id="pet-tank-width-required" class="required-text" style="display:none;">(required)</span></label>
-                                            <input type="number" id="pet-tank-width" name="pet-tank-width" class="form-input" min="0.1" step="0.1" placeholder="Width">
+                                        <div class="dimension-field-stack">
+                                            <span class="dimension-input-label">Width <span id="pet-tank-width-required" class="required-text" style="display:none;">(required)</span></span>
+                                            <input type="number" id="pet-tank-width" name="pet-tank-width" class="form-input dimension-field" min="0.1" step="0.1" placeholder="Width" aria-label="Tank width">
                                         </div>
-                                        <div class="form-group" style="margin-bottom: 0;">
-                                            <label class="form-label" for="pet-tank-height">Height <span id="pet-tank-height-required" class="required-text" style="display:none;">(required)</span></label>
-                                            <input type="number" id="pet-tank-height" name="pet-tank-height" class="form-input" min="0.1" step="0.1" placeholder="Height">
+                                        <div class="dimension-field-stack">
+                                            <span class="dimension-input-label">Height <span id="pet-tank-height-required" class="required-text" style="display:none;">(required)</span></span>
+                                            <input type="number" id="pet-tank-height" name="pet-tank-height" class="form-input dimension-field" min="0.1" step="0.1" placeholder="Height" aria-label="Tank height">
                                         </div>
-                                        <div class="form-group" style="margin-bottom: 0;">
-                                            <label class="form-label" for="pet-tank-size-unit">Unit</label>
-                                            <select id="pet-tank-size-unit" name="pet-tank-size-unit" class="form-input">
+                                        <div class="dimension-field-stack">
+                                            <span class="dimension-input-label">Size Unit</span>
+                                            <select id="pet-tank-size-unit" name="pet-tank-size-unit" class="form-input dimension-unit dimension-size-unit" aria-label="Tank size unit">
                                                 <option value="cm">cm</option>
                                                 <option value="mm">mm</option>
                                                 <option value="in">in</option>
@@ -824,6 +857,7 @@
                                         </div>
                                     </div>
                                 </div>
+
 
                                 <div class="form-group" style="margin-bottom: 0;">
                                     <label class="form-label" for="pet-weight-hidden">Pet / tank weight range <span class="required-text">(required)</span></label>
@@ -855,18 +889,23 @@
                                     </div>
                                 </div>
 
-                                <!-- Photo/Video Upload Section (for Pets) -->
-                                <div id="pet-photo-section" class="transport-item-subpanel" style="margin-top: 16px; margin-bottom: 0;">
-                                    <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add pet photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
-                                    <p style="margin: 6px 0 12px; color: #64748b; font-size: 0.9rem;">Photos or videos help providers understand the animal and any handling needs.</p>
-                                    <input type="file" id="pet-media-input" class="form-input" accept="image/*,video/*" multiple>
-                                    <input type="hidden" id="pet-media-hidden" value="">
-                                    <div id="pet-media-preview" style="margin-top: 8px; display: none;"></div>
-                                </div>
-
                                 <button type="button" id="add-pet-btn" style="display:none; margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Add Pet</button>
-                                <button type="button" id="pet-add-another-btn" style="margin-top: 16px; padding: 10px 20px; background: #ffffff; color: #1d4ed8; border: 1px solid #93c5fd; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">+ Add Another Pet</button>
-                                <button type="button" id="pet-continue-with-saved-btn" style="display:none; margin-top: 10px; padding: 10px 20px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%;">Continue with saved pets</button>
+                                <button type="button" id="pet-delete-form-btn" class="btn-delete-dimension" style="display:none;">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <line x1="15" y1="9" x2="9" y2="15"></line>
+                                        <line x1="9" y1="9" x2="15" y2="15"></line>
+                                    </svg>
+                                    Clear form
+                                </button>
+                                <button type="button" id="pet-add-another-btn" class="btn-add-dimension">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                    Add Another Pet
+                                </button>
+                                <button type="button" id="pet-continue-with-saved-btn">Continue with saved pets</button>
                                 <input type="hidden" id="pet-continue-with-saved-hidden" value="">
                                 </div>
                             </div>
@@ -2450,7 +2489,7 @@
     <script src="js/house-removal.js?v=20260322-1"></script>
     <script src="js/multi-items-handler.js?v=20260328-44"></script>
     <script src="js/form-alert.js?v=20260518-3"></script>
-    <script src="js/create-job.js?v=20260518-10"></script>
+    <script src="js/create-job.js?v=20260519-2"></script>
     <script src="js/quote-edit-bootstrap.js?v=20260502-4"></script>
 
 <script>
