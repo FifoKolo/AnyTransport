@@ -140,7 +140,6 @@
         backdrop.appendChild(content);
         wrap.insertBefore(backdrop, inputEl);
 
-        inputEl.classList.add('messages-input--highlighted');
         inputEl.dataset.messagesHighlightReady = '1';
 
         inputEl.addEventListener('scroll', function () {
@@ -162,7 +161,15 @@
         var matches = findContactMatches(inputEl.value);
         var hasMatches = matches.length > 0;
         wrap.classList.toggle('messages-input-highlight-wrap--active', hasMatches);
-        content.innerHTML = buildHighlightedMarkup(inputEl.value, matches) + (inputEl.tagName === 'TEXTAREA' ? '\n' : '');
+        inputEl.classList.toggle('messages-input--highlighted', hasMatches);
+
+        if (!hasMatches) {
+            content.innerHTML = '';
+            return;
+        }
+
+        content.innerHTML = buildHighlightedMarkup(inputEl.value, matches) +
+            (inputEl.tagName === 'TEXTAREA' ? '\n' : '');
         backdrop.scrollTop = inputEl.scrollTop;
         backdrop.scrollLeft = inputEl.scrollLeft;
     }
