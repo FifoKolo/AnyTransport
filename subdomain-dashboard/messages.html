@@ -38,6 +38,46 @@
             border-color: #f59e0b;
             box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
         }
+        .messages-input-highlight-wrap {
+            position: relative;
+            width: 100%;
+        }
+        .messages-input-highlight-backdrop {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+            border-radius: 8px;
+            z-index: 0;
+        }
+        .messages-input-highlight-content {
+            box-sizing: border-box;
+            width: 100%;
+            min-height: 100%;
+            padding: 10px;
+            font: inherit;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: #0f172a;
+        }
+        .messages-input-highlight-wrap--active:has(> input) .messages-input-highlight-content {
+            white-space: pre;
+        }
+        .messages-input-highlight-wrap--active .messages-input--highlighted {
+            position: relative;
+            z-index: 1;
+            background: transparent;
+            color: transparent;
+            caret-color: #0f172a;
+        }
+        .messages-flagged-text {
+            background: rgba(245, 158, 11, 0.55);
+            color: #7c2d12;
+            border-radius: 2px;
+            box-decoration-break: clone;
+            -webkit-box-decoration-break: clone;
+        }
     </style>
 </head>
 <body>
@@ -79,6 +119,6 @@
     </main>
 
     <script src="js/auth.js?v=20260503-7"></script>
-    <script src="js/messages.js?v=20260518-1"></script>
+    <script src="js/messages.js?v=20260519-1"></script>
 </body>
 </html>
