@@ -697,6 +697,33 @@ function send_provider_review_email($provider, $status, $notes = '') {
     return send_email_simple($providerEmail, $subject, $body);
 }
 
+function send_customer_welcome_email($customer) {
+    $customerEmail = trim((string) ($customer['email'] ?? ''));
+    if ($customerEmail === '') {
+        return false;
+    }
+
+    $customerName = trim((string) ($customer['name'] ?? $customer['username'] ?? ''));
+    if ($customerName === '') {
+        $customerName = 'there';
+    }
+
+    $dashboardUrl = get_app_url('customer-dashboard.html');
+    $quoteUrl = get_app_url('index.html#services');
+
+    $subject = 'Welcome to AnyTransport';
+    $body = "Hi " . $customerName . ",\n\n";
+    $body .= "Thank you for creating your AnyTransport account.\n\n";
+    $body .= "You can request transport quotes, track your forms, and message providers from your profile:\n";
+    $body .= $dashboardUrl . "\n\n";
+    $body .= "To submit a new request, visit:\n";
+    $body .= $quoteUrl . "\n\n";
+    $body .= "This inbox is not monitored. Please use your dashboard and in-app messages for updates.\n\n";
+    $body .= "Regards,\nAnyTransport";
+
+    return send_email_simple($customerEmail, $subject, $body);
+}
+
 function smtp_read_full_response($fp) {
     $out = '';
     while ($line = @fgets($fp, 515)) {
@@ -2287,6 +2314,12 @@ switch ($action) {
         if (strtolower($role) === 'provider') {
             try {
                 send_provider_review_email($user, 'pending_review', '');
+            } catch (Exception $_e) {
+                // swallow email errors
+            }
+        } else {
+            try {
+                send_customer_welcome_email($user);
             } catch (Exception $_e) {
                 // swallow email errors
             }
