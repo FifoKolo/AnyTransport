@@ -961,9 +961,10 @@ function message_contains_contact_details($text) {
     $patterns = array(
         '/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i',
         '/\d{5,}/',
-        '/(?:\+?\d[\d\s().\-]{6,}\d)/',
+        '/(?:\+?\d[\d\s().\-–—_\/]{4,}\d)/',
         '/(?:https?:\/\/|www\.)\S+/i',
-        '/\b(?:whatsapp|telegram|viber|wechat|snapchat|instagram|facebook|messenger|discord|skype|call me|text me|dm me|message me on)\b/i'
+        '/\b(?:whatsapp|telegram|viber|wechat|snapchat|instagram|facebook|messenger|discord|skype|signal|tiktok|insta|snap|my contact|contact me|my number|your number|reach me|call me|text me|dm me|phone me|email me|message me on|add me on|hit me up|get in touch|reach out)\b/i',
+        '/(?:(?:\b(?:zero|one|two|three|four|five|six|seven|eight|nine|oh|o)\b|\d)(?:\s*[,.\-–—\/]?\s*)?){5,}(?:\b(?:zero|one|two|three|four|five|six|seven|eight|nine|oh|o)\b|\d)/i'
     );
 
     foreach ($patterns as $pattern) {
@@ -971,6 +972,15 @@ function message_contains_contact_details($text) {
             return true;
         }
     }
+
+    if (preg_match_all('/[\d][\d\s.\-_|\/\\\\()\x{2013}\x{2014}+]{2,}[\d]|[\d]{5,}/u', $value, $digitRuns)) {
+        foreach ($digitRuns[0] as $run) {
+            if (strlen(preg_replace('/\D/', '', $run)) >= 5) {
+                return true;
+            }
+        }
+    }
+
     return false;
 }
 

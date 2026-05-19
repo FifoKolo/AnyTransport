@@ -28,50 +28,81 @@
         return '';
     }
 
+    var WARN_EMAIL = 'Email addresses are not allowed. Keep all communication on AnyTransport.';
+    var WARN_PHONE = 'Phone numbers are not allowed. Do not share contact details in messages.';
+    var WARN_LINK = 'Links are not allowed in messages.';
+    var WARN_CONTACT_APP = 'External contact apps are not allowed. Keep all communication on AnyTransport.';
+    var WARN_CONTACT_PHRASE = 'Contact details are not allowed. Keep all communication on AnyTransport.';
+
+    var NUMBER_WORD = '(?:zero|one|two|three|four|five|six|seven|eight|nine|oh|o)';
+    var SPELLED_NUMBER_RUN = new RegExp(
+        '(?:(?:\\b' + NUMBER_WORD + '\\b|\\d)(?:\\s*[,.\-–—/]?\\s*)?){5,}(?:\\b' + NUMBER_WORD + '\\b|\\d)',
+        'gi'
+    );
+
     var CONTACT_CHECKS = [
+        { pattern: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i, warning: WARN_EMAIL },
+        { pattern: /\d{5,}/, warning: WARN_PHONE },
+        { pattern: /(?:\+?\d[\d\s().\-–—_\/]{4,}\d)/, warning: WARN_PHONE },
+        { pattern: /(?:https?:\/\/|www\.)\S+/i, warning: WARN_LINK },
         {
-            pattern: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
-            warning: 'Email addresses are not allowed. Keep all communication on AnyTransport.'
-        },
-        {
-            pattern: /\d{5,}/,
-            warning: 'Phone numbers are not allowed. Do not share contact details in messages.'
-        },
-        {
-            pattern: /(?:\+?\d[\d\s().-]{6,}\d)/,
-            warning: 'Phone numbers are not allowed. Do not share contact details in messages.'
-        },
-        {
-            pattern: /(?:https?:\/\/|www\.)\S+/i,
-            warning: 'Links are not allowed in messages.'
-        },
-        {
-            pattern: /\b(?:whatsapp|telegram|viber|wechat|snapchat|instagram|facebook|messenger|discord|skype|call me|text me|dm me|message me on)\b/i,
-            warning: 'External contact apps are not allowed. Keep all communication on AnyTransport.'
+            pattern: /\b(?:whatsapp|telegram|viber|wechat|snapchat|instagram|facebook|messenger|discord|skype|signal|tiktok|insta|snap|my contact|contact me|my number|your number|reach me|call me|text me|dm me|phone me|email me|message me on|add me on|hit me up|get in touch|reach out)\b/i,
+            warning: WARN_CONTACT_APP
         }
     ];
 
-    function findContactMatches(text) {
-        var value = String(text == null ? '' : text);
-        if (!value) return [];
-        var matches = [];
-        for (var i = 0; i < CONTACT_CHECKS.length; i += 1) {
-            var check = CONTACT_CHECKS[i];
-            var pattern = check.pattern;
-            var flags = pattern.flags.indexOf('g') >= 0 ? pattern.flags : pattern.flags + 'g';
-            var re = new RegExp(pattern.source, flags);
-            var match;
-            while ((match = re.exec(value)) !== null) {
-                matches.push({
-                    start: match.index,
-                    end: match.index + match[0].length,
-                    warning: check.warning
-                });
-                if (match[0].length === 0) {
-                    re.lastIndex += 1;
-                }
+    function pushPatternMatches(value, matches, pattern, warning) {
+        var flags = pattern.flags.indexOf('g') >= 0 ? pattern.flags : pattern.flags + 'g';
+        var re = new RegExp(pattern.source, flags);
+        var match;
+        while ((match = re.exec(value)) !== null) {
+            matches.push({
+                start: match.index,
+                end: match.index + match[0].length,
+                warning: warning
+            });
+            if (match[0].length === 0) {
+                re.lastIndex += 1;
             }
         }
+    }
+
+    function findDigitClusterMatches(text) {
+        var value = String(text == null ? '' : text);
+        var found = [];
+        var re = /[\d][\d\s.\-_|/\\()\u2013\u2014+]{2,}[\d]|[\d]{5,}/g;
+        var match;
+        while ((match = re.exec(value)) !== null) {
+            if (match[0].replace(/\D/g, '').length >= 5) {
+                found.push({
+                    start: match.index,
+                    end: match.index + match[0].length,
+                    warning: WARN_PHONE
+                });
+            }
+        }
+        return found;
+    }
+
+    function findSpelledNumberMatches(text) {
+        var value = String(text == null ? '' : text);
+        var found = [];
+        var re = new RegExp(SPELLED_NUMBER_RUN.source, 'gi');
+        var match;
+        while ((match = re.exec(value)) !== null) {
+            var tokens = match[0].match(/\b(?:zero|one|two|three|four|five|six|seven|eight|nine|oh|o)\b|\d/gi) || [];
+            if (tokens.length >= 5) {
+                found.push({
+                    start: match.index,
+                    end: match.index + match[0].length,
+                    warning: WARN_PHONE
+                });
+            }
+        }
+        return found;
+    }
+
+    function mergeContactMatches(matches) {
         if (!matches.length) return [];
         matches.sort(function (a, b) {
             return a.start - b.start || a.end - b.end;
@@ -80,7 +111,7 @@
         matches.forEach(function (entry) {
             var last = merged[merged.length - 1];
             if (!last || entry.start > last.end) {
-                merged.push({ start: entry.start, end: entry.end });
+                merged.push({ start: entry.start, end: entry.end, warning: entry.warning });
                 return;
             }
             if (entry.end > last.end) {
@@ -90,13 +121,30 @@
         return merged;
     }
 
+    function findContactMatches(text) {
+        var value = String(text == null ? '' : text);
+        if (!value) return [];
+        var matches = [];
+        for (var i = 0; i < CONTACT_CHECKS.length; i += 1) {
+            pushPatternMatches(value, matches, CONTACT_CHECKS[i].pattern, CONTACT_CHECKS[i].warning);
+        }
+        findDigitClusterMatches(value).forEach(function (entry) { matches.push(entry); });
+        findSpelledNumberMatches(value).forEach(function (entry) { matches.push(entry); });
+        return mergeContactMatches(matches);
+    }
+
     function getContactDetailsWarning(text) {
         var value = String(text == null ? '' : text);
         if (!value.trim()) return '';
+        var matches = findContactMatches(value);
+        if (!matches.length) return '';
         for (var i = 0; i < CONTACT_CHECKS.length; i += 1) {
             if (CONTACT_CHECKS[i].pattern.test(value)) return CONTACT_CHECKS[i].warning;
         }
-        return '';
+        if (findDigitClusterMatches(value).length || findSpelledNumberMatches(value).length) {
+            return WARN_PHONE;
+        }
+        return WARN_CONTACT_PHRASE;
     }
 
     function containsContactDetails(text) {
@@ -122,42 +170,107 @@
         return html;
     }
 
-    function unwrapLegacyHighlightLayer(inputEl) {
+    function unwrapHighlightContainer(inputEl) {
         if (!inputEl) return;
-        var wrap = inputEl.closest('.messages-input-highlight-wrap');
+        var wrap = inputEl.closest('.messages-input-highlight-wrap, .messages-inline-highlight');
         if (!wrap || !wrap.parentNode) return;
         wrap.parentNode.insertBefore(inputEl, wrap);
         wrap.remove();
         delete inputEl.dataset.messagesHighlightReady;
-        inputEl.classList.remove('messages-input--highlighted');
+        delete inputEl.dataset.inlineHighlightReady;
+        inputEl.classList.remove('messages-input--highlighted', 'messages-input--mirrored');
     }
 
-    function syncFlagPreview(previewEl, inputEl) {
-        if (!previewEl || !inputEl) return;
-        var bodyEl = previewEl.querySelector('.messages-flag-preview-body');
-        if (!bodyEl) return;
+    function copyMirrorStyles(fromEl, toEl) {
+        var computed = window.getComputedStyle(fromEl);
+        [
+            'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing',
+            'wordSpacing', 'textIndent', 'textTransform', 'paddingTop', 'paddingRight',
+            'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth',
+            'borderBottomWidth', 'borderLeftWidth', 'boxSizing'
+        ].forEach(function (prop) {
+            toEl.style[prop] = computed[prop];
+        });
+        toEl.style.width = fromEl.clientWidth + 'px';
+    }
+
+    function ensureInlineHighlight(inputEl) {
+        if (!inputEl) return null;
+        var existing = inputEl.closest('.messages-inline-highlight');
+        if (existing) return existing;
+
+        var wrap = document.createElement('div');
+        wrap.className = 'messages-inline-highlight';
+
+        var backdrop = document.createElement('div');
+        backdrop.className = 'messages-inline-backdrop';
+
+        var content = document.createElement('div');
+        content.className = 'messages-inline-backdrop-content';
+        backdrop.appendChild(content);
+
+        inputEl.parentNode.insertBefore(wrap, inputEl);
+        wrap.appendChild(backdrop);
+        wrap.appendChild(inputEl);
+
+        inputEl.dataset.inlineHighlightReady = '1';
+        inputEl.addEventListener('scroll', function () {
+            backdrop.scrollTop = inputEl.scrollTop;
+            backdrop.scrollLeft = inputEl.scrollLeft;
+        });
+
+        if (typeof ResizeObserver === 'function') {
+            var resizeObserver = new ResizeObserver(function () {
+                syncInlineHighlight(inputEl);
+            });
+            resizeObserver.observe(inputEl);
+            inputEl._messagesResizeObserver = resizeObserver;
+        }
+
+        return wrap;
+    }
+
+    function syncInlineHighlight(inputEl) {
+        if (!inputEl) return;
+        ensureInlineHighlight(inputEl);
+        var wrap = inputEl.closest('.messages-inline-highlight');
+        if (!wrap) return;
+
+        var content = wrap.querySelector('.messages-inline-backdrop-content');
+        if (!content) return;
 
         var matches = findContactMatches(inputEl.value);
-        if (!matches.length) {
-            previewEl.hidden = true;
-            bodyEl.innerHTML = '';
+        var hasMatches = matches.length > 0;
+        wrap.classList.toggle('messages-inline-highlight--active', hasMatches);
+        inputEl.classList.toggle('messages-input--mirrored', hasMatches);
+
+        if (!hasMatches) {
+            content.innerHTML = '';
+            if (inputEl.hasAttribute('data-spellcheck-off')) {
+                inputEl.setAttribute('spellcheck', inputEl.getAttribute('data-spellcheck-off'));
+                inputEl.removeAttribute('data-spellcheck-off');
+            }
             return;
         }
 
-        previewEl.hidden = false;
-        bodyEl.innerHTML = buildHighlightedMarkup(inputEl.value, matches);
+        if (!inputEl.hasAttribute('data-spellcheck-off')) {
+            inputEl.setAttribute('data-spellcheck-off', inputEl.getAttribute('spellcheck') || 'true');
+            inputEl.setAttribute('spellcheck', 'false');
+        }
+
+        copyMirrorStyles(inputEl, content);
+        content.innerHTML = buildHighlightedMarkup(inputEl.value, matches) +
+            (inputEl.tagName === 'TEXTAREA' ? '\n' : '');
+
+        var backdrop = wrap.querySelector('.messages-inline-backdrop');
+        if (backdrop) {
+            backdrop.scrollTop = inputEl.scrollTop;
+            backdrop.scrollLeft = inputEl.scrollLeft;
+        }
     }
 
-    function getMessagePreviewEls() {
-        return {
-            title: document.getElementById('messages-title-flag-preview'),
-            text: document.getElementById('messages-flag-preview')
-        };
-    }
-
-    function setComposerContactWarning(statusEl, titleInput, textInput, warningText, previewEls) {
+    function setComposerContactWarning(statusEl, titleInput, textInput, warningText) {
         var hasWarning = !!warningText;
-        var previews = previewEls || getMessagePreviewEls();
 
         if (statusEl) {
             statusEl.textContent = warningText || '';
@@ -166,33 +279,29 @@
         }
 
         if (titleInput) {
-            unwrapLegacyHighlightLayer(titleInput);
             var titleHasIssue = hasWarning && !!getContactDetailsWarning(titleInput.value);
             titleInput.classList.toggle('messages-input--warning', titleHasIssue);
             titleInput.setAttribute('aria-invalid', titleHasIssue ? 'true' : 'false');
-            syncFlagPreview(previews.title, titleInput);
+            syncInlineHighlight(titleInput);
         }
 
         if (textInput) {
-            unwrapLegacyHighlightLayer(textInput);
             var textHasIssue = hasWarning && !!getContactDetailsWarning(textInput.value);
             textInput.classList.toggle('messages-input--warning', textHasIssue);
             textInput.setAttribute('aria-invalid', textHasIssue ? 'true' : 'false');
-            syncFlagPreview(previews.text, textInput);
+            syncInlineHighlight(textInput);
         }
     }
 
-    function bindContactWarnings(titleInput, textInput, statusEl, previewEls) {
-        var previews = previewEls || getMessagePreviewEls();
-
+    function bindContactWarnings(titleInput, textInput, statusEl) {
         [titleInput, textInput].forEach(function (el) {
-            if (el) unwrapLegacyHighlightLayer(el);
+            if (el) unwrapHighlightContainer(el);
         });
 
         function refreshContactWarning() {
             var warning = getContactDetailsWarning(titleInput && titleInput.value) ||
                 getContactDetailsWarning(textInput && textInput.value);
-            setComposerContactWarning(statusEl, titleInput, textInput, warning, previews);
+            setComposerContactWarning(statusEl, titleInput, textInput, warning);
         }
 
         [titleInput, textInput].forEach(function (el) {
@@ -339,10 +448,7 @@
         var status = document.getElementById('messages-status');
         if (!form) return;
 
-        bindContactWarnings(titleInput, textInput, status, {
-            title: document.getElementById('messages-title-flag-preview'),
-            text: document.getElementById('messages-flag-preview')
-        });
+        bindContactWarnings(titleInput, textInput, status);
 
         form.addEventListener('submit', function (event) {
             event.preventDefault();
@@ -350,10 +456,7 @@
             var text = String(textInput && textInput.value || '').trim();
             var title = String(titleInput && titleInput.value || '').trim();
             if (!text) {
-                setComposerContactWarning(status, titleInput, textInput, '', {
-                    title: document.getElementById('messages-title-flag-preview'),
-                    text: document.getElementById('messages-flag-preview')
-                });
+                setComposerContactWarning(status, titleInput, textInput, '');
                 if (status) {
                     status.textContent = 'Write a message before sending.';
                     status.classList.remove('messages-status--warning');
@@ -362,10 +465,7 @@
             }
             var contactWarning = getContactDetailsWarning(text) || getContactDetailsWarning(title);
             if (contactWarning) {
-                setComposerContactWarning(status, titleInput, textInput, contactWarning, {
-                    title: document.getElementById('messages-title-flag-preview'),
-                    text: document.getElementById('messages-flag-preview')
-                });
+                setComposerContactWarning(status, titleInput, textInput, contactWarning);
                 return;
             }
 
@@ -378,10 +478,7 @@
                 var sent = window.anytransportApi.sendMessage(me.id, toUserId, text, title || 'Message');
                 if (!sent) throw new Error('No response from API');
                 if (textInput) textInput.value = '';
-                setComposerContactWarning(status, titleInput, textInput, '', {
-                    title: document.getElementById('messages-title-flag-preview'),
-                    text: document.getElementById('messages-flag-preview')
-                });
+                setComposerContactWarning(status, titleInput, textInput, '');
                 if (status) {
                     status.textContent = 'Message sent.';
                     status.classList.add('messages-status--ok');

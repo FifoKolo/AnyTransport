@@ -39,24 +39,50 @@
             box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
         }
         .messages-flag-preview {
-            padding: 10px 12px;
-            border: 1px solid #fcd34d;
+            display: none;
+        }
+        .messages-inline-highlight {
+            position: relative;
+            width: 100%;
+            background: #fff;
             border-radius: 8px;
-            background: #fffbeb;
         }
-        .messages-flag-preview-label {
-            margin: 0 0 6px;
-            font-size: 12px;
-            font-weight: 600;
-            color: #b45309;
+        .messages-inline-backdrop {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+            border-radius: 8px;
+            z-index: 0;
+            visibility: hidden;
         }
-        .messages-flag-preview-body {
-            margin: 0;
-            font-size: 14px;
-            line-height: 1.5;
+        .messages-inline-highlight--active .messages-inline-backdrop {
+            visibility: visible;
+        }
+        .messages-inline-backdrop-content {
+            box-sizing: border-box;
+            min-height: 100%;
             white-space: pre-wrap;
             word-wrap: break-word;
+            overflow-wrap: break-word;
             color: #0f172a;
+        }
+        .messages-inline-highlight--active:has(> input) .messages-inline-backdrop-content {
+            white-space: pre;
+        }
+        .messages-inline-highlight > textarea,
+        .messages-inline-highlight > input {
+            position: relative;
+            z-index: 1;
+            display: block;
+            width: 100%;
+            background: #fff;
+        }
+        .messages-inline-highlight--active > .messages-input--mirrored {
+            background: transparent !important;
+            color: transparent !important;
+            -webkit-text-fill-color: transparent;
+            caret-color: #0f172a;
         }
         .messages-flagged-text {
             background: rgba(245, 158, 11, 0.55);
@@ -114,6 +140,6 @@
     </main>
 
     <script src="js/auth.js?v=20260503-7"></script>
-    <script src="js/messages.js?v=20260519-3"></script>
+    <script src="js/messages.js?v=20260519-4"></script>
 </body>
 </html>
