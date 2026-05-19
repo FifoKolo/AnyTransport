@@ -38,42 +38,25 @@
             border-color: #f59e0b;
             box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
         }
-        .messages-input-highlight-wrap {
-            position: relative;
-            width: 100%;
-        }
-        .messages-input-highlight-backdrop {
-            position: absolute;
-            inset: 0;
-            overflow: hidden;
-            pointer-events: none;
+        .messages-flag-preview {
+            padding: 10px 12px;
+            border: 1px solid #fcd34d;
             border-radius: 8px;
-            z-index: 0;
-            visibility: hidden;
+            background: #fffbeb;
         }
-        .messages-input-highlight-wrap--active .messages-input-highlight-backdrop {
-            visibility: visible;
+        .messages-flag-preview-label {
+            margin: 0 0 6px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #b45309;
         }
-        .messages-input-highlight-content {
-            box-sizing: border-box;
-            width: 100%;
-            min-height: 100%;
-            padding: 10px;
-            font: inherit;
+        .messages-flag-preview-body {
+            margin: 0;
+            font-size: 14px;
             line-height: 1.5;
             white-space: pre-wrap;
             word-wrap: break-word;
             color: #0f172a;
-        }
-        .messages-input-highlight-wrap--active:has(> input) .messages-input-highlight-content {
-            white-space: pre;
-        }
-        .messages-input-highlight-wrap--active .messages-input--highlighted {
-            position: relative;
-            z-index: 1;
-            background: transparent;
-            color: transparent;
-            caret-color: #0f172a;
         }
         .messages-flagged-text {
             background: rgba(245, 158, 11, 0.55);
@@ -113,8 +96,16 @@
         </section>
 
         <form id="messages-form" class="messages-composer">
-            <input id="messages-title" type="text" maxlength="120" placeholder="Subject (optional)">
-            <textarea id="messages-text" rows="5" maxlength="2000" placeholder="Write your message"></textarea>
+            <input id="messages-title" type="text" maxlength="120" placeholder="Subject (optional)" spellcheck="true">
+            <div id="messages-title-flag-preview" class="messages-flag-preview" hidden aria-live="polite">
+                <p class="messages-flag-preview-label">Flagged text in subject:</p>
+                <div class="messages-flag-preview-body"></div>
+            </div>
+            <textarea id="messages-text" rows="5" maxlength="2000" placeholder="Write your message" spellcheck="true"></textarea>
+            <div id="messages-flag-preview" class="messages-flag-preview" hidden aria-live="polite">
+                <p class="messages-flag-preview-label">Flagged text in your message (remove or edit to send):</p>
+                <div class="messages-flag-preview-body"></div>
+            </div>
             <div class="messages-actions">
                 <button class="btn btn-primary" type="submit">Send message</button>
                 <span id="messages-status" class="messages-status"></span>
@@ -123,6 +114,6 @@
     </main>
 
     <script src="js/auth.js?v=20260503-7"></script>
-    <script src="js/messages.js?v=20260519-2"></script>
+    <script src="js/messages.js?v=20260519-3"></script>
 </body>
 </html>
