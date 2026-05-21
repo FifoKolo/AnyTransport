@@ -495,6 +495,42 @@ function setupCombinedAreaOrEircodeFields() {
 
 document.addEventListener('DOMContentLoaded', setupCombinedAreaOrEircodeFields);
 
+/** Keep visible combined area/eircode inputs aligned with hidden legacy fields after restore. */
+function syncCombinedAreaFieldsFromLegacy() {
+    const pairs = [
+        {
+            combinedId: 'pickup-area-eircode',
+            cityAreaId: 'pickup-city-area',
+            postcodeId: 'pickup-postcode'
+        },
+        {
+            combinedId: 'delivery-area-eircode',
+            cityAreaId: 'delivery-city-area',
+            postcodeId: 'delivery-postcode'
+        }
+    ];
+
+    pairs.forEach(({ combinedId, cityAreaId, postcodeId }) => {
+        const combined = document.getElementById(combinedId);
+        const cityArea = document.getElementById(cityAreaId);
+        const postcode = document.getElementById(postcodeId);
+        if (!combined) return;
+
+        const cityValue = String(cityArea?.value || '').trim();
+        const postcodeValue = String(postcode?.value || '').trim();
+        const combinedValue = String(combined.value || '').trim();
+
+        if (!combinedValue && (cityValue || postcodeValue)) {
+            combined.value = cityValue || postcodeValue;
+        } else if (combinedValue && cityArea && postcode && !cityValue && !postcodeValue) {
+            cityArea.value = combinedValue;
+            postcode.value = combinedValue;
+        }
+    });
+}
+
+window.syncCombinedAreaFieldsFromLegacy = syncCombinedAreaFieldsFromLegacy;
+
 // === END CRITICAL FUNCTIONS ===
 
 function getPreferredTimeFlexibilityValue(radioName, hiddenFieldId) {
@@ -2872,6 +2908,8 @@ function ensureMissingFieldSectionVisible(field) {
         'trailer-campervan-section',
         'piano-delivery-section',
         'pets-transport-section',
+        'industrial-transport-section',
+        'manpower-transport-section',
         'freight-step3-form',
         'clearance-step3-form',
         'customized-items-inventory-section',
@@ -2947,6 +2985,46 @@ function isFreightService(serviceValue) {
 function isClearanceService(serviceValue) {
     return normalizeServiceValue(serviceValue) === 'Clearance';
 }
+
+function getClearanceSelectedItemsFromDom() {
+    const hidden = document.getElementById('clearance-selected-items-hidden');
+    const raw = String(hidden?.value || '').trim();
+    if (!raw) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed)
+            ? parsed.map((item) => String(item || '').trim()).filter(Boolean)
+            : [];
+    } catch (_error) {
+        return [];
+    }
+}
+
+function getClearanceMissingInventoryTarget() {
+    return document.getElementById('clearance-selected-items-section')
+        || document.getElementById('clearance-select-inventory-btn')
+        || document.getElementById('clearance-selected-items-hidden');
+}
+
+function updateClearanceInventoryWarning() {
+    const section = document.getElementById('clearance-selected-items-section');
+    const warningEl = document.getElementById('clearance-inventory-required-warning');
+    if (!section) return;
+
+    const isStep3 = document.body.getAttribute('data-form-step') === '3'
+        || document.body.getAttribute('data-current-step') === '3';
+    const needsItems = isStep3 && isClearanceService(getActiveServiceValue());
+    const hasItems = getClearanceSelectedItemsFromDom().length > 0;
+    const showWarning = needsItems && !hasItems;
+
+    if (warningEl) {
+        warningEl.style.display = showWarning ? 'block' : 'none';
+    }
+    section.classList.toggle('clearance-inventory-missing', showWarning);
+}
+
+window.getClearanceSelectedItemsFromDom = getClearanceSelectedItemsFromDom;
+window.updateClearanceInventoryWarning = updateClearanceInventoryWarning;
 
 function isPetsService(serviceValue) {
     return String(normalizeServiceValue(serviceValue) || '').trim().toLowerCase() === 'pets';
@@ -3146,6 +3224,14 @@ function isNoLiftService(serviceValue) {
 
 function isVehicleLikeStepFlowService(serviceValue) {
     return isVehicleTransportService(serviceValue) || isFreightService(serviceValue) || isClearanceService(serviceValue);
+}
+
+function isIndustrialService(serviceValue) {
+    return serviceValue === 'Industrial';
+}
+
+function isManPowerService(serviceValue) {
+    return normalizeServiceValue(serviceValue) === 'Man Power Only';
 }
 
 function isParkingLevelService(serviceValue) {
@@ -4410,6 +4496,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
 
+            if (!getClearanceSelectedItemsFromDom().length) {
+                return getClearanceMissingInventoryTarget();
+            }
+
             return null;
         };
 
@@ -4651,8 +4741,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     pickupHasAreaOrEircode &&
                     (isClearance || deliveryHasAreaOrEircode);
             }
-            // Step 2: property type required
+            // Step 2: property type required (Industrial / Man Power: details on step 3)
             if (step === 2) {
+                if (isIndustrialService(serviceValue) || isManPowerService(serviceValue)) {
+                    return true;
+                }
+
                 const propertyType = document.getElementById('pickup-property-type');
                 if (!(propertyType && propertyType.value.trim())) {
                     return false;
@@ -4677,6 +4771,20 @@ document.addEventListener('DOMContentLoaded', function () {
             // Step 3: floor required, lift required if visible, and at least one inventory item when inventory is shown
             // lift also required if visible (when floor is not ground)
             if (step === 3) {
+                if (isIndustrialService(serviceValue)) {
+                    const description = document.getElementById('what-being-transported');
+                    const weight = document.getElementById('industrial-weight-hidden');
+                    return !!(
+                        description && description.value.trim()
+                        && weight && weight.value.trim()
+                    );
+                }
+
+                if (isManPowerService(serviceValue)) {
+                    const description = document.getElementById('manpower-job-description');
+                    return !!(description && description.value.trim());
+                }
+
                 if (serviceValue === 'Piano Transport') {
                     return !getPianoStep3MissingRequiredField();
                 }
@@ -5379,6 +5487,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 return 'Customized items';
             }
 
+            if (fieldId === 'clearance-selected-items-hidden'
+                || presentationField?.closest?.('#clearance-selected-items-section')) {
+                return 'Clearance inventory items';
+            }
+
             const customizedLabel = getCustomizedItemFieldLabel(field);
             if (customizedLabel) {
                 return customizedLabel;
@@ -5743,6 +5856,9 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             if (step === 2) {
+                if (isIndustrialService(serviceValue) || isManPowerService(serviceValue)) {
+                    return null;
+                } else {
                 const propertyType = document.getElementById('pickup-property-type');
                 if (!(propertyType && propertyType.value && propertyType.value.trim())) {
                     return propertyType || document.getElementById('property-type-selection-section');
@@ -5761,9 +5877,32 @@ document.addEventListener('DOMContentLoaded', function () {
                         return pickupLift || pickupLiftSection;
                     }
                 }
+                }
             }
 
             if (step === 3) {
+                if (isIndustrialService(serviceValue)) {
+                    const description = document.getElementById('what-being-transported');
+                    if (!(description && description.value && description.value.trim())) {
+                        return description || document.getElementById('industrial-transport-section');
+                    }
+                    const weight = document.getElementById('industrial-weight-hidden');
+                    if (!(weight && weight.value && weight.value.trim())) {
+                        return weight
+                            || document.querySelector('[data-option-nav-for="industrial-weight-hidden"]')
+                            || document.getElementById('industrial-transport-section');
+                    }
+                    return;
+                }
+
+                if (isManPowerService(serviceValue)) {
+                    const description = document.getElementById('manpower-job-description');
+                    if (!(description && description.value && description.value.trim())) {
+                        return description || document.getElementById('manpower-transport-section');
+                    }
+                    return;
+                }
+
                 if (isPianoService) {
                     return getPianoStep3MissingRequiredField() || document.getElementById('piano-delivery-section');
                 }
@@ -6139,6 +6278,9 @@ document.addEventListener('DOMContentLoaded', function () {
             stickyNextBtn.style.opacity = '1';
             ensureMultiFloorInventoryVisible();
             updateStep3InventoryWarning();
+            if (typeof updateClearanceInventoryWarning === 'function') {
+                updateClearanceInventoryWarning();
+            }
             updateStickyManageBtnVisibility();
         };
 
@@ -6415,7 +6557,10 @@ document.addEventListener('DOMContentLoaded', function () {
                         stickyNextBtn.classList.remove('disabled');
                         stickyNextBtn.style.opacity = '1';
                         if (typeof window.setFormStep === 'function') {
-                            window.setFormStep(step + 1);
+                            const nextStep = typeof window.getNextCreateJobStep === 'function'
+                                ? window.getNextCreateJobStep(step)
+                                : step + 1;
+                            window.setFormStep(nextStep);
                         }
                         return;
                     }
@@ -6437,7 +6582,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 stickyNextBtn.classList.remove('disabled');
                 stickyNextBtn.style.opacity = '1';
                 if (typeof window.setFormStep === 'function') {
-                    window.setFormStep(step + 1);
+                    const nextStep = typeof window.getNextCreateJobStep === 'function'
+                        ? window.getNextCreateJobStep(step)
+                        : step + 1;
+                    window.setFormStep(nextStep);
                 }
             };
         }
@@ -6545,6 +6693,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 stickyNextBtn.classList.remove('disabled');
                 stickyNextBtn.style.opacity = '1';
                 updateStep3InventoryWarning();
+                if (typeof updateClearanceInventoryWarning === 'function') {
+                    updateClearanceInventoryWarning();
+                }
             });
             el.addEventListener('change', function() {
                 updateStickyNextBtnVisibility();
@@ -6552,6 +6703,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 stickyNextBtn.classList.remove('disabled');
                 stickyNextBtn.style.opacity = '1';
                 updateStep3InventoryWarning();
+                if (typeof updateClearanceInventoryWarning === 'function') {
+                    updateClearanceInventoryWarning();
+                }
             });
         });
         // Listen for inventory changes
@@ -6575,6 +6729,9 @@ document.addEventListener('DOMContentLoaded', function () {
         stickyNextBtn.classList.remove('disabled');
         stickyNextBtn.style.opacity = '1';
         updateStep3InventoryWarning();
+        if (typeof updateClearanceInventoryWarning === 'function') {
+            updateClearanceInventoryWarning();
+        }
         // Scroll logic: hide sticky button if footer is visible
         window.addEventListener('scroll', function() {
             const footer = document.querySelector('footer');
@@ -6626,17 +6783,10 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             // Go back one step (no landing page reload)
             if (step > 1 && typeof window.setFormStep === 'function') {
-                const serviceValue = (typeof getActiveServiceValue === 'function' ? getActiveServiceValue() : '').trim();
-                const isClearance = typeof isClearanceService === 'function' && isClearanceService(serviceValue);
-                let prevStep = step - 1;
-                if (isClearance) {
-                    while (prevStep > 1 && (prevStep === 4 || prevStep === 5)) {
-                        prevStep -= 1;
-                    }
-                }
+                const prevStep = typeof window.getPrevCreateJobStep === 'function'
+                    ? window.getPrevCreateJobStep(step)
+                    : step - 1;
                 window.setFormStep(prevStep);
-                document.body.dataset.formStep = String(prevStep);
-                document.body.dataset.currentStep = String(prevStep);
             }
         };
         const handleHomeClick = function () {
@@ -7186,6 +7336,8 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
+        appendTransportAddonInventoryItems(addItem);
+
         let currentState = parsePackingItemsSelection(hiddenInput.value);
         if (Object.keys(currentState).length > 0) {
             hiddenInput.dataset.partialAutoInitialized = 'yes';
@@ -7451,6 +7603,109 @@ document.addEventListener('DOMContentLoaded', function () {
         return Object.values(state).some((qty) => (parseInt(qty, 10) || 0) > 0);
     };
 
+    function getPreferredPickupFloorForAddons() {
+        const selectedPickupFloors = window.selectedPickupFloors instanceof Set
+            ? Array.from(window.selectedPickupFloors).filter(Boolean)
+            : [];
+        return selectedPickupFloors[0]
+            || (document.getElementById('pickup-floor-select')?.value || '').trim()
+            || 'Ground';
+    }
+
+    function getPianoAddonItemLabels() {
+        const labels = typeof getPianoOverviewInventoryLabels === 'function'
+            ? getPianoOverviewInventoryLabels()
+            : [];
+        if (labels.length > 0) {
+            return labels;
+        }
+
+        if (getActiveServiceValue() !== 'Piano Transport' || !window.multiItemsManager?.collectPianoDraft) {
+            return [];
+        }
+
+        const draft = window.multiItemsManager.collectPianoDraft();
+        if (!draft?.type) {
+            return [];
+        }
+
+        const manager = window.multiItemsManager;
+        const typeLabel = typeof manager.getPianoTypeLabel === 'function'
+            ? manager.getPianoTypeLabel(draft.type)
+            : String(draft.type || 'Piano');
+        let sizeLabel = '';
+
+        if (draft.isCustomType || draft.isCustomSize) {
+            const dims = [draft.customLength, draft.customWidth, draft.customHeight]
+                .map((v) => String(v || '').trim())
+                .filter(Boolean)
+                .join(' x ');
+            const unit = String(draft.customUnit || '').trim();
+            const modelName = String(draft.customName || '').trim();
+            const dimsLabel = dims ? `${dims}${unit ? ` ${unit}` : ''}` : '';
+            sizeLabel = modelName && dimsLabel
+                ? `${modelName}, ${dimsLabel}`
+                : modelName || dimsLabel;
+        } else if (draft.type === 'unknown') {
+            const approxDims = [draft.lengthMeasurement, draft.widthMeasurement, draft.heightMeasurement]
+                .map((v) => String(v || '').trim())
+                .filter(Boolean)
+                .join(' x ');
+            sizeLabel = approxDims ? `Approx: ${approxDims} cm` : 'Details from uploaded media';
+        } else if (typeof manager.getPianoSizeLabel === 'function') {
+            sizeLabel = manager.getPianoSizeLabel(draft.size);
+        }
+
+        return [`Piano 1: ${typeLabel}${sizeLabel ? ` (${sizeLabel})` : ''}`];
+    }
+
+    function appendTransportAddonInventoryItems(addItem) {
+        if (typeof addItem !== 'function') return;
+
+        const serviceValue = getActiveServiceValue();
+        const floor = getPreferredPickupFloorForAddons();
+
+        if (serviceValue === 'Piano Transport') {
+            getPianoAddonItemLabels().forEach((itemName) => addItem(floor, itemName, 1));
+        }
+
+        if (isPetsService(serviceValue)) {
+            const petLabels = typeof getPetsOverviewInventoryLabels === 'function'
+                ? getPetsOverviewInventoryLabels()
+                : [];
+            petLabels.forEach((label, index) => {
+                const itemName = /^pet\s+\d+/i.test(String(label || '').trim())
+                    ? String(label).trim()
+                    : `Pet ${index + 1}: ${String(label || 'Pet').trim()}`;
+                addItem(floor, itemName, 1);
+            });
+        }
+
+        if (isVehicleLikeStepFlowService(serviceValue) && window.multiItemsManager) {
+            const vehicleLabels = {
+                car: 'Campervan / Car',
+                motorbike: 'Motorbike',
+                trailer: 'Trailer / Caravan'
+            };
+
+            ['car', 'motorbike', 'trailer'].forEach((vehicleType) => {
+                if (typeof window.multiItemsManager.parseVehicles !== 'function') return;
+
+                const savedVehicles = window.multiItemsManager.parseVehicles(vehicleType) || [];
+                if (!Array.isArray(savedVehicles) || savedVehicles.length === 0) return;
+
+                savedVehicles.forEach((vehicle, index) => {
+                    const makeModel = String(vehicle?.makeModel || '').trim();
+                    const labelBase = vehicleLabels[vehicleType] || 'Vehicle';
+                    const itemName = makeModel
+                        ? `${labelBase} ${index + 1}: ${makeModel}`
+                        : `${labelBase} ${index + 1}`;
+                    addItem(floor, itemName, 1);
+                });
+            });
+        }
+    }
+
     function getDisassemblyEligibleItems() {
         const byFloor = {};
         const floorOrder = ['Basement','Ground','1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','Attic'];
@@ -7490,6 +7745,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 addItem(preferredFloor, item.name, item.qty);
             });
         }
+
+        appendTransportAddonInventoryItems(addItem);
 
         const sortedFloors = Object.keys(byFloor).sort((a, b) => {
             const ia = floorOrder.indexOf(a);
@@ -9094,8 +9351,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.addEventListener('change', function(e) {
         if (!e.target) return;
-        if (e.target.id === 'service-packing' || e.target.id === 'service-packing-items' || e.target.id === 'service-packing-mode' || e.target.id === 'service-packing-box-provider') {
+        if (
+            e.target.id === 'service-packing'
+            || e.target.id === 'service-packing-items'
+            || e.target.id === 'service-packing-mode'
+            || e.target.id === 'service-packing-box-provider'
+            || e.target.id === 'pianos-json-hidden'
+            || e.target.id === 'pets-json-hidden'
+            || e.target.id === 'car-json-hidden'
+            || e.target.id === 'motorbike-json-hidden'
+            || e.target.id === 'trailer-json-hidden'
+        ) {
             renderPackingItemsConfig();
+            renderDisassemblyConfig();
+            renderStorageConfig();
             if (window.updateNextButtonState) {
                 window.updateNextButtonState();
             }
@@ -9673,11 +9942,15 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
         ['pickupAddress', 'pickup-address'],
         ['pickupCity', 'pickup-city'],
         ['pickupPostcode', 'pickup-postcode'],
+        ['pickupCityArea', 'pickup-city-area'],
+        ['pickupAreaEircode', 'pickup-area-eircode'],
         ['pickupPropertyType', 'pickup-property-type'],
         ['propertyType', 'pickup-property-type'],
         ['deliveryAddress', 'delivery-address'],
         ['deliveryCity', 'delivery-city'],
         ['deliveryPostcode', 'delivery-postcode'],
+        ['deliveryCityArea', 'delivery-city-area'],
+        ['deliveryAreaEircode', 'delivery-area-eircode'],
         ['deliveryPropertyType', 'delivery-property-type'],
         ['customerName', 'customer-name'],
         ['customerEmail', 'customer-email'],
@@ -9739,11 +10012,402 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
     const itemType = String(q.itemType || q.itemDescription || '').trim();
     if (itemType) {
         setEl('item-description-hidden', itemType);
+        window.pendingServiceFromUrl = itemType;
+    }
+
+    const petsRaw = q.petsJson || (q.petDetails && q.petDetails.pets);
+    if (typeof petsRaw === 'string' && petsRaw.trim()) {
+        setEl('pets-json-hidden', petsRaw);
+    } else if (Array.isArray(petsRaw) && petsRaw.length > 0) {
+        setEl('pets-json-hidden', petsRaw);
     }
 
     const pianosRaw = q.pianosJson;
     if (typeof pianosRaw === 'string' && pianosRaw.trim()) {
         setEl('pianos-json-hidden', pianosRaw);
+    }
+
+    const applyFreightFromQuote = (quoteRecord) => {
+        if (!quoteRecord || typeof quoteRecord !== 'object') return;
+
+        const pickQuoteValue = function () {
+            for (let i = 0; i < arguments.length; i += 1) {
+                const value = arguments[i];
+                if (value === null || value === undefined) continue;
+                const text = String(value).trim();
+                if (text) return text;
+            }
+            return '';
+        };
+
+        let freight = null;
+        const freightRaw = quoteRecord.freightJson || quoteRecord.freight_json;
+        if (typeof freightRaw === 'string' && freightRaw.trim()) {
+            try {
+                const parsed = JSON.parse(freightRaw);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    freight = parsed;
+                }
+            } catch (_error) {
+                // Ignore malformed freight payload.
+            }
+        } else if (freightRaw && typeof freightRaw === 'object' && !Array.isArray(freightRaw)) {
+            freight = freightRaw;
+        } else if (quoteRecord.freightDetails && typeof quoteRecord.freightDetails === 'object') {
+            freight = quoteRecord.freightDetails;
+        }
+
+        if (!freight) {
+            const unitCategory = pickQuoteValue(
+                quoteRecord['freight3-unit-category'],
+                quoteRecord.freight3UnitCategory
+            );
+            if (!unitCategory) return;
+            freight = {
+                unitCategory: unitCategory,
+                unitType: pickQuoteValue(quoteRecord['freight3-unit-type'], quoteRecord.freight3UnitType),
+                length: pickQuoteValue(quoteRecord['freight3-length'], quoteRecord.freight3Length),
+                width: pickQuoteValue(quoteRecord['freight3-width'], quoteRecord.freight3Width),
+                height: pickQuoteValue(quoteRecord['freight3-height'], quoteRecord.freight3Height),
+                dimensionUnit: pickQuoteValue(quoteRecord['freight3-dimension-unit'], quoteRecord.freight3DimensionUnit, 'm') || 'm',
+                unitWeight: pickQuoteValue(quoteRecord['freight3-unit-weight'], quoteRecord.freight3UnitWeight),
+                weightUnit: pickQuoteValue(quoteRecord['freight3-weight-unit'], quoteRecord.freight3WeightUnit, 'kg') || 'kg',
+                unitCount: pickQuoteValue(quoteRecord['freight3-unit-count'], quoteRecord.freight3UnitCount),
+                description: pickQuoteValue(quoteRecord['freight3-description'], quoteRecord.freight3Description),
+                notes: pickQuoteValue(quoteRecord['freight3-notes'], quoteRecord.freight3Notes)
+            };
+        }
+
+        const freightFieldMap = {
+            'freight3-unit-category': freight.unitCategory,
+            'freight3-unit-type': freight.unitType,
+            'freight3-length': freight.length,
+            'freight3-width': freight.width,
+            'freight3-height': freight.height,
+            'freight3-dimension-unit': freight.dimensionUnit,
+            'freight3-unit-weight': freight.unitWeight,
+            'freight3-weight-unit': freight.weightUnit,
+            'freight3-unit-count': freight.unitCount,
+            'freight3-description': freight.description,
+            'freight3-notes': freight.notes
+        };
+
+        Object.keys(freightFieldMap).forEach((fieldId) => {
+            const value = freightFieldMap[fieldId];
+            if (value !== undefined && value !== null && String(value).trim() !== '') {
+                setEl(fieldId, value);
+            }
+        });
+
+        if (typeof refreshFreightUnitTypeOptions === 'function') {
+            refreshFreightUnitTypeOptions();
+        }
+        if (typeof applyFreightDimensionVisibilityAndDefaults === 'function') {
+            applyFreightDimensionVisibilityAndDefaults();
+        }
+        if (typeof buildFreightDescriptionSummary === 'function') {
+            setEl('office-removal-description', buildFreightDescriptionSummary());
+        }
+    };
+
+    applyFreightFromQuote(q);
+
+    const applyIndustrialFromQuote = (quoteRecord) => {
+        if (!quoteRecord || typeof quoteRecord !== 'object') return;
+
+        const pickQuoteValue = function () {
+            for (let i = 0; i < arguments.length; i += 1) {
+                const value = arguments[i];
+                if (value === null || value === undefined) continue;
+                const text = String(value).trim();
+                if (text) return text;
+            }
+            return '';
+        };
+
+        let details = null;
+        const rawJson = pickQuoteValue(quoteRecord.industrialJson, quoteRecord.industrial_json);
+        if (rawJson) {
+            try {
+                const parsed = JSON.parse(rawJson);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    details = parsed;
+                }
+            } catch (_error) {
+                // Ignore malformed industrial payload.
+            }
+        }
+
+        if (!details && quoteRecord.industrialDetails) {
+            if (typeof quoteRecord.industrialDetails === 'string') {
+                const raw = quoteRecord.industrialDetails.trim();
+                if (raw) {
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                            details = parsed;
+                        }
+                    } catch (_error) {
+                        details = { description: raw };
+                    }
+                }
+            } else if (typeof quoteRecord.industrialDetails === 'object') {
+                details = quoteRecord.industrialDetails;
+            }
+        }
+
+        if (!details) {
+            const description = pickQuoteValue(
+                quoteRecord.whatBeingTransported,
+                quoteRecord.what_being_transported,
+                quoteRecord['what-being-transported']
+            );
+            const weight = pickQuoteValue(
+                quoteRecord.industrialWeight,
+                quoteRecord.industrial_weight,
+                quoteRecord['industrial-weight-hidden']
+            );
+            if (description || weight) {
+                details = { description: description, weight: weight };
+            }
+        }
+
+        if (!details) return;
+
+        if (details.description) {
+            setEl('what-being-transported', details.description);
+        }
+
+        if (details.weight) {
+            setEl('industrial-weight-hidden', details.weight);
+            const weightNav = document.querySelector('.option-nav[data-option-nav-for="industrial-weight-hidden"]');
+            if (weightNav) {
+                weightNav.querySelectorAll('.option-nav-btn').forEach((btn) => {
+                    const isActive = String(btn.dataset.value || '') === String(details.weight);
+                    btn.classList.toggle('selected', isActive);
+                    btn.classList.toggle('is-active', isActive);
+                    btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
+                });
+            }
+        }
+
+        const mediaItems = Array.isArray(details.media) ? details.media : [];
+        if (mediaItems.length) {
+            setEl('industrial-media-hidden', JSON.stringify(mediaItems));
+            if (window.multiItemsManager && typeof window.multiItemsManager.renderVehicleMediaPreview === 'function') {
+                window.multiItemsManager.renderVehicleMediaPreview('industrial', mediaItems);
+            }
+        }
+    };
+
+    applyIndustrialFromQuote(q);
+
+    const applyManpowerFromQuote = (quoteRecord) => {
+        if (!quoteRecord || typeof quoteRecord !== 'object') return;
+
+        const pickQuoteValue = function () {
+            for (let i = 0; i < arguments.length; i += 1) {
+                const value = arguments[i];
+                if (value === null || value === undefined) continue;
+                const text = String(value).trim();
+                if (text) return text;
+            }
+            return '';
+        };
+
+        let details = null;
+        const rawJson = pickQuoteValue(quoteRecord.manpowerJson, quoteRecord.manpower_json);
+        if (rawJson) {
+            try {
+                const parsed = JSON.parse(rawJson);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    details = parsed;
+                }
+            } catch (_error) {
+                // Ignore malformed manpower payload.
+            }
+        }
+
+        if (!details && quoteRecord.manpowerDetails) {
+            if (typeof quoteRecord.manpowerDetails === 'string') {
+                const raw = quoteRecord.manpowerDetails.trim();
+                if (raw) {
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                            details = parsed;
+                        }
+                    } catch (_error) {
+                        details = { description: raw };
+                    }
+                }
+            } else if (typeof quoteRecord.manpowerDetails === 'object') {
+                details = quoteRecord.manpowerDetails;
+            }
+        }
+
+        if (!details) {
+            const description = pickQuoteValue(
+                quoteRecord.manpowerJobDescription,
+                quoteRecord['manpower-job-description']
+            );
+            if (description) {
+                details = { description: description };
+            }
+        }
+
+        if (!details) return;
+
+        if (details.description) {
+            setEl('manpower-job-description', details.description);
+        }
+
+        const mediaItems = Array.isArray(details.media) ? details.media : [];
+        if (mediaItems.length) {
+            setEl('manpower-media-hidden', JSON.stringify(mediaItems));
+            if (window.multiItemsManager && typeof window.multiItemsManager.renderVehicleMediaPreview === 'function') {
+                window.multiItemsManager.renderVehicleMediaPreview('manpower', mediaItems);
+            }
+        }
+    };
+
+    applyManpowerFromQuote(q);
+
+    const applyClearanceFromQuote = (quoteRecord) => {
+        if (!quoteRecord || typeof quoteRecord !== 'object') return;
+
+        const pickQuoteValue = function () {
+            for (let i = 0; i < arguments.length; i += 1) {
+                const value = arguments[i];
+                if (value === null || value === undefined) continue;
+                const text = String(value).trim();
+                if (text) return text;
+            }
+            return '';
+        };
+
+        const selectedRaw = pickQuoteValue(
+            quoteRecord.clearanceSelectedItemsJson,
+            quoteRecord.clearance_selected_items_json,
+            quoteRecord.clearanceSelectedItems,
+            quoteRecord['clearance-selected-items-hidden']
+        );
+        if (selectedRaw) {
+            setEl('clearance-selected-items-hidden', selectedRaw);
+            if (typeof window.renderClearanceSelectedItems === 'function') {
+                window.renderClearanceSelectedItems();
+            }
+        }
+
+        let cards = [];
+        const cardsRaw = pickQuoteValue(quoteRecord.clearanceJson, quoteRecord.clearance_json);
+        if (cardsRaw) {
+            try {
+                const parsed = typeof cardsRaw === 'string' ? JSON.parse(cardsRaw) : cardsRaw;
+                if (Array.isArray(parsed)) {
+                    cards = parsed.filter((entry) => entry && typeof entry === 'object');
+                }
+            } catch (_error) {
+                // Ignore malformed clearance payload.
+            }
+        }
+
+        if (!cards.length) {
+            return;
+        }
+
+        const clearanceItemsList = document.getElementById('clearance-items-list');
+        const firstCard = clearanceItemsList?.querySelector('.clearance-customized-card');
+        if (!clearanceItemsList || !firstCard) {
+            return;
+        }
+
+        const applyCardValues = (cardEl, cardData) => {
+            if (!cardEl || !cardData) return;
+            const fieldMap = {
+                description: cardData.description,
+                weight: cardData.weight,
+                'weight-unit': cardData.weightUnit || cardData.weight_unit || 'kg',
+                recycling: cardData.recycling,
+                notes: cardData.notes,
+                'heavy-items': cardData.heavyItems || cardData.heavy_items
+            };
+            Object.keys(fieldMap).forEach((fieldKey) => {
+                const value = fieldMap[fieldKey];
+                if (value === undefined || value === null || String(value).trim() === '') return;
+                const field = cardEl.querySelector(`[data-clearance-field="${fieldKey}"]`);
+                if (!field) return;
+                field.value = String(value);
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            const recyclingHidden = cardEl.querySelector('[data-clearance-field="recycling"]');
+            if (recyclingHidden) {
+                const nav = cardEl.querySelector(`.option-nav[data-option-nav-for="${recyclingHidden.id}"]`);
+                if (nav) {
+                    const normalized = String(recyclingHidden.value || '').trim();
+                    nav.querySelectorAll('.option-nav-btn').forEach((btn) => {
+                        const selected = String(btn.getAttribute('data-value') || '').trim() === normalized;
+                        btn.classList.toggle('selected', selected);
+                        btn.classList.toggle('is-active', selected);
+                        btn.setAttribute('aria-checked', selected ? 'true' : 'false');
+                        btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+                    });
+                }
+            }
+            if (typeof refreshClearanceWeightRangeLabels === 'function') {
+                refreshClearanceWeightRangeLabels(cardEl);
+            }
+        };
+
+        applyCardValues(firstCard, cards[0]);
+        for (let index = 1; index < cards.length; index += 1) {
+            const clone = firstCard.cloneNode(true);
+            clearanceItemsList.appendChild(clone);
+            applyCardValues(clone, cards[index]);
+        }
+
+        if (typeof buildClearanceDescriptionSummary === 'function') {
+            setEl('office-removal-description', buildClearanceDescriptionSummary());
+        }
+        if (typeof window.renderClearanceSelectedItems === 'function') {
+            window.renderClearanceSelectedItems();
+        }
+    };
+
+    applyClearanceFromQuote(q);
+
+    const applyVehicleJsonField = (rawValue, hiddenId) => {
+        if (rawValue === undefined || rawValue === null || rawValue === '') return;
+        if (typeof rawValue === 'string') {
+            setEl(hiddenId, rawValue);
+            return;
+        }
+        if (Array.isArray(rawValue) && rawValue.length > 0) {
+            setEl(hiddenId, rawValue);
+        }
+    };
+
+    applyVehicleJsonField(q.carVehiclesJson, 'car-json-hidden');
+    applyVehicleJsonField(q.motorbikeVehiclesJson, 'motorbike-json-hidden');
+    applyVehicleJsonField(q.trailerVehiclesJson, 'trailer-json-hidden');
+
+    if ((!q.carVehiclesJson && !q.motorbikeVehiclesJson && !q.trailerVehiclesJson)
+        && q.vehicleDraftSnapshot
+        && typeof q.vehicleDraftSnapshot === 'object') {
+        applyVehicleJsonField(q.vehicleDraftSnapshot.car, 'car-json-hidden');
+        applyVehicleJsonField(q.vehicleDraftSnapshot.motorbike, 'motorbike-json-hidden');
+        applyVehicleJsonField(q.vehicleDraftSnapshot.trailer, 'trailer-json-hidden');
+    }
+
+    if (window.multiItemsManager && typeof window.multiItemsManager.renderVehiclesList === 'function') {
+        ['car', 'motorbike', 'trailer'].forEach((vehicleType) => {
+            try {
+                window.multiItemsManager.renderVehiclesList(vehicleType);
+            } catch (_error) {
+                // Ignore render errors during hydration.
+            }
+        });
     }
 
     // --- House removals: restore global floor/inventory state from the saved quote ---
@@ -9903,49 +10567,21 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
         window.multiItemsManager.renderPianosList();
     }
 
+    if (typeof window.finalizeCreateJobRestore === 'function') {
+        window.finalizeCreateJobRestore();
+    }
+
     setTimeout(() => {
-        const pLift = String(document.getElementById('pickup-lift-available')?.value || '').trim();
-        const dLift = String(document.getElementById('delivery-lift-available')?.value || '').trim();
-        if (typeof window.applyPickupLiftSelection === 'function') {
-            window.applyPickupLiftSelection(pLift);
-        }
-        if (typeof window.applyDeliveryLiftSelection === 'function') {
-            window.applyDeliveryLiftSelection(dLift);
-        }
-        if (typeof window.syncPickupStep2FromState === 'function') {
-            window.syncPickupStep2FromState();
-        }
-        if (typeof window.syncDeliveryStep4FromState === 'function') {
-            window.syncDeliveryStep4FromState();
-        }
-        if (typeof window.renderPickupFloorSelector === 'function') {
-            window.renderPickupFloorSelector();
-        }
-        if (typeof window.renderDeliveryFloorSelector === 'function') {
-            window.renderDeliveryFloorSelector();
-        }
-        if (typeof window.renderSelectedPickupFloorsInventory === 'function') {
-            window.renderSelectedPickupFloorsInventory(pLift);
-        }
-        if (typeof window.ensureMultiFloorInventoryVisible === 'function') {
-            window.ensureMultiFloorInventoryVisible();
-        }
-        if (typeof window.renderInventoryByRoom === 'function') {
-            window.renderInventoryByRoom(window.currentRoom || null);
-        }
-        if (typeof window.updateOrganizationSectionVisibility === 'function') {
-            window.updateOrganizationSectionVisibility();
-        }
-        if (typeof window.renderDeliveryFloors === 'function') {
-            window.renderDeliveryFloors();
-        }
-        if (typeof window.updateOverviewFloorAndInventorySummary === 'function') {
-            window.updateOverviewFloorAndInventorySummary();
-        }
-        if (typeof window.updateFormSummary === 'function') {
-            window.updateFormSummary();
+        if (typeof window.finalizeCreateJobRestore === 'function') {
+            window.finalizeCreateJobRestore();
         }
     }, 50);
+
+    setTimeout(() => {
+        if (typeof window.finalizeCreateJobRestore === 'function') {
+            window.finalizeCreateJobRestore();
+        }
+    }, 600);
 };
 
 // --- Simple Draft Persistence ---
@@ -9965,6 +10601,7 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
     let hasUserInteracted = false;
     let bootLockedStep = null;
     let isUnloadingForm = false;
+    let lastPersistedRestorePayload = null;
 
     const CRITICAL_FIELD_IDS = [
         'pickup-address',
@@ -10437,6 +11074,90 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
     const getSavedFullDraft = (scope, allowLegacyFallback = false) => {
         const payloads = getSavedPayloadsForScope(scope, allowLegacyFallback);
         return payloads.full;
+    };
+
+    const resolveRestorePayload = () => {
+        const requestedScope = getRestoreScope();
+        const scopesToTry = [];
+        const pushScope = (scope) => {
+            const normalized = normalizeServiceScope(scope) || 'global';
+            if (!scopesToTry.includes(normalized)) {
+                scopesToTry.push(normalized);
+            }
+        };
+
+        pushScope(requestedScope);
+        pushScope(getServiceFromForm());
+        pushScope(getLastSavedScope());
+        pushScope('global');
+
+        for (const scope of scopesToTry) {
+            const payloads = getSavedPayloadsForScope(scope, false);
+            let payload = payloads.full || payloads.core;
+            if (payload && typeof payload === 'object' && payload.fields) {
+                return { payload, scope };
+            }
+
+            const legacyPayloads = getSavedPayloadsForScope(scope, true);
+            const legacyPayload = legacyPayloads.full || legacyPayloads.core;
+            if (!legacyPayload || typeof legacyPayload !== 'object' || !legacyPayload.fields) {
+                continue;
+            }
+
+            const legacyScope = getServiceScopeFromPayload(legacyPayload);
+            if (requestedScope && legacyScope && legacyScope !== requestedScope && scope !== 'global') {
+                continue;
+            }
+
+            return { payload: legacyPayload, scope: legacyScope || scope };
+        }
+
+        return { payload: null, scope: requestedScope || 'global' };
+    };
+
+    const draftHasMeaningfulData = (payload) => {
+        if (!payload || typeof payload !== 'object') return false;
+
+        const criticalIds = [
+            'pickup-address',
+            'pickup-area-eircode',
+            'pickup-city',
+            'delivery-address',
+            'item-description-hidden'
+        ];
+        for (const id of criticalIds) {
+            const saved = payload.idState && payload.idState[id];
+            const value = typeof saved?.value === 'string' ? saved.value.trim() : '';
+            if (value) return true;
+        }
+
+        if (Array.isArray(payload.selectedPickupFloors) && payload.selectedPickupFloors.length > 0) {
+            return true;
+        }
+        if (Array.isArray(payload.selectedDeliveryFloors) && payload.selectedDeliveryFloors.length > 0) {
+            return true;
+        }
+        if (payload.multiFloorInventory && typeof payload.multiFloorInventory === 'object'
+            && Object.keys(payload.multiFloorInventory).length > 0) {
+            return true;
+        }
+        if (payload.itemQuantities && typeof payload.itemQuantities === 'object'
+            && Object.keys(payload.itemQuantities).length > 0) {
+            return true;
+        }
+
+        return false;
+    };
+
+    const liveFormHasMeaningfulData = () => {
+        const pickupAddress = String(document.getElementById('pickup-address')?.value || '').trim();
+        const pickupArea = String(document.getElementById('pickup-area-eircode')?.value || '').trim();
+        const serviceValue = String(document.getElementById('item-description-hidden')?.value || '').trim();
+        const hasPickupFloors = !!(window.selectedPickupFloors && window.selectedPickupFloors.size > 0);
+        const hasInventory = !!(window.multiFloorInventory && typeof window.multiFloorInventory === 'object'
+            && Object.keys(window.multiFloorInventory).length > 0);
+
+        return !!(pickupAddress || pickupArea || serviceValue || hasPickupFloors || hasInventory);
     };
 
     window.clearCreateJobProgress = function clearCreateJobProgress() {
@@ -11370,6 +12091,96 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
         }
     };
 
+    const finalizeCreateJobRestore = () => {
+        if (typeof syncCombinedAreaFieldsFromLegacy === 'function') {
+            syncCombinedAreaFieldsFromLegacy();
+        }
+
+        const pickupAddress = document.getElementById('pickup-address');
+        const pickupCity = document.getElementById('pickup-city');
+        const deliveryAddress = document.getElementById('delivery-address');
+        const deliveryCity = document.getElementById('delivery-city');
+        if (pickupAddress && pickupCity) {
+            const pickupValue = String(pickupAddress.value || '').trim();
+            if (pickupValue && !String(pickupCity.value || '').trim()) {
+                pickupCity.value = pickupValue;
+            }
+        }
+        if (deliveryAddress && deliveryCity) {
+            const deliveryValue = String(deliveryAddress.value || '').trim();
+            if (deliveryValue && !String(deliveryCity.value || '').trim()) {
+                deliveryCity.value = deliveryValue;
+            }
+        }
+
+        let serviceValue = String(document.getElementById('item-description-hidden')?.value || '').trim();
+        if (!serviceValue) {
+            serviceValue = String(window.pendingServiceFromUrl || '').trim();
+        }
+        if (!serviceValue) {
+            try {
+                const params = new URLSearchParams(window.location.search || '');
+                const fromUrl = params.get('service');
+                serviceValue = fromUrl ? decodeURIComponent(fromUrl).trim() : '';
+            } catch (_error) {
+                serviceValue = '';
+            }
+        }
+
+        if (serviceValue) {
+            const hidden = document.getElementById('item-description-hidden');
+            if (hidden && !String(hidden.value || '').trim()) {
+                hidden.value = serviceValue;
+            }
+            if (typeof window.applyServiceSelection === 'function') {
+                window.applyServiceSelection(serviceValue, serviceValue);
+            } else if (typeof window.setActiveServiceIcon === 'function') {
+                window.setActiveServiceIcon(serviceValue);
+            }
+        }
+
+        if (window.selectedPickupFloors && window.selectedPickupFloors.size > 0) {
+            if (typeof syncPickupFloorHiddenFromSelection === 'function') {
+                syncPickupFloorHiddenFromSelection();
+            }
+            if (typeof window.renderPickupFloorSelector === 'function') {
+                window.renderPickupFloorSelector();
+            }
+        }
+
+        if (window.selectedDeliveryFloors && window.selectedDeliveryFloors.size > 0) {
+            if (typeof window.renderDeliveryFloorSelector === 'function') {
+                window.renderDeliveryFloorSelector();
+            }
+            if (typeof window.renderDeliveryFloors === 'function') {
+                window.renderDeliveryFloors();
+            }
+        }
+
+        applyUiState();
+
+        if (typeof window.renderInventoryByRoom === 'function') {
+            window.renderInventoryByRoom(window.currentRoom || null);
+        }
+        if (typeof window.updateOrganizationSectionVisibility === 'function') {
+            window.updateOrganizationSectionVisibility();
+        }
+        if (typeof updateOverviewFloorAndInventorySummary === 'function') {
+            updateOverviewFloorAndInventorySummary();
+        }
+        if (typeof window.updateFormSummary === 'function') {
+            window.updateFormSummary();
+        }
+        if (typeof window.initializeStep6 === 'function') {
+            window.initializeStep6();
+        }
+        if (typeof window.updateNextButtonState === 'function') {
+            window.updateNextButtonState();
+        }
+    };
+
+    window.finalizeCreateJobRestore = finalizeCreateJobRestore;
+
     window.restoreCreateJobProgress = function restoreCreateJobProgress() {
         // Loading a saved quote from the URL fully hydrates the form; draft restore would
         // clobber fields (e.g. lift status) on delayed passes at the same step.
@@ -11378,28 +12189,17 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
             return;
         }
 
-        const requestedScope = getRestoreScope();
-        const payloads = getSavedPayloadsForScope(requestedScope, false);
-        let payload = payloads.full || payloads.core;
-
-        if (!payload) {
-            const legacyPayloads = getSavedPayloadsForScope(requestedScope, true);
-            const legacyPayload = legacyPayloads.full || legacyPayloads.core;
-            const legacyScope = getServiceScopeFromPayload(legacyPayload);
-            if (!requestedScope || !legacyScope || legacyScope === requestedScope) {
-                payload = legacyPayload;
-            }
-        }
-
+        const { payload, scope: resolvedScope } = resolveRestorePayload();
         if (!payload || typeof payload !== 'object' || !payload.fields) {
             return;
         }
 
-        const payloadScope = getServiceScopeFromPayload(payload);
-        if (requestedScope && payloadScope && requestedScope !== payloadScope) {
-            return;
+        const payloadScope = getServiceScopeFromPayload(payload) || resolvedScope;
+        if (payloadScope) {
+            persistValue(LAST_SCOPE_KEY, payloadScope);
         }
 
+        lastPersistedRestorePayload = payload;
         isRestoring = true;
         try {
             const ensureClearanceCardsForRestore = () => {
@@ -11519,10 +12319,46 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
                     syncPickupFloorHiddenFromSelection();
                 }
             }
+            if (
+                (!window.selectedPickupFloors || window.selectedPickupFloors.size === 0)
+                && payload.multiFloorInventory
+                && typeof payload.multiFloorInventory === 'object'
+            ) {
+                const floorsFromInventory = Object.keys(payload.multiFloorInventory).filter((floorName) => {
+                    const items = payload.multiFloorInventory[floorName];
+                    if (!items || typeof items !== 'object') return false;
+                    return Object.values(items).some((qty) => (parseInt(qty, 10) || 0) > 0);
+                });
+                if (floorsFromInventory.length > 0) {
+                    window.selectedPickupFloors = new Set(floorsFromInventory);
+                    window.step3PickupFloorsConfirmed = true;
+                    if (typeof syncPickupFloorHiddenFromSelection === 'function') {
+                        syncPickupFloorHiddenFromSelection();
+                    }
+                }
+            }
             ensureClearanceCardsForRestore();
             window.step3PickupFloorsConfirmed = payload.step3PickupFloorsConfirmed === true;
             if (Array.isArray(payload.selectedDeliveryFloors)) {
                 window.selectedDeliveryFloors = new Set(payload.selectedDeliveryFloors);
+            }
+            if (
+                (!window.selectedDeliveryFloors || window.selectedDeliveryFloors.size === 0)
+                && payload.itemFloorAssignments
+                && typeof payload.itemFloorAssignments === 'object'
+            ) {
+                const floorsFromAssignments = new Set();
+                Object.values(payload.itemFloorAssignments).forEach((perFloor) => {
+                    if (!perFloor || typeof perFloor !== 'object') return;
+                    Object.entries(perFloor).forEach(([floorName, qty]) => {
+                        if ((parseInt(qty, 10) || 0) > 0 && floorName) {
+                            floorsFromAssignments.add(floorName);
+                        }
+                    });
+                });
+                if (floorsFromAssignments.size > 0) {
+                    window.selectedDeliveryFloors = floorsFromAssignments;
+                }
             }
             if (Array.isArray(payload.step5SelectedItems)) {
                 window.step5SelectedItemKeys = Array.from(payload.step5SelectedItems);
@@ -11686,7 +12522,7 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
                 document.body.dataset.currentStep = String(targetStep);
             }
 
-            applyUiState();
+            finalizeCreateJobRestore();
             if (isFreightService(getActiveServiceValue())) {
                 showFreightSection();
             }
@@ -11712,6 +12548,7 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
                 el.dispatchEvent(new Event('change', { bubbles: true }));
             });
             syncRestoredStep3ServiceVisibility();
+            finalizeCreateJobRestore();
 
             restoreFreightPhotoDraft(payload.freightPhotoDraft);
             restoreClearancePhotoDraft(payload.clearancePhotoDraft);
@@ -11763,11 +12600,10 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
                 }
             }
 
-            applyUiState();
-
             // Run one deferred UI sync so late DOMContentLoaded handlers can register
             // Step 3 inventory render functions before restore-dependent rendering runs.
             setTimeout(() => {
+                finalizeCreateJobRestore();
                 applyUiState();
                 if (isFreightService(getActiveServiceValue())) {
                     showFreightSection();
@@ -11813,6 +12649,9 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
                 }
                 if (typeof window.updateStep3InventoryWarning === 'function') {
                     window.updateStep3InventoryWarning();
+                }
+                if (typeof window.updateClearanceInventoryWarning === 'function') {
+                    window.updateClearanceInventoryWarning();
                 }
                 // Re-render saved vehicles after form restoration
                 ['car', 'motorbike', 'trailer'].forEach(vehicleType => {
@@ -11926,7 +12765,11 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
 
             bootRestoreDone = true;
             if (typeof window.saveCreateJobProgress === 'function') {
-                window.saveCreateJobProgress();
+                const persistedHadData = draftHasMeaningfulData(lastPersistedRestorePayload);
+                const liveHasData = liveFormHasMeaningfulData();
+                if (liveHasData || !persistedHadData) {
+                    window.saveCreateJobProgress();
+                }
             }
         }, 6200);
 
@@ -19755,7 +20598,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (stepFlowReady) {
-            // Step flow already wired; only update sections on service change.
+            // Step flow already wired; service-specific sections refresh below when hasValue.
         } else {
             stepFlowReady = true;
             if (isSingleForm) {
@@ -19777,7 +20620,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const getHiddenStepsForService = () => {
             const serviceValue = getActiveServiceValue();
-            return isClearanceService(serviceValue) ? [4, 5] : [];
+            if (isClearanceService(serviceValue)) {
+                return [4, 5];
+            }
+            if (isIndustrialService(serviceValue) || isManPowerService(serviceValue)) {
+                // Step 2 has no fields (property/floors hidden); job details are on step 3.
+                return [2, 4, 5];
+            }
+            return [];
         };
 
         const isStepHiddenForService = (step) => getHiddenStepsForService().includes(step);
@@ -20214,6 +21064,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 itemsSummary = buildClearanceDescriptionSummary() || getInputValue('office-removal-description');
             } else if (serviceValue === 'Freight') {
                 itemsSummary = buildFreightDescriptionSummary() || getInputValue('office-removal-description');
+            } else if (serviceValue === 'Industrial') {
+                const description = getInputValue('what-being-transported');
+                const weightLabel = getOptionNavLabel('industrial-weight-hidden');
+                const parts = [];
+                if (description) parts.push(description);
+                if (weightLabel) parts.push(`Weight: ${weightLabel}`);
+                itemsSummary = parts.join(' | ');
+            } else if (isManPowerService(serviceValue)) {
+                itemsSummary = getInputValue('manpower-job-description');
             } else if (serviceValue === 'Office Removals') {
                 itemsSummary = buildOfficeInventorySummary() || getInputValue('office-removal-description') || getInputValue('office-inventory-category');
             } else if (isCarCamperTransportService(serviceValue)) {
@@ -20541,6 +21400,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (
                 step === 3
+                && !isIndustrialService(getActiveServiceValue())
                 && !isVehicleLikeStepFlowService(getActiveServiceValue())
                 && getActiveServiceValue() !== 'Piano Transport'
                 && !isCustomizedInventoryService(getActiveServiceValue())
@@ -20774,6 +21634,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 window.updateNextButtonState();
             }
 
+            if (typeof syncIndustrialTransportStepRules === 'function') {
+                syncIndustrialTransportStepRules();
+            }
+            if (typeof syncManPowerTransportStepRules === 'function') {
+                syncManPowerTransportStepRules();
+            }
+
             // Persist immediately to avoid refresh timing gaps.
             if (typeof window.saveCreateJobProgress === 'function') {
                 window.saveCreateJobProgress();
@@ -20781,6 +21648,24 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         
         window.setFormStep = setFormStep;
+
+        window.__refreshCreateJobStepFlowForService = () => {
+            const rawStep = parseInt(
+                document.body.dataset.formStep || document.body.dataset.currentStep || String(currentStep),
+                10
+            );
+            if (Number.isFinite(rawStep)) {
+                currentStep = Math.max(1, Math.min(totalSteps, rawStep));
+            }
+            updateStepLinkAccess();
+            updateStepperState(currentStep);
+            updateStepButtons();
+            if (typeof window.updateNextButtonState === 'function') {
+                window.updateNextButtonState();
+            }
+        };
+        window.getNextCreateJobStep = (step) => getNextAvailableStep(step);
+        window.getPrevCreateJobStep = (step) => getPrevAvailableStep(step);
 
         if (stepBackBtn) {
             // Handler moved to top for unified logic
@@ -21094,7 +21979,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (genericSection) genericSection.style.display = 'block';
             if (carTransportSection) carTransportSection.style.display = 'none';
             resetMandatoryAdditionalInfoForm();
-            showManpowerSection();
             hideOfficeRemovalSection();
             hideVehiclePartsSection();
             hidePackagingSection();
@@ -21251,6 +22135,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (typeof syncVehicleTransportStepRules === 'function') {
             syncVehicleTransportStepRules();
+        }
+        if (typeof syncIndustrialTransportStepRules === 'function') {
+            syncIndustrialTransportStepRules();
+        }
+        if (typeof syncManPowerTransportStepRules === 'function') {
+            syncManPowerTransportStepRules();
+        }
+
+        if (hasValue && typeof window.__refreshCreateJobStepFlowForService === 'function') {
+            window.__refreshCreateJobStepFlowForService();
         }
         
         // Immediately update inventory visibility for customized-style services.
@@ -22047,45 +22941,203 @@ document.addEventListener('DOMContentLoaded', function() {
         petsJsonInput.dispatchEvent(new Event('change', { bubbles: true }));
     };
 
+    const syncOptionNavInRoot = (root, hiddenId, value) => {
+        if (!root) return;
+        const normalized = String(value || '').trim();
+        const hidden = root.querySelector(`#${hiddenId}`);
+        const nav = root.querySelector(`.option-nav[data-option-nav-for="${hiddenId}"]`);
+
+        if (hidden) {
+            hidden.value = normalized;
+        }
+
+        if (!nav) return;
+
+        nav.querySelectorAll('.option-nav-btn').forEach((btn) => {
+            const isActive = String(btn.dataset.value || '') === normalized;
+            btn.classList.toggle('selected', isActive);
+            btn.classList.toggle('is-active', isActive);
+            btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
+            btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    };
+
+    const syncPetFormRootSections = (root) => {
+        if (!root) return;
+
+        const typeField = root.querySelector('#pet-animal-type');
+        const otherWrap = root.querySelector('#pet-other-name-wrap');
+        const otherRequired = root.querySelector('#pet-other-name-required');
+        const tankWrap = root.querySelector('#pet-tank-dimensions-wrap');
+        const tankLengthRequired = root.querySelector('#pet-tank-length-required');
+        const tankWidthRequired = root.querySelector('#pet-tank-width-required');
+        const tankHeightRequired = root.querySelector('#pet-tank-height-required');
+        const weightField = root.querySelector('#pet-weight-hidden');
+        const weightCustomWrap = root.querySelector('#pet-weight-custom-wrap');
+        const weightCustomRequired = root.querySelector('#pet-weight-custom-required');
+
+        const typeValue = (typeField?.value || '').trim().toLowerCase();
+        const showOtherName = typeValue === 'other';
+        const showTankDimensions = ['lizard', 'snake', 'aquarium', 'insects', 'other'].includes(typeValue);
+
+        if (otherWrap) {
+            otherWrap.style.display = showOtherName ? 'block' : 'none';
+        }
+        if (otherRequired) {
+            otherRequired.style.display = showOtherName ? 'inline' : 'none';
+        }
+        if (tankWrap) {
+            tankWrap.style.display = showTankDimensions ? 'block' : 'none';
+        }
+        [tankLengthRequired, tankWidthRequired, tankHeightRequired].forEach((el) => {
+            if (!el) return;
+            el.style.display = showTankDimensions ? 'inline' : 'none';
+        });
+
+        const isHeavyRange = (weightField?.value || '').trim() === '81kg+';
+        if (weightCustomWrap) {
+            weightCustomWrap.style.display = isHeavyRange ? 'block' : 'none';
+        }
+        if (weightCustomRequired) {
+            weightCustomRequired.style.display = isHeavyRange ? 'inline' : 'none';
+        }
+    };
+
+    const applyPetMediaToPhotoGridInRoot = (root, mediaItems) => {
+        if (!root) return;
+
+        const media = Array.isArray(mediaItems) ? mediaItems : [];
+        const inputs = Array.from(root.querySelectorAll('.photo-input'));
+        inputs.forEach((input, index) => {
+            input.value = '';
+            delete input.dataset.savedName;
+            delete input.dataset.savedType;
+            delete input.dataset.savedPreview;
+            input.disabled = true;
+
+            const item = media[index];
+            if (item && String(item?.name || '').trim()) {
+                input.dataset.savedName = String(item.name || '').trim();
+                input.dataset.savedType = String(item?.type || '').trim();
+                input.dataset.savedPreview = String(item?.dataUrl || '').trim();
+            }
+        });
+
+        const clearPhotosButton = root.querySelector('#pet-delete-photos-top');
+        if (clearPhotosButton) {
+            clearPhotosButton.style.display = 'none';
+        }
+
+        const photoList = root.querySelector('#pet-dimension-photos-list');
+        if (photoList) {
+            photoList.innerHTML = '';
+            photoList.style.display = 'none';
+        }
+    };
+
+    const populatePetFormRoot = (root, pet) => {
+        if (!root || !pet) return;
+
+        syncOptionNavInRoot(root, 'pet-animal-type', pet.typeValue);
+        syncOptionNavInRoot(root, 'pet-weight-hidden', pet.weightValue);
+        syncOptionNavInRoot(root, 'pet-owner-lift-hidden', pet.ownerLiftValue);
+
+        const setField = (id, value) => {
+            const field = root.querySelector(`#${id}`);
+            if (field) {
+                field.value = String(value ?? '').trim();
+            }
+        };
+
+        setField('pet-other-name', pet.otherName);
+        setField('pet-tank-length', pet.tankLength);
+        setField('pet-tank-width', pet.tankWidth);
+        setField('pet-tank-height', pet.tankHeight);
+        setField('pet-tank-size-unit', pet.tankUnit || 'cm');
+        setField('pet-weight-custom', pet.weightCustom);
+
+        syncPetFormRootSections(root);
+        applyPetMediaToPhotoGridInRoot(root, pet.media);
+
+        if (window.multiItemsManager?.renderVehiclePhotoTiles) {
+            window.multiItemsManager.renderVehiclePhotoTiles('pet', Array.isArray(pet.media) ? pet.media : [], root, { readOnly: true });
+        }
+    };
+
     const renderPetsList = () => {
         const petsList = document.getElementById('pets-list');
-        if (!petsList) return;
+        const entryForm = getPetEntryForm();
+        if (!petsList || !entryForm) return;
 
         const pets = parsePetsList();
+        petsList.innerHTML = '';
+
         if (pets.length === 0) {
             petsList.innerHTML = '<div class="dimensions-list-empty">No pets added yet. Fill in the form below and click <strong>Add Another Pet</strong>.</div>';
+            updatePetEntryTitle();
             return;
         }
 
-        petsList.innerHTML = pets.map((pet, index) => {
-            const parts = [];
-            if (pet.typeLabel) parts.push(pet.typeLabel);
-            if (pet.otherName) parts.push(`Name: ${pet.otherName}`);
-            if (pet.tankLength && pet.tankWidth && pet.tankHeight) {
-                parts.push(`Tank: ${pet.tankLength} x ${pet.tankWidth} x ${pet.tankHeight} ${pet.tankUnit || 'cm'}`);
-            }
-            if (pet.weightLabel) parts.push(`Weight: ${pet.weightLabel}`);
-            if (pet.weightCustom) parts.push(`Approx: ${pet.weightCustom}`);
-            if (Array.isArray(pet.media) && pet.media.length > 0) {
-                const imageCount = pet.media.filter((item) => String(item?.type || '').startsWith('image/')).length;
-                const videoCount = pet.media.filter((item) => String(item?.type || '').startsWith('video/')).length;
-                const mediaParts = [];
-                if (imageCount > 0) mediaParts.push(`${imageCount} photo${imageCount === 1 ? '' : 's'}`);
-                if (videoCount > 0) mediaParts.push(`${videoCount} video${videoCount === 1 ? '' : 's'}`);
-                if (mediaParts.length > 0) parts.push(`Media: ${mediaParts.join(', ')}`);
+        pets.forEach((pet, index) => {
+            const wrap = document.createElement('div');
+            wrap.className = 'saved-entry-form-wrap';
+
+            const actionsWrap = document.createElement('div');
+            actionsWrap.className = 'saved-entry-form-actions';
+            actionsWrap.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;';
+
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'pet-saved-edit-btn';
+            editBtn.textContent = 'Edit';
+            editBtn.setAttribute('data-edit-pet-index', String(index));
+            editBtn.style.cssText = 'padding:6px 12px;background:#eff6ff;color:#1d4ed8;border:1px solid #93c5fd;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.86rem;';
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'pet-saved-remove-btn';
+            removeBtn.textContent = 'Remove';
+            removeBtn.setAttribute('data-remove-pet-index', String(index));
+            removeBtn.style.cssText = 'padding:6px 12px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.86rem;';
+
+            actionsWrap.appendChild(editBtn);
+            actionsWrap.appendChild(removeBtn);
+
+            const clone = entryForm.cloneNode(true);
+            clone.removeAttribute('data-item-entry-form');
+            clone.classList.add('saved-entry-form-clone', 'dimension-item');
+
+            const deleteFormBtn = clone.querySelector('#pet-delete-form-btn');
+            const addAnotherBtn = clone.querySelector('#pet-add-another-btn');
+            const continueBtn = clone.querySelector('#pet-continue-with-saved-btn');
+            const addBtn = clone.querySelector('#add-pet-btn');
+            if (deleteFormBtn) deleteFormBtn.style.display = 'none';
+            if (addAnotherBtn) addAnotherBtn.style.display = 'none';
+            if (continueBtn) continueBtn.style.display = 'none';
+            if (addBtn) addBtn.style.display = 'none';
+
+            const title = clone.querySelector('#pet-entry-title');
+            if (title) {
+                title.textContent = `Pet ${index + 1}`;
             }
 
-            return `
-                <div class="dimension-item pet-saved-item">
-                    <div class="custom-item-title">Pet ${index + 1}</div>
-                    <p class="pet-saved-item-summary">${parts.join(' · ')}</p>
-                    <div class="pet-saved-item-actions">
-                        <button type="button" class="pet-saved-edit-btn" data-edit-pet-index="${index}">Edit</button>
-                        <button type="button" class="pet-saved-remove-btn" data-remove-pet-index="${index}">Remove</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
+            clone.querySelectorAll('.option-nav-btn').forEach((btn) => {
+                btn.setAttribute('tabindex', '-1');
+            });
+            clone.querySelectorAll('input, select, textarea').forEach((field) => {
+                if (field.type === 'file' || field.type === 'hidden') return;
+                field.setAttribute('readonly', 'readonly');
+                field.setAttribute('tabindex', '-1');
+            });
+
+            populatePetFormRoot(clone, pet);
+
+            wrap.appendChild(actionsWrap);
+            wrap.appendChild(clone);
+            petsList.appendChild(wrap);
+        });
+
+        updatePetEntryTitle();
     };
 
     const clearOptionNavSelection = (hiddenId) => {
@@ -24671,6 +25723,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     syncVehicleTransportStepRules();
+    syncIndustrialTransportStepRules();
+    syncManPowerTransportStepRules();
 
     const getFieldLabelText = (field, formEl) => {
         if (!field || !formEl) return '';
@@ -25751,6 +26805,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 quoteData.pianosJson = getElementValue('pianos-json-hidden');
             }
 
+            if (isFreightService(itemTypeValue)) {
+                quoteData.freightJson = JSON.stringify({
+                    unitCategory: getElementValue('freight3-unit-category'),
+                    unitType: getElementValue('freight3-unit-type'),
+                    length: getElementValue('freight3-length'),
+                    width: getElementValue('freight3-width'),
+                    height: getElementValue('freight3-height'),
+                    dimensionUnit: getElementValue('freight3-dimension-unit') || 'm',
+                    unitWeight: getElementValue('freight3-unit-weight'),
+                    weightUnit: getElementValue('freight3-weight-unit') || 'kg',
+                    unitCount: getElementValue('freight3-unit-count'),
+                    description: getElementValue('freight3-description'),
+                    notes: getElementValue('freight3-notes')
+                });
+            }
+
+            if (isClearanceService(itemTypeValue)) {
+                const clearanceCards = serializeClearanceCardsFromDom();
+                const selectedItemsRaw = getElementValue('clearance-selected-items-hidden') || '[]';
+                quoteData.clearanceSelectedItemsJson = selectedItemsRaw;
+                if (clearanceCards.length > 0) {
+                    quoteData.clearanceJson = JSON.stringify(clearanceCards);
+                }
+            }
+
+            if (isCarCamperTransportService(itemTypeValue)) {
+                quoteData.carVehiclesJson = getElementValue('car-json-hidden');
+            } else if (itemTypeValue === 'Motorbike Transport') {
+                quoteData.motorbikeVehiclesJson = getElementValue('motorbike-json-hidden');
+            } else if (isCaravanTrailerTransportService(itemTypeValue) || itemTypeValue === 'Boats') {
+                quoteData.trailerVehiclesJson = getElementValue('trailer-json-hidden');
+            }
+
             quoteData.pickupLiftAvailable = getElementValue('pickup-lift-available');
             quoteData.deliveryLiftAvailable = getElementValue('delivery-lift-available');
 
@@ -25972,6 +27059,64 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
             }
 
+            if (!isMultiStopMode && isManPowerService(itemTypeValue)) {
+                const description = getElementValue('manpower-job-description').trim();
+                let media = [];
+                const rawMedia = getElementValue('manpower-media-hidden');
+                if (rawMedia) {
+                    try {
+                        const parsedMedia = JSON.parse(rawMedia);
+                        media = Array.isArray(parsedMedia) ? parsedMedia : [];
+                    } catch (_error) {
+                        media = [];
+                    }
+                }
+
+                quoteData.manpowerDetails = {
+                    description: description,
+                    media: media
+                };
+                quoteData.manpowerJson = JSON.stringify(quoteData.manpowerDetails);
+                if (description) {
+                    quoteData.itemDescription = description;
+                }
+            }
+
+            if (!isMultiStopMode && isIndustrialService(itemTypeValue)) {
+                const industrialWeightLabels = {
+                    '1kg-500kg': '1kg - 500kg',
+                    '501kg-1000kg': '501kg - 1000kg',
+                    '1001kg-1500kg': '1001kg - 1500kg',
+                    '1501kg-2000kg': '1501kg-2000kg',
+                    '2001kg+': '2001kg+'
+                };
+                const description = getElementValue('what-being-transported').trim();
+                const weightValue = getElementValue('industrial-weight-hidden').trim();
+                const weightLabel = industrialWeightLabels[weightValue]
+                    || getOptionNavLabel('industrial-weight-hidden')
+                    || weightValue;
+                let media = [];
+                const rawMedia = getElementValue('industrial-media-hidden');
+                if (rawMedia) {
+                    try {
+                        const parsedMedia = JSON.parse(rawMedia);
+                        media = Array.isArray(parsedMedia) ? parsedMedia : [];
+                    } catch (_error) {
+                        media = [];
+                    }
+                }
+
+                quoteData.industrialDetails = {
+                    description: description,
+                    weight: weightValue,
+                    weightLabel: weightLabel,
+                    media: media
+                };
+                quoteData.industrialJson = JSON.stringify(quoteData.industrialDetails);
+                quoteData.whatBeingTransported = description;
+                quoteData.industrialWeight = weightValue;
+            }
+
             const isUpdateSavedFormSubmit = submitter && submitter.id === 'update-saved-form-btn';
             let editQuoteId = '';
             let editFormId = '';
@@ -26055,6 +27200,33 @@ document.addEventListener('DOMContentLoaded', function() {
                         delete entry.dataUrl;
                     });
                 }
+
+                const stripVehicleMediaPayloads = (vehicles) => {
+                    if (!Array.isArray(vehicles)) return vehicles;
+                    vehicles.forEach((vehicle) => {
+                        if (!vehicle || typeof vehicle !== 'object') return;
+                        const media = Array.isArray(vehicle.media) ? vehicle.media : [];
+                        media.forEach((entry) => {
+                            if (!entry || typeof entry !== 'object') return;
+                            delete entry.previewDataUrl;
+                            delete entry.previewUrl;
+                            delete entry.dataUrl;
+                        });
+                    });
+                    return vehicles;
+                };
+
+                ['carVehiclesJson', 'motorbikeVehiclesJson', 'trailerVehiclesJson'].forEach((fieldName) => {
+                    const raw = record[fieldName];
+                    if (!raw) return;
+                    try {
+                        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                        if (!Array.isArray(parsed)) return;
+                        record[fieldName] = JSON.stringify(stripVehicleMediaPayloads(parsed));
+                    } catch (_error) {
+                        // Keep original payload if parsing fails.
+                    }
+                });
             };
 
             const buildStorageVariant = (record, variant) => {
@@ -26192,6 +27364,44 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (Array.isArray(attachments)) {
                     attachments.forEach(pushServerUrls);
                 }
+
+                const uploadVehicleMedia = (vehicles) => {
+                    if (!Array.isArray(vehicles)) return;
+                    vehicles.forEach((vehicle) => {
+                        if (!vehicle || typeof vehicle !== 'object') return;
+                        const media = Array.isArray(vehicle.media) ? vehicle.media : [];
+                        media.forEach(pushServerUrls);
+                    });
+                };
+
+                ['carVehiclesJson', 'motorbikeVehiclesJson', 'trailerVehiclesJson'].forEach((fieldName) => {
+                    const raw = quoteData[fieldName];
+                    if (!raw) return;
+                    try {
+                        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                        if (!Array.isArray(parsed)) return;
+                        uploadVehicleMedia(parsed);
+                        quoteData[fieldName] = JSON.stringify(parsed);
+                    } catch (_error) {
+                        // Keep original payload if parsing fails.
+                    }
+                });
+
+                const industrialMedia = Array.isArray(quoteData.industrialDetails && quoteData.industrialDetails.media)
+                    ? quoteData.industrialDetails.media
+                    : [];
+                industrialMedia.forEach(pushServerUrls);
+                if (quoteData.industrialDetails) {
+                    quoteData.industrialJson = JSON.stringify(quoteData.industrialDetails);
+                }
+
+                const manpowerMedia = Array.isArray(quoteData.manpowerDetails && quoteData.manpowerDetails.media)
+                    ? quoteData.manpowerDetails.media
+                    : [];
+                manpowerMedia.forEach(pushServerUrls);
+                if (quoteData.manpowerDetails) {
+                    quoteData.manpowerJson = JSON.stringify(quoteData.manpowerDetails);
+                }
             };
 
             flushInlineMediaToServer();
@@ -26310,18 +27520,32 @@ function resetMandatoryAdditionalInfoForm() {
     }
 }
 
-function showManpowerSection() {
-    const manpowerSection = document.getElementById('manpower-job-description-section');
-    if (manpowerSection) {
-        manpowerSection.style.display = 'block';
+function syncManPowerTransportStepRules() {
+    const isManPower = isManPowerService(getActiveServiceValue());
+    document.body.classList.toggle('man-power-transport-active', isManPower);
+
+    const legacySection = document.getElementById('manpower-job-description-section');
+    const transportSection = document.getElementById('manpower-transport-section');
+    if (!isManPower) {
+        if (legacySection) legacySection.style.display = 'none';
+        if (transportSection) transportSection.style.display = 'none';
+        return;
     }
+
+    if (legacySection) legacySection.style.display = 'none';
+    if (transportSection) transportSection.style.removeProperty('display');
+}
+
+function showManpowerSection() {
+    syncManPowerTransportStepRules();
 }
 
 function hideManpowerSection() {
-    const manpowerSection = document.getElementById('manpower-job-description-section');
-    if (manpowerSection) {
-        manpowerSection.style.display = 'none';
-    }
+    document.body.classList.remove('man-power-transport-active');
+    const legacySection = document.getElementById('manpower-job-description-section');
+    const transportSection = document.getElementById('manpower-transport-section');
+    if (legacySection) legacySection.style.display = 'none';
+    if (transportSection) transportSection.style.display = 'none';
 }
 
 function hideOtherSection() {
@@ -26535,17 +27759,68 @@ function buildFreightDescriptionSummary() {
     return parts.join(' | ');
 }
 
+function formatClearanceWeightRangeLabel(weightRange, weightUnit) {
+    const range = String(weightRange || '').trim();
+    if (!range) return '';
+    const unit = String(weightUnit || 'kg').trim().toLowerCase() || 'kg';
+    if (range === '100+') return `100+ ${unit}`;
+    return `${range.replace('-', '–')} ${unit}`;
+}
+
+function refreshClearanceWeightRangeLabels(root = document) {
+    const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+    scope.querySelectorAll('.clearance-customized-card').forEach((card) => {
+        const weightSelect = card.querySelector('[data-clearance-field="weight"]');
+        const unit = String(card.querySelector('[data-clearance-field="weight-unit"]')?.value || 'kg').trim().toLowerCase() || 'kg';
+        if (!weightSelect) return;
+
+        Array.from(weightSelect.options).forEach((option) => {
+            const value = String(option.value || '').trim();
+            if (!value) {
+                option.textContent = 'Select weight range';
+                return;
+            }
+            option.textContent = formatClearanceWeightRangeLabel(value, unit);
+        });
+    });
+}
+
+function serializeClearanceCardsFromDom() {
+    const cards = Array.from(document.querySelectorAll('#clearance-step3-form .clearance-customized-card'));
+    return cards.map((card, index) => {
+        const description = String(card.querySelector('[data-clearance-field="description"]')?.value || '').trim();
+        const weight = String(card.querySelector('[data-clearance-field="weight"]')?.value || '').trim();
+        const weightUnit = String(card.querySelector('[data-clearance-field="weight-unit"]')?.value || 'kg').trim().toLowerCase() || 'kg';
+        const recycling = String(card.querySelector('[data-clearance-field="recycling"]')?.value || '').trim();
+        const notes = String(card.querySelector('[data-clearance-field="notes"]')?.value || '').trim();
+        const heavyItems = String(card.querySelector('[data-clearance-field="heavy-items"]')?.value || '').trim();
+        if (!description && !weight && !recycling) {
+            return null;
+        }
+        return {
+            index: index + 1,
+            description,
+            weight,
+            weightUnit,
+            recycling,
+            notes,
+            heavyItems
+        };
+    }).filter(Boolean);
+}
+
 function buildClearanceDescriptionSummary() {
     const cards = Array.from(document.querySelectorAll('#clearance-step3-form .clearance-customized-card'));
     const cardSummaries = cards.map((card, idx) => {
         const weightRange = String(card.querySelector('[data-clearance-field="weight"]')?.value || '').trim();
+        const weightUnit = String(card.querySelector('[data-clearance-field="weight-unit"]')?.value || 'kg').trim().toLowerCase() || 'kg';
         const heavyItems = String(card.querySelector('[data-clearance-field="heavy-items"]')?.value || '').trim();
         const clearanceDescription = String(card.querySelector('[data-clearance-field="description"]')?.value || '').trim();
         const clearanceNotes = String(card.querySelector('[data-clearance-field="notes"]')?.value || '').trim();
         const recyclingFee = String(card.querySelector('[data-clearance-field="recycling"]')?.value || '').trim();
 
         const parts = [];
-        if (weightRange) parts.push(`Weight range: ${weightRange}`);
+        if (weightRange) parts.push(`Weight range: ${formatClearanceWeightRangeLabel(weightRange, weightUnit)}`);
         if (heavyItems) parts.push(`Heavy items: ${heavyItems}`);
         if (recyclingFee) parts.push(`Recycling fee: ${recyclingFee === 'yes' ? 'Included' : 'Not included'}`);
         if (clearanceDescription) parts.push(`Clearance items: ${clearanceDescription}`);
@@ -26736,8 +28011,17 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const items = getClearanceSelectedItems();
-        clearanceSelectedItemsSection.style.display = items.length > 0 ? 'block' : 'none';
+        const emptyEl = document.getElementById('clearance-selected-items-empty');
+        const clearBtn = clearanceClearSelectedItemsBtn;
+
         clearanceSelectedItemsList.innerHTML = '';
+        clearanceSelectedItemsList.style.display = items.length > 0 ? 'flex' : 'none';
+        if (emptyEl) {
+            emptyEl.style.display = items.length > 0 ? 'none' : 'block';
+        }
+        if (clearBtn) {
+            clearBtn.style.display = items.length > 0 ? 'inline-flex' : 'none';
+        }
 
         items.forEach((item) => {
             const pill = document.createElement('span');
@@ -26745,6 +28029,13 @@ document.addEventListener('DOMContentLoaded', function () {
             pill.style.cssText = 'display:inline-flex;align-items:center;padding:6px 10px;border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:999px;font-size:0.84rem;font-weight:700;';
             clearanceSelectedItemsList.appendChild(pill);
         });
+
+        if (typeof updateClearanceInventoryWarning === 'function') {
+            updateClearanceInventoryWarning();
+        }
+        if (typeof window.updateNextButtonState === 'function') {
+            window.updateNextButtonState();
+        }
     };
 
     const appendClearanceSelectedItems = (items) => {
@@ -26770,6 +28061,7 @@ document.addEventListener('DOMContentLoaded', function () {
         clearanceSelectedItemsHidden.addEventListener('input', () => syncToHiddenDescription(buildClearanceDescriptionSummary));
     }
 
+    window.renderClearanceSelectedItems = renderClearanceSelectedItems;
     renderClearanceSelectedItems();
     const bindClearanceOptionNavs = (root) => {
         const navs = Array.from((root || document).querySelectorAll('.option-nav[data-option-nav-for]'));
@@ -26938,11 +28230,17 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         bindClearanceOptionNavs(clone);
 
-        clone.querySelectorAll('[data-clearance-field="description"], [data-clearance-field="weight"], [data-clearance-field="recycling"]').forEach((field) => {
+        clone.querySelectorAll('[data-clearance-field="description"], [data-clearance-field="weight"], [data-clearance-field="weight-unit"], [data-clearance-field="recycling"]').forEach((field) => {
             field.addEventListener('input', () => syncToHiddenDescription(buildClearanceDescriptionSummary));
-            field.addEventListener('change', () => syncToHiddenDescription(buildClearanceDescriptionSummary));
+            field.addEventListener('change', () => {
+                if (field.matches('[data-clearance-field="weight-unit"]')) {
+                    refreshClearanceWeightRangeLabels(clone);
+                }
+                syncToHiddenDescription(buildClearanceDescriptionSummary);
+            });
         });
 
+        refreshClearanceWeightRangeLabels(clone);
         syncClearanceCardTitles();
         syncToHiddenDescription(buildClearanceDescriptionSummary);
         return clone;
@@ -27227,6 +28525,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const clearanceFieldIds = [
         'clearance3-weight-range',
+        'clearance3-weight-unit',
         'clearance3-heavy-items',
         'clearance3-description',
         'clearance3-notes',
@@ -27239,9 +28538,15 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         field.addEventListener('input', () => syncToHiddenDescription(buildClearanceDescriptionSummary));
-        field.addEventListener('change', () => syncToHiddenDescription(buildClearanceDescriptionSummary));
+        field.addEventListener('change', () => {
+            if (fieldId === 'clearance3-weight-unit') {
+                refreshClearanceWeightRangeLabels(document.getElementById('clearance-step3-form') || document);
+            }
+            syncToHiddenDescription(buildClearanceDescriptionSummary);
+        });
     });
 
+    refreshClearanceWeightRangeLabels(document.getElementById('clearance-step3-form') || document);
     syncClearanceCardTitles();
     bindClearanceOptionNavs(document.getElementById('clearance-step3-form') || document);
 });
@@ -27845,14 +29150,13 @@ function getMultiStopCategorySectionsMarkup(stopId) {
         buildMultiStopSectionFromTemplate('car-transport-section', stopId, 'Car Transport'),
         buildMultiStopSectionFromTemplate('motorbike-transport-section', stopId, 'Motorbike Transport'),
         buildMultiStopSectionFromTemplate('trailer-campervan-section', stopId, 'Trailers & Campervans Transport'),
-        buildMultiStopSectionFromTemplate('industrial-section', stopId, 'Industrial'),
-        buildMultiStopSectionFromTemplate('industrial-weight-section', stopId, 'Industrial'),
+        buildMultiStopSectionFromTemplate('industrial-transport-section', stopId, 'Industrial'),
         buildMultiStopSectionFromTemplate(
             'office-removal-description-section',
             stopId,
             'Boats|Clearance|Freight|Vehicle Parts|Packaging|Specialist & Antiques|Customized Items'
         ),
-        buildMultiStopSectionFromTemplate('manpower-job-description-section', stopId, 'Man Power Only'),
+        buildMultiStopSectionFromTemplate('manpower-transport-section', stopId, 'Man Power Only'),
         buildMultiStopSectionFromTemplate('other-job-description-section', stopId, 'Other'),
         buildMultiStopPianoSection(stopId)
     ];
@@ -29718,25 +31022,35 @@ function decreaseOfficeQuantity(item) {
     }
 }
 
-function showIndustrialSection() {
+function syncIndustrialTransportStepRules() {
+    const isIndustrial = isIndustrialService(getActiveServiceValue());
+    document.body.classList.toggle('industrial-transport-active', isIndustrial);
+
     const industrialSection = document.getElementById('industrial-section');
-    const industrialWeightSection = document.getElementById('industrial-weight-section');
-    if (industrialSection) {
-        industrialSection.style.display = 'block';
+    const industrialTransportSection = document.getElementById('industrial-transport-section');
+    if (!isIndustrial) {
+        if (industrialSection) industrialSection.style.display = 'none';
+        if (industrialTransportSection) industrialTransportSection.style.display = 'none';
+        return;
     }
-    if (industrialWeightSection) {
-        industrialWeightSection.style.display = 'block';
-    }
+
+    if (industrialSection) industrialSection.style.display = 'none';
+    if (industrialTransportSection) industrialTransportSection.style.removeProperty('display');
+}
+
+function showIndustrialSection() {
+    syncIndustrialTransportStepRules();
 }
 
 function hideIndustrialSection() {
+    document.body.classList.remove('industrial-transport-active');
     const industrialSection = document.getElementById('industrial-section');
-    const industrialWeightSection = document.getElementById('industrial-weight-section');
+    const industrialTransportSection = document.getElementById('industrial-transport-section');
     if (industrialSection) {
         industrialSection.style.display = 'none';
     }
-    if (industrialWeightSection) {
-        industrialWeightSection.style.display = 'none';
+    if (industrialTransportSection) {
+        industrialTransportSection.style.display = 'none';
     }
 }
 
@@ -31534,6 +32848,59 @@ function buildOverviewFloorInventoryMarkup(kind) {
     const selectedDelivery = getOrderedFloorList(Array.from(window.selectedDeliveryFloors || []));
     const serviceValue = getActiveServiceValue();
 
+    if (kind === 'storage') {
+        const isStorageYes = String(document.getElementById('service-storage')?.value || '').trim().toLowerCase() === 'yes';
+        if (!isStorageYes) {
+            return 'No items selected for storage.';
+        }
+
+        let selections = {};
+        const storageRaw = String(document.getElementById('service-storage-items')?.value || '').trim();
+        if (storageRaw) {
+            try {
+                const parsed = JSON.parse(storageRaw);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    selections = parsed;
+                }
+            } catch (_error) {
+                selections = {};
+            }
+        }
+
+        Object.entries(selections).forEach(([key, qtyValue]) => {
+            const qty = parseInt(qtyValue, 10) || 0;
+            if (qty <= 0) return;
+            const parts = String(key || '').split('||');
+            if (parts.length < 2) return;
+            const floor = String(parts[0] || '').trim() || 'Ground';
+            const itemName = String(parts.slice(1).join('||') || '').trim();
+            if (!itemName) return;
+            if (!grouped[floor]) grouped[floor] = {};
+            grouped[floor][itemName] = (grouped[floor][itemName] || 0) + qty;
+        });
+
+        const storageFloors = getOrderedFloorList(Object.keys(grouped));
+        if (storageFloors.length === 0) {
+            return 'No items selected for storage.';
+        }
+
+        return storageFloors.map((floor) => {
+            const items = Object.entries(grouped[floor] || {});
+            const itemRows = items.length === 0
+                ? '<li>No items</li>'
+                : items
+                    .sort((a, b) => a[0].localeCompare(b[0]))
+                    .map(([name, qty]) => `<li>${escapeOverviewHtml(name)} x${qty}</li>`)
+                    .join('');
+            return `
+                <div class="overview-floor-block">
+                    <div class="overview-floor-title">${escapeOverviewHtml(floor)} Floor</div>
+                    <ul class="overview-floor-items">${itemRows}</ul>
+                </div>
+            `;
+        }).join('');
+    }
+
     if (isClearanceService(serviceValue)) {
         if (kind !== 'pickup') {
             return 'No delivery floor assignments yet.';
@@ -33159,8 +34526,10 @@ function updateOverviewFloorAndInventorySummary() {
 
     const pickupInventoryEl = document.getElementById('summary-pickup-inventory');
     const deliveryInventoryEl = document.getElementById('summary-delivery-inventory');
+    const storageInventoryEl = document.getElementById('summary-storage-inventory');
     if (pickupInventoryEl) pickupInventoryEl.innerHTML = buildOverviewFloorInventoryMarkup('pickup');
     if (deliveryInventoryEl) deliveryInventoryEl.innerHTML = buildOverviewFloorInventoryMarkup('delivery');
+    if (storageInventoryEl) storageInventoryEl.innerHTML = buildOverviewFloorInventoryMarkup('storage');
 
     updateOverviewMoversDisplay();
 
@@ -33483,6 +34852,8 @@ function syncOverviewVehicleVisibility() {
     const routeDistanceCard = document.getElementById('summary-route-distance')?.closest('.overview-item');
     const routeDurationCard = document.getElementById('summary-route-duration')?.closest('.overview-item');
     const deliveryInventoryCard = document.getElementById('summary-delivery-inventory')?.closest('.overview-inventory-card');
+    const storageInventoryCard = document.getElementById('summary-storage-inventory-card');
+    const isStorageYes = String(document.getElementById('service-storage')?.value || '').trim().toLowerCase() === 'yes';
     const routeDeliveryLine = document.getElementById('overview-point-b')?.closest('.overview-route-line');
     const routeAddressesEditBtn = document.querySelector('.overview-route-card [data-overview-edit="addresses"]');
     const routeCities = document.getElementById('overview-route-cities');
@@ -33503,6 +34874,9 @@ function syncOverviewVehicleVisibility() {
     }
     if (storageDatesCard) {
         storageDatesCard.style.display = shouldHideStorage ? 'none' : '';
+    }
+    if (storageInventoryCard) {
+        storageInventoryCard.style.display = (shouldHideStorage || !isStorageYes) ? 'none' : '';
     }
 
     if (deliveryTypeCard) {
@@ -34041,17 +35415,27 @@ document.addEventListener('DOMContentLoaded', function() {
     if (isMultiStopMode) {
         return;
     }
-    
+
+    const decodedService = decodeURIComponent(service || '').trim();
+    if (decodedService && typeof window.applyServiceSelection === 'function') {
+        window.applyServiceSelection(decodedService, decodedService);
+    } else if (decodedService) {
+        const serviceHidden = document.getElementById('item-description-hidden');
+        if (serviceHidden) {
+            serviceHidden.value = decodedService;
+            serviceHidden.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+
     if (service === 'house-removals') {
         document.querySelector('.service-icon-btn[data-value="House Removals"]')?.click();
     }
-    
+
     if (service === 'Car Transport') {
         document.querySelector('.service-icon-btn[data-value="Car Transport"]')?.click();
     }
-    
+
     // Handle customized-style services from URL
-    const decodedService = decodeURIComponent(service || '').trim();
     if (isCustomizedInventoryService(decodedService)) {
         if (window.pendingServiceFromUrl && typeof window.applyServiceSelection === 'function') {
             window.applyServiceSelection(window.pendingServiceFromUrl, window.pendingServiceFromUrl);

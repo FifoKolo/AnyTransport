@@ -66,71 +66,208 @@ window.multiItemsManager = {
         this.renderPianosList();
     },
 
+    updatePianoEntryTitle() {
+        const entryForm = document.querySelector('[data-item-entry-form="piano"]');
+        if (!entryForm) return;
+
+        let title = entryForm.querySelector('#piano-entry-title');
+        if (!title) {
+            title = document.createElement('div');
+            title.id = 'piano-entry-title';
+            title.className = 'custom-item-title';
+            const deleteBtn = entryForm.querySelector('#piano-delete-form-btn');
+            entryForm.insertBefore(title, deleteBtn ? deleteBtn.nextSibling : entryForm.firstChild);
+        }
+
+        const savedCount = this.parsePianos().length;
+        title.textContent = `Piano ${savedCount + 1}`;
+    },
+
+    syncPianoOptionNavInRoot(root, hiddenId, value) {
+        if (!root) return;
+        const normalized = String(value || '').trim();
+        const hidden = root.querySelector(`#${hiddenId}`);
+        const nav = root.querySelector(`.option-nav[data-option-nav-for="${hiddenId}"]`);
+
+        if (hidden) {
+            hidden.value = normalized;
+        }
+
+        if (!nav) return;
+
+        nav.querySelectorAll('.option-nav-btn').forEach((btn) => {
+            const isActive = String(btn.dataset.value || '') === normalized;
+            btn.classList.toggle('selected', isActive);
+            btn.classList.toggle('is-active', isActive);
+            btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
+            btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    },
+
+    setPianoFieldValueInRoot(root, fieldId, value) {
+        if (!root) return;
+        const field = root.querySelector(`#${fieldId}`);
+        if (field) {
+            field.value = String(value ?? '').trim();
+        }
+    },
+
+    updatePianoFormRootSections(root) {
+        if (!root) return;
+
+        const typeInput = root.querySelector('#piano-type-entry-hidden');
+        const sizeInput = root.querySelector('#piano-size-entry-hidden');
+        const customSection = root.querySelector('#piano-custom-section');
+        const photoSection = root.querySelector('#piano-photo-section');
+        const photoRequiredLabel = root.querySelector('#piano-media-required');
+        const measurementsSection = root.querySelector('#piano-unknown-measurements');
+        const sizeGroup = root.querySelector('#piano-size-group');
+        const sizeNav = root.querySelector('.piano-size-entry-nav');
+
+        if (!typeInput) return;
+
+        const isCustomType = typeInput.value === 'custom';
+        const isCustomSize = sizeInput && sizeInput.value === 'custom';
+        const isUnknownType = typeInput.value === 'unknown';
+        const isCustom = isCustomType || isCustomSize;
+
+        if (customSection) {
+            customSection.style.display = isCustom ? 'block' : 'none';
+        }
+        if (photoSection) {
+            photoSection.style.display = 'block';
+        }
+        if (photoRequiredLabel) {
+            photoRequiredLabel.style.display = (isUnknownType || isCustom) ? 'inline' : 'none';
+        }
+        if (measurementsSection) {
+            measurementsSection.style.display = isUnknownType ? 'block' : 'none';
+        }
+        if (sizeGroup) {
+            sizeGroup.style.display = (isCustomType || isUnknownType) ? 'none' : '';
+        }
+        if (sizeNav) {
+            sizeNav.style.display = (isCustomType || isUnknownType) ? 'none' : '';
+        }
+    },
+
+    renderPianoMediaPreviewInRoot(root, mediaItems) {
+        if (!root) return;
+
+        const fileInput = root.querySelector('#piano-media-input');
+        if (fileInput) {
+            fileInput.value = '';
+        }
+
+        const readOnly = root.classList.contains('saved-entry-form-clone');
+        const files = Array.isArray(mediaItems) ? mediaItems : [];
+        this.renderVehiclePhotoTiles('piano', files, root, { readOnly });
+
+        const preview = root.querySelector('#piano-media-preview');
+        if (preview) {
+            preview.innerHTML = '';
+            preview.style.display = 'none';
+        }
+    },
+
+    populatePianoFormRoot(root, piano) {
+        if (!root || !piano) return;
+
+        this.syncPianoOptionNavInRoot(root, 'piano-type-entry-hidden', piano.type);
+        this.syncPianoOptionNavInRoot(root, 'piano-size-entry-hidden', piano.size);
+
+        this.setPianoFieldValueInRoot(root, 'piano-custom-name', piano.customName);
+        this.setPianoFieldValueInRoot(root, 'piano-custom-length', piano.customLength);
+        this.setPianoFieldValueInRoot(root, 'piano-custom-width', piano.customWidth);
+        this.setPianoFieldValueInRoot(root, 'piano-custom-height', piano.customHeight);
+        this.setPianoFieldValueInRoot(root, 'piano-custom-size-unit', piano.customUnit || 'cm');
+        this.setPianoFieldValueInRoot(root, 'piano-length-measurement', piano.lengthMeasurement);
+        this.setPianoFieldValueInRoot(root, 'piano-width-measurement', piano.widthMeasurement);
+        this.setPianoFieldValueInRoot(root, 'piano-height-measurement', piano.heightMeasurement);
+        this.setPianoFieldValueInRoot(root, 'piano-measurement-unit', piano.measurementUnit || 'cm');
+
+        this.updatePianoFormRootSections(root);
+        this.renderPianoMediaPreviewInRoot(root, piano.media);
+    },
+
     // Render pianos list
     renderPianosList() {
         const listContainer = document.getElementById('pianos-list');
-        if (!listContainer) return;
+        const entryForm = document.querySelector('[data-item-entry-form="piano"]');
+        if (!listContainer || !entryForm) return;
 
         const pianos = this.parsePianos();
         listContainer.innerHTML = '';
 
         if (pianos.length === 0) {
             listContainer.style.display = 'none';
+            this.updatePianoEntryTitle();
             return;
         }
 
         listContainer.style.display = 'block';
 
         pianos.forEach((piano, index) => {
-            const pianoEl = document.createElement('div');
-            pianoEl.style.cssText = 'padding: 12px; margin-bottom: 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb; display: flex; align-items: center; justify-content: space-between;';
+            const wrap = document.createElement('div');
+            wrap.className = 'saved-entry-form-wrap';
+            wrap.style.marginBottom = '14px';
 
-            const detailEl = document.createElement('div');
-            const typeLabel = this.getPianoTypeLabel(piano.type);
-            const typeGroupLabel = this.getPianoTypeGroupLabel(piano.type);
-            let sizeLabel = '';
-
-            if (piano.isCustomType || piano.isCustomSize) {
-                const customDims = [piano.customLength, piano.customWidth, piano.customHeight]
-                    .map((v) => String(v || '').trim())
-                    .filter(Boolean)
-                    .join(' x ');
-                const customUnit = String(piano.customUnit || '').trim();
-                const customDimsLabel = customDims ? `${customDims}${customUnit ? ` ${customUnit}` : ''}` : '';
-                const customName = String(piano.customName || '').trim();
-                sizeLabel = customName && customDimsLabel
-                    ? `Model: ${customName} (${customDimsLabel})`
-                    : customName
-                        ? `Model: ${customName}`
-                        : customDimsLabel
-                            ? `Custom size: ${customDimsLabel}`
-                            : 'Custom size';
-            } else if (piano.type === 'unknown') {
-                const approxDims = [piano.lengthMeasurement, piano.widthMeasurement, piano.heightMeasurement]
-                    .map((v) => String(v || '').trim())
-                    .filter(Boolean)
-                    .join(' x ');
-                sizeLabel = approxDims ? `Approx: ${approxDims} cm` : 'Details from uploaded media';
-            } else {
-                sizeLabel = this.getPianoSizeLabel(piano.size);
-            }
-            detailEl.style.flex = '1';
-            const safe = (value) => String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            detailEl.innerHTML = `<strong>Piano ${index + 1}:</strong> ${safe(typeLabel)}${sizeLabel ? ` · ${safe(sizeLabel)}` : ''}`;
+            const actionsWrap = document.createElement('div');
+            actionsWrap.className = 'saved-entry-form-actions';
+            actionsWrap.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:8px;';
 
             const deleteBtn = document.createElement('button');
             deleteBtn.type = 'button';
-            deleteBtn.textContent = '✕ Remove';
-            deleteBtn.style.cssText = 'padding: 6px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem;';
+            deleteBtn.textContent = 'Remove';
+            deleteBtn.style.cssText = 'padding:6px 12px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-weight:700;font-size:0.86rem;';
             deleteBtn.addEventListener('click', () => {
                 this.deletePiano(piano.id);
                 if (window.updateNextButtonState) window.updateNextButtonState();
             });
+            actionsWrap.appendChild(deleteBtn);
 
-            pianoEl.appendChild(detailEl);
-            pianoEl.appendChild(deleteBtn);
-            listContainer.appendChild(pianoEl);
+            const clone = entryForm.cloneNode(true);
+            clone.removeAttribute('data-item-entry-form');
+            clone.classList.add('saved-entry-form-clone');
+            clone.style.marginBottom = '0';
+
+            const deleteFormBtn = clone.querySelector('#piano-delete-form-btn');
+            const addAnotherBtn = clone.querySelector('#piano-add-another-btn');
+            const continueBtn = clone.querySelector('#piano-continue-with-saved-btn');
+            const addBtn = clone.querySelector('#add-piano-btn');
+            if (deleteFormBtn) deleteFormBtn.style.display = 'none';
+            if (addAnotherBtn) addAnotherBtn.style.display = 'none';
+            if (continueBtn) continueBtn.style.display = 'none';
+            if (addBtn) addBtn.style.display = 'none';
+
+            const title = clone.querySelector('#piano-entry-title');
+            if (title) {
+                title.textContent = `Piano ${index + 1}`;
+            } else {
+                const heading = document.createElement('div');
+                heading.className = 'custom-item-title';
+                heading.id = 'piano-entry-title';
+                heading.textContent = `Piano ${index + 1}`;
+                const deleteBtn = clone.querySelector('#piano-delete-form-btn');
+                clone.insertBefore(heading, deleteBtn ? deleteBtn.nextSibling : clone.firstChild);
+            }
+
+            clone.querySelectorAll('.option-nav-btn').forEach((btn) => {
+                btn.setAttribute('tabindex', '-1');
+            });
+            clone.querySelectorAll('input, select, textarea').forEach((field) => {
+                field.setAttribute('readonly', 'readonly');
+                field.setAttribute('tabindex', '-1');
+            });
+
+            this.populatePianoFormRoot(clone, piano);
+
+            wrap.appendChild(actionsWrap);
+            wrap.appendChild(clone);
+            listContainer.appendChild(wrap);
         });
+
+        this.updatePianoEntryTitle();
     },
 
     getPianoTypeLabel(typeValue) {
@@ -717,11 +854,19 @@ window.multiItemsManager = {
         const sectionIdMap = {
             car: 'car-transport-section',
             motorbike: 'motorbike-transport-section',
-            trailer: 'trailer-campervan-section'
+            trailer: 'trailer-campervan-section',
+            piano: 'piano-delivery-section',
+            pet: 'pets-transport-section',
+            industrial: 'industrial-transport-section',
+            manpower: 'manpower-transport-section'
         };
 
         const section = document.getElementById(sectionIdMap[vehicleType] || '');
-        const activeForm = formRoot || section?.querySelector?.(`[data-vehicle-entry-form="${vehicleType}"]`);
+        let activeForm = formRoot || null;
+        if (!activeForm && section) {
+            activeForm = section.querySelector(`[data-vehicle-entry-form="${vehicleType}"]`)
+                || section.querySelector(`[data-item-entry-form="${vehicleType}"]`);
+        }
         if (!activeForm) return;
 
         const tiles = Array.from(activeForm.querySelectorAll('.vehicle-photo-upload-area'));
@@ -2090,6 +2235,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 persistAndRefreshState();
             });
+        }
+
+        const pianoClearMediaBtn = document.querySelector('[data-vehicle-clear-media="piano"]');
+        if (pianoClearMediaBtn && pianoClearMediaBtn.dataset.simplePianoBound !== '1') {
+            pianoClearMediaBtn.dataset.simplePianoBound = '1';
+            pianoClearMediaBtn.addEventListener('click', () => {
+                const input = document.getElementById('piano-media-input');
+                if (input) input.value = '';
+                manager.saveVehicleMediaToHidden('piano', []);
+                manager.renderVehicleMediaPreview('piano', []);
+                persistAndRefreshState();
+            });
+        }
+
+        const restoredPianoMedia = manager.parseVehicleMediaFromHidden('piano');
+        if (restoredPianoMedia.length > 0) {
+            manager.renderVehicleMediaPreview('piano', restoredPianoMedia);
         }
 
         syncPianoDraftUi();
@@ -3787,13 +3949,66 @@ document.addEventListener('DOMContentLoaded', function() {
         rerenderVehiclesIfNeeded();
     });
 
-    // Initialize piano media input
+    // Initialize piano media input + restore tiles from saved progress
     const pianoMediaInput = document.getElementById('piano-media-input');
-    if (pianoMediaInput) {
+    if (pianoMediaInput && pianoMediaInput.dataset.pianoMediaBootBound !== '1') {
+        pianoMediaInput.dataset.pianoMediaBootBound = '1';
         pianoMediaInput.addEventListener('change', () => {
             window.multiItemsManager.syncVehicleMediaFromInput('piano');
             if (window.updateNextButtonState) window.updateNextButtonState();
         });
+    }
+    const restoredPianoMedia = window.multiItemsManager.parseVehicleMediaFromHidden('piano');
+    if (restoredPianoMedia.length > 0) {
+        window.multiItemsManager.renderVehicleMediaPreview('piano', restoredPianoMedia);
+    }
+
+    const industrialMediaInput = document.getElementById('industrial-media-input');
+    if (industrialMediaInput && industrialMediaInput.dataset.industrialMediaBootBound !== '1') {
+        industrialMediaInput.dataset.industrialMediaBootBound = '1';
+        industrialMediaInput.addEventListener('change', () => {
+            window.multiItemsManager.syncVehicleMediaFromInput('industrial');
+            if (window.updateNextButtonState) window.updateNextButtonState();
+        });
+    }
+    const industrialClearMediaBtn = document.querySelector('[data-vehicle-clear-media="industrial"]');
+    if (industrialClearMediaBtn && industrialClearMediaBtn.dataset.industrialMediaBootBound !== '1') {
+        industrialClearMediaBtn.dataset.industrialMediaBootBound = '1';
+        industrialClearMediaBtn.addEventListener('click', () => {
+            const input = document.getElementById('industrial-media-input');
+            if (input) input.value = '';
+            window.multiItemsManager.saveVehicleMediaToHidden('industrial', []);
+            window.multiItemsManager.renderVehicleMediaPreview('industrial', []);
+            if (window.updateNextButtonState) window.updateNextButtonState();
+        });
+    }
+    const restoredIndustrialMedia = window.multiItemsManager.parseVehicleMediaFromHidden('industrial');
+    if (restoredIndustrialMedia.length > 0) {
+        window.multiItemsManager.renderVehicleMediaPreview('industrial', restoredIndustrialMedia);
+    }
+
+    const manpowerMediaInput = document.getElementById('manpower-media-input');
+    if (manpowerMediaInput && manpowerMediaInput.dataset.manpowerMediaBootBound !== '1') {
+        manpowerMediaInput.dataset.manpowerMediaBootBound = '1';
+        manpowerMediaInput.addEventListener('change', () => {
+            window.multiItemsManager.syncVehicleMediaFromInput('manpower');
+            if (window.updateNextButtonState) window.updateNextButtonState();
+        });
+    }
+    const manpowerClearMediaBtn = document.querySelector('[data-vehicle-clear-media="manpower"]');
+    if (manpowerClearMediaBtn && manpowerClearMediaBtn.dataset.manpowerMediaBootBound !== '1') {
+        manpowerClearMediaBtn.dataset.manpowerMediaBootBound = '1';
+        manpowerClearMediaBtn.addEventListener('click', () => {
+            const input = document.getElementById('manpower-media-input');
+            if (input) input.value = '';
+            window.multiItemsManager.saveVehicleMediaToHidden('manpower', []);
+            window.multiItemsManager.renderVehicleMediaPreview('manpower', []);
+            if (window.updateNextButtonState) window.updateNextButtonState();
+        });
+    }
+    const restoredManpowerMedia = window.multiItemsManager.parseVehicleMediaFromHidden('manpower');
+    if (restoredManpowerMedia.length > 0) {
+        window.multiItemsManager.renderVehicleMediaPreview('manpower', restoredManpowerMedia);
     }
 
     const petMediaInput = document.getElementById('pet-media-input');

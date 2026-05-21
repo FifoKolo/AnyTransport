@@ -9,7 +9,7 @@
     <title>Request a Quote - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260420-4">
-    <link rel="stylesheet" href="css/create-job.css?v=20260519-1">
+    <link rel="stylesheet" href="css/create-job.css?v=20260519-9">
     <link rel="stylesheet" href="css/house-removal.css?v=20260422-2">
     <link rel="stylesheet" href="css/sticky-next-btn.css?v=20260503-1">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
@@ -466,7 +466,7 @@
 <!-- Floor selection modal moved to end of body for proper overlay -->
                 </div>
 
-                                                            <div class="card-section" id="customized-items-inventory-section" data-form-step="3" style="display:none; margin-top:2rem;">
+                                                            <div class="card-section transport-inventory-shell" id="customized-items-inventory-section" data-form-step="3" style="display:none; margin-top:2rem;">
                                                                 <h3 style="margin-bottom: 10px; color: var(--text-primary);"><span id="customized-items-heading-text">Customized Items</span> <span class="required-text" data-required-for="customized-items-hidden">(required)</span></h3>
                                                                 <p id="customized-items-subheading" style="margin: 0 0 14px; color: #64748b; font-size: 0.9rem;">Add each custom item with quantity, photos, dimensions, and weight.</p>
                                                                 <div id="specialist-antiques-value-section" style="display:none; margin: 0 0 16px; padding: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: #f8fbff;">
@@ -552,65 +552,111 @@
         </div>
     </div>
                         
-                        <div id="industrial-section" class="card-section" data-form-step="2" style="display: none;">
-                            <h2 class="section-title">Step 2: Industrial Details</h2>
-                            <label for="what-being-transported" class="form-label">What is being transported</label>
-                            <textarea id="what-being-transported" class="form-input" placeholder="Describe what you need transported" rows="4" data-contact-digit-limit></textarea>
-                        </div>
-                        
-                        <div id="industrial-weight-section" class="card-section" data-form-step="2" style="display: none;">
-                            <h2 class="section-title">Step 2: Weight Details</h2>
-                            <label for="industrial-weight-hidden" class="form-label">How much weight are you transporting <span class="required-text" data-required-for="industrial-weight-hidden">(required)</span></label>
-                            <div class="custom-dropdown-wrapper has-option-nav">
-                                <div class="option-nav option-nav--compact" data-option-nav-for="industrial-weight-hidden" role="radiogroup" aria-label="Industrial weight range">
-                                    <button type="button" class="option-nav-btn" data-value="1kg-500kg" role="radio" aria-checked="false">
-                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                            <path d="M5 6h14v2H5z" fill="currentColor"/>
-                                            <path d="M7 8h10l2 10H5z" fill="currentColor"/>
-                                            <path d="M9 12h6" stroke="#fff" stroke-width="2"/>
-                                        </svg>
-                                        <span>1kg - 500kg</span>
-                                    </button>
-                                    <button type="button" class="option-nav-btn" data-value="501kg-1000kg" role="radio" aria-checked="false">
-                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                            <path d="M5 6h14v2H5z" fill="currentColor"/>
-                                            <path d="M7 8h10l2 10H5z" fill="currentColor"/>
-                                            <path d="M9 12h6" stroke="#fff" stroke-width="2"/>
-                                        </svg>
-                                        <span>501kg - 1000kg</span>
-                                    </button>
-                                    <button type="button" class="option-nav-btn" data-value="1001kg-1500kg" role="radio" aria-checked="false">
-                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                            <path d="M5 6h14v2H5z" fill="currentColor"/>
-                                            <path d="M7 8h10l2 10H5z" fill="currentColor"/>
-                                            <path d="M9 12h6" stroke="#fff" stroke-width="2"/>
-                                        </svg>
-                                        <span>1001kg - 1500kg</span>
-                                    </button>
-                                    <button type="button" class="option-nav-btn" data-value="1501kg-2000kg" role="radio" aria-checked="false">
-                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                            <path d="M5 6h14v2H5z" fill="currentColor"/>
-                                            <path d="M7 8h10l2 10H5z" fill="currentColor"/>
-                                            <path d="M9 12h6" stroke="#fff" stroke-width="2"/>
-                                        </svg>
-                                        <span>1501kg-2000kg</span>
-                                    </button>
-                                    <button type="button" class="option-nav-btn" data-value="2001kg+" role="radio" aria-checked="false">
-                                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                                            <path d="M5 6h14v2H5z" fill="currentColor"/>
-                                            <path d="M7 8h10l2 10H5z" fill="currentColor"/>
-                                            <path d="M9 12h6" stroke="#fff" stroke-width="2"/>
-                                        </svg>
-                                        <span>2001kg+</span>
-                                    </button>
+                        <!-- Legacy step-2 placeholder (fields live in industrial-weight-section on step 3) -->
+                        <div id="industrial-section" class="card-section" data-form-step="2" style="display: none;" aria-hidden="true"></div>
+
+                        <div id="industrial-transport-section" data-form-step="3" style="display: none;">
+                            <div id="industrial-weight-section" class="card-section transport-inventory-shell">
+                                <h3 style="margin-bottom: 10px; color: var(--text-primary);">Industrial Details</h3>
+                                <p style="margin: 0 0 14px; color: #64748b; font-size: 0.92rem;">Add what you are transporting with photos, a description, and approximate weight.</p>
+
+                                <div data-item-entry-form="industrial" class="transport-entry-card transport-item-panel dimension-item">
+                                    <div id="industrial-entry-title" class="custom-item-title">Industrial item 1</div>
+
+                                    <div id="industrial-photo-section" style="margin-bottom: 16px;">
+                                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+                                            <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
+                                            <button type="button" data-vehicle-clear-media="industrial" style="border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:6px;padding:5px 10px;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap;">Delete photos</button>
+                                        </div>
+                                        <div class="photo-upload-grid vehicle-photo-upload-grid custom-item-photo-grid" style="margin-bottom: 10px;">
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="industrial-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="industrial-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="industrial-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="industrial-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="industrial-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                        </div>
+                                        <input type="file" id="industrial-media-input" class="photo-input" accept="image/*,video/*" multiple>
+                                        <input type="hidden" id="industrial-media-hidden" value="">
+                                        <div id="industrial-media-preview" style="margin-top: 8px; display: none;"></div>
+                                    </div>
+
+                                    <div class="transport-entry-fields">
+                                        <div class="form-group" style="margin-bottom: 16px;">
+                                            <label for="what-being-transported" class="form-label">Add description <span class="required-text">(required)</span></label>
+                                            <textarea id="what-being-transported" class="form-input" placeholder="Describe what you need transported (item names, quantities, and any special handling notes help providers quote accurately)" rows="4" data-contact-digit-limit data-required="true" aria-required="true"></textarea>
+                                        </div>
+
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label for="industrial-weight-hidden" class="form-label">How much weight are you transporting <span class="required-text" data-required-for="industrial-weight-hidden">(required)</span></label>
+                                            <div class="custom-dropdown-wrapper has-option-nav">
+                                                <div class="option-nav option-nav--compact" data-option-nav-for="industrial-weight-hidden" role="radiogroup" aria-label="Industrial weight range">
+                                                    <button type="button" class="option-nav-btn" data-value="1kg-500kg" role="radio" aria-checked="false">
+                                                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                            <path d="M5 6h14v2H5z" fill="currentColor"/>
+                                                            <path d="M7 8h10l2 10H5z" fill="currentColor"/>
+                                                            <path d="M9 12h6" stroke="#fff" stroke-width="2"/>
+                                                        </svg>
+                                                        <span>1kg - 500kg</span>
+                                                    </button>
+                                                    <button type="button" class="option-nav-btn" data-value="501kg-1000kg" role="radio" aria-checked="false">
+                                                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                            <path d="M5 6h14v2H5z" fill="currentColor"/>
+                                                            <path d="M7 8h10l2 10H5z" fill="currentColor"/>
+                                                            <path d="M9 12h6" stroke="#fff" stroke-width="2"/>
+                                                        </svg>
+                                                        <span>501kg - 1000kg</span>
+                                                    </button>
+                                                    <button type="button" class="option-nav-btn" data-value="1001kg-1500kg" role="radio" aria-checked="false">
+                                                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                            <path d="M5 6h14v2H5z" fill="currentColor"/>
+                                                            <path d="M7 8h10l2 10H5z" fill="currentColor"/>
+                                                            <path d="M9 12h6" stroke="#fff" stroke-width="2"/>
+                                                        </svg>
+                                                        <span>1001kg - 1500kg</span>
+                                                    </button>
+                                                    <button type="button" class="option-nav-btn" data-value="1501kg-2000kg" role="radio" aria-checked="false">
+                                                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                            <path d="M5 6h14v2H5z" fill="currentColor"/>
+                                                            <path d="M7 8h10l2 10H5z" fill="currentColor"/>
+                                                            <path d="M9 12h6" stroke="#fff" stroke-width="2"/>
+                                                        </svg>
+                                                        <span>1501kg-2000kg</span>
+                                                    </button>
+                                                    <button type="button" class="option-nav-btn" data-value="2001kg+" role="radio" aria-checked="false">
+                                                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                            <path d="M5 6h14v2H5z" fill="currentColor"/>
+                                                            <path d="M7 8h10l2 10H5z" fill="currentColor"/>
+                                                            <path d="M9 12h6" stroke="#fff" stroke-width="2"/>
+                                                        </svg>
+                                                        <span>2001kg+</span>
+                                                    </button>
+                                                </div>
+                                                <input type="hidden" id="industrial-weight-hidden" name="industrial-weight" data-required="true" aria-required="true">
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <input type="hidden" id="industrial-weight-hidden" name="industrial-weight">
                             </div>
                         </div>
 
                         <!-- Piano Transport Section (shown only for Piano Transport) -->
                         <div id="piano-delivery-section" data-form-step="3" style="display: none;">
-                            <div class="card-section">
+                            <div class="card-section transport-inventory-shell">
                                 <h3 style="margin-bottom: 10px; color: var(--text-primary);">Piano Details</h3>
                                 <p style="margin: 0 0 14px; color: #64748b; font-size: 0.92rem;">Add piano details. You can add more pianos if needed.</p>
 
@@ -621,8 +667,43 @@
                                 <input type="hidden" id="pianos-json-hidden" name="pianos-data" value="">
 
                                 <!-- Piano entry form -->
-                                <div data-item-entry-form="piano" class="transport-item-panel dimension-item" style="margin-bottom: 16px;">
+                                <div data-item-entry-form="piano" class="transport-entry-card transport-item-panel dimension-item" style="margin-bottom: 16px; position: relative;">
                                     <button type="button" id="piano-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">Clear form</button>
+                                    <div id="piano-entry-title" class="custom-item-title" style="font-size:1.5rem; font-weight:800; color:#0f172a; margin:0 0 10px;">Piano 1</div>
+
+                                    <div id="piano-photo-section" style="margin-bottom: 16px;">
+                                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+                                            <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span> <span id="piano-media-required" class="required-text" style="display:none;">(required)</span></label>
+                                            <button type="button" data-vehicle-clear-media="piano" style="border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:6px;padding:5px 10px;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap;">Delete photos</button>
+                                        </div>
+                                        <div class="photo-upload-grid vehicle-photo-upload-grid custom-item-photo-grid" style="margin-bottom: 10px;">
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="piano-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="piano-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="piano-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="piano-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="piano-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                        </div>
+                                        <input type="file" id="piano-media-input" class="photo-input" accept="image/*,video/*" multiple>
+                                        <input type="hidden" id="piano-media-hidden" value="">
+                                        <div id="piano-media-preview" style="margin-top: 8px; display: none;"></div>
+                                    </div>
+
+                                    <div class="transport-entry-fields">
                                     <div class="form-group" style="margin-bottom: 16px;">
                                         <label class="form-label">Piano type <span class="required-text">(required)</span></label>
                                         <div class="custom-dropdown-wrapper has-option-nav">
@@ -721,19 +802,6 @@
                                             </div>
                                         </div>
                                     </div>
-
-                                    <!-- Photo/Video Upload Section -->
-                                    <div id="piano-photo-section" class="transport-item-subpanel" style="margin-bottom: 16px; margin-top: 16px;">
-                                        <div class="clearance-section-label-wrap">
-                                            <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add piano photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span> <span id="piano-media-required" class="required-text" style="display:none;">(required)</span></label>
-                                        </div>
-                                        <p style="margin: 8px 0 12px; color: #64748b; font-size: 0.9rem;">Upload photos or videos to help us determine the exact piano model and size.</p>
-
-                                        <div style="margin-bottom: 12px;">
-                                            <input type="file" id="piano-media-input" class="form-input" accept="image/*,video/*" multiple>
-                                            <input type="hidden" id="piano-media-hidden" value="">
-                                            <div id="piano-media-preview" style="margin-top: 8px; display: none;"></div>
-                                        </div>
                                     </div>
 
                                     <button type="button" id="add-piano-btn" style="display:none; margin-top: 16px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">+ Save Piano</button>
@@ -746,14 +814,14 @@
 
                         <!-- Pets Transport Section (shown only for Pets service) -->
                         <div id="pets-transport-section" data-form-step="3" style="display: none;">
-                            <div class="card-section" id="pets-transport-inventory-section">
+                            <div class="card-section transport-inventory-shell" id="pets-transport-inventory-section">
                                 <h3 style="margin-bottom: 10px; color: var(--text-primary);">Pet Transport <span class="required-text" data-required-for="pets-json-hidden">(required)</span></h3>
                                 <p style="margin: 0 0 14px; color: #64748b; font-size: 0.9rem;">Add each pet with photos, type, weight, and handling details so providers can quote accurately.</p>
 
                                 <input type="hidden" id="pets-json-hidden" name="pets-data" data-required="true" value="">
                                 <div id="pets-list" class="dimensions-list"></div>
 
-                                <div data-item-entry-form="pet" class="dimension-item">
+                                <div data-item-entry-form="pet" class="transport-entry-card transport-item-panel dimension-item">
                                 <div id="pet-entry-title" class="custom-item-title" style="font-size:1.5rem; font-weight:800; color:#0f172a; margin:0 0 10px;">Pet 1</div>
                                 <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
                                     <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
@@ -1213,7 +1281,7 @@
                         <!-- Office Removals Section -->
                         <div id="office-removal-description-section" data-form-step="2" style="display: none;">
                             <div id="freight-step3-form" class="freight-step3-form" style="display:none;">
-                                <div class="card-section clearance-customized-shell freight-customized-shell">
+                                <div class="card-section transport-inventory-shell clearance-customized-shell freight-customized-shell">
                                     <h3 class="clearance-customized-title freight-customized-title">Freight Shipment Details</h3>
                                     <p class="clearance-customized-subtitle freight-customized-subtitle">Choose pallet, container, or other unit types and provide dimensions, weight, quantity, and cargo details for accurate quotes.</p>
 
@@ -1355,7 +1423,7 @@
                             </div>
 
                               <div id="clearance-step3-form" class="clearance-step3-form" style="display:none;">
-                                <div class="card-section clearance-customized-shell">
+                                <div class="card-section transport-inventory-shell clearance-customized-shell">
                                     <h3 class="clearance-customized-title">Clearance Items <span class="required-text">(required)</span></h3>
                                     <p class="clearance-customized-subtitle">Add photos or videos and details about what needs to be cleared so movers can quote accurately.</p>
 
@@ -1417,15 +1485,25 @@
                                         <label for="clearance3-description" class="form-label" style="margin-top:4px;">Add clearance details <span class="required-text">(required)</span></label>
                                         <textarea id="clearance3-description" data-clearance-field="description" class="dimension-description form-input" rows="2" placeholder="Enter what needs to be cleared (e.g. sofa, old fridge, boxes, loose items)" data-required="true" aria-required="true" data-contact-digit-limit></textarea>
 
-                                        <div class="dimension-inputs clearance-dimension-inputs">
-                                            <select id="clearance3-weight-range" data-clearance-field="weight" class="dimension-field form-input" data-required="true" aria-required="true">
-                                                <option value="">Weight (required)</option>
-                                                <option value="0-10">0-10</option>
-                                                <option value="10-25">10-25</option>
-                                                <option value="25-50">25-50</option>
-                                                <option value="50-100">50-100</option>
-                                                <option value="100+">100+</option>
-                                            </select>
+                                        <div class="dimension-inputs clearance-dimension-inputs clearance-weight-row">
+                                            <div class="dimension-field-stack">
+                                                <label for="clearance3-weight-range" class="dimension-input-label">Estimated weight <span class="required-text">(required)</span></label>
+                                                <select id="clearance3-weight-range" data-clearance-field="weight" class="dimension-field form-input" data-required="true" aria-required="true">
+                                                    <option value="">Select weight range</option>
+                                                    <option value="0-10">0–10 kg</option>
+                                                    <option value="10-25">10–25 kg</option>
+                                                    <option value="25-50">25–50 kg</option>
+                                                    <option value="50-100">50–100 kg</option>
+                                                    <option value="100+">100+ kg</option>
+                                                </select>
+                                            </div>
+                                            <div class="dimension-field-stack">
+                                                <label for="clearance3-weight-unit" class="dimension-input-label">Weight unit</label>
+                                                <select id="clearance3-weight-unit" data-clearance-field="weight-unit" class="dimension-unit form-input" data-optional="true">
+                                                    <option value="kg" selected>kg</option>
+                                                    <option value="lb">lb</option>
+                                                </select>
+                                            </div>
                                         </div>
 
                                         <div class="form-group" style="margin-top: 10px; margin-bottom: 0;">
@@ -1464,16 +1542,22 @@
                                         </svg>
                                         Add Another Item
                                     </button>
-                                    <div id="clearance-selected-items-section" class="card-section" style="margin-top:12px;display:none;padding:12px 14px;border:1px solid #dbeafe;background:#f8fbff;">
+                                    <div id="clearance-selected-items-section" class="card-section clearance-selected-inventory-block" style="margin-top:12px;padding:12px 14px;border:1px solid #dbeafe;background:#f8fbff;">
                                         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
                                             <div>
-                                                <h4 style="margin:0;font-size:0.98rem;color:#0f172a;">Selected Inventory Items</h4>
-                                                <p style="margin:4px 0 0;font-size:0.84rem;color:#475569;">Items chosen from House Inventory and custom entries.</p>
+                                                <h4 style="margin:0;font-size:0.98rem;color:#0f172a;">Selected Inventory Items <span class="required-text" data-required-for="clearance-selected-items-hidden">(required)</span></h4>
+                                                <p style="margin:4px 0 0;font-size:0.84rem;color:#475569;">Select at least one item from House Inventory before continuing.</p>
                                             </div>
-                                            <button type="button" id="clearance-clear-selected-items" style="border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;">Clear list</button>
+                                            <button type="button" id="clearance-clear-selected-items" style="border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;display:none;">Clear list</button>
                                         </div>
-                                        <div id="clearance-selected-items-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
-                                        <input type="hidden" id="clearance-selected-items-hidden" value="[]">
+                                        <div id="clearance-inventory-required-warning" class="clearance-inventory-required-warning" style="display:none;margin-top:10px;padding:10px 12px;border-left:4px solid #f59e0b;background:#fffbeb;color:#92400e;border-radius:6px;font-size:0.88rem;font-weight:600;">
+                                            Add at least one item using “Select from House Inventory” to continue.
+                                        </div>
+                                        <div id="clearance-selected-items-empty" class="clearance-selected-items-empty" style="margin-top:10px;padding:10px 12px;border:1px dashed #bfdbfe;border-radius:8px;color:#64748b;font-size:0.86rem;">
+                                            No items selected yet.
+                                        </div>
+                                        <div id="clearance-selected-items-list" style="display:none;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
+                                        <input type="hidden" id="clearance-selected-items-hidden" name="clearance-selected-items" data-required="true" value="[]" aria-required="true">
                                     </div>
                             </div>
 
@@ -1483,11 +1567,56 @@
                             </div>
                         </div>
                         
-                        <!-- Man Power Only Section -->
-                        <div id="manpower-job-description-section" data-form-step="2" style="display: none;">
-                            <div class="card-section">
-                                <label for="manpower-job-description" class="form-label">Enter the job you need done</label>
-                                <textarea id="manpower-job-description" class="form-input" placeholder="e.g. Moving a pool table 2 floors" rows="4" data-contact-digit-limit></textarea>
+                        <!-- Legacy step-2 placeholder (Man Power details live on step 3) -->
+                        <div id="manpower-job-description-section" data-form-step="2" style="display: none;" aria-hidden="true"></div>
+
+                        <div id="manpower-transport-section" data-form-step="3" style="display: none;">
+                            <div id="manpower-details-section" class="card-section transport-inventory-shell">
+                                <h3 style="margin-bottom: 10px; color: var(--text-primary);">Man Power Details</h3>
+                                <p style="margin: 0 0 14px; color: #64748b; font-size: 0.92rem;">Describe the work you need done and add photos so providers can quote accurately.</p>
+
+                                <div data-item-entry-form="manpower" class="transport-entry-card transport-item-panel dimension-item">
+                                    <div id="manpower-entry-title" class="custom-item-title">Job 1</div>
+
+                                    <div id="manpower-photo-section" style="margin-bottom: 16px;">
+                                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+                                            <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
+                                            <button type="button" data-vehicle-clear-media="manpower" style="border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:6px;padding:5px 10px;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap;">Delete photos</button>
+                                        </div>
+                                        <div class="photo-upload-grid vehicle-photo-upload-grid custom-item-photo-grid" style="margin-bottom: 10px;">
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="manpower-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="manpower-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="manpower-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="manpower-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                            <label class="photo-upload-area vehicle-photo-upload-area custom-item-photo-area" for="manpower-media-input">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+                                                <span>Drag photo or video here <strong>upload</strong></span>
+                                            </label>
+                                        </div>
+                                        <input type="file" id="manpower-media-input" class="photo-input" accept="image/*,video/*" multiple>
+                                        <input type="hidden" id="manpower-media-hidden" value="">
+                                        <div id="manpower-media-preview" style="margin-top: 8px; display: none;"></div>
+                                    </div>
+
+                                    <div class="transport-entry-fields">
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label for="manpower-job-description" class="form-label">Add description <span class="required-text">(required)</span></label>
+                                            <textarea id="manpower-job-description" class="form-input" placeholder="Describe the job you need done (e.g. move a pool table between floors, assemble furniture, loading help)" rows="4" data-contact-digit-limit data-required="true" aria-required="true"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -1631,19 +1760,19 @@
 
                         <!-- Car/Campervan Transport Section -->
                         <div id="car-transport-section" data-form-step="3" style="display: none;">
-                            <div class="card-section">
+                            <div class="card-section transport-inventory-shell">
                                 <h3 style="margin-bottom: 10px; color: var(--text-primary);">Campervan / Car Details</h3>
                                 <p style="margin: 0 0 14px; color: #64748b; font-size: 0.92rem;">Add campervan or car details. You can add multiple vehicles.</p>
                                 <div id="car-list" style="margin-bottom: 32px;"></div>
                                 <input type="hidden" id="car-json-hidden" name="car-data" value="">
-                                <div data-vehicle-entry-form="car" class="dimension-item" style="margin-bottom: 16px; position: relative;">
+                                <div data-vehicle-entry-form="car" class="transport-entry-card transport-item-panel dimension-item" style="margin-bottom: 16px; position: relative;">
                                     <button type="button" id="car-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">Clear form</button>
                                     <div class="custom-item-title" style="font-size:1.5rem; font-weight:800; color:#0f172a; margin:0 0 10px;">Vehicle item</div>
                                     <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
                                         <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
                                         <button type="button" data-vehicle-clear-media="car" style="border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:6px;padding:5px 10px;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap;">Delete photos</button>
                                     </div>
-                                    <div class="photo-upload-grid vehicle-photo-upload-grid" style="margin-bottom: 10px;">
+                                    <div class="photo-upload-grid vehicle-photo-upload-grid custom-item-photo-grid" style="margin-bottom: 10px;">
                                         <label class="photo-upload-area vehicle-photo-upload-area" for="car-media-input">
                                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
                                             <span>Drag photo or video here <strong>upload</strong></span>
@@ -1727,19 +1856,19 @@
 
                         <!-- Motorbike Transport Section (shown only for Motorbike Transport) -->
                         <div id="motorbike-transport-section" data-form-step="3" style="display: none;">
-                            <div class="card-section">
+                            <div class="card-section transport-inventory-shell">
                                 <h3 style="margin-bottom: 10px; color: var(--text-primary);">Motorbike Details</h3>
                                 <p style="margin: 0 0 14px; color: #64748b; font-size: 0.92rem;">Add motorbike details. You can add more motorbikes if needed.</p>
                                 <div id="motorbike-list" style="margin-bottom: 32px;"></div>
                                 <input type="hidden" id="motorbike-json-hidden" name="motorbike-data" value="">
-                                <div data-vehicle-entry-form="motorbike" class="dimension-item" style="margin-bottom: 16px; position: relative;">
+                                <div data-vehicle-entry-form="motorbike" class="transport-entry-card transport-item-panel dimension-item" style="margin-bottom: 16px; position: relative;">
                                     <button type="button" id="motorbike-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">Clear form</button>
                                     <div class="custom-item-title" style="font-size:1.5rem; font-weight:800; color:#0f172a; margin:0 0 10px;">Vehicle item</div>
                                     <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
                                         <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
                                         <button type="button" data-vehicle-clear-media="motorbike" style="border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:6px;padding:5px 10px;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap;">Delete photos</button>
                                     </div>
-                                    <div class="photo-upload-grid vehicle-photo-upload-grid" style="margin-bottom: 10px;">
+                                    <div class="photo-upload-grid vehicle-photo-upload-grid custom-item-photo-grid" style="margin-bottom: 10px;">
                                         <label class="photo-upload-area vehicle-photo-upload-area" for="motorbike-media-input"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg><span>Drag photo or video here <strong>upload</strong></span></label>
                                         <label class="photo-upload-area vehicle-photo-upload-area" for="motorbike-media-input"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg><span>Drag photo or video here <strong>upload</strong></span></label>
                                         <label class="photo-upload-area vehicle-photo-upload-area" for="motorbike-media-input"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg><span>Drag photo or video here <strong>upload</strong></span></label>
@@ -1806,19 +1935,19 @@
 
                         <!-- Caravan/Trailer Transport Section -->
                         <div id="trailer-campervan-section" data-form-step="3" style="display: none;">
-                            <div class="card-section">
+                            <div class="card-section transport-inventory-shell">
                                 <h3 id="trailer-section-heading" style="margin-bottom: 10px; color: var(--text-primary);">Caravan / Trailer Details</h3>
                                 <p id="trailer-section-subtitle" style="margin: 0 0 14px; color: #64748b; font-size: 0.92rem;">Add caravan or trailer details. You can add multiple items.</p>
                                 <div id="trailer-list" style="margin-bottom: 32px;"></div>
                                 <input type="hidden" id="trailer-json-hidden" name="trailer-data" value="">
-                                <div data-vehicle-entry-form="trailer" class="dimension-item" style="margin-bottom: 16px; position: relative;">
+                                <div data-vehicle-entry-form="trailer" class="transport-entry-card transport-item-panel dimension-item" style="margin-bottom: 16px; position: relative;">
                                     <button type="button" id="trailer-delete-form-btn" style="display:none; position: absolute; top: 12px; right: 12px; padding: 8px 12px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.85rem;">Clear form</button>
                                     <div class="custom-item-title" style="font-size:1.5rem; font-weight:800; color:#0f172a; margin:0 0 10px;">Vehicle item</div>
                                     <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
                                         <label class="form-label" style="margin:0; display:inline-flex; align-items:center; gap:8px;">Add photos or videos <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#334155; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:999px; padding:2px 8px;">5 Maximum</span></label>
                                         <button type="button" data-vehicle-clear-media="trailer" style="border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:6px;padding:5px 10px;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap;">Delete photos</button>
                                     </div>
-                                    <div class="photo-upload-grid vehicle-photo-upload-grid" style="margin-bottom: 10px;">
+                                    <div class="photo-upload-grid vehicle-photo-upload-grid custom-item-photo-grid" style="margin-bottom: 10px;">
                                         <label class="photo-upload-area vehicle-photo-upload-area" for="trailer-media-input"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg><span>Drag photo or video here <strong>upload</strong></span></label>
                                         <label class="photo-upload-area vehicle-photo-upload-area" for="trailer-media-input"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg><span>Drag photo or video here <strong>upload</strong></span></label>
                                         <label class="photo-upload-area vehicle-photo-upload-area" for="trailer-media-input"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg><span>Drag photo or video here <strong>upload</strong></span></label>
@@ -2407,6 +2536,12 @@
                                         </div>
                                         <div id="summary-delivery-inventory" class="overview-inventory-list">No delivery floor assignments yet.</div>
                                     </div>
+                                    <div class="overview-inventory-card" id="summary-storage-inventory-card" style="display:none;">
+                                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
+                                            <h3 style="margin:0; color:#0f172a; font-size:1rem;">Storage Inventory</h3>
+                                        </div>
+                                        <div id="summary-storage-inventory" class="overview-inventory-list">No items selected for storage.</div>
+                                    </div>
                                 </div>
 
                                 <div class="overview-route-card">
@@ -2487,9 +2622,9 @@
     <script src="js/auth.js?v=20260503-6"></script>
     <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/house-removal.js?v=20260322-1"></script>
-    <script src="js/multi-items-handler.js?v=20260328-44"></script>
+    <script src="js/multi-items-handler.js?v=20260519-4"></script>
     <script src="js/form-alert.js?v=20260518-3"></script>
-    <script src="js/create-job.js?v=20260519-2"></script>
+    <script src="js/create-job.js?v=20260519-14"></script>
     <script src="js/quote-edit-bootstrap.js?v=20260502-4"></script>
 
 <script>

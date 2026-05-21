@@ -35,6 +35,88 @@ body.pets-transport-active[data-current-step="3"] #pets-transport-section {
 body.pets-transport-active #step3-title-wrapper {
     display: none !important;
 }
+
+/* === Industrial transport — step 2 details, step 3 weight (skip house floors/inventory) === */
+body.industrial-transport-active[data-form-step="2"] #property-type-selection-section,
+body.industrial-transport-active[data-current-step="2"] #property-type-selection-section,
+body.industrial-transport-active[data-form-step="2"] #generic-floors-section,
+body.industrial-transport-active[data-current-step="2"] #generic-floors-section,
+body.industrial-transport-active[data-form-step="2"] #pickup-lift-section,
+body.industrial-transport-active[data-current-step="2"] #pickup-lift-section {
+    display: none !important;
+}
+body.industrial-transport-active[data-form-step="2"] #industrial-section:not(.step-hidden),
+body.industrial-transport-active[data-current-step="2"] #industrial-section:not(.step-hidden) {
+    display: none !important;
+}
+body.industrial-transport-active #step3-title-wrapper,
+body.industrial-transport-active[data-form-step="3"] #pickup-room-list-wrapper,
+body.industrial-transport-active[data-current-step="3"] #pickup-room-list-wrapper,
+body.industrial-transport-active[data-form-step="3"] #inventory-card-container,
+body.industrial-transport-active[data-current-step="3"] #inventory-card-container,
+body.industrial-transport-active[data-form-step="3"] #house-removal-inventory-section,
+body.industrial-transport-active[data-current-step="3"] #house-removal-inventory-section,
+body.industrial-transport-active[data-form-step="3"] #customized-items-inventory-section,
+body.industrial-transport-active[data-current-step="3"] #customized-items-inventory-section {
+    display: none !important;
+}
+body.industrial-transport-active[data-form-step="3"] #industrial-transport-section:not(.step-hidden),
+body.industrial-transport-active[data-current-step="3"] #industrial-transport-section:not(.step-hidden) {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-top: 2rem;
+}
+body.industrial-transport-active[data-form-step="4"] #delivery-property-type-selection-section,
+body.industrial-transport-active[data-current-step="4"] #delivery-property-type-selection-section,
+body.industrial-transport-active[data-form-step="5"] #delivery-floors-section,
+body.industrial-transport-active[data-current-step="5"] #delivery-floors-section {
+    display: none !important;
+}
+
+/* === Man Power Only — job details on step 3 (skip property/floors on step 2) === */
+body.man-power-transport-active[data-form-step="2"] #property-type-selection-section,
+body.man-power-transport-active[data-current-step="2"] #property-type-selection-section,
+body.man-power-transport-active[data-form-step="2"] #generic-floors-section,
+body.man-power-transport-active[data-current-step="2"] #generic-floors-section,
+body.man-power-transport-active[data-form-step="2"] #pickup-lift-section,
+body.man-power-transport-active[data-current-step="2"] #pickup-lift-section,
+body.man-power-transport-active[data-form-step="2"] #manpower-job-description-section:not(.step-hidden),
+body.man-power-transport-active[data-current-step="2"] #manpower-job-description-section:not(.step-hidden) {
+    display: none !important;
+}
+body.man-power-transport-active #step3-title-wrapper,
+body.man-power-transport-active[data-form-step="3"] #pickup-room-list-wrapper,
+body.man-power-transport-active[data-current-step="3"] #pickup-room-list-wrapper,
+body.man-power-transport-active[data-form-step="3"] #inventory-card-container,
+body.man-power-transport-active[data-current-step="3"] #inventory-card-container,
+body.man-power-transport-active[data-form-step="3"] #house-removal-inventory-section,
+body.man-power-transport-active[data-current-step="3"] #house-removal-inventory-section,
+body.man-power-transport-active[data-form-step="3"] #customized-items-inventory-section,
+body.man-power-transport-active[data-current-step="3"] #customized-items-inventory-section {
+    display: none !important;
+}
+body.man-power-transport-active[data-form-step="3"] #manpower-transport-section:not(.step-hidden),
+body.man-power-transport-active[data-current-step="3"] #manpower-transport-section:not(.step-hidden) {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-top: 2rem;
+}
+body.man-power-transport-active[data-form-step="3"] #manpower-details-section,
+body.man-power-transport-active[data-current-step="3"] #manpower-details-section {
+    background: #f8fbff;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
+}
+body.man-power-transport-active[data-form-step="4"] #delivery-property-type-selection-section,
+body.man-power-transport-active[data-current-step="4"] #delivery-property-type-selection-section,
+body.man-power-transport-active[data-form-step="5"] #delivery-floors-section,
+body.man-power-transport-active[data-current-step="5"] #delivery-floors-section {
+    display: none !important;
+}
+
 #pets-transport-inventory-section {
     margin-top: 2rem;
 }
@@ -4059,6 +4141,26 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     grid-template-columns: 1.2fr 1fr 1.6fr;
 }
 
+.clearance-weight-row {
+    grid-template-columns: minmax(0, 1.4fr) minmax(120px, 0.6fr);
+    margin-top: 8px;
+}
+
+.clearance-selected-inventory-block.clearance-inventory-missing {
+    border-color: #fca5a5 !important;
+    box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.35);
+}
+
+.clearance-inventory-required-warning {
+    display: none;
+}
+
+@media (max-width: 700px) {
+    .clearance-weight-row {
+        grid-template-columns: 1fr;
+    }
+}
+
 @media (max-width: 900px) {
     .clearance-customized-title {
         font-size: 1.8rem;
@@ -4288,6 +4390,100 @@ body:not(.house-removals-active):not(.office-removals-active) .job-form.v2 .form
     border-radius: 4px;
 }
 
+/* Transport inventory shells (piano, vehicles, pets, customized, freight, clearance, etc.). */
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] .transport-inventory-shell,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] .transport-inventory-shell,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #piano-delivery-section > .card-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #piano-delivery-section > .card-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #pets-transport-section > .card-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #pets-transport-section > .card-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #car-transport-section > .card-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #car-transport-section > .card-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #motorbike-transport-section > .card-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #motorbike-transport-section > .card-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #trailer-campervan-section > .card-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #trailer-campervan-section > .card-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #customized-items-inventory-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #customized-items-inventory-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] .freight-customized-shell,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] .freight-customized-shell,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] .clearance-customized-shell,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] .clearance-customized-shell,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #industrial-weight-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #industrial-weight-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #manpower-details-section,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #manpower-details-section {
+    background: #f8fbff;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
+}
+
+/* Entry cards inside transport shells: full light-blue panel (piano, vehicles, pets, etc.). */
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] .transport-inventory-shell .transport-entry-card,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] .transport-inventory-shell .transport-entry-card,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] .transport-inventory-shell #dimensions-list .dimension-item,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] .transport-inventory-shell #dimensions-list .dimension-item,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #pianos-list .saved-entry-form-clone,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #pianos-list .saved-entry-form-clone,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #pets-list .saved-entry-form-clone,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #pets-list .saved-entry-form-clone,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #car-list .saved-entry-form-clone,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #car-list .saved-entry-form-clone,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #motorbike-list .saved-entry-form-clone,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #motorbike-list .saved-entry-form-clone,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #trailer-list .saved-entry-form-clone,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #trailer-list .saved-entry-form-clone {
+    background: #f8fbff !important;
+    border: 1px solid #dbeafe !important;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
+}
+
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] .transport-entry-card .transport-item-subpanel,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] .transport-entry-card .transport-item-subpanel,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] [data-item-entry-form] .transport-item-subpanel,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] [data-item-entry-form] .transport-item-subpanel {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+}
+
+.transport-entry-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+
+.custom-item-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 10px;
+    line-height: 1.2;
+}
+
+/* House / Office removals: keep inventory areas white (no transport blue panels). */
+body.house-removals-active[data-form-step="3"] #house-removal-inventory-section,
+body.house-removals-active[data-current-step="3"] #house-removal-inventory-section,
+body.office-removals-active[data-form-step="3"] #office-removal-inventory-section,
+body.office-removals-active[data-current-step="3"] #office-removal-inventory-section,
+body.house-removals-active[data-form-step="3"] .floor-inventory-section,
+body.house-removals-active[data-current-step="3"] .floor-inventory-section,
+body.office-removals-active[data-form-step="3"] .floor-inventory-section,
+body.office-removals-active[data-current-step="3"] .floor-inventory-section,
+body.house-removals-active[data-form-step="3"] .floor-inventory-block,
+body.house-removals-active[data-current-step="3"] .floor-inventory-block,
+body.office-removals-active[data-form-step="3"] .floor-inventory-block,
+body.office-removals-active[data-current-step="3"] .floor-inventory-block,
+body.house-removals-active[data-form-step="3"] .floor-inventory-block .inventory-items-list,
+body.house-removals-active[data-current-step="3"] .floor-inventory-block .inventory-items-list,
+body.office-removals-active[data-form-step="3"] .floor-inventory-block .inventory-items-list,
+body.office-removals-active[data-current-step="3"] .floor-inventory-block .inventory-items-list {
+    background: #ffffff !important;
+    border-color: #e5e7eb !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
+}
+
 /* Step 3 item-entry panels: light blue cards (transport services; House/Office removals excluded). */
 body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #pickup-room-list,
 body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #pickup-room-list,
@@ -4305,6 +4501,30 @@ body:not(.house-removals-active):not(.office-removals-active) [data-form-step="3
 body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] .transport-item-panel,
 body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] [data-item-entry-form],
 body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] [data-vehicle-entry-form] {
+    background: #f8fbff;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
+}
+
+.saved-entry-form-wrap {
+    margin-bottom: 14px;
+}
+
+.saved-entry-form-clone {
+    pointer-events: none;
+    user-select: none;
+}
+
+.saved-entry-form-wrap > .saved-entry-form-actions,
+.saved-entry-form-clone .saved-entry-form-actions {
+    pointer-events: auto;
+}
+
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #pianos-list .saved-entry-form-clone,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #pianos-list .saved-entry-form-clone,
+body:not(.house-removals-active):not(.office-removals-active)[data-form-step="3"] #pets-list .saved-entry-form-clone,
+body:not(.house-removals-active):not(.office-removals-active)[data-current-step="3"] #pets-list .saved-entry-form-clone {
     background: #f8fbff;
     border: 1px solid #dbeafe;
     border-radius: 10px;

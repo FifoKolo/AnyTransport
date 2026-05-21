@@ -1403,6 +1403,1668 @@
         }
     }
 
+    function normalizeListingServiceType(quote) {
+        return String(firstText(
+            quote.itemType,
+            quote.serviceType,
+            quote.service,
+            quote.selectedService,
+            quote.itemDescription,
+            ''
+        ) || '').trim();
+    }
+
+    function isVehicleTransportListing(quote) {
+        const serviceType = normalizeListingServiceType(quote).toLowerCase();
+        if (!serviceType) return false;
+        if (serviceType.includes('vehicle parts')) return false;
+        return serviceType.includes('car/campervan')
+            || serviceType.includes('car transport')
+            || serviceType.includes('motorbike')
+            || serviceType.includes('caravan')
+            || serviceType.includes('trailer transport')
+            || serviceType.includes('trailers & campervans')
+            || serviceType === 'boats'
+            || serviceType.includes('boat transport');
+    }
+
+    function isPianoTransportListing(quote) {
+        const serviceType = normalizeListingServiceType(quote).toLowerCase();
+        return serviceType.includes('piano');
+    }
+
+    function isFreightTransportListing(quote) {
+        const serviceType = normalizeListingServiceType(quote).toLowerCase();
+        return serviceType === 'freight' || serviceType.includes('freight');
+    }
+
+    function isIndustrialTransportListing(quote) {
+        const serviceType = normalizeListingServiceType(quote).toLowerCase();
+        return serviceType === 'industrial' || serviceType.includes('industrial');
+    }
+
+    const INDUSTRIAL_WEIGHT_LABELS = {
+        '1kg-500kg': '1kg - 500kg',
+        '501kg-1000kg': '501kg - 1000kg',
+        '1001kg-1500kg': '1001kg - 1500kg',
+        '1501kg-2000kg': '1501kg-2000kg',
+        '2001kg+': '2001kg+'
+    };
+
+    function formatIndustrialWeightLabel(weightValue) {
+        const normalized = String(weightValue || '').trim();
+        if (!normalized) return '';
+        return INDUSTRIAL_WEIGHT_LABELS[normalized] || normalized;
+    }
+
+    function parseIndustrialFromQuote(quote) {
+        let details = null;
+
+        const rawJson = firstText(quote.industrialJson, quote.industrial_json, '');
+        if (rawJson) {
+            try {
+                const parsed = JSON.parse(rawJson);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    details = parsed;
+                }
+            } catch (_error) {
+                // Fall through to other payload shapes.
+            }
+        }
+
+        if (!details && quote.industrialDetails) {
+            if (typeof quote.industrialDetails === 'string') {
+                const raw = quote.industrialDetails.trim();
+                if (raw) {
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                            details = parsed;
+                        }
+                    } catch (_error) {
+                        details = { description: raw };
+                    }
+                }
+            } else if (typeof quote.industrialDetails === 'object') {
+                details = quote.industrialDetails;
+            }
+        }
+
+        if (!details) {
+            const description = firstText(
+                quote.whatBeingTransported,
+                quote.what_being_transported,
+                quote['what-being-transported'],
+                getQuoteFieldValue(quote, 'what-being-transported')
+            );
+            const weight = firstText(
+                quote.industrialWeight,
+                quote.industrial_weight,
+                quote['industrial-weight-hidden'],
+                getQuoteFieldValue(quote, 'industrial-weight-hidden')
+            );
+            if (description || weight) {
+                details = {
+                    description: description,
+                    weight: weight,
+                    weightLabel: formatIndustrialWeightLabel(weight)
+                };
+            }
+        }
+
+        if (!details) return null;
+
+        if (!Array.isArray(details.media)) {
+            const rawMedia = firstText(
+                quote['industrial-media-hidden'],
+                quote.industrialMediaHidden,
+                getQuoteFieldValue(quote, 'industrial-media-hidden')
+            );
+            if (rawMedia) {
+                try {
+                    const parsedMedia = JSON.parse(rawMedia);
+                    if (Array.isArray(parsedMedia)) {
+                        details.media = parsedMedia;
+                    }
+                } catch (_error) {
+                    details.media = [];
+                }
+            } else {
+                details.media = [];
+            }
+        }
+
+        details.description = String(details.description || '').trim();
+        details.weight = String(details.weight || '').trim();
+        details.weightLabel = String(details.weightLabel || '').trim() || formatIndustrialWeightLabel(details.weight);
+
+        return details;
+    }
+
+    function buildIndustrialDetailRows(details) {
+        const rows = [];
+        const addRow = function (label, value) {
+            const text = String(value || '').trim();
+            if (!text) return;
+            rows.push('<li><strong>' + escapeHtml(label) + ':</strong> ' + escapeHtml(text) + '</li>');
+        };
+
+        addRow('Description', details && details.description);
+        addRow('Weight range', details && (details.weightLabel || formatIndustrialWeightLabel(details.weight)));
+
+        const mediaItems = Array.isArray(details && details.media) ? details.media : [];
+        if (mediaItems.length) {
+            const imageCount = mediaItems.filter(function (item) {
+                return String(item && item.type || '').toLowerCase().startsWith('image/');
+            }).length;
+            const videoCount = mediaItems.filter(function (item) {
+                return String(item && item.type || '').toLowerCase().startsWith('video/');
+            }).length;
+            const parts = [];
+            if (imageCount > 0) parts.push(imageCount + ' photo' + (imageCount === 1 ? '' : 's'));
+            if (videoCount > 0) parts.push(videoCount + ' video' + (videoCount === 1 ? '' : 's'));
+            if (!parts.length) parts.push(mediaItems.length + ' file' + (mediaItems.length === 1 ? '' : 's'));
+            addRow('Photos / videos', parts.join(', '));
+        }
+
+        return rows;
+    }
+
+    function collectIndustrialServiceInventory(quote) {
+        const details = parseIndustrialFromQuote(quote);
+        if (!details || (!details.description && !details.weight && !(details.media || []).length)) {
+            return null;
+        }
+
+        let selectedPickupFloors = [];
+        const rawPickupFloors = quote.selectedPickupFloors || quote.pickupFloors || quote.pickup_floors;
+        if (Array.isArray(rawPickupFloors)) {
+            selectedPickupFloors = rawPickupFloors;
+        } else if (typeof rawPickupFloors === 'string' && rawPickupFloors.trim()) {
+            try {
+                const parsedFloors = JSON.parse(rawPickupFloors);
+                if (Array.isArray(parsedFloors)) {
+                    selectedPickupFloors = parsedFloors;
+                }
+            } catch (_error) {
+                selectedPickupFloors = rawPickupFloors.split(',').map(function (entry) {
+                    return String(entry || '').trim();
+                }).filter(Boolean);
+            }
+        }
+
+        selectedPickupFloors = selectedPickupFloors
+            .map(function (floor) { return normalizeInventoryFloorKey(floor); })
+            .filter(Boolean);
+
+        const pickupFloor = selectedPickupFloors[0]
+            || normalizeInventoryFloorKey(firstText(quote.pickupFloorSelect, quote.pickupFloor, quote.fromFloor, 'Ground'));
+
+        const labelParts = [];
+        if (details.description) {
+            const shortDescription = details.description.length > 120
+                ? details.description.slice(0, 117) + '...'
+                : details.description;
+            labelParts.push(shortDescription);
+        }
+        if (details.weightLabel) {
+            labelParts.push('Weight: ' + details.weightLabel);
+        }
+        const label = 'Industrial item 1' + (labelParts.length ? ': ' + labelParts.join(' · ') : '');
+
+        const pickupMap = {};
+        pickupMap[pickupFloor] = {};
+        pickupMap[pickupFloor][label] = 1;
+
+        return {
+            pickup: pickupMap,
+            delivery: {}
+        };
+    }
+
+    function renderIndustrialInventoryMarkup(quote) {
+        const details = parseIndustrialFromQuote(quote);
+        if (!details || (!details.description && !details.weight && !(details.media || []).length)) {
+            return '<div class="empty-inventory">No industrial transport details were saved for this listing.</div>';
+        }
+
+        const rows = buildIndustrialDetailRows(details);
+        const rowHtml = rows.length
+            ? '<ul class="inventory-overview-floor-items vehicle-detail-list">' + rows.join('') + '</ul>'
+            : '<div class="empty-inventory">No details recorded for this industrial item.</div>';
+
+        const card = '<div class="inventory-overview-floor-block vehicle-detail-card">' +
+            '<div class="inventory-overview-floor-title">Industrial item 1</div>' +
+            rowHtml +
+        '</div>';
+
+        return '<div class="inventory-overview-grid inventory-overview-grid-vehicle">' +
+            '<section class="inventory-overview-column">' +
+                '<h4 class="inventory-overview-column-title">Industrial Transport</h4>' +
+                '<div class="vehicle-detail-grid">' + card + '</div>' +
+            '</section>' +
+        '</div>';
+    }
+
+    function isManPowerTransportListing(quote) {
+        const serviceType = normalizeListingServiceType(quote).toLowerCase();
+        return serviceType.includes('man power') || serviceType.includes('manpower');
+    }
+
+    function parseManpowerFromQuote(quote) {
+        let details = null;
+
+        const rawJson = firstText(quote.manpowerJson, quote.manpower_json, '');
+        if (rawJson) {
+            try {
+                const parsed = JSON.parse(rawJson);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    details = parsed;
+                }
+            } catch (_error) {
+                // Fall through to other payload shapes.
+            }
+        }
+
+        if (!details && quote.manpowerDetails) {
+            if (typeof quote.manpowerDetails === 'string') {
+                const raw = quote.manpowerDetails.trim();
+                if (raw) {
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                            details = parsed;
+                        }
+                    } catch (_error) {
+                        details = { description: raw };
+                    }
+                }
+            } else if (typeof quote.manpowerDetails === 'object') {
+                details = quote.manpowerDetails;
+            }
+        }
+
+        if (!details) {
+            const description = firstText(
+                quote.manpowerJobDescription,
+                quote['manpower-job-description'],
+                getQuoteFieldValue(quote, 'manpower-job-description'),
+                isManPowerTransportListing(quote) ? quote.itemDescription : '',
+                isManPowerTransportListing(quote) ? quote.itemsSummary : ''
+            );
+            if (description) {
+                details = { description: description };
+            }
+        }
+
+        if (!details) return null;
+
+        if (!Array.isArray(details.media)) {
+            const rawMedia = firstText(
+                quote['manpower-media-hidden'],
+                quote.manpowerMediaHidden,
+                getQuoteFieldValue(quote, 'manpower-media-hidden')
+            );
+            if (rawMedia) {
+                try {
+                    const parsedMedia = JSON.parse(rawMedia);
+                    if (Array.isArray(parsedMedia)) {
+                        details.media = parsedMedia;
+                    }
+                } catch (_error) {
+                    details.media = [];
+                }
+            } else {
+                details.media = [];
+            }
+        }
+
+        details.description = String(details.description || '').trim();
+        return details;
+    }
+
+    function buildManpowerDetailRows(details) {
+        const rows = [];
+        const addRow = function (label, value) {
+            const text = String(value || '').trim();
+            if (!text) return;
+            rows.push('<li><strong>' + escapeHtml(label) + ':</strong> ' + escapeHtml(text) + '</li>');
+        };
+
+        addRow('Description', details && details.description);
+
+        const mediaItems = Array.isArray(details && details.media) ? details.media : [];
+        if (mediaItems.length) {
+            const imageCount = mediaItems.filter(function (item) {
+                return String(item && item.type || '').toLowerCase().startsWith('image/');
+            }).length;
+            const videoCount = mediaItems.filter(function (item) {
+                return String(item && item.type || '').toLowerCase().startsWith('video/');
+            }).length;
+            const parts = [];
+            if (imageCount > 0) parts.push(imageCount + ' photo' + (imageCount === 1 ? '' : 's'));
+            if (videoCount > 0) parts.push(videoCount + ' video' + (videoCount === 1 ? '' : 's'));
+            if (!parts.length) parts.push(mediaItems.length + ' file' + (mediaItems.length === 1 ? '' : 's'));
+            addRow('Photos / videos', parts.join(', '));
+        }
+
+        return rows;
+    }
+
+    function collectManpowerServiceInventory(quote) {
+        const details = parseManpowerFromQuote(quote);
+        if (!details || (!details.description && !(details.media || []).length)) {
+            return null;
+        }
+
+        let selectedPickupFloors = [];
+        const rawPickupFloors = quote.selectedPickupFloors || quote.pickupFloors || quote.pickup_floors;
+        if (Array.isArray(rawPickupFloors)) {
+            selectedPickupFloors = rawPickupFloors;
+        } else if (typeof rawPickupFloors === 'string' && rawPickupFloors.trim()) {
+            try {
+                const parsedFloors = JSON.parse(rawPickupFloors);
+                if (Array.isArray(parsedFloors)) {
+                    selectedPickupFloors = parsedFloors;
+                }
+            } catch (_error) {
+                selectedPickupFloors = rawPickupFloors.split(',').map(function (entry) {
+                    return String(entry || '').trim();
+                }).filter(Boolean);
+            }
+        }
+
+        selectedPickupFloors = selectedPickupFloors
+            .map(function (floor) { return normalizeInventoryFloorKey(floor); })
+            .filter(Boolean);
+
+        const pickupFloor = selectedPickupFloors[0]
+            || normalizeInventoryFloorKey(firstText(quote.pickupFloorSelect, quote.pickupFloor, quote.fromFloor, 'Ground'));
+
+        const labelParts = [];
+        if (details.description) {
+            const shortDescription = details.description.length > 120
+                ? details.description.slice(0, 117) + '...'
+                : details.description;
+            labelParts.push(shortDescription);
+        }
+        const label = 'Job 1' + (labelParts.length ? ': ' + labelParts.join(' · ') : '');
+
+        const pickupMap = {};
+        pickupMap[pickupFloor] = {};
+        pickupMap[pickupFloor][label] = 1;
+
+        return {
+            pickup: pickupMap,
+            delivery: {}
+        };
+    }
+
+    function renderManpowerInventoryMarkup(quote) {
+        const details = parseManpowerFromQuote(quote);
+        if (!details || (!details.description && !(details.media || []).length)) {
+            return '<div class="empty-inventory">No man power job details were saved for this listing.</div>';
+        }
+
+        const rows = buildManpowerDetailRows(details);
+        const rowHtml = rows.length
+            ? '<ul class="inventory-overview-floor-items vehicle-detail-list">' + rows.join('') + '</ul>'
+            : '<div class="empty-inventory">No details recorded for this job.</div>';
+
+        const card = '<div class="inventory-overview-floor-block vehicle-detail-card">' +
+            '<div class="inventory-overview-floor-title">Job 1</div>' +
+            rowHtml +
+        '</div>';
+
+        return '<div class="inventory-overview-grid inventory-overview-grid-vehicle">' +
+            '<section class="inventory-overview-column">' +
+                '<h4 class="inventory-overview-column-title">Man Power</h4>' +
+                '<div class="vehicle-detail-grid">' + card + '</div>' +
+            '</section>' +
+        '</div>';
+    }
+
+    function isPetsTransportListing(quote) {
+        const serviceType = normalizeListingServiceType(quote).toLowerCase();
+        return serviceType.includes('pet');
+    }
+
+    function parsePetsFromQuote(quote) {
+        let pets = [];
+
+        const pushParsedArray = function (value) {
+            if (!Array.isArray(value)) return;
+            value.forEach(function (entry) {
+                if (entry && typeof entry === 'object') {
+                    pets.push(entry);
+                }
+            });
+        };
+
+        const petDetails = quote.petDetails || quote.pet_details;
+        if (petDetails) {
+            if (typeof petDetails === 'string') {
+                const raw = petDetails.trim();
+                if (raw) {
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (Array.isArray(parsed)) {
+                            pushParsedArray(parsed);
+                        } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.pets)) {
+                            pushParsedArray(parsed.pets);
+                        }
+                    } catch (_error) {
+                        // Ignore malformed JSON.
+                    }
+                }
+            } else if (Array.isArray(petDetails)) {
+                pushParsedArray(petDetails);
+            } else if (typeof petDetails === 'object' && Array.isArray(petDetails.pets)) {
+                pushParsedArray(petDetails.pets);
+            }
+        }
+
+        if (!pets.length) {
+            const rawJson = firstText(quote.petsJson, quote.pets_json, '');
+            if (rawJson) {
+                try {
+                    const parsed = JSON.parse(rawJson);
+                    if (Array.isArray(parsed)) {
+                        pushParsedArray(parsed);
+                    } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.pets)) {
+                        pushParsedArray(parsed.pets);
+                    }
+                } catch (_error) {
+                    // Ignore malformed JSON.
+                }
+            }
+        }
+
+        if (!pets.length && Array.isArray(quote.pets)) {
+            pushParsedArray(quote.pets);
+        }
+
+        return pets;
+    }
+
+    function getPetDisplayTitle(pet, index) {
+        const typeLabel = firstText(pet && pet.typeLabel, pet && pet.animalType, pet && pet.type, pet && pet.typeValue);
+        const otherName = firstText(pet && pet.otherName, pet && pet.name);
+        let title = typeLabel || ('Pet ' + (Number(index) + 1 || 1));
+        if (otherName) {
+            title += ': ' + otherName;
+        }
+        return title;
+    }
+
+    function buildPetDetailRows(pet) {
+        const rows = [];
+        const addRow = function (label, value) {
+            const text = String(value || '').trim();
+            if (!text) return;
+            rows.push('<li><strong>' + escapeHtml(label) + ':</strong> ' + escapeHtml(text) + '</li>');
+        };
+
+        const typeLabel = firstText(pet && pet.typeLabel, pet && pet.animalType, pet && pet.type, pet && pet.typeValue);
+        addRow('Animal type', typeLabel);
+
+        const otherName = firstText(pet && pet.otherName, pet && pet.name);
+        if (otherName) {
+            addRow('Name / description', otherName);
+        }
+
+        const tankLength = String(pet && pet.tankLength || '').trim();
+        const tankWidth = String(pet && pet.tankWidth || '').trim();
+        const tankHeight = String(pet && pet.tankHeight || '').trim();
+        if (tankLength || tankWidth || tankHeight) {
+            const unit = firstText(pet && pet.tankUnit, 'cm');
+            const sizeParts = [tankLength, tankWidth, tankHeight].filter(Boolean);
+            addRow('Tank / carrier size', sizeParts.join(' × ') + ' ' + unit);
+        }
+
+        const weightText = firstText(
+            pet && pet.weightLabel,
+            pet && pet.weightCustom,
+            pet && pet.weightValue,
+            pet && pet.weight
+        );
+        addRow('Weight', weightText);
+
+        const ownerLift = firstText(pet && pet.ownerLiftLabel, pet && pet.ownerLiftValue, pet && pet.ownerLift);
+        addRow('Owner can help with lift', ownerLift);
+
+        const mediaItems = Array.isArray(pet && pet.media) ? pet.media : [];
+        if (mediaItems.length) {
+            const imageCount = mediaItems.filter(function (item) {
+                return String(item && item.type || '').toLowerCase().startsWith('image/');
+            }).length;
+            const videoCount = mediaItems.filter(function (item) {
+                return String(item && item.type || '').toLowerCase().startsWith('video/');
+            }).length;
+            const parts = [];
+            if (imageCount > 0) parts.push(imageCount + ' photo' + (imageCount === 1 ? '' : 's'));
+            if (videoCount > 0) parts.push(videoCount + ' video' + (videoCount === 1 ? '' : 's'));
+            if (!parts.length) parts.push(mediaItems.length + ' file' + (mediaItems.length === 1 ? '' : 's'));
+            addRow('Photos / videos', parts.join(', '));
+        }
+
+        return rows;
+    }
+
+    function collectPetsServiceInventory(quote) {
+        const pets = parsePetsFromQuote(quote);
+        if (!pets.length) return null;
+
+        let selectedPickupFloors = [];
+        const rawPickupFloors = quote.selectedPickupFloors || quote.pickupFloors || quote.pickup_floors;
+        if (Array.isArray(rawPickupFloors)) {
+            selectedPickupFloors = rawPickupFloors;
+        } else if (typeof rawPickupFloors === 'string' && rawPickupFloors.trim()) {
+            try {
+                const parsedFloors = JSON.parse(rawPickupFloors);
+                if (Array.isArray(parsedFloors)) {
+                    selectedPickupFloors = parsedFloors;
+                }
+            } catch (_error) {
+                selectedPickupFloors = rawPickupFloors.split(',').map(function (entry) {
+                    return String(entry || '').trim();
+                }).filter(Boolean);
+            }
+        }
+
+        selectedPickupFloors = selectedPickupFloors
+            .map(function (floor) { return normalizeInventoryFloorKey(floor); })
+            .filter(Boolean);
+
+        const pickupFloor = selectedPickupFloors[0]
+            || normalizeInventoryFloorKey(firstText(quote.pickupFloorSelect, quote.pickupFloor, quote.fromFloor, 'Ground'));
+
+        const pickupMap = {};
+        pickupMap[pickupFloor] = {};
+        pets.forEach(function (pet, index) {
+            pickupMap[pickupFloor][getPetDisplayTitle(pet, index)] = 1;
+        });
+
+        return {
+            pickup: pickupMap,
+            delivery: {}
+        };
+    }
+
+    function renderPetsInventoryMarkup(quote) {
+        const pets = parsePetsFromQuote(quote);
+        if (!pets.length) {
+            return '<div class="empty-inventory">No pet transport details were saved for this listing.</div>';
+        }
+
+        const cards = pets.map(function (pet, index) {
+            const title = getPetDisplayTitle(pet, index);
+            const rows = buildPetDetailRows(pet);
+            const rowHtml = rows.length
+                ? '<ul class="inventory-overview-floor-items vehicle-detail-list">' + rows.join('') + '</ul>'
+                : '<div class="empty-inventory">No details recorded for this pet.</div>';
+
+            return '<div class="inventory-overview-floor-block vehicle-detail-card">' +
+                '<div class="inventory-overview-floor-title">' + escapeHtml(title) + '</div>' +
+                rowHtml +
+            '</div>';
+        }).join('');
+
+        return '<div class="inventory-overview-grid inventory-overview-grid-vehicle">' +
+            '<section class="inventory-overview-column">' +
+                '<h4 class="inventory-overview-column-title">Pet Transport</h4>' +
+                '<div class="vehicle-detail-grid">' + cards + '</div>' +
+            '</section>' +
+        '</div>';
+    }
+
+    function getFreightCategoryLabel(unitCategory) {
+        const normalized = String(unitCategory || '').trim().toLowerCase();
+        if (normalized === 'pallet') return 'Pallet';
+        if (normalized === 'container') return 'Container';
+        if (normalized === 'other') return 'Other';
+        return formatItemLabel(unitCategory);
+    }
+
+    function getFreightUnitCountNoun(unitCategory) {
+        const normalized = String(unitCategory || '').trim().toLowerCase();
+        if (normalized === 'pallet') return 'pallets';
+        if (normalized === 'container') return 'containers';
+        return 'units';
+    }
+
+    function getQuoteFieldValue(quote, fieldId) {
+        if (!quote || typeof quote !== 'object') return '';
+        const camelKey = String(fieldId || '').replace(/-([a-z])/g, function (_match, letter) {
+            return letter.toUpperCase();
+        });
+        return firstText(
+            quote[fieldId],
+            quote[camelKey],
+            quote.idState && quote.idState[fieldId] && quote.idState[fieldId].value,
+            quote.formData && quote.formData[fieldId],
+            quote.quoteData && quote.quoteData[fieldId],
+            quote.stepData && quote.stepData[fieldId],
+            ''
+        );
+    }
+
+    function parseFreightUnitsFromQuote(quote) {
+        const units = [];
+        const pushUnit = function (unit) {
+            if (!unit || typeof unit !== 'object') return;
+            const unitCategory = String(unit.unitCategory || unit.category || '').trim();
+            const description = String(unit.description || unit.cargo || '').trim();
+            const unitType = String(unit.unitType || unit.type || '').trim();
+            if (!unitCategory && !description && !unitType) return;
+            units.push(unit);
+        };
+
+        const rawJson = firstText(quote.freightJson, quote.freight_json, '');
+        if (rawJson) {
+            try {
+                const parsed = JSON.parse(rawJson);
+                if (Array.isArray(parsed)) {
+                    parsed.forEach(pushUnit);
+                } else {
+                    pushUnit(parsed);
+                }
+            } catch (_error) {
+                // Fall through to other freight payload shapes.
+            }
+        }
+
+        if (!units.length && quote.freightDetails) {
+            if (Array.isArray(quote.freightDetails)) {
+                quote.freightDetails.forEach(pushUnit);
+            } else {
+                pushUnit(quote.freightDetails);
+            }
+        }
+
+        if (!units.length) {
+            const unitCategory = getQuoteFieldValue(quote, 'freight3-unit-category');
+            if (unitCategory) {
+                pushUnit({
+                    unitCategory: unitCategory,
+                    unitType: getQuoteFieldValue(quote, 'freight3-unit-type'),
+                    length: getQuoteFieldValue(quote, 'freight3-length'),
+                    width: getQuoteFieldValue(quote, 'freight3-width'),
+                    height: getQuoteFieldValue(quote, 'freight3-height'),
+                    dimensionUnit: getQuoteFieldValue(quote, 'freight3-dimension-unit') || 'm',
+                    unitWeight: getQuoteFieldValue(quote, 'freight3-unit-weight'),
+                    weightUnit: getQuoteFieldValue(quote, 'freight3-weight-unit') || 'kg',
+                    unitCount: getQuoteFieldValue(quote, 'freight3-unit-count'),
+                    description: getQuoteFieldValue(quote, 'freight3-description'),
+                    notes: getQuoteFieldValue(quote, 'freight3-notes')
+                });
+            }
+        }
+
+        if (!units.length) {
+            const summaryText = firstText(
+                quote.officeRemovalDescription,
+                quote['office-removal-description'],
+                quote.itemDescription,
+                ''
+            );
+            const parsedFromSummary = parseFreightUnitsFromSummaryText(summaryText);
+            parsedFromSummary.forEach(pushUnit);
+        }
+
+        return units;
+    }
+
+    function parseFreightUnitsFromSummaryText(summaryText) {
+        const text = String(summaryText || '').trim();
+        if (!text || !/unit category:/i.test(text)) return [];
+
+        const unit = {};
+        text.split('|').forEach(function (segment) {
+            const part = String(segment || '').trim();
+            const colonIndex = part.indexOf(':');
+            if (colonIndex <= 0) return;
+            const label = part.slice(0, colonIndex).trim().toLowerCase();
+            const value = part.slice(colonIndex + 1).trim();
+            if (!value) return;
+
+            if (label === 'unit category') unit.unitCategory = value;
+            else if (label === 'unit type') unit.unitType = value;
+            else if (label === 'dimensions') {
+                const match = value.match(/^(.+?)\s*x\s*(.+?)\s+([a-z]+)$/i);
+                if (match) {
+                    unit.length = match[1].trim();
+                    unit.width = match[2].trim();
+                    unit.dimensionUnit = match[3].trim();
+                }
+            } else if (label === 'height') {
+                const match = value.match(/^(.+?)\s+([a-z]+)$/i);
+                if (match) {
+                    unit.height = match[1].trim();
+                    if (!unit.dimensionUnit) unit.dimensionUnit = match[2].trim();
+                } else {
+                    unit.height = value;
+                }
+            } else if (label === 'weight per unit') {
+                const match = value.match(/^(.+?)\s+([a-z]+)$/i);
+                if (match) {
+                    unit.unitWeight = match[1].trim();
+                    unit.weightUnit = match[2].trim();
+                } else {
+                    unit.unitWeight = value;
+                }
+            } else if (label === 'quantity') {
+                const match = value.match(/^(\d+)/);
+                if (match) unit.unitCount = match[1];
+            } else if (label === 'cargo') unit.description = value;
+            else if (label === 'notes') unit.notes = value;
+        });
+
+        return Object.keys(unit).length ? [unit] : [];
+    }
+
+    function formatFreightListingLabel(unit, index) {
+        const categoryLabel = getFreightCategoryLabel(unit && unit.unitCategory);
+        const typeLabel = formatItemLabel(unit && unit.unitType);
+        const description = String(unit && unit.description || '').trim();
+        const detailParts = [];
+
+        if (typeLabel) detailParts.push(typeLabel);
+        if (description) detailParts.push('Cargo: ' + description);
+
+        const specificLabel = detailParts.length
+            ? categoryLabel + ' (' + detailParts.join(' · ') + ')'
+            : categoryLabel;
+
+        return 'Freight ' + (index + 1) + ': ' + specificLabel;
+    }
+
+    function buildFreightDetailRows(unit) {
+        const rows = [];
+        const addRow = function (label, value) {
+            const text = String(value || '').trim();
+            if (!text) return;
+            rows.push('<li><strong>' + escapeHtml(label) + ':</strong> ' + escapeHtml(text) + '</li>');
+        };
+
+        addRow('Category', getFreightCategoryLabel(unit && unit.unitCategory));
+        addRow('Unit type', formatItemLabel(unit && unit.unitType));
+
+        const length = String(unit && unit.length || '').trim();
+        const width = String(unit && unit.width || '').trim();
+        const dimensionUnit = String(unit && unit.dimensionUnit || 'm').trim() || 'm';
+        if (length && width) {
+            let dimensions = length + ' x ' + width + ' ' + dimensionUnit;
+            const height = String(unit && unit.height || '').trim();
+            if (height) dimensions += ' x ' + height + ' ' + dimensionUnit;
+            addRow('Dimensions', dimensions);
+        }
+
+        const unitWeight = String(unit && unit.unitWeight || '').trim();
+        if (unitWeight) {
+            addRow('Weight per unit', unitWeight + ' ' + (String(unit && unit.weightUnit || 'kg').trim() || 'kg'));
+        }
+
+        const unitCount = Math.max(1, parseInt(unit && unit.unitCount, 10) || 1);
+        addRow('Quantity', String(unitCount) + ' ' + getFreightUnitCountNoun(unit && unit.unitCategory));
+
+        addRow('Cargo description', unit && unit.description);
+        addRow('Access / loading notes', unit && unit.notes);
+
+        return rows;
+    }
+
+    function collectFreightServiceInventory(quote) {
+        const units = parseFreightUnitsFromQuote(quote);
+        if (!units.length) return null;
+
+        let selectedPickupFloors = [];
+        const rawPickupFloors = quote.selectedPickupFloors || quote.pickupFloors || quote.pickup_floors;
+        if (Array.isArray(rawPickupFloors)) {
+            selectedPickupFloors = rawPickupFloors;
+        } else if (typeof rawPickupFloors === 'string' && rawPickupFloors.trim()) {
+            try {
+                const parsedFloors = JSON.parse(rawPickupFloors);
+                if (Array.isArray(parsedFloors)) {
+                    selectedPickupFloors = parsedFloors;
+                }
+            } catch (_error) {
+                selectedPickupFloors = rawPickupFloors.split(',').map(function (entry) {
+                    return String(entry || '').trim();
+                }).filter(Boolean);
+            }
+        }
+
+        selectedPickupFloors = selectedPickupFloors
+            .map(function (floor) { return normalizeInventoryFloorKey(floor); })
+            .filter(Boolean);
+
+        const pickupFloor = selectedPickupFloors[0]
+            || normalizeInventoryFloorKey(firstText(quote.pickupFloorSelect, quote.pickupFloor, quote.fromFloor, 'Ground'));
+
+        const pickupMap = {};
+        if (!pickupMap[pickupFloor]) {
+            pickupMap[pickupFloor] = {};
+        }
+
+        units.forEach(function (unit, index) {
+            const label = formatFreightListingLabel(unit, index);
+            const qty = Math.max(1, parseInt(unit && unit.unitCount, 10) || 1);
+            pickupMap[pickupFloor][label] = (pickupMap[pickupFloor][label] || 0) + qty;
+        });
+
+        return {
+            pickup: pickupMap,
+            delivery: {}
+        };
+    }
+
+    function renderFreightInventoryMarkup(quote, units) {
+        const freightUnits = Array.isArray(units) ? units : parseFreightUnitsFromQuote(quote);
+        if (!freightUnits.length) {
+            return '<div class="empty-inventory">No freight units were saved for this listing.</div>';
+        }
+
+        const cards = freightUnits.map(function (unit, index) {
+            const title = formatFreightListingLabel(unit, index);
+            const rows = buildFreightDetailRows(unit);
+            const rowHtml = rows.length
+                ? '<ul class="inventory-overview-floor-items vehicle-detail-list">' + rows.join('') + '</ul>'
+                : '<div class="empty-inventory">No details recorded for this freight unit.</div>';
+
+            return '<div class="inventory-overview-floor-block vehicle-detail-card">' +
+                '<div class="inventory-overview-floor-title">' + escapeHtml(title) + '</div>' +
+                rowHtml +
+            '</div>';
+        }).join('');
+
+        return '<div class="inventory-overview-grid inventory-overview-grid-vehicle">' +
+            '<section class="inventory-overview-column">' +
+                '<h4 class="inventory-overview-column-title">Freight Units</h4>' +
+                '<div class="vehicle-detail-grid">' + cards + '</div>' +
+            '</section>' +
+        '</div>';
+    }
+
+    function isClearanceTransportListing(quote) {
+        const serviceType = normalizeListingServiceType(quote).toLowerCase();
+        return serviceType === 'clearance' || serviceType.includes('clearance');
+    }
+
+    function formatClearanceWeightLabel(weightRange, weightUnit) {
+        const range = String(weightRange || '').trim();
+        if (!range) return '';
+        const unit = String(weightUnit || 'kg').trim().toLowerCase() || 'kg';
+        if (range === '100+') return '100+ ' + unit;
+        return range.replace('-', '–') + ' ' + unit;
+    }
+
+    function parseClearanceSelectedItemsFromQuote(quote) {
+        const items = [];
+        const pushItems = function (source) {
+            if (!source) return;
+            let parsed = source;
+            if (typeof source === 'string') {
+                const raw = source.trim();
+                if (!raw) return;
+                try {
+                    parsed = JSON.parse(raw);
+                } catch (_error) {
+                    raw.split(/[;,\n]+/).forEach(function (part) {
+                        const label = String(part || '').trim();
+                        if (label) items.push(label);
+                    });
+                    return;
+                }
+            }
+            if (Array.isArray(parsed)) {
+                parsed.forEach(function (entry) {
+                    const label = String(entry || '').trim();
+                    if (label) items.push(label);
+                });
+            }
+        };
+
+        pushItems(firstText(
+            quote.clearanceSelectedItemsJson,
+            quote.clearance_selected_items_json,
+            quote.clearanceSelectedItems,
+            quote.clearance_selected_items,
+            ''
+        ));
+        if (!items.length) {
+            pushItems(getQuoteFieldValue(quote, 'clearance-selected-items-hidden'));
+        }
+
+        if (!items.length) {
+            const summaryText = firstText(
+                quote.officeRemovalDescription,
+                quote['office-removal-description'],
+                quote.itemDescription,
+                ''
+            );
+            const selectedMatch = summaryText.match(/selected inventory:\s*(.+)$/i);
+            if (selectedMatch && selectedMatch[1]) {
+                selectedMatch[1].split(',').forEach(function (part) {
+                    const label = String(part || '').trim();
+                    if (label) items.push(label);
+                });
+            }
+        }
+
+        const deduped = [];
+        const seen = new Set();
+        items.forEach(function (item) {
+            const key = item.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            deduped.push(item);
+        });
+        return deduped;
+    }
+
+    function parseClearanceCardsFromQuote(quote) {
+        const cards = [];
+        const pushCard = function (card) {
+            if (!card || typeof card !== 'object') return;
+            const description = String(card.description || card.clearanceDescription || '').trim();
+            const weight = String(card.weight || card.weightRange || '').trim();
+            const recycling = String(card.recycling || '').trim();
+            if (!description && !weight && !recycling) return;
+            cards.push(card);
+        };
+
+        const rawJson = firstText(quote.clearanceJson, quote.clearance_json, '');
+        if (rawJson) {
+            try {
+                const parsed = JSON.parse(rawJson);
+                if (Array.isArray(parsed)) {
+                    parsed.forEach(pushCard);
+                } else {
+                    pushCard(parsed);
+                }
+            } catch (_error) {
+                // Fall through to summary parsing.
+            }
+        }
+
+        if (!cards.length && Array.isArray(quote.clearanceCards)) {
+            quote.clearanceCards.forEach(pushCard);
+        }
+
+        if (!cards.length) {
+            const summaryText = firstText(
+                quote.officeRemovalDescription,
+                quote['office-removal-description'],
+                quote.itemDescription,
+                ''
+            );
+            if (summaryText) {
+                summaryText.split(/\s*\|\|\s*/).forEach(function (segment) {
+                    const part = String(segment || '').trim();
+                    if (!part || /^selected inventory:/i.test(part)) return;
+                    const itemMatch = part.match(/^item\s+(\d+)\s*:\s*(.+)$/i);
+                    if (!itemMatch) return;
+                    const details = itemMatch[2];
+                    const card = { index: parseInt(itemMatch[1], 10) || cards.length + 1 };
+                    details.split('|').forEach(function (piece) {
+                        const pieceText = String(piece || '').trim();
+                        const colonIndex = pieceText.indexOf(':');
+                        if (colonIndex <= 0) return;
+                        const label = pieceText.slice(0, colonIndex).trim().toLowerCase();
+                        const value = pieceText.slice(colonIndex + 1).trim();
+                        if (!value) return;
+                        if (label === 'weight range') {
+                            const weightMatch = value.match(/^(.+?)\s+(kg|lb)$/i);
+                            if (weightMatch) {
+                                card.weight = weightMatch[1].replace(/–/g, '-').trim();
+                                card.weightUnit = weightMatch[2].toLowerCase();
+                            } else {
+                                card.weight = value.replace(/–/g, '-').trim();
+                                card.weightUnit = 'kg';
+                            }
+                        } else if (label === 'clearance items') {
+                            card.description = value;
+                        } else if (label === 'recycling fee') {
+                            card.recycling = /included/i.test(value) ? 'yes' : 'no';
+                        } else if (label === 'notes') {
+                            card.notes = value;
+                        } else if (label === 'heavy items') {
+                            card.heavyItems = value;
+                        }
+                    });
+                    pushCard(card);
+                });
+            }
+        }
+
+        return cards;
+    }
+
+    function formatClearanceCardTitle(card, index) {
+        const description = String(card && card.description || '').trim();
+        const titleIndex = parseInt(card && card.index, 10) || (index + 1);
+        if (description) {
+            return 'Clearance ' + titleIndex + ': ' + description;
+        }
+        return 'Clearance ' + titleIndex;
+    }
+
+    function buildClearanceDetailRows(card) {
+        const rows = [];
+        const addRow = function (label, value) {
+            const text = String(value || '').trim();
+            if (!text) return;
+            rows.push('<li><strong>' + escapeHtml(label) + ':</strong> ' + escapeHtml(text) + '</li>');
+        };
+
+        addRow('Description', card && card.description);
+        addRow('Weight range', formatClearanceWeightLabel(card && card.weight, card && card.weightUnit));
+        const recycling = String(card && card.recycling || '').trim().toLowerCase();
+        if (recycling === 'yes') {
+            addRow('Recycling fee', 'Included');
+        } else if (recycling === 'no') {
+            addRow('Recycling fee', 'Not included');
+        }
+        addRow('Heavy items', card && card.heavyItems);
+        addRow('Notes', card && card.notes);
+
+        return rows;
+    }
+
+    function collectClearanceServiceInventory(quote) {
+        const cards = parseClearanceCardsFromQuote(quote);
+        const selectedItems = parseClearanceSelectedItemsFromQuote(quote);
+        if (!cards.length && !selectedItems.length) {
+            return null;
+        }
+
+        let selectedPickupFloors = [];
+        const rawPickupFloors = quote.selectedPickupFloors || quote.pickupFloors || quote.pickup_floors;
+        if (Array.isArray(rawPickupFloors)) {
+            selectedPickupFloors = rawPickupFloors;
+        } else if (typeof rawPickupFloors === 'string' && rawPickupFloors.trim()) {
+            try {
+                const parsedFloors = JSON.parse(rawPickupFloors);
+                if (Array.isArray(parsedFloors)) {
+                    selectedPickupFloors = parsedFloors;
+                }
+            } catch (_error) {
+                selectedPickupFloors = rawPickupFloors.split(',').map(function (entry) {
+                    return String(entry || '').trim();
+                }).filter(Boolean);
+            }
+        }
+
+        selectedPickupFloors = selectedPickupFloors
+            .map(function (floor) { return normalizeInventoryFloorKey(floor); })
+            .filter(Boolean);
+
+        const pickupFloor = selectedPickupFloors[0]
+            || normalizeInventoryFloorKey(firstText(quote.pickupFloorSelect, quote.pickupFloor, quote.fromFloor, 'Ground'));
+
+        const pickupMap = {};
+        if (!pickupMap[pickupFloor]) {
+            pickupMap[pickupFloor] = {};
+        }
+
+        cards.forEach(function (card, index) {
+            const label = formatClearanceCardTitle(card, index);
+            pickupMap[pickupFloor][label] = 1;
+        });
+
+        selectedItems.forEach(function (itemName) {
+            const label = formatItemLabel(itemName);
+            if (!label) return;
+            pickupMap[pickupFloor][label] = (pickupMap[pickupFloor][label] || 0) + 1;
+        });
+
+        return {
+            pickup: pickupMap,
+            delivery: {}
+        };
+    }
+
+    function renderClearanceInventoryMarkup(quote) {
+        const cards = parseClearanceCardsFromQuote(quote);
+        const selectedItems = parseClearanceSelectedItemsFromQuote(quote);
+        if (!cards.length && !selectedItems.length) {
+            return '<div class="empty-inventory">No clearance items were saved for this listing.</div>';
+        }
+
+        let html = '<div class="inventory-overview-grid inventory-overview-grid-vehicle">';
+
+        if (cards.length) {
+            const cardBlocks = cards.map(function (card, index) {
+                const title = formatClearanceCardTitle(card, index);
+                const rows = buildClearanceDetailRows(card);
+                const rowHtml = rows.length
+                    ? '<ul class="inventory-overview-floor-items vehicle-detail-list">' + rows.join('') + '</ul>'
+                    : '<div class="empty-inventory">No details recorded for this clearance item.</div>';
+                return '<div class="inventory-overview-floor-block vehicle-detail-card">' +
+                    '<div class="inventory-overview-floor-title">' + escapeHtml(title) + '</div>' +
+                    rowHtml +
+                '</div>';
+            }).join('');
+
+            html += '<section class="inventory-overview-column">' +
+                '<h4 class="inventory-overview-column-title">Clearance Items</h4>' +
+                '<div class="vehicle-detail-grid">' + cardBlocks + '</div>' +
+            '</section>';
+        }
+
+        if (selectedItems.length) {
+            const selectedRows = selectedItems.map(function (itemName) {
+                return '<li><span class="inventory-overview-item-name">' + escapeHtml(formatItemLabel(itemName)) + '</span>' +
+                    '<span class="inventory-overview-item-meta">x1</span></li>';
+            }).join('');
+
+            html += '<section class="inventory-overview-column">' +
+                '<h4 class="inventory-overview-column-title">Selected House Inventory</h4>' +
+                '<div class="inventory-overview-floor-block">' +
+                    '<ul class="inventory-overview-floor-items">' + selectedRows + '</ul>' +
+                '</div>' +
+            '</section>';
+        }
+
+        html += '</div>';
+        return html;
+    }
+
+    function parsePianosFromQuote(quote) {
+        const raw = firstText(quote.pianosJson, quote.pianos_json, '');
+        if (raw) {
+            try {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    return parsed.filter(function (entry) { return entry && typeof entry === 'object'; });
+                }
+            } catch (_error) {
+                // Fall through to legacy array field.
+            }
+        }
+
+        if (Array.isArray(quote.pianos)) {
+            return quote.pianos.filter(function (entry) { return entry && typeof entry === 'object'; });
+        }
+
+        return [];
+    }
+
+    function formatPianoListingLabel(piano, index) {
+        const pianoTypeLabels = {
+            'upright-spinet': 'Upright - Spinet',
+            'upright-console': 'Upright - Console',
+            'upright-studio': 'Upright - Studio',
+            'upright-full': 'Upright - Full',
+            'baby-grand': 'Baby Grand',
+            'medium-grand': 'Medium Grand',
+            'parlor-grand': 'Parlor / Living Grand',
+            'concert-grand': 'Concert Grand',
+            'digital': 'Digital Piano',
+            'keyboard': 'Keyboard',
+            'custom': 'Custom Piano',
+            'unknown': "I don't know"
+        };
+
+        const pianoSizeLabels = {
+            '145x60x100cm': '145 x 60 x 100 cm',
+            '150x65x110cm': '150 x 65 x 110 cm',
+            '150x65x120cm': '150 x 65 x 120 cm',
+            '155x65x130cm': '155 x 65 x 130 cm',
+            '155x150x102cm': '155 x 150 x 102 cm',
+            '170x152x102cm': '170 x 152 x 102 cm',
+            '190x152x102cm': '190 x 152 x 102 cm',
+            '275x158x102cm': '275 x 158 x 102 cm',
+            '140x40x90cm': '140 x 40 x 90 cm',
+            '130x35x15cm': '130 x 35 x 15 cm'
+        };
+
+        const baseType = pianoTypeLabels[String(piano && piano.type || '').trim()] || 'Piano';
+        let detailText = '';
+
+        if (piano && (piano.isCustomSize || piano.isCustomType)) {
+            const customDims = [piano.customLength, piano.customWidth, piano.customHeight]
+                .map(function (v) { return String(v || '').trim(); })
+                .filter(Boolean)
+                .join(' x ');
+            const customUnit = String(piano.customUnit || '').trim();
+            const customDimsText = customDims ? customDims + (customUnit ? ' ' + customUnit : '') : '';
+            const customName = String(piano.customName || '').trim();
+
+            if (customName && customDimsText) {
+                detailText = 'Model: ' + customName + ', Size: ' + customDimsText;
+            } else if (customName) {
+                detailText = 'Model: ' + customName;
+            } else if (customDimsText) {
+                detailText = 'Custom size: ' + customDimsText;
+            } else {
+                detailText = 'Custom size';
+            }
+        } else if (piano && String(piano.type || '').trim() === 'unknown') {
+            const approxDims = [piano.lengthMeasurement, piano.widthMeasurement, piano.heightMeasurement]
+                .map(function (v) { return String(v || '').trim(); })
+                .filter(Boolean)
+                .join(' x ');
+            detailText = approxDims ? 'Approx size: ' + approxDims + ' cm' : 'Details from uploaded media';
+        } else {
+            const sizeLabel = pianoSizeLabels[String(piano && piano.size || '').trim()] || '';
+            if (sizeLabel) {
+                detailText = 'Size: ' + sizeLabel;
+            }
+        }
+
+        const specificLabel = detailText ? baseType + ' (' + detailText + ')' : baseType;
+        return 'Piano ' + (index + 1) + ': ' + specificLabel;
+    }
+
+    function collectPianoServiceInventory(quote) {
+        const pianos = parsePianosFromQuote(quote);
+        if (!pianos.length) {
+            return null;
+        }
+
+        let selectedPickupFloors = [];
+        const rawPickupFloors = quote.selectedPickupFloors || quote.pickupFloors || quote.pickup_floors;
+        if (Array.isArray(rawPickupFloors)) {
+            selectedPickupFloors = rawPickupFloors;
+        } else if (typeof rawPickupFloors === 'string' && rawPickupFloors.trim()) {
+            try {
+                const parsedFloors = JSON.parse(rawPickupFloors);
+                if (Array.isArray(parsedFloors)) {
+                    selectedPickupFloors = parsedFloors;
+                }
+            } catch (_error) {
+                selectedPickupFloors = rawPickupFloors.split(',').map(function (entry) {
+                    return String(entry || '').trim();
+                }).filter(Boolean);
+            }
+        }
+
+        selectedPickupFloors = selectedPickupFloors
+            .map(function (floor) { return normalizeInventoryFloorKey(floor); })
+            .filter(Boolean);
+
+        const pickupFloor = selectedPickupFloors[0]
+            || normalizeInventoryFloorKey(firstText(quote.pickupFloorSelect, quote.pickupFloor, quote.fromFloor, 'Ground'));
+
+        const pickupMap = {};
+        if (!pickupMap[pickupFloor]) {
+            pickupMap[pickupFloor] = {};
+        }
+
+        pianos.forEach(function (piano, index) {
+            const label = formatPianoListingLabel(piano, index);
+            pickupMap[pickupFloor][label] = 1;
+        });
+
+        return {
+            pickup: pickupMap,
+            delivery: {},
+            isPiano: true
+        };
+    }
+
+    function getVehicleListingKind(quote) {
+        const serviceType = normalizeListingServiceType(quote).toLowerCase();
+        if (serviceType.includes('car/campervan') || serviceType.includes('car transport')) return 'car';
+        if (serviceType.includes('motorbike')) return 'motorbike';
+        if (serviceType.includes('boat')) return 'trailer';
+        if (serviceType.includes('caravan') || serviceType.includes('trailer')) return 'trailer';
+        return '';
+    }
+
+    function parseVehiclesJson(raw) {
+        if (!raw) return [];
+        if (Array.isArray(raw)) return raw;
+        if (typeof raw === 'string') {
+            try {
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_error) {
+                return [];
+            }
+        }
+        return [];
+    }
+
+    function collectVehiclesFromQuote(quote) {
+        const kind = getVehicleListingKind(quote);
+        if (!kind) {
+            return { kind: '', vehicles: [], baseLabel: 'Vehicle' };
+        }
+
+        const baseLabel = kind === 'car'
+            ? 'Car/Campervan'
+            : (kind === 'motorbike' ? 'Motorbike' : (normalizeListingServiceType(quote).toLowerCase().includes('boat') ? 'Boat' : 'Caravan/Trailer'));
+
+        let raw = '';
+        if (kind === 'car') {
+            raw = firstText(quote.carVehiclesJson, quote.carJson, quote.car_json, quote.carDetails);
+        } else if (kind === 'motorbike') {
+            raw = firstText(quote.motorbikeVehiclesJson, quote.motorbikeJson, quote.motorbike_json, quote.motorbikeDetails);
+        } else {
+            raw = firstText(
+                quote.trailerVehiclesJson,
+                quote.trailerJson,
+                quote.trailer_json,
+                quote.trailerDetails,
+                quote.campervanDetails
+            );
+        }
+
+        let vehicles = parseVehiclesJson(raw);
+        if (!vehicles.length && quote.vehicleDraftSnapshot && typeof quote.vehicleDraftSnapshot === 'object') {
+            vehicles = parseVehiclesJson(quote.vehicleDraftSnapshot[kind]);
+        }
+
+        const serviceType = normalizeListingServiceType(quote).toLowerCase();
+        return {
+            kind: kind,
+            vehicles: vehicles,
+            baseLabel: baseLabel,
+            isBoatService: serviceType === 'boats' || serviceType.includes('boat transport')
+        };
+    }
+
+    const VEHICLE_OPTION_LABELS = {
+        value: {
+            '0-1000': '€0 - €1,000',
+            '1000-2500': '€1,000 - €2,500',
+            '2501-5000': '€2,501 - €5,000',
+            '5001-10000': '€5,001 - €10,000',
+            '10001-15000': '€10,001 - €15,000',
+            '15001-20000': '€15,001 - €20,000',
+            '20000+': '€20,000+'
+        },
+        weight: {
+            'upto-1000': 'Up to 1000kg',
+            '1001-1250': '1001-1250kg',
+            '1251-1500': '1251-1500kg',
+            '1501-1750': '1501-1750kg',
+            '1751-2000': '1751-2000kg',
+            '2001+': '2001kg+',
+            custom: 'Other (approx.)'
+        },
+        length: {
+            'upto-2500': 'Up to 2500mm',
+            '2501-3000': '2501-3000mm',
+            '3001-3500': '3001-3500mm',
+            '3501-4000': '3501-4000mm',
+            '4001-4500': '4001-4500mm',
+            '4501+': '4501mm+',
+            custom: 'Other (approx.)'
+        },
+        type: {
+            car: 'Car',
+            campervan: 'Campervan'
+        },
+        condition: {
+            'brand-new': 'Brand New',
+            used: 'Used',
+            'used-non-runner': 'Non-runner'
+        },
+        method: {
+            towed: 'Towed',
+            driven: 'Driven',
+            'open-transporter': 'Open Transporter',
+            'enclosed-transport': 'Enclosed Transport'
+        }
+    };
+
+    function formatVehicleDetailValue(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        if (/^(yes|no|true|false)$/i.test(raw)) {
+            return raw.toLowerCase() === 'yes' || raw.toLowerCase() === 'true' ? 'Yes' : 'No';
+        }
+        if (VEHICLE_OPTION_LABELS.value[raw]
+            || VEHICLE_OPTION_LABELS.weight[raw]
+            || VEHICLE_OPTION_LABELS.length[raw]
+            || VEHICLE_OPTION_LABELS.type[raw]
+            || VEHICLE_OPTION_LABELS.condition[raw]
+            || VEHICLE_OPTION_LABELS.method[raw]) {
+            return VEHICLE_OPTION_LABELS.value[raw]
+                || VEHICLE_OPTION_LABELS.weight[raw]
+                || VEHICLE_OPTION_LABELS.length[raw]
+                || VEHICLE_OPTION_LABELS.type[raw]
+                || VEHICLE_OPTION_LABELS.condition[raw]
+                || VEHICLE_OPTION_LABELS.method[raw];
+        }
+        return raw
+            .replace(/_/g, ' ')
+            .replace(/\b([a-z])/g, function (match) { return match.toUpperCase(); });
+    }
+
+    function formatVehicleFieldValue(fieldKind, value, vehicle) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+
+        const map = VEHICLE_OPTION_LABELS[fieldKind] || {};
+        if (map[raw]) return map[raw];
+
+        if (fieldKind === 'weight' && raw === 'custom') {
+            const customValue = String(vehicle && vehicle.customWeight || '').trim();
+            if (!customValue) return 'Other (approx.)';
+            return 'Approx. ' + customValue + ' ' + String(vehicle.customWeightUnit || 'kg').trim();
+        }
+
+        if (fieldKind === 'length' && raw === 'custom') {
+            const customValue = String(vehicle && vehicle.customLength || '').trim();
+            if (!customValue) return 'Other (approx.)';
+            return customValue + ' ' + String(vehicle.customLengthUnit || 'mm').trim();
+        }
+
+        return formatVehicleDetailValue(raw);
+    }
+
+    function formatFloorDisplayLabel(floorName) {
+        const raw = String(floorName || '').trim();
+        if (!raw) return '';
+        if (/floor$/i.test(raw)) return raw;
+        return raw + ' Floor';
+    }
+
+    function resolveVehiclePickupFloorLabel(quote, vehicle) {
+        const vehicleFloors = Array.isArray(vehicle && vehicle.floors)
+            ? vehicle.floors.map(function (floor) { return String(floor || '').trim(); }).filter(Boolean)
+            : [];
+        if (vehicleFloors.length) {
+            return vehicleFloors.map(formatFloorDisplayLabel).join(', ');
+        }
+
+        const selectedPickup = quote.selectedPickupFloors;
+        if (Array.isArray(selectedPickup) && selectedPickup.length) {
+            return selectedPickup.map(formatFloorDisplayLabel).join(', ');
+        }
+
+        return formatFloorDisplayLabel(firstText(
+            quote.pickupFloorSelect,
+            quote.pickupFloor,
+            quote.fromFloor,
+            'Ground'
+        ));
+    }
+
+    function resolveVehicleDeliveryFloorLabel(quote, vehicle, kind, index) {
+        const deliveryFloors = new Set();
+
+        if (Array.isArray(vehicle && vehicle.floors)) {
+            vehicle.floors.forEach(function (floor) {
+                const clean = String(floor || '').trim();
+                if (clean) deliveryFloors.add(clean);
+            });
+        }
+
+        const makeModel = String(vehicle && vehicle.makeModel || '').trim().toLowerCase();
+        const vehicleId = vehicle && vehicle.id != null ? String(vehicle.id) : '';
+        const vehiclePrefix = kind ? (kind + '::') : '';
+        const labelPatterns = [];
+        if (makeModel) {
+            labelPatterns.push(makeModel);
+            labelPatterns.push('campervan / car ' + String(index + 1) + ': ' + makeModel);
+            labelPatterns.push('car ' + String(index + 1) + ': ' + makeModel);
+        }
+        if (vehicleId && vehiclePrefix) {
+            labelPatterns.push(vehiclePrefix + vehicleId);
+        }
+
+        const assignments = firstObject(
+            quote.itemFloorAssignments,
+            quote.deliveryItemFloorAssignments,
+            quote.deliveryFloorAssignments,
+            quote.floorAssignments
+        );
+
+        if (assignments && typeof assignments === 'object') {
+            Object.keys(assignments).forEach(function (assignmentKey) {
+                const keyLower = String(assignmentKey || '').toLowerCase();
+                const matchesVehicle = labelPatterns.some(function (pattern) {
+                    return pattern && keyLower.includes(String(pattern).toLowerCase());
+                });
+                if (!matchesVehicle) return;
+
+                const perFloor = assignments[assignmentKey];
+                if (!perFloor || typeof perFloor !== 'object') return;
+                Object.keys(perFloor).forEach(function (floorName) {
+                    const qty = parseInt(perFloor[floorName], 10) || 0;
+                    if (qty > 0 && floorName) deliveryFloors.add(floorName);
+                });
+            });
+        }
+
+        if (deliveryFloors.size) {
+            return Array.from(deliveryFloors)
+                .sort(compareFloorLabels)
+                .map(formatFloorDisplayLabel)
+                .join(', ');
+        }
+
+        const selectedDelivery = quote.selectedDeliveryFloors;
+        if (Array.isArray(selectedDelivery) && selectedDelivery.length) {
+            return selectedDelivery.map(formatFloorDisplayLabel).join(', ');
+        }
+
+        return formatFloorDisplayLabel(firstText(
+            quote.deliveryFloorSelect,
+            quote.deliveryFloor,
+            quote.toFloor,
+            ''
+        )) || 'Not assigned';
+    }
+
+    function buildVehicleDetailRows(quote, vehicle, kind, index, baseLabel, isBoatService) {
+        const rows = [];
+        const addRow = function (label, value) {
+            const text = String(value || '').trim();
+            if (!text) return;
+            rows.push('<li><strong>' + escapeHtml(label) + ':</strong> ' + escapeHtml(text) + '</li>');
+        };
+
+        const title = firstText(vehicle && vehicle.makeModel, baseLabel + ' ' + (index + 1));
+        addRow('Make & model', title);
+        addRow('Pickup floor', resolveVehiclePickupFloorLabel(quote, vehicle));
+        addRow('Delivery floor', resolveVehicleDeliveryFloorLabel(quote, vehicle, kind, index));
+        addRow('Year', vehicle && vehicle.year);
+        addRow('Estimated value', formatVehicleFieldValue('value', vehicle && vehicle.value, vehicle));
+        if (kind !== 'motorbike') {
+            addRow('Vehicle type', formatVehicleFieldValue('type', vehicle && vehicle.type, vehicle));
+        }
+        addRow('Condition', formatVehicleFieldValue('condition', vehicle && vehicle.condition, vehicle));
+        if (kind !== 'motorbike') {
+            addRow('Transport method', formatVehicleFieldValue('method', vehicle && vehicle.method, vehicle));
+        }
+        addRow(isBoatService ? 'Seaworthy' : 'Roadworthy', formatVehicleDetailValue(vehicle && vehicle.roadworthy));
+        if (kind !== 'trailer') {
+            addRow('Insurance', formatVehicleDetailValue(vehicle && vehicle.insurance));
+            addRow('Road tax', formatVehicleDetailValue(vehicle && vehicle.roadtax));
+        }
+        if (kind === 'trailer') {
+            addRow('Recently tested', formatVehicleDetailValue(vehicle && vehicle.tested));
+        }
+        addRow('Weight', formatVehicleFieldValue('weight', vehicle && vehicle.weight, vehicle));
+        addRow('Length', formatVehicleFieldValue('length', vehicle && vehicle.length, vehicle));
+
+        const mediaLabel = (function () {
+            const media = Array.isArray(vehicle && vehicle.media) ? vehicle.media : [];
+            if (!media.length) return '';
+            const photos = media.filter(function (item) {
+                return String(item && item.type || '').toLowerCase().startsWith('image/');
+            }).length;
+            const videos = media.filter(function (item) {
+                return String(item && item.type || '').toLowerCase().startsWith('video/');
+            }).length;
+            const parts = [];
+            if (photos > 0) parts.push(photos + ' photo' + (photos === 1 ? '' : 's'));
+            if (videos > 0) parts.push(videos + ' video' + (videos === 1 ? '' : 's'));
+            if (!parts.length) parts.push(media.length + ' file' + (media.length === 1 ? '' : 's'));
+            return parts.join(', ');
+        })();
+        addRow('Photos / videos', mediaLabel);
+
+        return rows;
+    }
+
+    function renderVehicleInventoryMarkup(quote, vehiclePayload) {
+        const vehicles = vehiclePayload && Array.isArray(vehiclePayload.vehicles) ? vehiclePayload.vehicles : [];
+        const baseLabel = firstText(vehiclePayload && vehiclePayload.baseLabel, 'Vehicle');
+        const isBoatService = !!vehiclePayload && !!vehiclePayload.isBoatService;
+
+        if (!vehicles.length) {
+            return '<div class="empty-inventory">No vehicle details were saved for this listing.</div>';
+        }
+
+        const cards = vehicles.map(function (vehicle, index) {
+            const title = firstText(vehicle && vehicle.makeModel, baseLabel + ' ' + (index + 1));
+            const rows = buildVehicleDetailRows(quote, vehicle, vehiclePayload.kind, index, baseLabel, isBoatService);
+            const rowHtml = rows.length
+                ? '<ul class="inventory-overview-floor-items vehicle-detail-list">' + rows.join('') + '</ul>'
+                : '<div class="empty-inventory">No details recorded for this vehicle.</div>';
+
+            return '<div class="inventory-overview-floor-block vehicle-detail-card">' +
+                '<div class="inventory-overview-floor-title">' + escapeHtml(title) + '</div>' +
+                rowHtml +
+            '</div>';
+        }).join('');
+
+        return '<div class="inventory-overview-grid inventory-overview-grid-vehicle">' +
+            '<section class="inventory-overview-column">' +
+                '<h4 class="inventory-overview-column-title">Vehicle Details</h4>' +
+                '<div class="vehicle-detail-grid">' + cards + '</div>' +
+            '</section>' +
+        '</div>';
+    }
+
+    function normalizeInventoryFloorKey(floorLabel) {
+        const raw = String(floorLabel || '').trim();
+        if (!raw) return 'Ground';
+        return raw.replace(/\s+floor$/i, '').trim() || 'Ground';
+    }
+
+    function collectVehicleServiceInventory(quote) {
+        const payload = collectVehiclesFromQuote(quote);
+        if (!payload.vehicles.length) return null;
+
+        const pickupMap = {};
+
+        payload.vehicles.forEach(function (vehicle, index) {
+            const label = firstText(vehicle && vehicle.makeModel, payload.baseLabel + ' ' + (index + 1));
+            const pickupFloor = resolveVehiclePickupFloorLabel(quote, vehicle) || 'Ground Floor';
+
+            pickupFloor.split(',').map(function (entry) { return entry.trim(); }).filter(Boolean).forEach(function (floorLabel) {
+                const floorKey = normalizeInventoryFloorKey(floorLabel);
+                if (!pickupMap[floorKey]) pickupMap[floorKey] = {};
+                pickupMap[floorKey][label] = 1;
+            });
+        });
+
+        return {
+            pickup: pickupMap,
+            delivery: {},
+            isVehicle: true
+        };
+    }
+
     function renderInventory(quote) {
         const inventoryEl = document.getElementById('details-inventory');
         const toggleBtn = document.getElementById('inventory-toggle-btn');
@@ -1410,15 +3072,29 @@
         if (!inventoryEl || !toggleBtn || !panelEl) return;
         let panelAnimationTimer = null;
 
-        const overviewInventory = collectOverviewStyleInventory(quote);
-        if (overviewInventory) {
-            inventoryEl.innerHTML = renderRoomSortedInventory(quote, overviewInventory);
+        let inventoryHtml = '';
+        if (isVehicleTransportListing(quote)) {
+            inventoryHtml = renderVehicleInventoryMarkup(quote, collectVehiclesFromQuote(quote));
+        } else if (isFreightTransportListing(quote)) {
+            inventoryHtml = renderFreightInventoryMarkup(quote);
+        } else if (isClearanceTransportListing(quote)) {
+            inventoryHtml = renderClearanceInventoryMarkup(quote);
+        } else if (isIndustrialTransportListing(quote)) {
+            inventoryHtml = renderIndustrialInventoryMarkup(quote);
+        } else if (isManPowerTransportListing(quote)) {
+            inventoryHtml = renderManpowerInventoryMarkup(quote);
+        } else if (isPetsTransportListing(quote)) {
+            inventoryHtml = renderPetsInventoryMarkup(quote);
         } else {
-            const groups = collectInventoryGroups(quote);
-            if (!groups.length) {
-                inventoryEl.innerHTML = '<div class="empty-inventory">No items specified for this listing.</div>';
+            const overviewInventory = collectOverviewStyleInventory(quote);
+            if (overviewInventory) {
+                inventoryHtml = renderRoomSortedInventory(quote, overviewInventory);
             } else {
-                inventoryEl.innerHTML = groups.map(function (group) {
+                const groups = collectInventoryGroups(quote);
+                if (!groups.length) {
+                    inventoryHtml = '<div class="empty-inventory">No items specified for this listing.</div>';
+                } else {
+                    inventoryHtml = groups.map(function (group) {
                     const roomBlocks = group.rooms.map(function (roomGroup) {
                         const itemsHtml = roomGroup.items.map(function (entry) {
                             const qtyLabel = Number(entry.qty) > 0 ? 'x' + String(entry.qty) + ' ' : '';
@@ -1438,9 +3114,12 @@
                         '<h4 class="inventory-floor-title">Pickup floor: ' + escapeHtml(group.pickupFloor) + '</h4>' +
                         roomBlocks +
                         '</article>';
-                }).join('');
+                    }).join('');
+                }
             }
         }
+
+        inventoryEl.innerHTML = inventoryHtml;
 
         closeInventoryPanel(true);
         toggleBtn.setAttribute('aria-expanded', 'false');
@@ -1623,7 +3302,64 @@
         const servicesEl = document.getElementById('details-services');
         if (!toggleBtn || !modalEl || !dialogEl || !dragHandleEl || !closeBtn || !resetBtn || !servicesEl) return;
 
-        const inventoryData = collectOverviewStyleInventory(quote);
+        const isVehicleListing = isVehicleTransportListing(quote);
+        const isPianoListing = isPianoTransportListing(quote);
+        const isFreightListing = isFreightTransportListing(quote);
+        const isClearanceListing = isClearanceTransportListing(quote);
+        const isIndustrialListing = isIndustrialTransportListing(quote);
+        const isManPowerListing = isManPowerTransportListing(quote);
+        const isPetsListing = isPetsTransportListing(quote);
+        let inventoryData = collectOverviewStyleInventory(quote);
+        if (isVehicleListing) {
+            inventoryData = collectVehicleServiceInventory(quote) || inventoryData;
+        } else if (isPianoListing) {
+            inventoryData = collectPianoServiceInventory(quote) || inventoryData;
+        } else if (isFreightListing) {
+            inventoryData = collectFreightServiceInventory(quote) || inventoryData;
+        } else if (isClearanceListing) {
+            inventoryData = collectClearanceServiceInventory(quote) || inventoryData;
+        } else if (isIndustrialListing) {
+            inventoryData = collectIndustrialServiceInventory(quote) || inventoryData;
+        } else if (isManPowerListing) {
+            inventoryData = collectManpowerServiceInventory(quote) || inventoryData;
+        } else if (isPetsListing) {
+            inventoryData = collectPetsServiceInventory(quote) || inventoryData;
+        } else if (!inventoryData || !Object.keys(inventoryData.pickup || {}).length) {
+            const vehicleInventory = collectVehicleServiceInventory(quote);
+            if (vehicleInventory) {
+                inventoryData = vehicleInventory;
+            } else {
+                const pianoInventory = collectPianoServiceInventory(quote);
+                if (pianoInventory) {
+                    inventoryData = pianoInventory;
+                } else {
+                    const freightInventory = collectFreightServiceInventory(quote);
+                    if (freightInventory) {
+                        inventoryData = freightInventory;
+                    } else {
+                        const clearanceInventory = collectClearanceServiceInventory(quote);
+                        if (clearanceInventory) {
+                            inventoryData = clearanceInventory;
+                        } else {
+                            const industrialInventory = collectIndustrialServiceInventory(quote);
+                            if (industrialInventory) {
+                                inventoryData = industrialInventory;
+                            } else {
+                                const manpowerInventory = collectManpowerServiceInventory(quote);
+                                if (manpowerInventory) {
+                                    inventoryData = manpowerInventory;
+                                } else {
+                                    const petsInventory = collectPetsServiceInventory(quote);
+                                    if (petsInventory) {
+                                        inventoryData = petsInventory;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         const services = buildServiceSelections(quote);
 
         modalEl._servicesInventoryData = inventoryData;
@@ -1734,7 +3470,9 @@
     }
 
     function buildServiceSelections(quote) {
-        const packingItems = parseServiceSelectionMap(quote.servicePackingItems);
+        const packingItems = parseServiceSelectionMap(
+            firstText(quote.servicePackingItems, quote.service_packing_items, quote['service-packing-items'], '')
+        );
         const disassemblyItems = parseServiceSelectionMap(quote.serviceDisassemblyItems);
         const assembleItems = parseServiceSelectionMap(quote.serviceAssembleItems);
         const storageItems = parseServiceSelectionMap(quote.serviceStorageItems);
@@ -1749,7 +3487,14 @@
             disassemblyQtyByFloorItem: createFloorItemQtyMap(disassemblyItems),
             assembleQtyByFloorItem: createFloorItemQtyMap(assembleItems),
             storageQtyByFloorItem: createFloorItemQtyMap(storageItems),
-            genericServiceLabels: collectGenericServiceLabels(quote)
+            genericServiceLabels: collectGenericServiceLabels(quote),
+            isVehicleListing: isVehicleTransportListing(quote),
+            vehicleJobPacking: quote.servicePacking,
+            vehicleJobDisassembly: quote.serviceDisassembly,
+            vehicleJobAssemble: quote.serviceAssembleAtArrival,
+            vehicleJobStorage: quote.serviceStorage,
+            packingBoxProvider: firstText(quote.servicePackingBoxProvider, quote['service-packing-box-provider'], ''),
+            isPartialPacking: isPackingYes && packingMode === 'selected'
         };
     }
 
@@ -1760,6 +3505,43 @@
             if (!clean) return;
             labels.push(clean);
         };
+        const appendYesOnly = function (label, rawValue) {
+            if (String(rawValue || '').trim().toLowerCase() !== 'yes') return;
+            append(label);
+        };
+        const appendMovers = function (label, modeValue, countValue) {
+            const mode = String(modeValue || '').trim().toLowerCase();
+            if (mode === 'unsure') {
+                append(label + ': Not sure yet');
+                return;
+            }
+            const count = String(countValue || '').trim();
+            if (count) append(label + ': ' + count);
+        };
+
+        appendYesOnly('Packing', quote.servicePacking);
+        appendYesOnly('Disassembly', quote.serviceDisassembly);
+        appendYesOnly('Assembly at arrival', quote.serviceAssembleAtArrival);
+        appendYesOnly('Storage', quote.serviceStorage);
+
+        const pickupMoversMode = String(quote.servicePickupMoversMode || '').trim().toLowerCase();
+        const deliveryMoversMode = String(quote.serviceDeliveryMoversMode || '').trim().toLowerCase();
+        if (pickupMoversMode === 'unsure') {
+            appendMovers('Pickup movers', quote.servicePickupMoversMode, quote.servicePickupMovers);
+        }
+        if (deliveryMoversMode === 'unsure') {
+            appendMovers('Delivery movers', quote.serviceDeliveryMoversMode, quote.serviceDeliveryMovers);
+        }
+        if (quote.servicePickupLoadingMethod) {
+            append('Pickup loading: ' + formatVehicleDetailValue(quote.servicePickupLoadingMethod));
+        }
+        if (quote.serviceDeliveryLoadingMethod) {
+            append('Delivery loading: ' + formatVehicleDetailValue(quote.serviceDeliveryLoadingMethod));
+        }
+        if (quote.serviceSpecialInstructions) {
+            append('Special instructions: ' + String(quote.serviceSpecialInstructions).trim());
+        }
+
         const listSources = [
             quote.additionalServices,
             quote.serviceSelections,
@@ -1798,7 +3580,11 @@
             const floorMap = new Map();
 
             sourceEntries.forEach(function (entry) {
-                const floorName = firstText(entry && entry[floorField], 'Not provided');
+                const rawFloor = entry && entry[floorField];
+                if (floorField === 'deliveryFloor' && !String(rawFloor || '').trim()) {
+                    return;
+                }
+                const floorName = firstText(rawFloor, floorField === 'deliveryFloor' ? 'Not provided' : 'Not provided');
                 const roomName = firstText(entry && entry.room, 'General');
                 const itemName = formatItemLabel(entry && entry.item);
                 if (!itemName) return;
@@ -1847,15 +3633,17 @@
             return floorMap;
         };
 
-        const hasEntries = entries.length > 0;
-        const pickupMap = hasEntries
-            ? buildFloorRoomMap(entries, 'pickupFloor')
-            : buildFloorRoomMapFromOverview(overviewInventory && overviewInventory.pickup);
-        const deliveryMap = hasEntries
-            ? buildFloorRoomMap(entries, 'deliveryFloor')
-            : buildFloorRoomMapFromOverview(overviewInventory && overviewInventory.delivery);
+        const pickupMap = overviewInventory && overviewInventory.pickup
+            ? buildFloorRoomMapFromOverview(overviewInventory.pickup)
+            : buildFloorRoomMap(entries, 'pickupFloor');
+        const deliveryMap = overviewInventory && overviewInventory.delivery
+            ? buildFloorRoomMapFromOverview(overviewInventory.delivery)
+            : buildFloorRoomMap(entries, 'deliveryFloor');
+        const storageMap = overviewInventory && overviewInventory.storage
+            ? buildFloorRoomMapFromOverview(overviewInventory.storage)
+            : buildFloorRoomMapFromOverview(collectStorageInventoryMap(quote));
 
-        if (!pickupMap.size && !deliveryMap.size) {
+        if (!pickupMap.size && !deliveryMap.size && !storageMap.size) {
             return '<div class="empty-inventory">No items specified for this listing.</div>';
         }
 
@@ -1896,7 +3684,11 @@
             }).join('');
         };
 
-        return '<div class="inventory-overview-grid inventory-overview-grid-compact">' +
+        const gridClass = storageMap.size
+            ? 'inventory-overview-grid inventory-overview-grid-compact inventory-overview-grid-has-storage'
+            : 'inventory-overview-grid inventory-overview-grid-compact';
+
+        return '<div class="' + gridClass + '">' +
             '<section class="inventory-overview-column">' +
                 '<h4 class="inventory-overview-column-title">Pickup Floor Inventory</h4>' +
                 renderColumn(pickupMap, 'No pickup inventory selected yet.') +
@@ -1905,19 +3697,20 @@
                 '<h4 class="inventory-overview-column-title">Delivery Floor Inventory</h4>' +
                 renderColumn(deliveryMap, 'No delivery floor assignments yet.') +
             '</section>' +
+            (storageMap.size
+                ? '<section class="inventory-overview-column">' +
+                    '<h4 class="inventory-overview-column-title">Storage Inventory</h4>' +
+                    renderColumn(storageMap, 'No items selected for storage.') +
+                '</section>'
+                : '') +
         '</div>';
     }
 
     function renderServicesMarkup(inventoryData, services, filteredTypes) {
+        const emptyTaggedMessage = '<div class="empty-inventory">No items with services selected for this listing.</div>';
+
         if (!inventoryData || !inventoryData.pickup || !Object.keys(inventoryData.pickup).length) {
-            if (services && Array.isArray(services.genericServiceLabels) && services.genericServiceLabels.length) {
-                return '<div class="services-modal-wrap"><div class="services-floor-block"><h4 class="services-floor-title">Selected services</h4><ul class="services-item-list">' +
-                    services.genericServiceLabels.map(function (label) {
-                        return '<li class="services-item-row"><div class="services-item-main"><span class="services-item-name">' + escapeHtml(String(label || '')) + '</span></div></li>';
-                    }).join('') +
-                    '</ul></div></div>';
-            }
-            return '<div class="empty-inventory">No inventory items available to map services yet.</div>';
+            return emptyTaggedMessage;
         }
 
         const floorNames = getOrderedFloorNames(Object.keys(inventoryData.pickup || {}));
@@ -1939,15 +3732,18 @@
                 .sort(function (a, b) { return String(a[0]).localeCompare(String(b[0]), undefined, { sensitivity: 'base' }); });
 
             const rows = floorItems.map(function (entry) {
-                const itemLabel = formatItemLabel(entry[0]);
+                const rawItemName = String(entry[0] || '').trim();
+                const itemLabel = formatItemLabel(rawItemName);
                 const qty = parseInt(entry[1], 10) || 0;
-                const badges = getItemServiceBadges(floorName, itemLabel, qty, services, quantityContext);
+                const badges = getItemServiceBadges(floorName, itemLabel, qty, services, quantityContext, rawItemName);
+
+                if (!badges.length) {
+                    return '';
+                }
 
                 badges.forEach(function (badge) {
                     if (badge && badge.type) badgeTypes.add(badge.type);
                 });
-
-                if (!badges.length) return '';
 
                 if (isFiltered) {
                     const hasFilteredBadge = badges.some(function (badge) {
@@ -1956,12 +3752,16 @@
                     if (!hasFilteredBadge) return '';
                 }
 
+                const tagsHtml = badges.length
+                    ? '<div class="services-item-tags">' + badges.map(renderServiceBadge).join('') + '</div>'
+                    : '';
+
                 return '<li class="services-item-row">' +
                     '<div class="services-item-main">' +
                         '<span class="services-item-name">' + escapeHtml(itemLabel) + '</span>' +
                         '<span class="services-item-qty">x' + escapeHtml(String(qty)) + '</span>' +
                     '</div>' +
-                    '<div class="services-item-tags">' + badges.map(renderServiceBadge).join('') + '</div>' +
+                    tagsHtml +
                 '</li>';
             }).filter(function (rowHtml) { return rowHtml; }).join('');
 
@@ -1974,14 +3774,7 @@
         }).join('');
 
         if (!floorBlocks) {
-            if (services && Array.isArray(services.genericServiceLabels) && services.genericServiceLabels.length) {
-                return '<div class="services-modal-wrap"><div class="services-floor-block"><h4 class="services-floor-title">Selected services</h4><ul class="services-item-list">' +
-                    services.genericServiceLabels.map(function (label) {
-                        return '<li class="services-item-row"><div class="services-item-main"><span class="services-item-name">' + escapeHtml(String(label || '')) + '</span></div></li>';
-                    }).join('') +
-                    '</ul></div></div>';
-            }
-            return '<div class="empty-inventory">No item-level services selected for this listing.</div>';
+            return emptyTaggedMessage;
         }
 
         const legendTypes = Array.from(badgeTypes);
@@ -1989,7 +3782,18 @@
             ? '<div class="services-legend">' + legendTypes.map(function (type) { return renderServiceBadgeFilter(type, filteredTypes); }).join('') + '</div>'
             : '';
 
-        return '<div class="services-modal-wrap">' + legend + floorBlocks + '</div>';
+        let packingMetaHtml = '';
+        if (services && services.isPartialPacking && badgeTypes.has('packing')) {
+            const provider = String(services.packingBoxProvider || '').trim();
+            if (provider) {
+                packingMetaHtml = '<p class="services-packing-meta">Partial packing · Materials: ' +
+                    escapeHtml(formatVehicleDetailValue(provider)) + '</p>';
+            } else {
+                packingMetaHtml = '<p class="services-packing-meta">Partial packing selected</p>';
+            }
+        }
+
+        return '<div class="services-modal-wrap">' + legend + packingMetaHtml + floorBlocks + '</div>';
     }
 
     function renderServiceBadgeFilter(badgeType, filteredTypes) {
@@ -2016,19 +3820,20 @@
         '</button>';
     }
 
-    function getItemServiceBadges(floorName, itemLabel, itemQty, services, quantityContext) {
-        const normalizedFloor = normalizeServiceFloorName(floorName);
-        const normalizedItem = normalizeServiceItemName(itemLabel);
-        const floorKey = normalizedFloor + '||' + normalizedItem;
+    function getItemServiceBadges(floorName, itemLabel, itemQty, services, quantityContext, rawItemName) {
         const qty = Math.max(0, parseInt(itemQty, 10) || 0);
 
-        const packingSelectedQty = services.isPackingAll
-            ? qty
-            : consumeQuantityAllocation(
-                quantityContext && quantityContext.remainingPackingQtyByItem,
-                normalizedItem,
-                qty
-            );
+        const normalizedFloor = normalizeServiceFloorName(floorName);
+        const normalizedItem = normalizeServiceItemName(rawItemName || itemLabel);
+        const floorKey = normalizedFloor + '||' + normalizedItem;
+
+        const packingSelectedQty = resolvePackingSelectedQty(
+            rawItemName || itemLabel,
+            itemLabel,
+            qty,
+            services,
+            quantityContext
+        );
         const disassemblySelectedQty = getSelectedQtyFromMap(services.disassemblyQtyByFloorItem, floorKey);
         const assembleSelectedQty = getSelectedQtyFromMap(services.assembleQtyByFloorItem, floorKey);
         const storageSelectedQty = getSelectedQtyFromMap(services.storageQtyByFloorItem, floorKey);
@@ -2158,8 +3963,60 @@
         }
 
         return base
+            .replace(/[-_]+/g, ' ')
             .replace(/\s+/g, ' ')
             .toLowerCase();
+    }
+
+    function getPianoNumberFromLabel(value) {
+        const match = String(value || '').match(/piano\s*(\d+)\s*:/i);
+        return match ? parseInt(match[1], 10) : null;
+    }
+
+    function resolvePackingSelectedQty(rawItemName, itemLabel, itemQty, services, quantityContext) {
+        const qty = Math.max(0, parseInt(itemQty, 10) || 0);
+        if (!services || services.isPackingAll) {
+            return qty;
+        }
+
+        const map = quantityContext && quantityContext.remainingPackingQtyByItem;
+        if (!map || typeof map.get !== 'function') {
+            return 0;
+        }
+
+        const candidateKeys = [];
+        [rawItemName, itemLabel].forEach(function (value) {
+            const normalized = normalizeServiceItemName(value);
+            if (normalized && candidateKeys.indexOf(normalized) === -1) {
+                candidateKeys.push(normalized);
+            }
+        });
+
+        for (let i = 0; i < candidateKeys.length; i++) {
+            const used = consumeQuantityAllocation(map, candidateKeys[i], qty);
+            if (used > 0) {
+                return used;
+            }
+        }
+
+        const pianoNum = getPianoNumberFromLabel(rawItemName || itemLabel);
+        if (!pianoNum) {
+            return 0;
+        }
+
+        const prefix = 'piano ' + pianoNum + ':';
+        const fuzzyKeys = Array.from(map.keys()).filter(function (key) {
+            return String(key || '').startsWith(prefix) && (parseInt(map.get(key), 10) || 0) > 0;
+        });
+
+        for (let j = 0; j < fuzzyKeys.length; j++) {
+            const used = consumeQuantityAllocation(map, fuzzyKeys[j], qty);
+            if (used > 0) {
+                return used;
+            }
+        }
+
+        return 0;
     }
 
     function renderServiceBadge(badge) {
@@ -2204,7 +4061,7 @@
                 floorEntries.forEach(function (entry) {
                     if (!entry || typeof entry !== 'object') return;
                     const mediaType = String(entry.mediaType || '').toLowerCase() === 'video' ? 'video' : 'photo';
-                    const previewSrc = firstText(entry.previewDataUrl, entry.previewUrl, entry.dataUrl, '');
+                    const previewSrc = firstText(entry.previewDataUrl, entry.previewUrl, entry.mediaUrl, entry.dataUrl, '');
                     entries.push({
                         floor: floorName,
                         mediaType: mediaType,
@@ -2223,14 +4080,131 @@
             entries.push({
                 floor: 'General',
                 mediaType: String(entry.mediaType || '').toLowerCase() === 'video' ? 'video' : 'photo',
-                previewSrc: firstText(entry.previewDataUrl, entry.previewUrl, entry.dataUrl, ''),
+                previewSrc: firstText(entry.previewDataUrl, entry.previewUrl, entry.mediaUrl, entry.dataUrl, ''),
                 fileName: firstText(entry.fileName, entry.name, 'Attachment'),
                 note: firstText(entry.note, entry.notes, ''),
                 itemName: ''
             });
         });
 
+        const vehiclePayload = collectVehiclesFromQuote(quote);
+        vehiclePayload.vehicles.forEach(function (vehicle, index) {
+            const vehicleLabel = firstText(vehicle && vehicle.makeModel, vehiclePayload.baseLabel + ' ' + (index + 1));
+            const mediaItems = Array.isArray(vehicle && vehicle.media) ? vehicle.media : [];
+            mediaItems.forEach(function (item) {
+                if (!item || typeof item !== 'object') return;
+                const previewSrc = firstText(item.previewDataUrl, item.previewUrl, item.mediaUrl, item.dataUrl, '');
+                if (!previewSrc) return;
+                const mimeType = String(item.type || item.mimeType || '').toLowerCase();
+                const mediaType = mimeType.startsWith('video') || String(item.mediaType || '').toLowerCase() === 'video'
+                    ? 'video'
+                    : 'photo';
+                entries.push({
+                    floor: vehicleLabel,
+                    mediaType: mediaType,
+                    previewSrc: previewSrc,
+                    fileName: firstText(item.fileName, item.name, 'Attachment'),
+                    note: firstText(item.note, item.notes, ''),
+                    itemName: vehicleLabel
+                });
+            });
+        });
+
+        const industrialDetails = parseIndustrialFromQuote(quote);
+        const industrialMedia = Array.isArray(industrialDetails && industrialDetails.media) ? industrialDetails.media : [];
+        industrialMedia.forEach(function (item) {
+            if (!item || typeof item !== 'object') return;
+            const previewSrc = firstText(item.previewDataUrl, item.previewUrl, item.mediaUrl, item.dataUrl, '');
+            if (!previewSrc) return;
+            const mimeType = String(item.type || item.mimeType || '').toLowerCase();
+            const mediaType = mimeType.startsWith('video') || String(item.mediaType || '').toLowerCase() === 'video'
+                ? 'video'
+                : 'photo';
+            entries.push({
+                floor: 'Industrial item 1',
+                mediaType: mediaType,
+                previewSrc: previewSrc,
+                fileName: firstText(item.fileName, item.name, 'Attachment'),
+                note: firstText(item.note, item.notes, industrialDetails && industrialDetails.description, ''),
+                itemName: 'Industrial item 1'
+            });
+        });
+
+        const manpowerDetails = parseManpowerFromQuote(quote);
+        const manpowerMedia = Array.isArray(manpowerDetails && manpowerDetails.media) ? manpowerDetails.media : [];
+        manpowerMedia.forEach(function (item) {
+            if (!item || typeof item !== 'object') return;
+            const previewSrc = firstText(item.previewDataUrl, item.previewUrl, item.mediaUrl, item.dataUrl, '');
+            if (!previewSrc) return;
+            const mimeType = String(item.type || item.mimeType || '').toLowerCase();
+            const mediaType = mimeType.startsWith('video') || String(item.mediaType || '').toLowerCase() === 'video'
+                ? 'video'
+                : 'photo';
+            entries.push({
+                floor: 'Job 1',
+                mediaType: mediaType,
+                previewSrc: previewSrc,
+                fileName: firstText(item.fileName, item.name, 'Attachment'),
+                note: firstText(item.note, item.notes, manpowerDetails && manpowerDetails.description, ''),
+                itemName: 'Job 1'
+            });
+        });
+
+        parsePetsFromQuote(quote).forEach(function (pet, index) {
+            const petLabel = getPetDisplayTitle(pet, index);
+            const petMedia = Array.isArray(pet && pet.media) ? pet.media : [];
+            petMedia.forEach(function (item) {
+                if (!item || typeof item !== 'object') return;
+                const previewSrc = firstText(item.previewDataUrl, item.previewUrl, item.mediaUrl, item.dataUrl, '');
+                if (!previewSrc) return;
+                const mimeType = String(item.type || item.mimeType || '').toLowerCase();
+                const mediaType = mimeType.startsWith('video') || String(item.mediaType || '').toLowerCase() === 'video'
+                    ? 'video'
+                    : 'photo';
+                entries.push({
+                    floor: petLabel,
+                    mediaType: mediaType,
+                    previewSrc: previewSrc,
+                    fileName: firstText(item.fileName, item.name, 'Attachment'),
+                    note: firstText(item.note, item.notes, pet && pet.otherName, ''),
+                    itemName: petLabel
+                });
+            });
+        });
+
         return entries;
+    }
+
+    function parseStorageItemSelectionKey(key) {
+        const parts = String(key || '').split('||');
+        if (parts.length < 2) return null;
+        const floor = String(parts[0] || '').trim();
+        const itemName = formatItemLabel(parts.slice(1).join('||'));
+        if (!floor || !itemName) return null;
+        return { floor: floor, itemName: itemName };
+    }
+
+    function collectStorageInventoryMap(quote) {
+        const storageMap = {};
+        const storageEnabled = String(
+            firstText(quote.serviceStorage, quote.service_storage, quote.storage)
+        ).trim().toLowerCase() === 'yes';
+        if (!storageEnabled) return storageMap;
+
+        const selections = parseServiceSelectionMap(
+            firstText(quote.serviceStorageItems, quote.service_storage_items)
+        );
+
+        Object.entries(selections).forEach(function (entry) {
+            const parsed = parseStorageItemSelectionKey(entry[0]);
+            const qty = Math.max(0, parseInt(entry[1], 10) || 0);
+            if (!parsed || qty <= 0) return;
+            const cleanFloor = firstText(parsed.floor, 'Ground').trim();
+            if (!storageMap[cleanFloor]) storageMap[cleanFloor] = {};
+            storageMap[cleanFloor][parsed.itemName] = (storageMap[cleanFloor][parsed.itemName] || 0) + qty;
+        });
+
+        return storageMap;
     }
 
     function collectOverviewStyleInventory(quote) {
@@ -2282,7 +4256,8 @@
 
         if (assignments && typeof assignments === 'object') {
             Object.keys(assignments).forEach(function (itemKey) {
-                const baseName = normalizeAssignmentItemKey(itemKey);
+                const keyParts = getAssignmentKeyParts(itemKey);
+                const baseName = keyParts.itemName;
                 const perFloor = assignments[itemKey];
                 if (!perFloor || typeof perFloor !== 'object' || !baseName) return;
 
@@ -2294,13 +4269,94 @@
 
         populatePickupInventoryFallback(quote, pickupMap, deliveryMap, addToFloorMap);
 
+        if (!Object.keys(pickupMap).length && isPianoTransportListing(quote)) {
+            const pianoInventory = collectPianoServiceInventory(quote);
+            if (pianoInventory && pianoInventory.pickup) {
+                Object.keys(pianoInventory.pickup).forEach(function (floorName) {
+                    const floorItems = pianoInventory.pickup[floorName];
+                    if (!floorItems || typeof floorItems !== 'object') return;
+                    Object.keys(floorItems).forEach(function (itemName) {
+                        addToFloorMap(pickupMap, floorName, itemName, floorItems[itemName]);
+                    });
+                });
+            }
+        }
+
+        if (!Object.keys(pickupMap).length && isFreightTransportListing(quote)) {
+            const freightInventory = collectFreightServiceInventory(quote);
+            if (freightInventory && freightInventory.pickup) {
+                Object.keys(freightInventory.pickup).forEach(function (floorName) {
+                    const floorItems = freightInventory.pickup[floorName];
+                    if (!floorItems || typeof floorItems !== 'object') return;
+                    Object.keys(floorItems).forEach(function (itemName) {
+                        addToFloorMap(pickupMap, floorName, itemName, floorItems[itemName]);
+                    });
+                });
+            }
+        }
+
+        if (!Object.keys(pickupMap).length && isClearanceTransportListing(quote)) {
+            const clearanceInventory = collectClearanceServiceInventory(quote);
+            if (clearanceInventory && clearanceInventory.pickup) {
+                Object.keys(clearanceInventory.pickup).forEach(function (floorName) {
+                    const floorItems = clearanceInventory.pickup[floorName];
+                    if (!floorItems || typeof floorItems !== 'object') return;
+                    Object.keys(floorItems).forEach(function (itemName) {
+                        addToFloorMap(pickupMap, floorName, itemName, floorItems[itemName]);
+                    });
+                });
+            }
+        }
+
+        if (!Object.keys(pickupMap).length && isIndustrialTransportListing(quote)) {
+            const industrialInventory = collectIndustrialServiceInventory(quote);
+            if (industrialInventory && industrialInventory.pickup) {
+                Object.keys(industrialInventory.pickup).forEach(function (floorName) {
+                    const floorItems = industrialInventory.pickup[floorName];
+                    if (!floorItems || typeof floorItems !== 'object') return;
+                    Object.keys(floorItems).forEach(function (itemName) {
+                        addToFloorMap(pickupMap, floorName, itemName, floorItems[itemName]);
+                    });
+                });
+            }
+        }
+
+        if (!Object.keys(pickupMap).length && isManPowerTransportListing(quote)) {
+            const manpowerInventory = collectManpowerServiceInventory(quote);
+            if (manpowerInventory && manpowerInventory.pickup) {
+                Object.keys(manpowerInventory.pickup).forEach(function (floorName) {
+                    const floorItems = manpowerInventory.pickup[floorName];
+                    if (!floorItems || typeof floorItems !== 'object') return;
+                    Object.keys(floorItems).forEach(function (itemName) {
+                        addToFloorMap(pickupMap, floorName, itemName, floorItems[itemName]);
+                    });
+                });
+            }
+        }
+
+        if (!Object.keys(pickupMap).length && isPetsTransportListing(quote)) {
+            const petsInventory = collectPetsServiceInventory(quote);
+            if (petsInventory && petsInventory.pickup) {
+                Object.keys(petsInventory.pickup).forEach(function (floorName) {
+                    const floorItems = petsInventory.pickup[floorName];
+                    if (!floorItems || typeof floorItems !== 'object') return;
+                    Object.keys(floorItems).forEach(function (itemName) {
+                        addToFloorMap(pickupMap, floorName, itemName, floorItems[itemName]);
+                    });
+                });
+            }
+        }
+
+        const storageMap = collectStorageInventoryMap(quote);
         const hasPickup = Object.keys(pickupMap).length > 0;
         const hasDelivery = Object.keys(deliveryMap).length > 0;
-        if (!hasPickup && !hasDelivery) return null;
+        const hasStorage = Object.keys(storageMap).length > 0;
+        if (!hasPickup && !hasDelivery && !hasStorage) return null;
 
         return {
             pickup: pickupMap,
-            delivery: deliveryMap
+            delivery: deliveryMap,
+            storage: storageMap
         };
     }
 
@@ -2333,7 +4389,12 @@
             }).join('');
         };
 
-        return '<div class="inventory-overview-grid">' +
+        const hasStorage = inventoryData.storage && Object.keys(inventoryData.storage).length > 0;
+        const gridClass = hasStorage
+            ? 'inventory-overview-grid inventory-overview-grid-has-storage'
+            : 'inventory-overview-grid';
+
+        return '<div class="' + gridClass + '">' +
             '<section class="inventory-overview-column">' +
                 '<h4 class="inventory-overview-column-title">Pickup Floor Inventory</h4>' +
                 renderFloorBlocks(inventoryData.pickup, 'No pickup inventory selected yet.') +
@@ -2342,6 +4403,12 @@
                 '<h4 class="inventory-overview-column-title">Delivery Floor Inventory</h4>' +
                 renderFloorBlocks(inventoryData.delivery, 'No delivery floor assignments yet.') +
             '</section>' +
+            (hasStorage
+                ? '<section class="inventory-overview-column">' +
+                    '<h4 class="inventory-overview-column-title">Storage Inventory</h4>' +
+                    renderFloorBlocks(inventoryData.storage, 'No items selected for storage.') +
+                '</section>'
+                : '') +
         '</div>';
     }
 
@@ -2651,6 +4718,62 @@
             );
         });
 
+        if (!entries.length) {
+            const multiFloorInventory = firstObject(
+                quote.multiFloorInventory,
+                quote.multi_floor_inventory,
+                quote.houseInventory && quote.houseInventory.multiFloorInventory
+            );
+            if (multiFloorInventory && typeof multiFloorInventory === 'object') {
+                Object.keys(multiFloorInventory).forEach(function (pickupFloor) {
+                    const floorItems = multiFloorInventory[pickupFloor];
+                    if (!floorItems || typeof floorItems !== 'object') return;
+                    Object.keys(floorItems).forEach(function (itemKey) {
+                        const qty = parseInt(floorItems[itemKey], 10) || 0;
+                        if (qty <= 0) return;
+                        const cleanItem = formatItemLabel(itemKey);
+                        if (!cleanItem) return;
+                        entries.push({
+                            room: 'General',
+                            item: cleanItem,
+                            qty: qty,
+                            pickupFloor: firstText(pickupFloor, quote.pickupFloorSelect, quote.pickupFloor, 'Ground'),
+                            deliveryFloor: ''
+                        });
+                    });
+                });
+            }
+
+            const assignments = firstObject(
+                quote.itemFloorAssignments,
+                quote.deliveryItemFloorAssignments,
+                quote.deliveryFloorAssignments,
+                quote.floorAssignments,
+                quote.houseInventory && quote.houseInventory.itemFloorAssignments
+            );
+            if (assignments && typeof assignments === 'object') {
+                Object.keys(assignments).forEach(function (assignmentKey) {
+                    const keyParts = getAssignmentKeyParts(assignmentKey);
+                    const itemName = keyParts.itemName;
+                    if (!itemName) return;
+                    const pickupFloor = firstText(
+                        keyParts.sourceFloor,
+                        resolvePickupFloorForItem(quote, itemName),
+                        quote.pickupFloorSelect,
+                        quote.pickupFloor,
+                        'Ground'
+                    );
+                    const perFloor = assignments[assignmentKey];
+                    if (!perFloor || typeof perFloor !== 'object') return;
+                    Object.keys(perFloor).forEach(function (deliveryFloor) {
+                        const qty = parseInt(perFloor[deliveryFloor], 10) || 0;
+                        if (qty <= 0) return;
+                        addEntry('General', itemName, qty, pickupFloor, deliveryFloor);
+                    });
+                });
+            }
+        }
+
         return entries;
     }
 
@@ -2858,12 +4981,9 @@
             });
         }
 
-        if (Array.isArray(quote.pets)) {
-            quote.pets.forEach(function (pet) {
-                const label = (pet && pet.animalType) ? pet.animalType : 'Pet';
-                addItem(label, (pet && pet.quantity) ? pet.quantity : '');
-            });
-        }
+        parsePetsFromQuote(quote).forEach(function (pet, index) {
+            addItem(getPetDisplayTitle(pet, index), '');
+        });
 
         return items;
     }
@@ -3626,8 +5746,32 @@
     function normalizeAssignmentItemKey(itemKey) {
         const raw = String(itemKey || '').trim();
         if (!raw) return '';
-        const parts = raw.split('||');
-        return formatItemLabel(parts[parts.length - 1] || raw);
+        if (!raw.includes('||')) {
+            return formatItemLabel(raw);
+        }
+        const parts = raw.split('||').map(function (part) {
+            return String(part || '').trim();
+        }).filter(Boolean);
+        if (!parts.length) return '';
+        // Step 5 keys are itemName||sourcePickupFloor (e.g. "Console Table||Ground").
+        return formatItemLabel(parts[0]);
+    }
+
+    function getAssignmentKeyParts(itemKey) {
+        const raw = String(itemKey || '').trim();
+        if (!raw) {
+            return { itemName: '', sourceFloor: '' };
+        }
+        if (!raw.includes('||')) {
+            return { itemName: formatItemLabel(raw), sourceFloor: '' };
+        }
+        const parts = raw.split('||').map(function (part) {
+            return String(part || '').trim();
+        }).filter(Boolean);
+        return {
+            itemName: formatItemLabel(parts[0] || raw),
+            sourceFloor: parts[1] || ''
+        };
     }
 
     function populatePickupInventoryFallback(quote, pickupMap, deliveryMap, addToFloorMap) {

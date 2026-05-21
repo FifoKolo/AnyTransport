@@ -1316,6 +1316,52 @@ body.listing-details--customer .details-workspace {
     gap: 10px;
 }
 
+.inventory-overview-grid-has-storage {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.inventory-overview-grid-vehicle {
+    grid-template-columns: 1fr;
+}
+
+.inventory-overview-grid-vehicle .vehicle-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.inventory-overview-grid-vehicle .vehicle-detail-card {
+    margin-bottom: 0;
+    height: 100%;
+}
+
+.inventory-overview-grid-vehicle .vehicle-detail-list {
+    grid-template-columns: 1fr;
+}
+
+@media (max-width: 720px) {
+    .inventory-overview-grid-vehicle .vehicle-detail-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.services-transport-summary {
+    margin-bottom: 12px;
+}
+
+.services-item-tags-block {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 4px 2px 8px;
+}
+
+.service-badge-vehicle-job {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e3a8a;
+}
+
 .inventory-overview-room-block {
     border-top: 1px solid #e7eff6;
     margin-top: 6px;
@@ -1435,6 +1481,17 @@ body.listing-details--customer .details-workspace {
     border: 1px solid #dce8f2;
     border-radius: 10px;
     background: #f8fbff;
+}
+
+.services-packing-meta {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border: 1px solid #dbeafe;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: #1e40af;
+    font-size: 0.88rem;
+    font-weight: 600;
 }
 
 .services-floor-block {
