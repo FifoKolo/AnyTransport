@@ -7,7 +7,7 @@
     <title>My profile - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260522-1">
-    <link rel="stylesheet" href="css/dashboard.css?v=20260522-1">
+    <link rel="stylesheet" href="css/dashboard.css?v=20260522-2">
 </head>
 <body>
     <nav class="navbar">
@@ -92,12 +92,13 @@
                             <th>Submitted</th>
                             <th>Service</th>
                             <th>Route</th>
+                            <th>Budget</th>
                             <th>Status</th>
                             <th>Bids / actions</th>
                         </tr>
                     </thead>
                     <tbody id="customer-quotes-body">
-                        <tr><td colspan="6" class="customer-empty-cell">Loading…</td></tr>
+                        <tr><td colspan="7" class="customer-empty-cell">Loading…</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -139,10 +140,40 @@
         </section>
     </main>
 
+    <div id="customer-budget-modal" class="customer-budget-modal" role="dialog" aria-modal="true" aria-labelledby="customer-budget-modal-title" hidden>
+        <div class="customer-budget-dialog">
+            <h2 id="customer-budget-modal-title">Edit budget</h2>
+            <p class="customer-budget-intro">Update what you are willing to pay for this request. Providers see this on your listing.</p>
+            <p id="customer-budget-form-label" class="customer-budget-form-label"></p>
+            <div class="customer-budget-mode-row">
+                <button type="button" class="customer-budget-mode-btn" data-mode="flexible">Flexible</button>
+                <button type="button" class="customer-budget-mode-btn" data-mode="up_to">Up to amount</button>
+                <button type="button" class="customer-budget-mode-btn" data-mode="range">Range</button>
+                <button type="button" class="customer-budget-mode-btn" data-mode="">No budget set</button>
+            </div>
+            <input type="hidden" id="customer-budget-edit-mode" value="">
+            <div id="customer-budget-edit-up-to" class="customer-budget-panel" hidden>
+                <label for="customer-budget-edit-max-only">Maximum (€)</label>
+                <input type="number" id="customer-budget-edit-max-only" min="0" step="1" placeholder="e.g. 500">
+            </div>
+            <div id="customer-budget-edit-range" class="customer-budget-panel" hidden>
+                <label for="customer-budget-edit-min">Minimum (€)</label>
+                <input type="number" id="customer-budget-edit-min" min="0" step="1" placeholder="e.g. 300">
+                <label for="customer-budget-edit-max">Maximum (€)</label>
+                <input type="number" id="customer-budget-edit-max" min="0" step="1" placeholder="e.g. 600">
+            </div>
+            <div class="customer-budget-dialog-actions">
+                <button type="button" class="btn btn-primary" id="customer-budget-save-btn">Save budget</button>
+                <button type="button" class="btn btn-outline" id="customer-budget-cancel-btn">Cancel</button>
+                <span id="customer-budget-save-status" class="customer-budget-save-status" aria-live="polite"></span>
+            </div>
+        </div>
+    </div>
+
     <script src="js/cache-maintenance.js?v=20260322-2"></script>
-    <script src="js/auth.js?v=20260503-7"></script>
+    <script src="js/auth.js?v=20260522-2"></script>
     <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/site-navbar.js?v=20260519-2"></script>
-    <script src="js/customer-dashboard.js?v=20260522-1"></script>
+    <script src="js/customer-dashboard.js?v=20260522-2"></script>
 </body>
 </html>

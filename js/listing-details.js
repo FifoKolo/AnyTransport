@@ -735,6 +735,7 @@
         const moveDate = getMoveDate(quote);
         const preferredTimeSummary = getPreferredTimeSummary(quote);
         const storageSummary = getStorageSummary(quote);
+        const budgetSummary = getCustomerBudgetSummary(quote);
         const averageVolumeSummary = isProvider ? getAverageVolumeSummary(quote) : '';
         const stats = [
             buildModernStat('Collection', collection, '', 'Lift: ' + pickupLiftStatus),
@@ -747,6 +748,7 @@
             buildModernStat('Pickup movers', pickupMovers),
             buildModernStat('Delivery movers', deliveryMovers),
             buildModernStat('Storage', storageSummary),
+            buildModernStat('Customer budget', budgetSummary || 'Not provided'),
             buildModernStat('User', username)
         ];
 
@@ -5897,6 +5899,29 @@
         const value = firstText(quote.transportDate, quote.preferredDate, quote.moveDate, quote.date);
         if (!value) return 'Not provided';
         return formatDate(value);
+    }
+
+    function getCustomerBudgetSummary(quote) {
+        if (!quote || typeof quote !== 'object') return '';
+        if (typeof window.formatCustomerBudgetLabel === 'function') {
+            return window.formatCustomerBudgetLabel(quote);
+        }
+        const mode = String(quote.customerBudgetMode || '').trim();
+        const parseAmount = (v) => {
+            const n = parseFloat(String(v == null ? '' : v).replace(/,/g, ''));
+            return Number.isFinite(n) && n >= 0 ? n : null;
+        };
+        const min = parseAmount(quote.customerBudgetMin);
+        const max = parseAmount(quote.customerBudgetMax);
+        const euro = (n) => '€' + Math.round(n).toLocaleString('en-IE');
+        if (mode === 'flexible') return 'Flexible / open to quotes';
+        if (mode === 'up_to' && max != null) return 'Up to ' + euro(max);
+        if (mode === 'range' && min != null && max != null) {
+            return min === max ? euro(min) : euro(min) + ' – ' + euro(max);
+        }
+        if (max != null) return 'Up to ' + euro(max);
+        if (min != null) return 'From ' + euro(min);
+        return '';
     }
 
     function getMoversRequired(quote) {

@@ -50,6 +50,256 @@
         return (a || '—') + ' → ' + (b || '—');
     }
 
+    function parseBudgetAmount(value) {
+        const n = parseFloat(String(value == null ? '' : value).replace(/,/g, ''));
+        return Number.isFinite(n) && n >= 0 ? n : null;
+    }
+
+    function formatEuro(amount) {
+        const n = parseBudgetAmount(amount);
+        if (n == null) return '';
+        return '€' + Math.round(n).toLocaleString('en-IE');
+    }
+
+    function formatCustomerBudgetLabel(q) {
+        if (!q || typeof q !== 'object') return '';
+        const mode = String(q.customerBudgetMode || '').trim();
+        const min = parseBudgetAmount(q.customerBudgetMin);
+        const max = parseBudgetAmount(q.customerBudgetMax);
+        if (mode === 'flexible') return 'Flexible / open to quotes';
+        if (mode === 'up_to' && max != null) return 'Up to ' + formatEuro(max);
+        if (mode === 'range' && min != null && max != null) {
+            if (Math.abs(min - max) < 0.01) return formatEuro(min);
+            return formatEuro(min) + ' – ' + formatEuro(max);
+        }
+        if (max != null) return 'Up to ' + formatEuro(max);
+        if (min != null) return 'From ' + formatEuro(min);
+        return '';
+    }
+
+    function isSubdomainDashboardPath() {
+        try {
+            return String(window.location.pathname || '').indexOf('subdomain-dashboard') >= 0;
+        } catch (_e) {
+            return false;
+        }
+    }
+
+    function getListingDetailsPage() {
+        return isSubdomainDashboardPath() ? '../listing-details.html' : 'listing-details.html';
+    }
+
+    function getCreateJobPage() {
+        return isSubdomainDashboardPath() ? '../create-job.html' : 'create-job.html';
+    }
+
+    function getListingViewHref(q) {
+        const base = getListingDetailsPage();
+        const id = String(q && q.id || '').trim();
+        const formId = String(q && q.formId || '').trim();
+        if (id) {
+            return base + '?quoteId=' + encodeURIComponent(id);
+        }
+        if (formId) {
+            return base + '?id=' + encodeURIComponent(formId);
+        }
+        return '';
+    }
+
+    function buildBudgetFieldsFromModal() {
+        const mode = String(document.getElementById('customer-budget-edit-mode')?.value || '').trim();
+        const fields = {
+            customerBudgetMode: mode,
+            customerBudgetMin: null,
+            customerBudgetMax: null
+        };
+        if (mode === 'up_to') {
+            const maxVal = parseBudgetAmount(document.getElementById('customer-budget-edit-max-only')?.value);
+            if (maxVal != null) fields.customerBudgetMax = maxVal;
+        } else if (mode === 'range') {
+            const minVal = parseBudgetAmount(document.getElementById('customer-budget-edit-min')?.value);
+            const maxVal = parseBudgetAmount(document.getElementById('customer-budget-edit-max')?.value);
+            if (minVal != null) fields.customerBudgetMin = minVal;
+            if (maxVal != null) fields.customerBudgetMax = maxVal;
+        }
+        return fields;
+    }
+
+    function syncBudgetModalPanels() {
+        const mode = String(document.getElementById('customer-budget-edit-mode')?.value || '').trim();
+        document.querySelectorAll('.customer-budget-mode-btn').forEach(function (btn) {
+            const active = String(btn.getAttribute('data-mode') || '') === mode;
+            btn.classList.toggle('is-active', active);
+        });
+        const upTo = document.getElementById('customer-budget-edit-up-to');
+        const range = document.getElementById('customer-budget-edit-range');
+        if (upTo) upTo.hidden = mode !== 'up_to';
+        if (range) range.hidden = mode !== 'range';
+    }
+
+    function fillBudgetModalFromQuote(q) {
+        const mode = String(q && q.customerBudgetMode || '').trim();
+        const modeEl = document.getElementById('customer-budget-edit-mode');
+        if (modeEl) modeEl.value = mode;
+        const maxOnly = document.getElementById('customer-budget-edit-max-only');
+        const minInput = document.getElementById('customer-budget-edit-min');
+        const maxInput = document.getElementById('customer-budget-edit-max');
+        if (mode === 'up_to') {
+            const max = parseBudgetAmount(q.customerBudgetMax ?? q.customerBudgetMin);
+            if (maxOnly && max != null) maxOnly.value = String(Math.round(max));
+        } else if (mode === 'range') {
+            const min = parseBudgetAmount(q.customerBudgetMin);
+            const max = parseBudgetAmount(q.customerBudgetMax);
+            if (minInput && min != null) minInput.value = String(Math.round(min));
+            if (maxInput && max != null) maxInput.value = String(Math.round(max));
+        } else {
+            if (maxOnly) maxOnly.value = '';
+            if (minInput) minInput.value = '';
+            if (maxInput) maxInput.value = '';
+        }
+        syncBudgetModalPanels();
+    }
+
+    let budgetEditQuoteId = '';
+
+    function openBudgetModal(q) {
+        const modal = document.getElementById('customer-budget-modal');
+        if (!modal || !q) return;
+        budgetEditQuoteId = String(q.id || '').trim();
+        if (!budgetEditQuoteId) {
+            alert('This form cannot be updated (missing ID).');
+            return;
+        }
+        const label = document.getElementById('customer-budget-form-label');
+        if (label) {
+            label.textContent = 'Form #' + getQuoteLabel(q);
+        }
+        const status = document.getElementById('customer-budget-save-status');
+        if (status) {
+            status.textContent = '';
+            status.classList.remove('is-error');
+        }
+        fillBudgetModalFromQuote(q);
+        modal.hidden = false;
+        modal.classList.add('is-open');
+    }
+
+    function closeBudgetModal() {
+        const modal = document.getElementById('customer-budget-modal');
+        if (!modal) return;
+        modal.classList.remove('is-open');
+        modal.hidden = true;
+        budgetEditQuoteId = '';
+    }
+
+    function saveBudgetForQuote(authRef, user, quoteId, budgetFields, highlightFormId) {
+        const id = String(quoteId || '').trim();
+        if (!id) return false;
+
+        let quote = null;
+        if (window.anytransportApi && typeof window.anytransportApi.getQuote === 'function') {
+            try {
+                quote = window.anytransportApi.getQuote(id);
+            } catch (_e) {
+                quote = null;
+            }
+        }
+        if (!quote) {
+            const merged = loadQuotesMerged(user.id, user.email || '');
+            quote = merged.find(function (entry) {
+                return String(entry && entry.id || '') === id;
+            }) || null;
+        }
+        if (!quote) {
+            alert('Request form not found.');
+            return false;
+        }
+
+        const payload = Object.assign({}, quote, budgetFields, { id: id });
+        try {
+            if (window.anytransportApi && typeof window.anytransportApi.saveQuote === 'function') {
+                window.anytransportApi.saveQuote(payload);
+            } else {
+                const raw = JSON.parse(localStorage.getItem(LISTING_STORAGE_KEY) || '[]');
+                const list = Array.isArray(raw) ? raw.slice() : [];
+                const idx = list.findIndex(function (entry) {
+                    return String(entry && entry.id || '') === id;
+                });
+                if (idx >= 0) {
+                    list[idx] = Object.assign({}, list[idx], budgetFields);
+                } else {
+                    list.push(payload);
+                }
+                localStorage.setItem(LISTING_STORAGE_KEY, JSON.stringify(list));
+            }
+        } catch (error) {
+            alert(error && error.message ? error.message : 'Unable to save budget.');
+            return false;
+        }
+
+        const quotes = loadQuotesMerged(user.id, user.email || '');
+        const bids = loadAllBids();
+        renderQuotes(quotes, bids, highlightFormId);
+        return true;
+    }
+
+    function wireBudgetModal(authRef, user, highlightFormId) {
+        const modal = document.getElementById('customer-budget-modal');
+        if (!modal || modal.dataset.wired === '1') return;
+        modal.dataset.wired = '1';
+
+        document.querySelectorAll('.customer-budget-mode-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const modeEl = document.getElementById('customer-budget-edit-mode');
+                if (modeEl) modeEl.value = String(btn.getAttribute('data-mode') || '');
+                syncBudgetModalPanels();
+            });
+        });
+
+        const cancelBtn = document.getElementById('customer-budget-cancel-btn');
+        if (cancelBtn) cancelBtn.addEventListener('click', closeBudgetModal);
+
+        modal.addEventListener('click', function (event) {
+            if (event.target === modal) closeBudgetModal();
+        });
+
+        const saveBtn = document.getElementById('customer-budget-save-btn');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', function () {
+                const status = document.getElementById('customer-budget-save-status');
+                const fields = buildBudgetFieldsFromModal();
+                const mode = fields.customerBudgetMode;
+                if (mode === 'up_to' && fields.customerBudgetMax == null) {
+                    if (status) {
+                        status.textContent = 'Enter a maximum budget amount.';
+                        status.classList.add('is-error');
+                    }
+                    return;
+                }
+                if (mode === 'range' && (fields.customerBudgetMin == null || fields.customerBudgetMax == null)) {
+                    if (status) {
+                        status.textContent = 'Enter both minimum and maximum for a range.';
+                        status.classList.add('is-error');
+                    }
+                    return;
+                }
+                saveBtn.disabled = true;
+                if (status) {
+                    status.textContent = 'Saving…';
+                    status.classList.remove('is-error');
+                }
+                const ok = saveBudgetForQuote(authRef, user, budgetEditQuoteId, fields, highlightFormId);
+                saveBtn.disabled = false;
+                if (ok) {
+                    closeBudgetModal();
+                } else if (status) {
+                    status.textContent = 'Save failed.';
+                    status.classList.add('is-error');
+                }
+            });
+        }
+    }
+
     function countBidsForQuote(quoteId, bids) {
         const id = String(quoteId || '').trim();
         if (!id || !Array.isArray(bids)) return 0;
@@ -200,7 +450,7 @@
         if (!el) return;
 
         if (!quotes.length) {
-            el.innerHTML = '<tr><td colspan="6" class="customer-empty-cell">You have not submitted any request forms yet. <a href="index.html#services">Create a request</a>.</td></tr>';
+            el.innerHTML = '<tr><td colspan="7" class="customer-empty-cell">You have not submitted any request forms yet. <a href="index.html#services">Create a request</a>.</td></tr>';
             return;
         }
 
@@ -210,25 +460,40 @@
 
         el.innerHTML = sorted.map(function (q) {
             const fid = getQuoteLabel(q);
+            const quoteId = String(q.id || '').trim();
             const isHi = highlightFormId && String(q.formId || '').trim() === highlightFormId;
             const bidN = countBidsForQuote(q.id, bids);
             const status = escapeHtml(String(q.status || 'pending'));
+            const budgetLabel = formatCustomerBudgetLabel(q) || 'Not set';
+            const viewHref = getListingViewHref(q);
+            const viewListingBtn = viewHref
+                ? '<a class="btn btn-sm customer-view-listing-btn" href="' + escapeHtml(viewHref) + '" onclick="if(window.setNavbarReturnUrl){setNavbarReturnUrl(window.location.href);}">View listing</a>'
+                : '';
+            const editQuoteHref = quoteId
+                ? getCreateJobPage() + '?editQuote=' + encodeURIComponent(quoteId)
+                : '';
             return [
-                '<tr class="customer-quote-row' + (isHi ? ' customer-quote-row--highlight' : '') + '" data-form-id="' + escapeHtml(String(q.formId || '')) + '">',
+                '<tr class="customer-quote-row' + (isHi ? ' customer-quote-row--highlight' : '') + '" data-form-id="' + escapeHtml(String(q.formId || '')) + '" data-quote-id="' + escapeHtml(quoteId) + '">',
                 '<td><strong>' + escapeHtml(fid) + '</strong></td>',
                 '<td>' + formatWhen(q.submittedAt || q.createdAt) + '</td>',
                 '<td>' + escapeHtml(getServiceTitle(q)) + '</td>',
                 '<td class="customer-from-to">' + escapeHtml(getFromTo(q)) + '</td>',
+                '<td class="customer-budget-cell">',
+                '<div class="customer-budget-cell-actions">',
+                '<span>' + escapeHtml(budgetLabel) + '</span>',
+                (quoteId ? '<button type="button" class="btn btn-outline btn-sm customer-edit-budget-btn" data-quote-id="' + escapeHtml(quoteId) + '">Edit budget</button>' : ''),
+                '</div>',
+                '</td>',
                 '<td><span class="customer-status customer-status--' + status.toLowerCase().replace(/\s+/g, '-') + '">' + status + '</span></td>',
                 '<td class="customer-actions">',
                 '<div class="customer-actions-row">',
                 '<span class="customer-bid-count" title="Active bids">' + bidN + '</span>',
-                '<a class="btn btn-outline btn-sm" href="listing-details.html?quoteId=' + encodeURIComponent(q.id) + '">View</a>',
-                '<a class="btn btn-primary btn-sm" href="create-job.html?editQuote=' + encodeURIComponent(q.id) + '">Edit</a>',
-                '<button type="button" class="btn btn-danger btn-sm customer-delete-quote-btn" data-quote-id="' + escapeHtml(String(q.id || '')) + '">Delete</button>',
+                viewListingBtn,
+                (editQuoteHref ? '<a class="btn btn-primary btn-sm" href="' + escapeHtml(editQuoteHref) + '">Edit</a>' : ''),
+                (quoteId ? '<button type="button" class="btn btn-danger btn-sm customer-delete-quote-btn" data-quote-id="' + escapeHtml(quoteId) + '">Delete</button>' : ''),
                 '</div>',
                 '<div class="customer-actions-row">',
-                '<button type="button" class="btn btn-secondary btn-sm customer-open-form-messages-btn" data-quote-id="' + escapeHtml(String(q.id || '')) + '" data-form-id="' + escapeHtml(String(fid || '')) + '">View grouped messages</button>',
+                (quoteId ? '<button type="button" class="btn btn-secondary btn-sm customer-open-form-messages-btn" data-quote-id="' + escapeHtml(quoteId) + '" data-form-id="' + escapeHtml(String(fid || '')) + '">View grouped messages</button>' : ''),
                 '</div>',
                 '</td></tr>'
             ].join('');
@@ -582,6 +847,7 @@
 
         const bids = loadAllBids();
         renderQuotes(quotes, bids, highlightFormId);
+        wireBudgetModal(authRef, user, highlightFormId);
 
         let messages = loadMessagesForUser(user.id);
         renderMessageGroupsIndex(quotes, bids);
@@ -591,6 +857,17 @@
         const quotesBody = document.getElementById('customer-quotes-body');
         if (quotesBody) {
             quotesBody.addEventListener('click', function (event) {
+                const budgetBtn = event.target.closest('.customer-edit-budget-btn');
+                if (budgetBtn) {
+                    const quoteId = String(budgetBtn.getAttribute('data-quote-id') || '').trim();
+                    const latestQuotes = loadQuotesMerged(user.id, user.email || '');
+                    const target = latestQuotes.find(function (entry) {
+                        return String(entry && entry.id || '') === quoteId;
+                    });
+                    if (target) openBudgetModal(target);
+                    return;
+                }
+
                 const deleteBtn = event.target.closest('.customer-delete-quote-btn');
                 if (deleteBtn) {
                     const quoteId = String(deleteBtn.getAttribute('data-quote-id') || '').trim();

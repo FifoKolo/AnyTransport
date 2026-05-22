@@ -170,6 +170,80 @@
         renderActions(u);
         renderAvatar(u);
         renderEditor(u);
+        renderReviews(u);
+    }
+
+    function renderReviews(u) {
+        const summaryEl = document.getElementById('provider-review-summary');
+        const listEl = document.getElementById('provider-reviews-list');
+        if (!summaryEl && !listEl) return;
+
+        const providerId = String(u && u.id || '').trim();
+        if (!providerId) {
+            if (summaryEl) summaryEl.textContent = 'No reviews yet.';
+            if (listEl) listEl.innerHTML = '';
+            return;
+        }
+
+        function paint(payload) {
+            const stats = payload && payload.stats ? payload.stats : { count: 0, average: 0 };
+            const reviews = payload && Array.isArray(payload.reviews) ? payload.reviews : [];
+            const count = Number(stats.count) || 0;
+            const average = Number(stats.average) || 0;
+            if (summaryEl) {
+                summaryEl.textContent = count > 0
+                    ? (average.toFixed(1) + ' ★ average · ' + count + ' review' + (count === 1 ? '' : 's'))
+                    : 'No reviews yet.';
+            }
+            if (!listEl) return;
+            if (!reviews.length) {
+                listEl.innerHTML = '<p class="provider-empty-hint" style="margin:0;">Reviews appear here after customers complete a job and leave feedback.</p>';
+                return;
+            }
+            const top = reviews.slice(0, 6);
+            listEl.innerHTML = '<ul class="provider-services-list" style="padding-left:1rem;">' + top.map(function (review) {
+                const rating = Math.max(1, Math.min(5, parseInt(review.rating, 10) || 0));
+                const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+                const who = escapeHtml(firstText(review.customerName, 'Customer'));
+                const when = review.createdAt ? escapeHtml(formatReviewWhen(review.createdAt)) : '';
+                const text = escapeHtml(firstText(review.text, ''));
+                const formId = review.formId ? (' · Form #' + escapeHtml(String(review.formId))) : '';
+                return '<li style="margin-bottom:10px;"><strong>' + stars + '</strong> ' + who
+                    + (when ? (' · ' + when) : '') + formId
+                    + (text ? ('<div style="margin-top:4px;color:#475569;">' + text + '</div>') : '')
+                    + '</li>';
+            }).join('') + '</ul>';
+        }
+
+        if (window.anytransportApi && typeof window.anytransportApi.listProviderReviews === 'function') {
+            try {
+                paint(window.anytransportApi.listProviderReviews(providerId, ''));
+                return;
+            } catch (_e) {
+                /* fall through to fetch */
+            }
+        }
+
+        const apiBase = String(window.ANYTRANSPORT_API_URL || 'api/index.php').trim();
+        const sep = apiBase.indexOf('?') >= 0 ? '&' : '?';
+        const apiUrl = apiBase + sep + 'action=reviews.list&providerId=' + encodeURIComponent(providerId);
+        fetch(apiUrl, { credentials: 'include' })
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .then(function (payload) { paint(payload || {}); })
+            .catch(function () {
+                if (summaryEl) summaryEl.textContent = 'Reviews unavailable.';
+                if (listEl) listEl.innerHTML = '';
+            });
+    }
+
+    function formatReviewWhen(iso) {
+        try {
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        } catch (_e) {
+            return '';
+        }
     }
 
     // Viewer helpers — decide whether to reveal full email or mask

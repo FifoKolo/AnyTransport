@@ -335,6 +335,207 @@
         }
     }
 
+    function isCustomerUser(user) {
+        if (!user || typeof user !== 'object') return false;
+        const role = String(user.role || '').trim().toLowerCase();
+        if (role === 'customer') return true;
+        if (Array.isArray(user.roles) && user.roles.some(function (r) {
+            return String(r || '').trim().toLowerCase() === 'customer';
+        })) {
+            return true;
+        }
+        return !role || role === 'user';
+    }
+
+    function loadQuoteContext(quoteId) {
+        if (!quoteId || !window.anytransportApi) return null;
+        if (typeof window.anytransportApi.getQuote === 'function') {
+            try {
+                return window.anytransportApi.getQuote(quoteId);
+            } catch (_e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    function setupConversationToolbar(me, toUserId, quoteId) {
+        var toolbar = document.getElementById('messages-context-toolbar');
+        if (!toolbar || !toUserId) return;
+
+        var profileBtn = document.getElementById('messages-view-profile-btn');
+        var completeBtn = document.getElementById('messages-mark-complete-btn');
+        var completeBadge = document.getElementById('messages-form-complete-badge');
+        var reviewBtn = document.getElementById('messages-leave-review-btn');
+        var summaryEl = document.getElementById('messages-context-summary');
+
+        toolbar.style.display = '';
+        if (profileBtn) {
+            profileBtn.href = 'provider-profile.html?userId=' + encodeURIComponent(toUserId);
+        }
+
+        if (!isCustomerUser(me)) {
+            if (summaryEl) summaryEl.textContent = 'View the provider profile or continue the conversation below.';
+            if (completeBtn) completeBtn.style.display = 'none';
+            if (completeBadge) completeBadge.style.display = 'none';
+            if (reviewBtn) reviewBtn.style.display = 'none';
+            return;
+        }
+
+        if (!quoteId) {
+            if (summaryEl) summaryEl.textContent = 'View the provider profile. Link a request from your dashboard to mark the form complete or leave a review.';
+            if (completeBtn) completeBtn.style.display = 'none';
+            if (completeBadge) completeBadge.style.display = 'none';
+            if (reviewBtn) reviewBtn.style.display = 'none';
+            return;
+        }
+
+        var quote = loadQuoteContext(quoteId);
+        var formLabel = quote && quote.formId ? ('Form #' + quote.formId) : 'your request';
+        if (summaryEl) {
+            summaryEl.textContent = 'Actions for ' + formLabel + ' with ' + resolveUserName(toUserId) + '.';
+        }
+
+        var formComplete = !!(quote && quote.customerFormComplete);
+        if (completeBtn) {
+            completeBtn.style.display = formComplete ? 'none' : '';
+            completeBtn.disabled = false;
+            completeBtn.textContent = 'Mark form complete';
+            if (!completeBtn.dataset.bound) {
+                completeBtn.dataset.bound = '1';
+                completeBtn.addEventListener('click', function () {
+                    if (!window.anytransportApi || typeof window.anytransportApi.markQuoteFormComplete !== 'function') {
+                        alert('Unable to mark the form complete right now.');
+                        return;
+                    }
+                    if (!window.confirm('Confirm that your request form is complete and ready for the provider to work from?')) {
+                        return;
+                    }
+                    completeBtn.disabled = true;
+                    try {
+                        var updated = window.anytransportApi.markQuoteFormComplete(quoteId);
+                        if (!updated) throw new Error('No response');
+                        setupConversationToolbar(me, toUserId, quoteId);
+                    } catch (err) {
+                        completeBtn.disabled = false;
+                        alert((err && err.message) ? err.message : 'Could not mark the form complete.');
+                    }
+                });
+            }
+        }
+        if (completeBadge) {
+            completeBadge.style.display = formComplete ? '' : 'none';
+        }
+
+        var existingReview = null;
+        if (formComplete && window.anytransportApi && typeof window.anytransportApi.listProviderReviews === 'function') {
+            try {
+                var reviewPayload = window.anytransportApi.listProviderReviews(toUserId, quoteId);
+                existingReview = reviewPayload && reviewPayload.existingReview ? reviewPayload.existingReview : null;
+            } catch (_e) {
+                existingReview = null;
+            }
+        }
+
+        if (reviewBtn) {
+            if (!formComplete) {
+                reviewBtn.style.display = 'none';
+            } else if (existingReview) {
+                reviewBtn.style.display = 'none';
+                if (completeBadge) {
+                    completeBadge.textContent = 'Form complete · Review submitted (' + String(existingReview.rating || '') + '★)';
+                }
+            } else {
+                reviewBtn.style.display = '';
+                if (!reviewBtn.dataset.bound) {
+                    reviewBtn.dataset.bound = '1';
+                    reviewBtn.addEventListener('click', function () {
+                        openReviewModal(me, toUserId, quoteId, function () {
+                            setupConversationToolbar(me, toUserId, quoteId);
+                        });
+                    });
+                }
+            }
+        }
+    }
+
+    function openReviewModal(me, providerId, quoteId, onDone) {
+        var modal = document.getElementById('messages-review-modal');
+        if (!modal) return;
+        var selectedRating = 0;
+        var statusEl = document.getElementById('messages-review-status');
+        var textEl = document.getElementById('messages-review-text');
+        var starsWrap = document.getElementById('messages-review-stars');
+
+        function setRating(rating) {
+            selectedRating = rating;
+            if (!starsWrap) return;
+            starsWrap.querySelectorAll('button[data-rating]').forEach(function (btn) {
+                var val = parseInt(btn.getAttribute('data-rating') || '0', 10);
+                btn.classList.toggle('is-selected', val <= rating);
+            });
+        }
+
+        if (starsWrap && !starsWrap.dataset.bound) {
+            starsWrap.dataset.bound = '1';
+            starsWrap.querySelectorAll('button[data-rating]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    setRating(parseInt(btn.getAttribute('data-rating') || '0', 10));
+                });
+            });
+        }
+
+        setRating(0);
+        if (textEl) textEl.value = '';
+        if (statusEl) statusEl.textContent = '';
+        modal.hidden = false;
+        modal.classList.add('is-open');
+
+        var cancelBtn = document.getElementById('messages-review-cancel');
+        var submitBtn = document.getElementById('messages-review-submit');
+
+        function closeModal() {
+            modal.classList.remove('is-open');
+            modal.hidden = true;
+        }
+
+        if (cancelBtn && !cancelBtn.dataset.bound) {
+            cancelBtn.dataset.bound = '1';
+            cancelBtn.addEventListener('click', closeModal);
+        }
+        modal.addEventListener('click', function (evt) {
+            if (evt.target === modal) closeModal();
+        });
+
+        if (submitBtn) {
+            submitBtn.onclick = function () {
+                if (selectedRating < 1 || selectedRating > 5) {
+                    if (statusEl) statusEl.textContent = 'Choose a star rating (1–5).';
+                    return;
+                }
+                if (!window.anytransportApi || typeof window.anytransportApi.saveProviderReview !== 'function') {
+                    if (statusEl) statusEl.textContent = 'Reviews are unavailable right now.';
+                    return;
+                }
+                submitBtn.disabled = true;
+                if (statusEl) statusEl.textContent = 'Saving…';
+                try {
+                    window.anytransportApi.saveProviderReview(
+                        providerId,
+                        quoteId,
+                        selectedRating,
+                        textEl ? textEl.value : ''
+                    );
+                    closeModal();
+                    if (typeof onDone === 'function') onDone();
+                } catch (err) {
+                    submitBtn.disabled = false;
+                    if (statusEl) statusEl.textContent = (err && err.message) ? err.message : 'Could not save review.';
+                }
+            };
+        }
+    }
+
     function renderThread(currentUserId, messages) {
         var threadEl = document.getElementById('messages-thread');
         if (!threadEl) return;
@@ -412,8 +613,12 @@
 
         var subtitleEl = document.getElementById('messages-subtitle');
         if (subtitleEl) {
-            subtitleEl.textContent = 'Conversation with ' + resolveUserName(toUserId) + (quoteId ? (' for quote ' + quoteId) : '');
+            var quote = quoteId ? loadQuoteContext(quoteId) : null;
+            var formHint = quote && quote.formId ? (' (Form #' + quote.formId + ')') : (quoteId ? '' : '');
+            subtitleEl.textContent = 'Conversation with ' + resolveUserName(toUserId) + formHint;
         }
+
+        setupConversationToolbar(me, toUserId, quoteId);
 
         var bidContextEl = document.getElementById('messages-bid-context');
         var bidTextEl = document.getElementById('messages-bid-text');

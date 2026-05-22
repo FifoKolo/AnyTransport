@@ -359,6 +359,28 @@ window.anytransportApi = window.anytransportApi || (function () {
                 maxKm: ctx.maxKm != null ? ctx.maxKm : 100
             });
         },
+        markQuoteFormComplete: function (quoteId) {
+            const response = request('quotes.markComplete', 'POST', {
+                quoteId: quoteId ? String(quoteId) : ''
+            });
+            return response && response.quote ? response.quote : null;
+        },
+        saveProviderReview: function (providerId, quoteId, rating, text) {
+            const response = request('reviews.create', 'POST', {
+                providerId: providerId ? String(providerId) : '',
+                quoteId: quoteId ? String(quoteId) : '',
+                rating: Number(rating) || 0,
+                text: text ? String(text) : ''
+            });
+            return response || null;
+        },
+        listProviderReviews: function (providerId, quoteId) {
+            const params = { providerId: providerId ? String(providerId) : '' };
+            if (quoteId) {
+                params.quoteId = String(quoteId);
+            }
+            return request('reviews.list', 'GET', null, params);
+        },
         saveQuote: function (quote) {
             const response = request('quotes.create', 'POST', { quote: quote || {} });
             return response.quote || quote || null;

@@ -125,7 +125,8 @@ function default_store() {
         'autoBidEvents' => array(),
         'customerBidEmailQueue' => array(),
         'autoBidCooldowns' => array(),
-        'providerInvites' => array()
+        'providerInvites' => array(),
+        'providerReviews' => array()
     );
 }
 
@@ -1169,6 +1170,149 @@ function ensure_provider_stripe_onboarding(&$store, $storeFile, $userId, $return
     );
 }
 
+function normalize_budget_amount($value) {
+    if ($value === null || $value === '') {
+        return null;
+    }
+    if (!is_numeric($value)) {
+        return null;
+    }
+    $amount = round((float) $value, 2);
+    if ($amount < 0) {
+        return null;
+    }
+    if ($amount > 9999999) {
+        $amount = 9999999.0;
+    }
+    return $amount;
+}
+
+function normalize_customer_budget_fields(&$quote) {
+    if (!is_array($quote)) {
+        return;
+    }
+    $mode = trim((string) ($quote['customerBudgetMode'] ?? ''));
+    if (!in_array($mode, array('flexible', 'up_to', 'range'), true)) {
+        $mode = '';
+    }
+    $min = normalize_budget_amount($quote['customerBudgetMin'] ?? null);
+    $max = normalize_budget_amount($quote['customerBudgetMax'] ?? null);
+    if ($mode === 'up_to' && $max === null && $min !== null) {
+        $max = $min;
+        $min = null;
+    }
+    if ($mode === 'range' && $min !== null && $max !== null && $min > $max) {
+        $swap = $min;
+        $min = $max;
+        $max = $swap;
+    }
+    $quote['customerBudgetMode'] = $mode;
+    $quote['customerBudgetMin'] = $min;
+    $quote['customerBudgetMax'] = $max;
+}
+
+function format_customer_budget_label($quote) {
+    if (!is_array($quote)) {
+        return '';
+    }
+    $mode = trim((string) ($quote['customerBudgetMode'] ?? ''));
+    $min = normalize_budget_amount($quote['customerBudgetMin'] ?? null);
+    $max = normalize_budget_amount($quote['customerBudgetMax'] ?? null);
+    if ($mode === 'flexible') {
+        return 'Flexible / open to quotes';
+    }
+    if ($mode === 'up_to' && $max !== null) {
+        return 'Up to €' . number_format($max, 0, '.', ',');
+    }
+    if ($mode === 'range' && $min !== null && $max !== null) {
+        if (abs($min - $max) < 0.01) {
+            return '€' . number_format($min, 0, '.', ',');
+        }
+        return '€' . number_format($min, 0, '.', ',') . ' – €' . number_format($max, 0, '.', ',');
+    }
+    if ($min !== null && $max !== null) {
+        if (abs($min - $max) < 0.01) {
+            return '€' . number_format($min, 0, '.', ',');
+        }
+        return '€' . number_format($min, 0, '.', ',') . ' – €' . number_format($max, 0, '.', ',');
+    }
+    if ($max !== null) {
+        return 'Up to €' . number_format($max, 0, '.', ',');
+    }
+    if ($min !== null) {
+        return 'From €' . number_format($min, 0, '.', ',');
+    }
+    return '';
+}
+
+function find_quote_by_id($quotes, $quoteId) {
+    $needle = trim((string) $quoteId);
+    if ($needle === '' || !is_array($quotes)) {
+        return null;
+    }
+    foreach ($quotes as $quote) {
+        if (!is_array($quote)) {
+            continue;
+        }
+        if (trim((string) ($quote['id'] ?? '')) === $needle) {
+            return $quote;
+        }
+    }
+    return null;
+}
+
+function find_provider_review_index($store, $customerId, $providerId, $quoteId) {
+    if (!isset($store['providerReviews']) || !is_array($store['providerReviews'])) {
+        return -1;
+    }
+    $customerId = trim((string) $customerId);
+    $providerId = trim((string) $providerId);
+    $quoteId = trim((string) $quoteId);
+    foreach ($store['providerReviews'] as $index => $review) {
+        if (!is_array($review)) {
+            continue;
+        }
+        if (trim((string) ($review['customerId'] ?? '')) !== $customerId) {
+            continue;
+        }
+        if (trim((string) ($review['providerId'] ?? '')) !== $providerId) {
+            continue;
+        }
+        if (trim((string) ($review['quoteId'] ?? '')) !== $quoteId) {
+            continue;
+        }
+        return (int) $index;
+    }
+    return -1;
+}
+
+function get_provider_review_stats($store, $providerId) {
+    $providerId = trim((string) $providerId);
+    $count = 0;
+    $sum = 0;
+    if ($providerId === '' || !isset($store['providerReviews']) || !is_array($store['providerReviews'])) {
+        return array('count' => 0, 'average' => 0);
+    }
+    foreach ($store['providerReviews'] as $review) {
+        if (!is_array($review)) {
+            continue;
+        }
+        if (trim((string) ($review['providerId'] ?? '')) !== $providerId) {
+            continue;
+        }
+        $rating = (int) ($review['rating'] ?? 0);
+        if ($rating < 1 || $rating > 5) {
+            continue;
+        }
+        $count += 1;
+        $sum += $rating;
+    }
+    return array(
+        'count' => $count,
+        'average' => $count > 0 ? round($sum / $count, 1) : 0
+    );
+}
+
 function normalize_quote($quote, $quotes) {
     $normalized = is_array($quote) ? $quote : array();
     if (!isset($normalized['id']) || trim((string) $normalized['id']) === '') {
@@ -1186,6 +1330,15 @@ function normalize_quote($quote, $quotes) {
     $normalized['updatedAt'] = gmdate('c');
     if (!isset($normalized['status']) || trim((string) $normalized['status']) === '') {
         $normalized['status'] = 'pending';
+    }
+
+    normalize_customer_budget_fields($normalized);
+    $normalized['customerFormComplete'] = !empty($normalized['customerFormComplete']);
+    if ($normalized['customerFormComplete'] && trim((string) ($normalized['customerFormCompletedAt'] ?? '')) === '') {
+        $normalized['customerFormCompletedAt'] = gmdate('c');
+    }
+    if (!$normalized['customerFormComplete']) {
+        $normalized['customerFormCompletedAt'] = '';
     }
 
     return $normalized;
@@ -1245,6 +1398,11 @@ function quote_scalar_change_fields() {
         'routeDistanceKm' => 'Route distance (km)',
         'routeDurationText' => 'Route duration',
         'whatBeingTransported' => 'What is being transported',
+        'customerBudgetMode' => 'Budget preference',
+        'customerBudgetMin' => 'Budget (minimum)',
+        'customerBudgetMax' => 'Budget (maximum)',
+        'customerFormComplete' => 'Form marked complete',
+        'customerFormCompletedAt' => 'Form completed at',
     );
 }
 
@@ -2435,22 +2593,6 @@ function refresh_session_cookie() {
     if ($token !== '') {
         set_session_cookie($token);
     }
-}
-
-function find_quote_by_id($quotes, $quoteId) {
-    $quoteId = trim((string) $quoteId);
-    if ($quoteId === '') {
-        return null;
-    }
-    foreach ($quotes as $quote) {
-        if (!is_array($quote)) {
-            continue;
-        }
-        if (trim((string) ($quote['id'] ?? '')) === $quoteId) {
-            return $quote;
-        }
-    }
-    return null;
 }
 
 function user_can_access_quote_media($store, $sessionUser, $record) {
@@ -4291,6 +4433,140 @@ switch ($action) {
         send_provider_job_invite_email($provider, $customerName, $quoteLabel, $quoteId);
         write_store($storeFile, $store);
         send_json(array('ok' => true, 'invite' => $invite));
+
+    case 'quotes.markComplete':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $sessionUser = get_current_user_record($store);
+        if (!is_array($sessionUser)) {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        $quoteId = trim((string) ($input['quoteId'] ?? ''));
+        if ($quoteId === '') {
+            send_json(array('ok' => false, 'error' => 'quoteId is required.'), 400);
+        }
+        $index = find_user_index($store['quotes'], function ($existing) use ($quoteId) {
+            return is_array($existing) && trim((string) ($existing['id'] ?? '')) === $quoteId;
+        });
+        if ($index < 0) {
+            send_json(array('ok' => false, 'error' => 'Request form not found.'), 404);
+        }
+        $quote = $store['quotes'][$index];
+        if (!session_user_owns_quote($sessionUser, $quote)) {
+            send_json(array('ok' => false, 'error' => 'You can only mark your own request forms as complete.'), 403);
+        }
+        $quote['customerFormComplete'] = true;
+        $quote['customerFormCompletedAt'] = gmdate('c');
+        $quote['updatedAt'] = gmdate('c');
+        $store['quotes'][$index] = $quote;
+        write_store($storeFile, $store);
+        refresh_session_cookie();
+        send_json(array('ok' => true, 'quote' => attach_quote_media($store, $quote)));
+
+    case 'reviews.create':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $sessionUser = get_current_user_record($store);
+        if (!is_array($sessionUser)) {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        $customerId = trim((string) ($sessionUser['id'] ?? ''));
+        $providerId = trim((string) ($input['providerId'] ?? ''));
+        $quoteId = trim((string) ($input['quoteId'] ?? ''));
+        $rating = (int) ($input['rating'] ?? 0);
+        $text = trim((string) ($input['text'] ?? ''));
+        if ($providerId === '' || $quoteId === '') {
+            send_json(array('ok' => false, 'error' => 'providerId and quoteId are required.'), 400);
+        }
+        if ($rating < 1 || $rating > 5) {
+            send_json(array('ok' => false, 'error' => 'Rating must be between 1 and 5 stars.'), 400);
+        }
+        $quote = find_quote_by_id($store['quotes'], $quoteId);
+        if (!is_array($quote)) {
+            send_json(array('ok' => false, 'error' => 'Request form not found.'), 404);
+        }
+        if (!session_user_owns_quote($sessionUser, $quote)) {
+            send_json(array('ok' => false, 'error' => 'You can only review providers for your own request forms.'), 403);
+        }
+        if (empty($quote['customerFormComplete'])) {
+            send_json(array('ok' => false, 'error' => 'Mark your request form as complete before leaving a review.'), 400);
+        }
+        $provider = find_store_user_by_id($store, $providerId);
+        if (!is_discoverable_provider($provider)) {
+            send_json(array('ok' => false, 'error' => 'Provider not found.'), 404);
+        }
+        if (!isset($store['providerReviews']) || !is_array($store['providerReviews'])) {
+            $store['providerReviews'] = array();
+        }
+        $existingIndex = find_provider_review_index($store, $customerId, $providerId, $quoteId);
+        if ($existingIndex >= 0) {
+            send_json(array('ok' => false, 'error' => 'You already reviewed this provider for this request.'), 409);
+        }
+        $review = array(
+            'id' => make_id('review'),
+            'providerId' => $providerId,
+            'customerId' => $customerId,
+            'quoteId' => $quoteId,
+            'formId' => trim((string) ($quote['formId'] ?? '')),
+            'rating' => $rating,
+            'text' => $text,
+            'customerName' => trim((string) ($sessionUser['username'] ?? $sessionUser['name'] ?? 'Customer')),
+            'createdAt' => gmdate('c')
+        );
+        array_unshift($store['providerReviews'], $review);
+        $store['providerReviews'] = array_slice($store['providerReviews'], 0, 5000);
+        add_user_notification(
+            $store,
+            $providerId,
+            'New customer review',
+            trim((string) ($review['customerName'] ?? 'A customer')) . ' left a ' . $rating . '-star review on listing ' . trim((string) ($review['formId'] ?? $quoteId)) . '.',
+            'provider_review',
+            array('quoteId' => $quoteId, 'reviewId' => $review['id'], 'fromUserId' => $customerId)
+        );
+        write_store($storeFile, $store);
+        refresh_session_cookie();
+        send_json(array('ok' => true, 'review' => $review, 'stats' => get_provider_review_stats($store, $providerId)));
+
+    case 'reviews.list':
+        $providerId = trim((string) ($_GET['providerId'] ?? ''));
+        $quoteId = trim((string) ($_GET['quoteId'] ?? ''));
+        if ($providerId === '') {
+            send_json(array('ok' => false, 'error' => 'providerId is required.'), 400);
+        }
+        if (!isset($store['providerReviews']) || !is_array($store['providerReviews'])) {
+            $store['providerReviews'] = array();
+        }
+        $sessionUser = get_current_user_record($store);
+        $customerId = is_array($sessionUser) ? trim((string) ($sessionUser['id'] ?? '')) : '';
+        $reviews = array();
+        foreach ($store['providerReviews'] as $review) {
+            if (!is_array($review)) {
+                continue;
+            }
+            if (trim((string) ($review['providerId'] ?? '')) !== $providerId) {
+                continue;
+            }
+            if ($quoteId !== '' && trim((string) ($review['quoteId'] ?? '')) !== $quoteId) {
+                continue;
+            }
+            $reviews[] = $review;
+        }
+        $stats = get_provider_review_stats($store, $providerId);
+        $existingForCustomer = null;
+        if ($customerId !== '' && $quoteId !== '') {
+            $idx = find_provider_review_index($store, $customerId, $providerId, $quoteId);
+            if ($idx >= 0) {
+                $existingForCustomer = $store['providerReviews'][$idx];
+            }
+        }
+        send_json(array(
+            'ok' => true,
+            'reviews' => $reviews,
+            'stats' => $stats,
+            'existingReview' => $existingForCustomer
+        ));
 
     default:
         send_json(array('ok' => false, 'error' => 'Unknown action.'), 404);

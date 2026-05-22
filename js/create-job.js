@@ -9926,11 +9926,173 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (window.updateNextButtonState) {
                     window.updateNextButtonState();
                 }
+                if (typeof window.initCustomerBudgetUi === 'function') {
+                    window.initCustomerBudgetUi();
+                }
+                if (typeof window.syncCustomerBudgetModeUi === 'function') {
+                    window.syncCustomerBudgetModeUi();
+                }
             }, 50);
         }
         
         window.initializeStep6 = initializeStep6;
     })();
+
+(function initCustomerBudgetModule() {
+    const MODE_EL = () => document.getElementById('customer-budget-mode');
+    const MIN_EL = () => document.getElementById('customer-budget-min');
+    const MAX_EL = () => document.getElementById('customer-budget-max');
+    const UP_TO_WRAP = () => document.getElementById('customer-budget-up-to-wrap');
+    const RANGE_WRAP = () => document.getElementById('customer-budget-range-wrap');
+    const MAX_ONLY = () => document.getElementById('customer-budget-max-only');
+    const MIN_INPUT = () => document.getElementById('customer-budget-min-input');
+    const MAX_INPUT = () => document.getElementById('customer-budget-max-input');
+
+    function parseBudgetAmount(value) {
+        const n = parseFloat(String(value == null ? '' : value).replace(/,/g, ''));
+        return Number.isFinite(n) && n >= 0 ? n : null;
+    }
+
+    function formatEuro(amount) {
+        const n = parseBudgetAmount(amount);
+        if (n == null) return '';
+        return '€' + Math.round(n).toLocaleString('en-IE');
+    }
+
+    function syncCustomerBudgetHiddenFields() {
+        const mode = String(MODE_EL()?.value || '').trim();
+        const minHidden = MIN_EL();
+        const maxHidden = MAX_EL();
+        if (!minHidden || !maxHidden) return;
+        minHidden.value = '';
+        maxHidden.value = '';
+        if (mode === 'up_to') {
+            const maxVal = parseBudgetAmount(MAX_ONLY()?.value);
+            if (maxVal != null) maxHidden.value = String(maxVal);
+            return;
+        }
+        if (mode === 'range') {
+            const minVal = parseBudgetAmount(MIN_INPUT()?.value);
+            const maxVal = parseBudgetAmount(MAX_INPUT()?.value);
+            if (minVal != null) minHidden.value = String(minVal);
+            if (maxVal != null) maxHidden.value = String(maxVal);
+        }
+    }
+
+    function syncCustomerBudgetModeUi() {
+        const mode = String(MODE_EL()?.value || '').trim();
+        document.querySelectorAll('.customer-budget-mode-btn').forEach((btn) => {
+            const active = String(btn.getAttribute('data-mode') || '') === mode;
+            btn.classList.toggle('active', active);
+            if (active) {
+                btn.style.background = '#1d4ed8';
+                btn.style.color = '#fff';
+                btn.style.borderColor = '#1d4ed8';
+            } else {
+                btn.style.background = '#eff6ff';
+                btn.style.color = '#1d4ed8';
+                btn.style.borderColor = '#93c5fd';
+            }
+        });
+        const upTo = UP_TO_WRAP();
+        const range = RANGE_WRAP();
+        if (upTo) upTo.style.display = mode === 'up_to' ? '' : 'none';
+        if (range) range.style.display = mode === 'range' ? '' : 'none';
+        syncCustomerBudgetHiddenFields();
+    }
+
+    function setCustomerBudgetMode(mode) {
+        const el = MODE_EL();
+        if (!el) return;
+        el.value = String(mode || '').trim();
+        syncCustomerBudgetModeUi();
+        if (typeof window.updateFormSummary === 'function') {
+            window.updateFormSummary();
+        }
+        if (typeof window.saveCreateJobProgress === 'function') {
+            window.saveCreateJobProgress();
+        }
+    }
+
+    window.formatCustomerBudgetLabel = function formatCustomerBudgetLabel(quoteLike) {
+        const q = quoteLike && typeof quoteLike === 'object' ? quoteLike : {};
+        const mode = String(q.customerBudgetMode || '').trim();
+        const min = parseBudgetAmount(q.customerBudgetMin);
+        const max = parseBudgetAmount(q.customerBudgetMax);
+        if (mode === 'flexible') return 'Flexible / open to quotes';
+        if (mode === 'up_to' && max != null) return 'Up to ' + formatEuro(max);
+        if (mode === 'range' && min != null && max != null) {
+            if (Math.abs(min - max) < 0.01) return formatEuro(min);
+            return formatEuro(min) + ' – ' + formatEuro(max);
+        }
+        if (min != null && max != null) {
+            if (Math.abs(min - max) < 0.01) return formatEuro(min);
+            return formatEuro(min) + ' – ' + formatEuro(max);
+        }
+        if (max != null) return 'Up to ' + formatEuro(max);
+        if (min != null) return 'From ' + formatEuro(min);
+        return '';
+    };
+
+    window.getCustomerBudgetQuoteFields = function getCustomerBudgetQuoteFields() {
+        syncCustomerBudgetHiddenFields();
+        const mode = String(MODE_EL()?.value || '').trim();
+        const minRaw = MIN_EL()?.value;
+        const maxRaw = MAX_EL()?.value;
+        const min = parseBudgetAmount(minRaw);
+        const max = parseBudgetAmount(maxRaw);
+        return {
+            customerBudgetMode: mode,
+            customerBudgetMin: min != null ? min : null,
+            customerBudgetMax: max != null ? max : null
+        };
+    };
+
+    window.applyCustomerBudgetFromQuote = function applyCustomerBudgetFromQuote(q) {
+        if (!q || typeof q !== 'object') return;
+        const mode = String(q.customerBudgetMode || '').trim();
+        const modeEl = MODE_EL();
+        if (modeEl) modeEl.value = mode;
+        const maxOnly = MAX_ONLY();
+        const minInput = MIN_INPUT();
+        const maxInput = MAX_INPUT();
+        if (mode === 'up_to') {
+            const max = parseBudgetAmount(q.customerBudgetMax ?? q.customerBudgetMin);
+            if (maxOnly && max != null) maxOnly.value = String(Math.round(max));
+        } else if (mode === 'range') {
+            const min = parseBudgetAmount(q.customerBudgetMin);
+            const max = parseBudgetAmount(q.customerBudgetMax);
+            if (minInput && min != null) minInput.value = String(Math.round(min));
+            if (maxInput && max != null) maxInput.value = String(Math.round(max));
+        }
+        syncCustomerBudgetModeUi();
+    };
+
+    window.syncCustomerBudgetModeUi = syncCustomerBudgetModeUi;
+
+    window.initCustomerBudgetUi = function initCustomerBudgetUi() {
+        if (window.__customerBudgetUiReady) return;
+        window.__customerBudgetUiReady = true;
+        document.querySelectorAll('.customer-budget-mode-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                setCustomerBudgetMode(btn.getAttribute('data-mode') || '');
+            });
+        });
+        [MAX_ONLY(), MIN_INPUT(), MAX_INPUT()].forEach((input) => {
+            if (!input) return;
+            input.addEventListener('input', () => {
+                syncCustomerBudgetHiddenFields();
+                if (typeof window.updateFormSummary === 'function') window.updateFormSummary();
+                if (typeof window.saveCreateJobProgress === 'function') window.saveCreateJobProgress();
+            });
+        });
+        syncCustomerBudgetModeUi();
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        window.initCustomerBudgetUi();
+    });
+})();
 
 // --- Global State for Floor Selection ---
 window.selectedPickupFloors = new Set();
@@ -10028,7 +10190,10 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
         ['preferredPickupTime', 'preferred-time-pickup'],
         ['preferredDeliveryTime', 'preferred-time-delivery'],
         ['pickupLiftAvailable', 'pickup-lift-available'],
-        ['deliveryLiftAvailable', 'delivery-lift-available']
+        ['deliveryLiftAvailable', 'delivery-lift-available'],
+        ['customerBudgetMode', 'customer-budget-mode'],
+        ['customerBudgetMin', 'customer-budget-min'],
+        ['customerBudgetMax', 'customer-budget-max']
     ];
 
     stringPairs.forEach(([k, id]) => {
@@ -10604,6 +10769,10 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
         window.multiItemsManager.renderPianosList();
     }
 
+    if (typeof window.applyCustomerBudgetFromQuote === 'function') {
+        window.applyCustomerBudgetFromQuote(q);
+    }
+
     if (typeof window.finalizeCreateJobRestore === 'function') {
         window.finalizeCreateJobRestore();
     }
@@ -10611,6 +10780,9 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
     setTimeout(() => {
         if (typeof window.finalizeCreateJobRestore === 'function') {
             window.finalizeCreateJobRestore();
+        }
+        if (typeof window.applyCustomerBudgetFromQuote === 'function') {
+            window.applyCustomerBudgetFromQuote(q);
         }
     }, 50);
 
@@ -21317,6 +21489,14 @@ document.addEventListener('DOMContentLoaded', function() {
             setSummaryValue('summary-date', moveDateSummary || '—');
             setSummaryValue('summary-storage-dates', storageSummary || '—');
             setSummaryValue('summary-notes', specialInstructions || '—');
+            const budgetLabel = typeof window.formatCustomerBudgetLabel === 'function'
+                ? window.formatCustomerBudgetLabel(
+                    typeof window.getCustomerBudgetQuoteFields === 'function'
+                        ? window.getCustomerBudgetQuoteFields()
+                        : {}
+                )
+                : '';
+            setSummaryValue('summary-budget', budgetLabel || '—');
             updateOverviewFloorAndInventorySummary();
             
             // Keep floors row visible so users can always edit floor selections from Overview.
@@ -26812,6 +26992,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 customerEmail: getElementValue('customer-email'),
                 customerPhone: getElementValue('customer-phone'),
                 serviceSpecialInstructions: getElementValue('service-special-instructions'),
+                ...(typeof window.getCustomerBudgetQuoteFields === 'function'
+                    ? window.getCustomerBudgetQuoteFields()
+                    : {
+                        customerBudgetMode: getElementValue('customer-budget-mode'),
+                        customerBudgetMin: getElementValue('customer-budget-min') || null,
+                        customerBudgetMax: getElementValue('customer-budget-max') || null
+                    }),
                 servicePacking: getElementValue('service-packing'),
                 servicePackingMode: getElementValue('service-packing-mode'),
                 servicePackingBoxProvider: getElementValue('service-packing-box-provider'),

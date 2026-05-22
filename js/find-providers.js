@@ -301,7 +301,9 @@
             const services = Array.isArray(p.services) && p.services.length
                 ? p.services.slice(0, 4).join(' · ')
                 : 'General transport';
-            const msgUrl = 'messages.html?to=' + encodeURIComponent(String(p.id || ''));
+            const selectedQuoteId = select ? String(select.value || '').trim() : '';
+            const msgUrl = 'messages.html?to=' + encodeURIComponent(String(p.id || ''))
+                + (selectedQuoteId ? ('&quoteId=' + encodeURIComponent(selectedQuoteId)) : '');
             const canInvite = !p.blockInvites;
             const inviteBtn = canInvite
                 ? '<button type="button" class="btn btn-outline btn-sm find-invite-btn" data-provider-id="' + escapeHtml(String(p.id || '')) + '">Invite to quote</button>'
