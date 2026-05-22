@@ -1,0 +1,234 @@
+.find-providers-wrap {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 24px 16px 48px;
+}
+
+.find-providers-header h1 {
+    margin: 0 0 8px;
+    font-size: 1.75rem;
+    color: #0f172a;
+}
+
+.find-providers-header p {
+    margin: 0 0 20px;
+    color: #64748b;
+    max-width: 720px;
+    line-height: 1.5;
+}
+
+.find-providers-search {
+    display: grid;
+    grid-template-columns: 1fr 140px 160px auto;
+    gap: 10px;
+    align-items: end;
+    margin-bottom: 16px;
+}
+
+.find-providers-search label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 6px;
+}
+
+.find-providers-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 16px;
+    align-items: start;
+}
+
+.find-providers-map {
+    height: 520px;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid #dbe4ef;
+    background: #e8eef4;
+}
+
+.find-providers-map .mapboxgl-map {
+    width: 100%;
+    height: 100%;
+}
+
+.find-providers-list {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    max-height: 520px;
+    overflow-y: auto;
+}
+
+.find-providers-list-head {
+    padding: 14px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    font-weight: 700;
+    color: #0f172a;
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 1;
+}
+
+.find-provider-card {
+    padding: 14px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.find-provider-card:hover,
+.find-provider-card.is-active {
+    background: #f0f9ff;
+}
+
+.find-provider-card h3 {
+    margin: 0 0 4px;
+    font-size: 15px;
+    color: #0f172a;
+}
+
+.find-provider-meta {
+    font-size: 13px;
+    color: #64748b;
+    margin: 0 0 8px;
+}
+
+.find-provider-services {
+    font-size: 12px;
+    color: #475569;
+    margin: 0 0 10px;
+    line-height: 1.4;
+}
+
+.find-provider-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.find-providers-empty {
+    padding: 24px 16px;
+    color: #64748b;
+    font-size: 14px;
+}
+
+.find-providers-status {
+    font-size: 14px;
+    color: #334155;
+    margin-bottom: 12px;
+    min-height: 20px;
+}
+
+.find-providers-status--error {
+    color: #b45309;
+}
+
+.find-invite-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.find-invite-modal[hidden] {
+    display: none;
+}
+
+.find-invite-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+}
+
+.find-invite-modal-panel {
+    position: relative;
+    z-index: 1;
+    width: min(440px, 100%);
+    background: #fff;
+    border-radius: 14px;
+    padding: 22px 20px 18px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+}
+
+.find-invite-modal-panel h2 {
+    margin: 0 0 8px;
+    font-size: 1.25rem;
+}
+
+.find-invite-modal-sub {
+    margin: 0 0 14px;
+    color: #64748b;
+    font-size: 14px;
+}
+
+.find-invite-modal-panel label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #334155;
+}
+
+.find-invite-modal-status {
+    min-height: 18px;
+    font-size: 13px;
+    margin: 10px 0 0;
+    color: #047857;
+}
+
+.find-invite-modal-status--error {
+    color: #b45309;
+}
+
+.find-invite-modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 16px;
+}
+
+.find-invite-modal-close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    border: none;
+    background: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #64748b;
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
+@media (max-width: 960px) {
+    .find-providers-search {
+        grid-template-columns: 1fr 1fr;
+    }
+    .find-providers-search .find-search-btn-wrap {
+        grid-column: 1 / -1;
+    }
+    .find-providers-layout {
+        grid-template-columns: 1fr;
+    }
+    .find-providers-map {
+        height: 360px;
+    }
+    .find-providers-list {
+        max-height: none;
+    }
+}
+
+@media (max-width: 560px) {
+    .find-providers-search {
+        grid-template-columns: 1fr;
+    }
+}

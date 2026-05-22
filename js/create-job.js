@@ -2903,6 +2903,8 @@ function ensureMissingFieldSectionVisible(field) {
 
     const revealIds = new Set([
         'pickup-room-list-wrapper',
+        'pickup-room-list',
+        'pickup-floors-selector',
         'car-transport-section',
         'motorbike-transport-section',
         'trailer-campervan-section',
@@ -5349,6 +5351,36 @@ document.addEventListener('DOMContentLoaded', function () {
                 ) || visibleTargetElement;
             };
 
+            if (targetId === 'confirm-pickup-floors-btn') {
+                if (typeof syncSelectedPickupFloorsFromDom === 'function') {
+                    syncSelectedPickupFloorsFromDom();
+                }
+                if (typeof syncPickupFloorConfirmButtonVisibility === 'function') {
+                    syncPickupFloorConfirmButtonVisibility();
+                }
+
+                const confirmBtn = document.getElementById('confirm-pickup-floors-btn');
+                const floorSelector = document.getElementById('pickup-floors-selector');
+                const highlightNodes = [floorSelector, confirmBtn].filter(Boolean);
+
+                highlightNodes.forEach((node) => {
+                    node.classList.add('next-missing-highlight');
+                });
+
+                if (floorSelector) {
+                    floorSelector.setAttribute('aria-invalid', 'true');
+                    bindClearMissingHighlightOnResolution(targetElement, floorSelector, floorSelector);
+                }
+
+                if (confirmBtn && confirmBtn.style.display !== 'none') {
+                    scrollPickupFloorConfirmIntoView(confirmBtn);
+                } else if (floorSelector) {
+                    floorSelector.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+
+                return true;
+            }
+
             const highlightNode = getControlHighlightNode();
 
             highlightNode.classList.add('next-missing-highlight');
@@ -5743,6 +5775,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         function revealMissingFieldBeforeAlert(field, options = {}) {
             if (!field) return;
+
+            const fieldId = String(field.id || '').trim();
+            if (fieldId === 'confirm-pickup-floors-btn' && typeof window.syncPickupFloorConfirmButtonVisibility === 'function') {
+                window.syncPickupFloorConfirmButtonVisibility();
+            }
 
             const alertDelayMs = Number.isFinite(Number(options.alertDelayMs)) ? Number(options.alertDelayMs) : 320;
             const skipAlert = !!options.skipAlert;
@@ -12903,6 +12940,63 @@ function getDomSelectedPickupFloorNames() {
     return out;
 }
 
+/** Merge visible floor chips into selectedPickupFloors so confirm visibility matches the UI. */
+function syncSelectedPickupFloorsFromDom() {
+    if (!(window.selectedPickupFloors instanceof Set)) {
+        window.selectedPickupFloors = new Set();
+    }
+    getDomSelectedPickupFloorNames().forEach((floorName) => {
+        window.selectedPickupFloors.add(floorName);
+    });
+    const hiddenFloor = (document.getElementById('pickup-floor-select')?.value || '').trim();
+    if (hiddenFloor) {
+        window.selectedPickupFloors.add(hiddenFloor);
+    }
+    return window.selectedPickupFloors;
+}
+
+function hasSelectedPickupFloorsForConfirm() {
+    syncSelectedPickupFloorsFromDom();
+    return !!(window.selectedPickupFloors && window.selectedPickupFloors.size > 0);
+}
+
+/** Keep the blue confirm control visible whenever floors are selected but not yet confirmed. */
+function syncPickupFloorConfirmButtonVisibility(options = {}) {
+    const confirmBtn = document.getElementById('confirm-pickup-floors-btn');
+    if (!confirmBtn) {
+        return false;
+    }
+
+    const show = hasSelectedPickupFloorsForConfirm();
+    confirmBtn.style.display = show ? 'block' : 'none';
+    confirmBtn.setAttribute('aria-hidden', show ? 'false' : 'true');
+
+    if (show && options.scrollIntoView && typeof confirmBtn.scrollIntoView === 'function') {
+        requestAnimationFrame(() => {
+            try {
+                confirmBtn.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+            } catch (_error) {
+                // Ignore scroll errors in older browsers.
+            }
+        });
+    }
+
+    return show;
+}
+
+window.syncSelectedPickupFloorsFromDom = syncSelectedPickupFloorsFromDom;
+window.syncPickupFloorConfirmButtonVisibility = syncPickupFloorConfirmButtonVisibility;
+
+function scrollPickupFloorConfirmIntoView(confirmBtn) {
+    if (!confirmBtn || typeof confirmBtn.getBoundingClientRect !== 'function') {
+        return;
+    }
+
+    const stickyOffset = 220;
+    const absoluteTop = window.pageYOffset + confirmBtn.getBoundingClientRect().top;
+    window.scrollTo({ top: Math.max(0, absoluteTop - stickyOffset), behavior: 'smooth' });
+}
+
 function syncPickupFloorHiddenFromSelection() {
     const hidden = document.getElementById('pickup-floor-select');
     if (!hidden) return;
@@ -12966,20 +13060,7 @@ function renderPickupFloorSelector() {
         selectorContainer.appendChild(btn);
     });
     
-    // Show/hide confirm button based on selection
-    const confirmBtn = document.getElementById('confirm-pickup-floors-btn');
-    
-    if (confirmBtn) {
-        const show = window.selectedPickupFloors.size > 0;
-        confirmBtn.style.display = show ? 'block' : 'none';
-        if (show && typeof confirmBtn.scrollIntoView === 'function') {
-            requestAnimationFrame(() => {
-                try {
-                    confirmBtn.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-                } catch (_e) {}
-            });
-        }
-    }
+    syncPickupFloorConfirmButtonVisibility({ scrollIntoView: hasSelectedPickupFloorsForConfirm() });
 
     syncPickupFloorHiddenFromSelection();
 

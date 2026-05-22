@@ -1103,6 +1103,14 @@ body[data-current-step="3"] #confirm-pickup-floors-btn {
     margin-top: 16px;
 }
 
+/* Stay above the fixed Next FAB when validation highlights this control */
+body[data-form-step="3"] #confirm-pickup-floors-btn.next-missing-highlight,
+body[data-current-step="3"] #confirm-pickup-floors-btn.next-missing-highlight {
+    z-index: 1001;
+    background: #3b82f6 !important;
+    color: #fff !important;
+}
+
 #house-removal-inventory-section {
     display: none !important;
 }

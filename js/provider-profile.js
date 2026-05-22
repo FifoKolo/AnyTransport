@@ -407,9 +407,23 @@
             '          </div>',
             '        </div>',
             '        <div class="profile-form-row">',
-            '          <div class="profile-form-label">Location</div>',
-            '          <div><input id="profile-city" class="form-input" type="text" value="' + escapeAttribute(firstText(u.city, u.town, u.location, '')) + '"' + disabledAttr + '></div>',
+            '          <div class="profile-form-label">Town / city area</div>',
+            '          <div>',
+            '            <input id="profile-city" class="form-input" type="text" placeholder="e.g. Dublin, Cork, Galway" value="' + escapeAttribute(firstText(u.serviceAreaCity, u.city, u.town, u.location, '')) + '"' + disabledAttr + '>',
+            '            <div class="profile-help">Shown to customers searching near you. Required for map discovery.</div>',
+            '          </div>',
             '        </div>',
+            '        <div class="profile-form-row">',
+            '          <div class="profile-form-label">Full address <span style="font-weight:400;color:#64748b;">(optional)</span></div>',
+            '          <div>',
+            '            <input id="profile-service-address" class="form-input" type="text" placeholder="Street address for more accurate placement" value="' + escapeAttribute(firstText(u.serviceAreaAddress, '')) + '"' + disabledAttr + '>',
+            '            <div class="profile-help">Optional. Used for a more precise map pin when you allow it below.</div>',
+            '          </div>',
+            '        </div>',
+            '        <div class="profile-check-grid" style="margin-top:8px;">',
+            buildCheckbox('showExactAddressOnMap', 'Show my exact address on the customer map (otherwise only town/city area)', !!u.showExactAddressOnMap, disabledAttr),
+            '        </div>',
+            '        <div id="profile-location-status" class="profile-help" style="margin-top:8px;" aria-live="polite"></div>',
             '        <div class="profile-form-row">',
             '          <div class="profile-form-label">Contact</div>',
             '          <div><input id="profile-contact" class="form-input" type="text" value="' + escapeAttribute(firstText(u.phone, u.contact, u.email, '')) + '"' + disabledAttr + '></div>',
@@ -489,9 +503,48 @@
             }).join('');
         }
 
+        const MAPBOX_TOKEN = 'pk.eyJ1IjoiZmlsa28iLCJhIjoiY2x6dmdlODUwMDZsMjJqcGcxY2U2b290dCJ9.9DRj6-luEwljI3xea5ATHQ';
+        let cachedCoords = {
+            lat: Number(u.serviceAreaLat) || 0,
+            lng: Number(u.serviceAreaLng) || 0
+        };
+
+        async function geocodeServiceAreaQuery(query) {
+            const q = String(query || '').trim();
+            if (!q || !MAPBOX_TOKEN) return null;
+            const url = 'https://api.mapbox.com/geocoding/v5/mapbox.places/'
+                + encodeURIComponent(q)
+                + '.json?access_token=' + encodeURIComponent(MAPBOX_TOKEN)
+                + '&limit=1&country=ie,gb&types=address,place,locality,postcode';
+            try {
+                const res = await fetch(url);
+                if (!res.ok) return null;
+                const data = await res.json();
+                const feature = data && data.features && data.features[0];
+                if (!feature || !Array.isArray(feature.center) || feature.center.length < 2) return null;
+                return { lng: Number(feature.center[0]), lat: Number(feature.center[1]) };
+            } catch (_err) {
+                return null;
+            }
+        }
+
+        async function resolveServiceAreaCoords() {
+            const address = String(document.getElementById('profile-service-address')?.value || '').trim();
+            const city = String(document.getElementById('profile-city')?.value || '').trim();
+            const query = address || city;
+            if (!query) return null;
+            const coords = await geocodeServiceAreaQuery(query);
+            if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lng)) {
+                cachedCoords = coords;
+            }
+            return coords;
+        }
+
         function buildPayload() {
             const services = collectCheckedServices();
             const paymentMethods = collectPaymentMethods();
+            const city = String(document.getElementById('profile-city')?.value || '').trim();
+            const serviceAddress = String(document.getElementById('profile-service-address')?.value || '').trim();
             return {
                 id: u.id,
                 businessName: String(document.getElementById('profile-business-name')?.value || '').trim(),
@@ -499,8 +552,13 @@
                 nickname: String(document.getElementById('profile-business-name')?.value || '').trim(),
                 username: String(document.getElementById('profile-business-name')?.value || '').trim(),
                 companyType: String(document.getElementById('profile-company-type')?.value || '').trim(),
-                city: String(document.getElementById('profile-city')?.value || '').trim(),
-                location: String(document.getElementById('profile-city')?.value || '').trim(),
+                city: city,
+                location: city,
+                serviceAreaCity: city,
+                serviceAreaAddress: serviceAddress,
+                serviceAreaLat: cachedCoords.lat || 0,
+                serviceAreaLng: cachedCoords.lng || 0,
+                showExactAddressOnMap: !!document.getElementById('showExactAddressOnMap')?.checked,
                 phone: String(document.getElementById('profile-contact')?.value || '').trim(),
                 contact: String(document.getElementById('profile-contact')?.value || '').trim(),
                 website: String(document.getElementById('profile-website')?.value || '').trim(),
@@ -555,6 +613,7 @@
         }
 
         function saveProfile(options) {
+            const locationStatus = document.getElementById('profile-location-status');
             const payload = buildPayload();
             const signature = payloadSignature(payload);
             if (!window.anytransportApi || typeof window.anytransportApi.saveUser !== 'function') {
@@ -567,6 +626,20 @@
             }
 
             setSaveBadge('Saving…', 'saving');
+            if (locationStatus) {
+                locationStatus.textContent = 'Updating map location…';
+            }
+
+            return resolveServiceAreaCoords().then(function () {
+                const freshPayload = buildPayload();
+                return persistProfile(freshPayload, options);
+            }).catch(function () {
+                return persistProfile(payload, options);
+            });
+        }
+
+        function persistProfile(payload, options) {
+            const locationStatus = document.getElementById('profile-location-status');
             try {
                 console.info('[Provider Profile] autosave payload', {
                     userId: payload.id,
@@ -578,8 +651,17 @@
             } catch (_err) {}
 
             return Promise.resolve(window.anytransportApi.saveUser(payload)).then(function (serverUser) {
-                lastSavedSignature = signature;
+                lastSavedSignature = payloadSignature(payload);
                 setSaveBadge('All changes saved', 'saved');
+                if (locationStatus) {
+                    if (payload.serviceAreaLat && payload.serviceAreaLng) {
+                        locationStatus.textContent = 'Map location saved — customers can find you when they search near your area.';
+                    } else if (payload.serviceAreaCity) {
+                        locationStatus.textContent = 'Town saved, but map coordinates could not be resolved. Check spelling or add an address.';
+                    } else {
+                        locationStatus.textContent = 'Add a town/city so customers can find you on the map.';
+                    }
+                }
                 if (serverUser && typeof serverUser === 'object' && serverUser.id) {
                     Object.assign(u, serverUser);
                     try {
@@ -683,7 +765,7 @@
                 if (target.id === 'profile-about') {
                     updateAboutWordCount();
                 }
-                if (target.matches && target.matches('#profile-business-name, #profile-about, #profile-company-type, #profile-city, #profile-contact, #profile-website')) {
+                if (target.matches && target.matches('#profile-business-name, #profile-about, #profile-company-type, #profile-city, #profile-service-address, #profile-contact, #profile-website')) {
                     queueAutosave();
                 }
             });

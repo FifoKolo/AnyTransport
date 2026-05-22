@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Find transport providers - AnyTransport</title>
+    <link rel="stylesheet" href="css/style.css?v=20260322-1">
+    <link rel="stylesheet" href="css/navbar.css?v=20260420-4">
+    <link rel="stylesheet" href="css/find-providers.css?v=20260522-1">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a class="navbar-logo" href="index.html" aria-label="Go to landing page">
+                <img src="assets/logo.jpeg" alt="AnyTransport Logo" class="logo-img">
+                <span class="logo-text">AnyTransport</span>
+            </a>
+            <div class="navbar-menu">
+                <a href="index.html#about" class="nav-link">About Us</a>
+                <a href="find-providers.html" class="nav-link">Find providers</a>
+                <a href="create-job.html" class="nav-link">Get prices</a>
+            </div>
+            <div class="navbar-right">
+                <div id="auth-menu" style="display: flex;">
+                    <button class="btn btn-outline" type="button" onclick="openLoginModal()">Login</button>
+                </div>
+                <div id="user-menu" style="display: none;">
+                    <a href="customer-dashboard.html" class="btn btn-outline" style="margin-right:8px;">My requests</a>
+                    <button class="btn btn-primary" type="button" onclick="logout()">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="find-providers-wrap">
+        <header class="find-providers-header">
+            <h1>Find transport providers near you</h1>
+            <p>Search by your town or address and set how far you want to look (km). Approved providers in that area appear on the map — message them or invite them to quote on one of your request forms.</p>
+        </header>
+
+        <div class="find-providers-search">
+            <div>
+                <label for="customer-search-location">Your location</label>
+                <input id="customer-search-location" class="form-input" type="text" placeholder="Town, city, or address" autocomplete="off">
+            </div>
+            <div>
+                <label for="customer-search-max-km">Max distance (km)</label>
+                <input id="customer-search-max-km" class="form-input" type="number" min="5" max="300" step="5" value="100">
+            </div>
+            <div>
+                <label for="customer-search-category">Service (optional)</label>
+                <input id="customer-search-category" class="form-input" type="text" placeholder="e.g. house removal">
+            </div>
+            <div class="find-search-btn-wrap">
+                <label aria-hidden="true">&nbsp;</label>
+                <button type="button" id="customer-search-btn" class="btn btn-primary" style="width:100%;">Search</button>
+            </div>
+        </div>
+
+        <p id="find-providers-status" class="find-providers-status" aria-live="polite"></p>
+
+        <div class="find-providers-layout">
+            <div id="find-providers-map" class="find-providers-map" role="application" aria-label="Map of transport providers"></div>
+            <aside class="find-providers-list" aria-label="Provider results">
+                <div id="find-providers-list-head" class="find-providers-list-head">Search to see providers</div>
+                <div id="find-providers-list-body">
+                    <p class="find-providers-empty">Enter your location and click Search.</p>
+                </div>
+            </aside>
+        </div>
+    </main>
+
+    <div id="invite-provider-modal" class="find-invite-modal" hidden>
+        <div class="find-invite-modal-backdrop" data-invite-close></div>
+        <div class="find-invite-modal-panel" role="dialog" aria-labelledby="invite-modal-title">
+            <button type="button" class="find-invite-modal-close" data-invite-close aria-label="Close">&times;</button>
+            <h2 id="invite-modal-title">Invite to quote</h2>
+            <p id="invite-modal-provider" class="find-invite-modal-sub"></p>
+            <label for="invite-quote-select">Choose one of your request forms</label>
+            <select id="invite-quote-select" class="form-input"></select>
+            <p id="invite-modal-status" class="find-invite-modal-status" aria-live="polite"></p>
+            <div class="find-invite-modal-actions">
+                <button type="button" class="btn btn-outline" data-invite-close>Cancel</button>
+                <button type="button" id="invite-provider-submit" class="btn btn-primary">Send invitation</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/auth.js?v=20260522-2"></script>
+    <script src="js/find-providers.js?v=20260522-2"></script>
+</body>
+</html>

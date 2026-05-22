@@ -124,7 +124,8 @@ function default_store() {
         'formReports' => array(),
         'autoBidEvents' => array(),
         'customerBidEmailQueue' => array(),
-        'autoBidCooldowns' => array()
+        'autoBidCooldowns' => array(),
+        'providerInvites' => array()
     );
 }
 
@@ -379,6 +380,32 @@ function normalize_user($user) {
         $normalized['autoBidCooldownSeconds'] = 20;
     } else {
         $normalized['autoBidCooldownSeconds'] = max(1, (int) $normalized['autoBidCooldownSeconds']);
+    }
+
+    $cityValue = trim((string) ($normalized['serviceAreaCity'] ?? $normalized['city'] ?? $normalized['town'] ?? $normalized['location'] ?? ''));
+    if ($cityValue !== '') {
+        $normalized['serviceAreaCity'] = $cityValue;
+        if (!isset($normalized['city']) || trim((string) $normalized['city']) === '') {
+            $normalized['city'] = $cityValue;
+        }
+        if (!isset($normalized['location']) || trim((string) $normalized['location']) === '') {
+            $normalized['location'] = $cityValue;
+        }
+    } elseif (!isset($normalized['serviceAreaCity'])) {
+        $normalized['serviceAreaCity'] = '';
+    }
+
+    if (!isset($normalized['serviceAreaAddress'])) {
+        $normalized['serviceAreaAddress'] = '';
+    }
+
+    $normalized['serviceAreaLat'] = isset($normalized['serviceAreaLat']) ? (float) $normalized['serviceAreaLat'] : 0.0;
+    $normalized['serviceAreaLng'] = isset($normalized['serviceAreaLng']) ? (float) $normalized['serviceAreaLng'] : 0.0;
+
+    if (!isset($normalized['showExactAddressOnMap'])) {
+        $normalized['showExactAddressOnMap'] = false;
+    } else {
+        $normalized['showExactAddressOnMap'] = !empty($normalized['showExactAddressOnMap']);
     }
 
     if (!isset($normalized['autoBidSubscriptionEnabled'])) {
@@ -1164,6 +1191,339 @@ function normalize_quote($quote, $quotes) {
     return $normalized;
 }
 
+/** Stable JSON string for comparing quote field values. */
+function quote_value_fingerprint($value) {
+    if (is_array($value) || is_object($value)) {
+        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+    if (is_bool($value)) {
+        return $value ? '1' : '0';
+    }
+    if ($value === null) {
+        return '';
+    }
+    return trim((string) $value);
+}
+
+function quote_scalar_change_fields() {
+    return array(
+        'pickupAddress' => 'Pickup address',
+        'pickupCity' => 'Pickup city',
+        'pickupPostcode' => 'Pickup postcode',
+        'propertyType' => 'Pickup property type',
+        'pickupPropertyType' => 'Pickup property type',
+        'deliveryAddress' => 'Delivery address',
+        'deliveryCity' => 'Delivery city',
+        'deliveryPostcode' => 'Delivery postcode',
+        'deliveryPropertyType' => 'Delivery property type',
+        'preferredDate' => 'Preferred date',
+        'transportDate' => 'Transport date',
+        'preferredTime' => 'Preferred time',
+        'preferredPickupTime' => 'Pickup time',
+        'preferredDeliveryTime' => 'Delivery time',
+        'preferredPickupTimeFlexibility' => 'Pickup time flexibility',
+        'preferredDeliveryTimeFlexibility' => 'Delivery time flexibility',
+        'timeFlexibility' => 'Time flexibility',
+        'servicePickupMovers' => 'Pickup movers',
+        'servicePickupMoversMode' => 'Pickup movers (mode)',
+        'servicePickupMoversConfirmed' => 'Pickup movers (confirmed)',
+        'serviceDeliveryMovers' => 'Delivery movers',
+        'serviceDeliveryMoversMode' => 'Delivery movers (mode)',
+        'serviceDeliveryMoversConfirmed' => 'Delivery movers (confirmed)',
+        'pickupLiftAvailable' => 'Pickup lift access',
+        'deliveryLiftAvailable' => 'Delivery lift access',
+        'itemType' => 'Service type',
+        'itemDescription' => 'Item description',
+        'instructions' => 'Instructions',
+        'serviceSpecialInstructions' => 'Special instructions',
+        'servicePacking' => 'Packing service',
+        'serviceDisassembly' => 'Disassembly service',
+        'serviceAssembleAtArrival' => 'Assembly at arrival',
+        'serviceStorage' => 'Storage service',
+        'servicePickupLoadingMethod' => 'Pickup loading method',
+        'serviceDeliveryLoadingMethod' => 'Delivery loading method',
+        'routeDistanceKm' => 'Route distance (km)',
+        'routeDurationText' => 'Route duration',
+        'whatBeingTransported' => 'What is being transported',
+    );
+}
+
+function quote_json_blob_change_fields() {
+    return array(
+        'pianosJson' => 'Piano details',
+        'freightJson' => 'Freight details',
+        'clearanceSelectedItemsJson' => 'Clearance items',
+        'clearanceJson' => 'Clearance details',
+        'carVehiclesJson' => 'Vehicle details (car)',
+        'motorbikeVehiclesJson' => 'Vehicle details (motorbike)',
+        'trailerVehiclesJson' => 'Vehicle details (trailer)',
+        'industrialJson' => 'Industrial load details',
+        'manpowerJson' => 'Manpower details',
+        'officeInventory' => 'Office inventory',
+        'petDetails' => 'Pet transport details',
+        'stops' => 'Multi-stop route',
+    );
+}
+
+function quote_inventory_change_fields() {
+    return array(
+        'houseInventory' => 'House removal inventory',
+        'itemQuantities' => 'Item quantities',
+        'multiFloorInventory' => 'Multi-floor inventory',
+        'itemFloorAssignments' => 'Item floor assignments',
+        'floorBlocks' => 'Floor details',
+        'floorMediaItems' => 'Floor photos/videos',
+        'selectedPickupFloors' => 'Pickup floors',
+        'selectedDeliveryFloors' => 'Delivery floors',
+    );
+}
+
+function format_quote_change_value($value) {
+    $fp = quote_value_fingerprint($value);
+    if ($fp === '') {
+        return '(empty)';
+    }
+    if (strlen($fp) > 120) {
+        return substr($fp, 0, 117) . '...';
+    }
+    return $fp;
+}
+
+function quote_item_signature($item) {
+    if (!is_array($item)) {
+        return '';
+    }
+    $name = strtolower(trim((string) ($item['name'] ?? '')));
+    $qty = (int) ($item['quantity'] ?? 1);
+    if ($qty < 1) {
+        $qty = 1;
+    }
+    $dims = array(
+        (string) ($item['width'] ?? ''),
+        (string) ($item['widthUnit'] ?? ''),
+        (string) ($item['depth'] ?? ''),
+        (string) ($item['depthUnit'] ?? ''),
+        (string) ($item['height'] ?? ''),
+        (string) ($item['heightUnit'] ?? ''),
+        (string) ($item['weight'] ?? ''),
+        (string) ($item['weightUnit'] ?? ''),
+    );
+    return $name . '|' . $qty . '|' . implode(',', $dims);
+}
+
+function summarize_quote_items_changes($beforeItems, $afterItems) {
+    $lines = array();
+    $before = is_array($beforeItems) ? $beforeItems : array();
+    $after = is_array($afterItems) ? $afterItems : array();
+
+    $beforeMap = array();
+    foreach ($before as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $name = trim((string) ($item['name'] ?? ''));
+        if ($name === '') {
+            continue;
+        }
+        $sig = quote_item_signature($item);
+        $beforeMap[$sig] = $item;
+    }
+    $afterMap = array();
+    foreach ($after as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $name = trim((string) ($item['name'] ?? ''));
+        if ($name === '') {
+            continue;
+        }
+        $sig = quote_item_signature($item);
+        $afterMap[$sig] = $item;
+    }
+
+    foreach ($afterMap as $sig => $item) {
+        if (!isset($beforeMap[$sig])) {
+            $label = trim((string) ($item['name'] ?? 'Item'));
+            $qty = (int) ($item['quantity'] ?? 1);
+            $lines[] = 'Added item: ' . $label . ($qty > 1 ? ' (×' . $qty . ')' : '');
+        }
+    }
+    foreach ($beforeMap as $sig => $item) {
+        if (!isset($afterMap[$sig])) {
+            $label = trim((string) ($item['name'] ?? 'Item'));
+            $qty = (int) ($item['quantity'] ?? 1);
+            $lines[] = 'Removed item: ' . $label . ($qty > 1 ? ' (×' . $qty . ')' : '');
+        }
+    }
+
+    $beforeNames = array();
+    foreach ($before as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $n = strtolower(trim((string) ($item['name'] ?? '')));
+        if ($n !== '') {
+            $beforeNames[$n] = (int) ($item['quantity'] ?? 1);
+        }
+    }
+    $afterNames = array();
+    foreach ($after as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $n = strtolower(trim((string) ($item['name'] ?? '')));
+        if ($n !== '') {
+            $afterNames[$n] = (int) ($item['quantity'] ?? 1);
+        }
+    }
+    foreach ($afterNames as $name => $qtyAfter) {
+        if (!isset($beforeNames[$name])) {
+            continue;
+        }
+        $qtyBefore = (int) $beforeNames[$name];
+        if ($qtyBefore !== $qtyAfter) {
+            $lines[] = 'Quantity changed for ' . $name . ': ' . $qtyBefore . ' → ' . $qtyAfter;
+        }
+    }
+
+    return array_values(array_unique($lines));
+}
+
+function compare_quote_changes($before, $after) {
+    if (!is_array($before) || !is_array($after)) {
+        return array();
+    }
+
+    $changes = array();
+
+    foreach (quote_scalar_change_fields() as $key => $label) {
+        $b = quote_value_fingerprint($before[$key] ?? '');
+        $a = quote_value_fingerprint($after[$key] ?? '');
+        if ($b === $a) {
+            continue;
+        }
+        $changes[] = $label . ': ' . format_quote_change_value($before[$key] ?? '') . ' → ' . format_quote_change_value($after[$key] ?? '');
+    }
+
+    foreach (quote_json_blob_change_fields() as $key => $label) {
+        $b = quote_value_fingerprint($before[$key] ?? '');
+        $a = quote_value_fingerprint($after[$key] ?? '');
+        if ($b === $a) {
+            continue;
+        }
+        $changes[] = $label . ' updated';
+    }
+
+    foreach (quote_inventory_change_fields() as $key => $label) {
+        $b = quote_value_fingerprint($before[$key] ?? '');
+        $a = quote_value_fingerprint($after[$key] ?? '');
+        if ($b === $a) {
+            continue;
+        }
+        $changes[] = $label . ' updated';
+    }
+
+    $itemLines = summarize_quote_items_changes($before['items'] ?? array(), $after['items'] ?? array());
+    foreach ($itemLines as $line) {
+        $changes[] = $line;
+    }
+
+    $mediaBefore = quote_value_fingerprint($before['mediaAttachments'] ?? array());
+    $mediaAfter = quote_value_fingerprint($after['mediaAttachments'] ?? array());
+    if ($mediaBefore !== $mediaAfter) {
+        $changes[] = 'Photos/videos updated';
+    }
+
+    return array_values(array_unique($changes));
+}
+
+function session_user_owns_quote($sessionUser, $quote) {
+    if (!is_array($sessionUser) || !is_array($quote)) {
+        return false;
+    }
+    $sid = trim((string) ($sessionUser['id'] ?? ''));
+    $ownerId = trim((string) ($quote['userId'] ?? $quote['createdBy'] ?? ''));
+    if ($sid !== '' && $ownerId !== '' && $sid === $ownerId) {
+        return true;
+    }
+    $sessionEmail = strtolower(trim((string) ($sessionUser['email'] ?? '')));
+    $quoteEmail = strtolower(trim((string) ($quote['customerEmail'] ?? '')));
+    return $sessionEmail !== '' && $quoteEmail !== '' && $sessionEmail === $quoteEmail;
+}
+
+function get_provider_ids_with_active_bids_on_quote($store, $quoteId) {
+    $quoteId = trim((string) $quoteId);
+    $ids = array();
+    foreach (get_active_quote_bids($store, $quoteId) as $bid) {
+        $pid = trim((string) ($bid['providerId'] ?? ''));
+        if ($pid !== '') {
+            $ids[$pid] = true;
+        }
+    }
+    return array_keys($ids);
+}
+
+function send_provider_quote_updated_email($provider, $quoteLabel, $quoteId, $changes, $customerName) {
+    if (!is_array($provider) || empty($provider['email'])) {
+        return false;
+    }
+    $name = provider_public_name($provider, 'there');
+    $subject = 'Customer updated listing ' . $quoteLabel;
+    $body = "Hi " . $name . ",\n\n";
+    $body .= "The customer";
+    if ($customerName !== '') {
+        $body .= " (" . $customerName . ")";
+    }
+    $body .= " updated their request form " . $quoteLabel . ".\n\n";
+    $body .= "Changes:\n";
+    foreach ($changes as $line) {
+        $body .= "• " . $line . "\n";
+    }
+    $body .= "\nReview the updated listing and adjust your bid if needed:\n";
+    $body .= listing_details_url_for_quote($quoteId) . "\n\n";
+    $body .= "This inbox is not monitored. Please use your provider dashboard for messages.\n\n";
+    $body .= "Regards,\nAnyTransport";
+    return send_email_simple($provider['email'], $subject, $body);
+}
+
+function notify_providers_quote_updated(&$store, $before, $after) {
+    $quoteId = trim((string) ($after['id'] ?? ''));
+    if ($quoteId === '') {
+        return;
+    }
+    $changes = compare_quote_changes($before, $after);
+    if (empty($changes)) {
+        return;
+    }
+
+    $quoteLabel = trim((string) ($after['formId'] ?? $quoteId));
+    $customerName = trim((string) ($after['customerName'] ?? ''));
+    $providerIds = get_provider_ids_with_active_bids_on_quote($store, $quoteId);
+    if (empty($providerIds)) {
+        return;
+    }
+
+    $summary = count($changes) > 3
+        ? (count($changes) . ' updates including ' . $changes[0])
+        : implode('; ', $changes);
+
+    foreach ($providerIds as $providerId) {
+        $provider = find_store_user_by_id($store, $providerId);
+        if (!is_array($provider)) {
+            continue;
+        }
+        send_provider_quote_updated_email($provider, $quoteLabel, $quoteId, $changes, $customerName);
+        add_user_notification(
+            $store,
+            $providerId,
+            'Listing updated by customer',
+            'Form ' . $quoteLabel . ' was updated: ' . $summary,
+            'quote_updated',
+            array('quoteId' => $quoteId)
+        );
+    }
+}
+
 function build_quote_media_entries($store, $quoteId) {
     $qid = trim((string) $quoteId);
     if ($qid === '') return array();
@@ -1365,6 +1725,180 @@ function find_store_quote_by_id($store, $quoteId) {
         }
     }
     return null;
+}
+
+function haversine_distance_km($lat1, $lng1, $lat2, $lng2) {
+    $lat1 = (float) $lat1;
+    $lng1 = (float) $lng1;
+    $lat2 = (float) $lat2;
+    $lng2 = (float) $lng2;
+    if ($lat1 === 0.0 && $lng1 === 0.0) {
+        return null;
+    }
+    if ($lat2 === 0.0 && $lng2 === 0.0) {
+        return null;
+    }
+    $earthRadius = 6371.0;
+    $dLat = deg2rad($lat2 - $lat1);
+    $dLng = deg2rad($lng2 - $lng1);
+    $a = sin($dLat / 2) * sin($dLat / 2)
+        + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) * sin($dLng / 2);
+    $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+    return $earthRadius * $c;
+}
+
+function is_discoverable_provider($user) {
+    if (!is_array($user)) {
+        return false;
+    }
+    $role = strtolower(trim((string) ($user['role'] ?? '')));
+    if ($role !== 'provider') {
+        return false;
+    }
+    $status = strtolower(trim((string) ($user['identityReviewStatus'] ?? '')));
+    if ($status === 'approved' || !empty($user['verified'])) {
+        return true;
+    }
+    return false;
+}
+
+function provider_has_map_location($user) {
+    if (!is_array($user)) {
+        return false;
+    }
+    $lat = (float) ($user['serviceAreaLat'] ?? 0);
+    $lng = (float) ($user['serviceAreaLng'] ?? 0);
+    if ($lat === 0.0 && $lng === 0.0) {
+        return false;
+    }
+    $city = trim((string) ($user['serviceAreaCity'] ?? $user['city'] ?? ''));
+    return $city !== '' || trim((string) ($user['serviceAreaAddress'] ?? '')) !== '';
+}
+
+function sanitize_provider_for_discovery($user, $distanceKm = null) {
+    if (!is_array($user)) {
+        return array();
+    }
+    $showExact = !empty($user['showExactAddressOnMap']);
+    $city = trim((string) ($user['serviceAreaCity'] ?? $user['city'] ?? $user['location'] ?? ''));
+    $address = $showExact ? trim((string) ($user['serviceAreaAddress'] ?? '')) : '';
+    $services = array();
+    if (isset($user['services']) && is_array($user['services'])) {
+        $services = array_values(array_filter(array_map('strval', $user['services'])));
+    } elseif (isset($user['categories']) && is_array($user['categories'])) {
+        $services = array_values(array_filter(array_map('strval', $user['categories'])));
+    }
+    $out = array(
+        'id' => trim((string) ($user['id'] ?? '')),
+        'username' => trim((string) ($user['username'] ?? $user['nickname'] ?? '')),
+        'businessName' => trim((string) ($user['businessName'] ?? $user['name'] ?? '')),
+        'description' => trim((string) ($user['description'] ?? $user['about'] ?? $user['businessDescription'] ?? '')),
+        'serviceAreaCity' => $city,
+        'serviceAreaAddress' => $address,
+        'showExactAddressOnMap' => $showExact,
+        'blockInvites' => !empty($user['blockInvites']),
+        'services' => $services,
+        'avatar' => trim((string) ($user['avatar'] ?? '')),
+        'photos' => isset($user['photos']) && is_array($user['photos']) ? array_values($user['photos']) : array(),
+        'mapLat' => (float) ($user['serviceAreaLat'] ?? 0),
+        'mapLng' => (float) ($user['serviceAreaLng'] ?? 0),
+        'verified' => !empty($user['verified']),
+    );
+    if ($distanceKm !== null) {
+        $out['distanceKm'] = round((float) $distanceKm, 1);
+    }
+    return $out;
+}
+
+function search_discoverable_providers($store, $lat, $lng, $customerMaxKm, $categoryFilter) {
+    $lat = (float) $lat;
+    $lng = (float) $lng;
+    $customerMaxKm = max(5.0, min(500.0, (float) $customerMaxKm));
+    $categoryFilter = strtolower(trim((string) $categoryFilter));
+    $matches = array();
+
+    foreach ($store['users'] as $user) {
+        if (!is_discoverable_provider($user) || !provider_has_map_location($user)) {
+            continue;
+        }
+        $providerLat = (float) ($user['serviceAreaLat'] ?? 0);
+        $providerLng = (float) ($user['serviceAreaLng'] ?? 0);
+        $distance = haversine_distance_km($lat, $lng, $providerLat, $providerLng);
+        if ($distance === null) {
+            continue;
+        }
+        if ($distance > $customerMaxKm) {
+            continue;
+        }
+        if ($categoryFilter !== '') {
+            $services = array();
+            if (isset($user['services']) && is_array($user['services'])) {
+                $services = $user['services'];
+            } elseif (isset($user['categories']) && is_array($user['categories'])) {
+                $services = $user['categories'];
+            }
+            $blob = strtolower(implode(' ', array_map('strval', $services)));
+            if ($blob === '' || strpos($blob, $categoryFilter) === false) {
+                continue;
+            }
+        }
+        $entry = sanitize_provider_for_discovery($user, $distance);
+        $entry['_sortDistance'] = $distance;
+        $matches[] = $entry;
+    }
+
+    usort($matches, function ($a, $b) {
+        return ($a['_sortDistance'] ?? 0) <=> ($b['_sortDistance'] ?? 0);
+    });
+    foreach ($matches as &$entry) {
+        unset($entry['_sortDistance']);
+    }
+    unset($entry);
+
+    return $matches;
+}
+
+function ensure_store_provider_invites(&$store) {
+    if (!isset($store['providerInvites']) || !is_array($store['providerInvites'])) {
+        $store['providerInvites'] = array();
+    }
+}
+
+function find_provider_invite_index($store, $quoteId, $providerId) {
+    ensure_store_provider_invites($store);
+    $quoteId = trim((string) $quoteId);
+    $providerId = trim((string) $providerId);
+    foreach ($store['providerInvites'] as $index => $invite) {
+        if (!is_array($invite)) {
+            continue;
+        }
+        if (trim((string) ($invite['quoteId'] ?? '')) !== $quoteId) {
+            continue;
+        }
+        if (trim((string) ($invite['providerId'] ?? '')) !== $providerId) {
+            continue;
+        }
+        if (strtolower(trim((string) ($invite['status'] ?? 'active'))) === 'cancelled') {
+            continue;
+        }
+        return (int) $index;
+    }
+    return -1;
+}
+
+function send_provider_job_invite_email($provider, $customerName, $quoteLabel, $quoteId) {
+    if (!is_array($provider) || empty($provider['email']) || !empty($provider['muteInviteEmails'])) {
+        return false;
+    }
+    $name = provider_public_name($provider, 'there');
+    $subject = 'Invitation to quote on listing ' . $quoteLabel;
+    $body = "Hi " . $name . ",\n\n";
+    $body .= $customerName . " invited you to submit a quote on their listing " . $quoteLabel . ".\n\n";
+    $body .= "View the listing and place your bid:\n";
+    $body .= listing_details_url_for_quote($quoteId) . "\n\n";
+    $body .= "This inbox is not monitored. Please use your provider dashboard.\n\n";
+    $body .= "Regards,\nAnyTransport";
+    return send_email_simple($provider['email'], $subject, $body);
 }
 
 function provider_public_name($user, $fallback = 'Provider') {
@@ -2410,6 +2944,8 @@ switch ($action) {
                 'services', 'categories', 'skills', 'photos', 'avatar', 'coverImage',
                 'website', 'companyType', 'paymentMethods', 'acceptsCash', 'paypal', 'visa', 'mastercard', 'bankTransfer', 'americanExpress', 'cheque', 'cash',
                 'blockInvites', 'muteInviteEmails',
+                'serviceAreaCity', 'serviceAreaAddress', 'serviceAreaLat', 'serviceAreaLng',
+                'showExactAddressOnMap',
                 'autoBidCooldownSeconds', 'autoBidSubscriptionEnabled',
                 'instagram', 'facebook', 'x', 'twitter', 'tiktok', 'linkedin'
             );
@@ -2945,14 +3481,26 @@ switch ($action) {
         $index = find_user_index($store['quotes'], function ($existing) use ($normalized) {
             return trim((string) ($existing['id'] ?? '')) === trim((string) ($normalized['id'] ?? ''));
         });
-        if ($index >= 0) {
-            $store['quotes'][$index] = array_merge($store['quotes'][$index], $normalized);
+        $isQuoteUpdate = $index >= 0;
+        $previousQuote = $isQuoteUpdate ? $store['quotes'][$index] : null;
+        if ($isQuoteUpdate) {
+            $merged = array_merge($store['quotes'][$index], $normalized);
+            if (isset($store['quotes'][$index]['createdAt'])) {
+                $merged['createdAt'] = $store['quotes'][$index]['createdAt'];
+            }
+            $store['quotes'][$index] = $merged;
+            $normalized = $store['quotes'][$index];
         } else {
             $store['quotes'][] = $normalized;
         }
+
+        if ($isQuoteUpdate && is_array($previousQuote) && session_user_owns_quote($sessionUser, $previousQuote)) {
+            notify_providers_quote_updated($store, $previousQuote, $normalized);
+        }
+
         write_store($storeFile, $store);
 
-        // Send form submission confirmation email to the customer when possible.
+        // Send form submission / update confirmation email to the customer when possible.
         $customerEmail = strtolower(trim((string) ($normalized['customerEmail'] ?? '')));
         if ($customerEmail === '' && is_array($sessionUser)) {
             $customerEmail = strtolower(trim((string) ($sessionUser['email'] ?? '')));
@@ -2966,9 +3514,15 @@ switch ($action) {
                 $customerName = 'there';
             }
             $formReference = trim((string) ($normalized['formId'] ?? $normalized['id'] ?? ''));
-            $subject = 'We received your request';
-            $body = "Hi " . $customerName . ",\n\n";
-            $body .= "Your request form has been submitted successfully.\n";
+            if ($isQuoteUpdate) {
+                $subject = 'Your request was updated';
+                $body = "Hi " . $customerName . ",\n\n";
+                $body .= "Your request form has been updated successfully.\n";
+            } else {
+                $subject = 'We received your request';
+                $body = "Hi " . $customerName . ",\n\n";
+                $body .= "Your request form has been submitted successfully.\n";
+            }
             if ($formReference !== '') {
                 $body .= "Reference: " . $formReference . "\n";
             }
@@ -3642,6 +4196,101 @@ switch ($action) {
         header('Content-Type: ' . $contentType);
         echo $response;
         exit;
+
+    case 'providers.search':
+        $sessionUser = get_current_user_record($store);
+        if (!is_array($sessionUser) || trim((string) ($sessionUser['id'] ?? '')) === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        $lat = (float) ($input['lat'] ?? $_GET['lat'] ?? 0);
+        $lng = (float) ($input['lng'] ?? $_GET['lng'] ?? 0);
+        if ($lat === 0.0 && $lng === 0.0) {
+            send_json(array('ok' => false, 'error' => 'Search location (lat and lng) is required. Geocode your town or address first.'), 400);
+        }
+        $maxKm = (float) ($input['maxKm'] ?? $_GET['maxKm'] ?? 100);
+        $category = trim((string) ($input['category'] ?? $_GET['category'] ?? ''));
+        $providers = search_discoverable_providers($store, $lat, $lng, $maxKm, $category);
+        send_json(array(
+            'ok' => true,
+            'providers' => $providers,
+            'count' => count($providers),
+            'search' => array(
+                'lat' => $lat,
+                'lng' => $lng,
+                'maxKm' => max(5.0, min(500.0, $maxKm)),
+                'category' => $category
+            )
+        ));
+
+    case 'invites.create':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $sessionUser = get_current_user_record($store);
+        $customerId = is_array($sessionUser) ? trim((string) ($sessionUser['id'] ?? '')) : '';
+        if ($customerId === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        $quoteId = trim((string) ($input['quoteId'] ?? ''));
+        $providerId = trim((string) ($input['providerId'] ?? ''));
+        if ($quoteId === '' || $providerId === '') {
+            send_json(array('ok' => false, 'error' => 'quoteId and providerId are required.'), 400);
+        }
+        $quote = find_quote_by_id($store['quotes'], $quoteId);
+        if (!is_array($quote)) {
+            send_json(array('ok' => false, 'error' => 'Request form not found.'), 404);
+        }
+        $ownerId = trim((string) ($quote['userId'] ?? $quote['createdBy'] ?? ''));
+        if ($ownerId === '' || $ownerId !== $customerId) {
+            if (!session_user_owns_quote($sessionUser, $quote)) {
+                send_json(array('ok' => false, 'error' => 'You can only invite providers to your own request forms.'), 403);
+            }
+        }
+        $provider = find_store_user_by_id($store, $providerId);
+        if (!is_discoverable_provider($provider)) {
+            send_json(array('ok' => false, 'error' => 'Provider not found or not available.'), 404);
+        }
+        if (!empty($provider['blockInvites'])) {
+            send_json(array('ok' => false, 'error' => 'This provider is not accepting job invitations.'), 403);
+        }
+        $searchLat = (float) ($input['lat'] ?? 0);
+        $searchLng = (float) ($input['lng'] ?? 0);
+        $maxKm = (float) ($input['maxKm'] ?? 100);
+        if ($searchLat !== 0.0 || $searchLng !== 0.0) {
+            $distance = haversine_distance_km($searchLat, $searchLng, (float) ($provider['serviceAreaLat'] ?? 0), (float) ($provider['serviceAreaLng'] ?? 0));
+            if ($distance !== null && $distance > max(5.0, min(500.0, $maxKm))) {
+                send_json(array('ok' => false, 'error' => 'This provider is outside your search radius.'), 400);
+            }
+        }
+        ensure_store_provider_invites($store);
+        if (find_provider_invite_index($store, $quoteId, $providerId) >= 0) {
+            send_json(array('ok' => true, 'alreadyInvited' => true, 'message' => 'This provider was already invited to this form.'));
+        }
+        $quoteLabel = trim((string) ($quote['formId'] ?? $quoteId));
+        $customerName = trim((string) ($sessionUser['username'] ?? $sessionUser['nickname'] ?? $sessionUser['name'] ?? 'A customer'));
+        $invite = array(
+            'id' => make_id('invite'),
+            'quoteId' => $quoteId,
+            'formId' => $quoteLabel,
+            'providerId' => $providerId,
+            'customerId' => $customerId,
+            'customerName' => $customerName,
+            'status' => 'active',
+            'createdAt' => gmdate('c')
+        );
+        array_unshift($store['providerInvites'], $invite);
+        $store['providerInvites'] = array_slice($store['providerInvites'], 0, 2000);
+        add_user_notification(
+            $store,
+            $providerId,
+            'Invitation to quote',
+            $customerName . ' invited you to quote on listing ' . $quoteLabel . '.',
+            'job_invite',
+            array('quoteId' => $quoteId, 'fromUserId' => $customerId, 'inviteId' => $invite['id'])
+        );
+        send_provider_job_invite_email($provider, $customerName, $quoteLabel, $quoteId);
+        write_store($storeFile, $store);
+        send_json(array('ok' => true, 'invite' => $invite));
 
     default:
         send_json(array('ok' => false, 'error' => 'Unknown action.'), 404);

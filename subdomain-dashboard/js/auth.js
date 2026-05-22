@@ -339,6 +339,26 @@ window.anytransportApi = window.anytransportApi || (function () {
                 return null;
             }
         },
+        searchProviders: function (lat, lng, options) {
+            const opts = options && typeof options === 'object' ? options : {};
+            const response = request('providers.search', 'GET', null, {
+                lat: String(lat),
+                lng: String(lng),
+                maxKm: opts.maxKm != null ? String(opts.maxKm) : '100',
+                category: opts.category ? String(opts.category) : ''
+            });
+            return Array.isArray(response.providers) ? response.providers : [];
+        },
+        inviteProviderToQuote: function (quoteId, providerId, searchContext) {
+            const ctx = searchContext && typeof searchContext === 'object' ? searchContext : {};
+            return request('invites.create', 'POST', {
+                quoteId: quoteId ? String(quoteId) : '',
+                providerId: providerId ? String(providerId) : '',
+                lat: ctx.lat != null ? ctx.lat : 0,
+                lng: ctx.lng != null ? ctx.lng : 0,
+                maxKm: ctx.maxKm != null ? ctx.maxKm : 100
+            });
+        },
         saveQuote: function (quote) {
             const response = request('quotes.create', 'POST', { quote: quote || {} });
             return response.quote || quote || null;
