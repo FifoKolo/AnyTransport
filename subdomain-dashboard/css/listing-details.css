@@ -1,6 +1,6 @@
 .details-page {
     max-width: 1400px;
-    margin: 96px auto 40px;
+    margin: var(--spacing-xl) auto 40px;
     padding: 0 16px;
 }
 

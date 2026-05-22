@@ -1217,7 +1217,7 @@ body[data-form-step="5"] #delivery-room-list label.form-label {
 }
 /* V2 Form Layout for Instant Prices */
 .job-form.v2 {
-    padding: 110px 2rem 2rem;
+    padding: var(--spacing-xl) 2rem 2rem;
     background: none;
     box-shadow: none;
     border-radius: 0;
@@ -5937,7 +5937,7 @@ body.app-alert-open {
 .app-alert-modal.show {
     align-items: flex-start;
     justify-content: center;
-    padding-top: calc(92px + env(safe-area-inset-top, 0px));
+    padding-top: calc(var(--navbar-height, 82px) + env(safe-area-inset-top, 0px) + 1rem);
     padding-bottom: 1.5rem;
     overflow-y: auto;
 }

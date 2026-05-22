@@ -89,6 +89,32 @@
     color: #2563eb !important;
     fill: #2563eb !important;
 }
+/* Fixed navbar height token — used for body offset and sticky in-page headers */
+:root {
+    --navbar-height: 82px;
+}
+
+@media (max-width: 768px) {
+    :root {
+        --navbar-height: 64px;
+    }
+}
+
+@media (max-width: 600px) {
+    :root {
+        --navbar-height: 132px;
+    }
+}
+
+/* Keep all page content below the fixed site navbar */
+body:has(> .navbar) {
+    padding-top: calc(var(--navbar-height) + env(safe-area-inset-top, 0px));
+}
+
+html:has(body > .navbar) {
+    scroll-padding-top: calc(var(--navbar-height) + 12px + env(safe-area-inset-top, 0px));
+}
+
 /* Navbar Styles */
 .navbar {
     background: linear-gradient(135deg, #4A90E2 0%, #2f72b1 100%);
@@ -545,4 +571,39 @@
     .nav-link {
         display: block;
     }
+}
+
+/* Pages that previously added their own navbar offset — defer to body padding above */
+body:has(> .navbar) .hero-section {
+    margin-top: 0;
+}
+
+body:has(> .navbar) .dashboard-container,
+body:has(> .navbar) .container.dashboard-container,
+body:has(> .navbar) .container.create-job-container {
+    padding-top: var(--spacing-xl);
+}
+
+body:has(> .navbar) .job-form.v2 {
+    padding-top: var(--spacing-xl);
+}
+
+body:has(> .navbar) .details-page {
+    margin-top: var(--spacing-xl);
+}
+
+body:has(> .navbar) .admin-side-nav {
+    top: calc(var(--navbar-height) + 8px);
+}
+
+body:has(> .navbar) .dashboard-sidebar {
+    top: calc(var(--navbar-height) + var(--spacing-md));
+}
+
+body:has(> .navbar) .bid-sidebar {
+    top: calc(var(--navbar-height) + var(--spacing-sm));
+}
+
+body:has(> .navbar) [id^="admin-section-"] {
+    scroll-margin-top: calc(var(--navbar-height) + 16px);
 }

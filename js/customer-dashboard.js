@@ -221,11 +221,15 @@
                 '<td class="customer-from-to">' + escapeHtml(getFromTo(q)) + '</td>',
                 '<td><span class="customer-status customer-status--' + status.toLowerCase().replace(/\s+/g, '-') + '">' + status + '</span></td>',
                 '<td class="customer-actions">',
-                '<span class="customer-bid-count">' + bidN + '</span>',
-                '<a class="btn btn-outline btn-sm" href="listing-details.html?quoteId=' + encodeURIComponent(q.id) + '">View</a> ',
-                '<a class="btn btn-primary btn-sm" href="create-job.html?editQuote=' + encodeURIComponent(q.id) + '">Edit</a> ',
-                '<button type="button" class="btn btn-danger btn-sm customer-delete-quote-btn" data-quote-id="' + escapeHtml(String(q.id || '')) + '">Delete</button> ',
-                '<button type="button" class="btn btn-secondary btn-sm customer-open-form-messages-btn" data-quote-id="' + escapeHtml(String(q.id || '')) + '" data-form-id="' + escapeHtml(String(fid || '')) + '" style="display:inline-flex; align-items:center; margin-top:8px;">View grouped messages</button>',
+                '<div class="customer-actions-row">',
+                '<span class="customer-bid-count" title="Active bids">' + bidN + '</span>',
+                '<a class="btn btn-outline btn-sm" href="listing-details.html?quoteId=' + encodeURIComponent(q.id) + '">View</a>',
+                '<a class="btn btn-primary btn-sm" href="create-job.html?editQuote=' + encodeURIComponent(q.id) + '">Edit</a>',
+                '<button type="button" class="btn btn-danger btn-sm customer-delete-quote-btn" data-quote-id="' + escapeHtml(String(q.id || '')) + '">Delete</button>',
+                '</div>',
+                '<div class="customer-actions-row">',
+                '<button type="button" class="btn btn-secondary btn-sm customer-open-form-messages-btn" data-quote-id="' + escapeHtml(String(q.id || '')) + '" data-form-id="' + escapeHtml(String(fid || '')) + '">View grouped messages</button>',
+                '</div>',
                 '</td></tr>'
             ].join('');
         }).join('');
@@ -287,7 +291,7 @@
                 '<div class="customer-msg-meta"><span class="customer-msg-dir">' + dir + '</span> · ' + escapeHtml(when) + '</div>',
                 '<h4 class="customer-msg-title">' + title + '</h4>',
                 '<p class="customer-msg-text">' + preview + '</p>',
-                '<a class="btn btn-secondary btn-sm" href="' + openHref + '" onclick="if(window.setNavbarReturnUrl){setNavbarReturnUrl(window.location.href);}" style="display:inline-flex; align-items:center; margin-top:8px;">View message</a>',
+                '<div class="customer-msg-actions"><a class="btn btn-secondary btn-sm" href="' + openHref + '" onclick="if(window.setNavbarReturnUrl){setNavbarReturnUrl(window.location.href);}">View message</a></div>',
                 '</article>'
             ].join('');
         }).join('');
@@ -317,8 +321,8 @@
                 '<div class="customer-msg-meta">Form ' + escapeHtml(formLabel) + ' · ' + escapeHtml(latestWhen) + '</div>',
                 '<h4 class="customer-msg-title">' + escapeHtml(getServiceTitle(quote)) + '</h4>',
                 '<p class="customer-msg-text">' + escapeHtml(summaryText) + '</p>',
-                '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">',
-                '<span class="customer-bid-count">' + activeBids.length + '</span>',
+                '<div class="customer-msg-actions">',
+                '<span class="customer-bid-count" title="Active bids">' + activeBids.length + '</span>',
                 '<button type="button" class="btn btn-secondary btn-sm customer-open-form-group-btn" data-quote-id="' + escapeHtml(quoteId) + '" data-form-id="' + escapeHtml(formLabel) + '">Open group</button>',
                 '</div>',
                 '</article>'
@@ -356,7 +360,7 @@
                 '<div class="customer-msg-meta">Form ' + escapeHtml(formLabel) + '</div>',
                 '<h4 class="customer-msg-title">No bids yet</h4>',
                 '<p class="customer-msg-text">This form has no active bids/messages yet.</p>',
-                '<button type="button" class="btn btn-outline btn-sm customer-back-to-groups-btn" style="margin-top:8px;">Back to grouped forms</button>',
+                '<div class="customer-msg-actions"><button type="button" class="btn btn-outline btn-sm customer-back-to-groups-btn">Back to grouped forms</button></div>',
                 '</article>'
             ].join('');
             return;
@@ -366,7 +370,7 @@
             '<div class="customer-msg-meta">Grouped by form</div>',
             '<h4 class="customer-msg-title">Form ' + escapeHtml(formLabel) + ' · ' + groupedBids.length + ' bid' + (groupedBids.length === 1 ? '' : 's') + '</h4>',
             '<p class="customer-msg-text">All bid messages for this form are listed below.</p>',
-            '<div style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">',
+            '<div class="customer-msg-actions customer-msg-toolbar">',
             '<label for="customer-group-sort-select" style="font-size:12px; color:#334155; font-weight:600;">Sort bids</label>',
             '<select id="customer-group-sort-select" class="form-input customer-group-sort-select" data-quote-id="' + escapeHtml(qid) + '" data-form-id="' + escapeHtml(formLabel) + '" style="max-width:240px;">',
             '<option value="newest"' + (activeSortMode === 'newest' ? ' selected' : '') + '>Newest bid</option>',
@@ -375,7 +379,7 @@
             '<option value="provider"' + (activeSortMode === 'provider' ? ' selected' : '') + '>Provider name</option>',
             '</select>',
             '</div>',
-            '<button type="button" class="btn btn-outline btn-sm customer-back-to-groups-btn" style="margin-top:8px;">Back to grouped forms</button>',
+            '<div class="customer-msg-actions"><button type="button" class="btn btn-outline btn-sm customer-back-to-groups-btn">Back to grouped forms</button></div>',
             '</article>',
             groupedBids.map(function (bid) {
                 const incoming = String(bid && bid.providerId || '') !== String(userId || '');
@@ -393,7 +397,7 @@
                     '<div class="customer-msg-meta"><span class="customer-msg-dir">' + dir + '</span> · ' + when + ' · ' + escapeHtml(amountLabel) + '</div>',
                     '<h4 class="customer-msg-title">' + providerLabel + '</h4>',
                     '<p class="customer-msg-text">' + preview + '</p>',
-                    '<a class="btn btn-secondary btn-sm" href="' + openHref + '" onclick="if(window.setNavbarReturnUrl){setNavbarReturnUrl(window.location.href);}" style="display:inline-flex; align-items:center; margin-top:8px;">Open chat</a>',
+                    '<div class="customer-msg-actions"><a class="btn btn-secondary btn-sm" href="' + openHref + '" onclick="if(window.setNavbarReturnUrl){setNavbarReturnUrl(window.location.href);}">Open chat</a></div>',
                     '</article>'
                 ].join('');
             }).join('')
