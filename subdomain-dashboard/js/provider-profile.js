@@ -116,11 +116,6 @@
     }
 
     function loadProvider(userId) {
-        const syncUser = resolveUserRecordSync(userId);
-        if (syncUser) {
-            return Promise.resolve(syncUser);
-        }
-
         const apiBase = String(window.ANYTRANSPORT_API_URL || '../api/index.php' || 'api/index.php').trim();
         const sep = apiBase.indexOf('?') >= 0 ? '&' : '?';
         const apiUrl = apiBase + sep + 'action=users.get&id=' + encodeURIComponent(String(userId || '').trim());
@@ -545,12 +540,14 @@
             const paymentMethods = collectPaymentMethods();
             const city = String(document.getElementById('profile-city')?.value || '').trim();
             const serviceAddress = String(document.getElementById('profile-service-address')?.value || '').trim();
+            const businessName = String(document.getElementById('profile-business-name')?.value || '').trim();
             return {
                 id: u.id,
-                businessName: String(document.getElementById('profile-business-name')?.value || '').trim(),
-                name: String(document.getElementById('profile-business-name')?.value || '').trim(),
-                nickname: String(document.getElementById('profile-business-name')?.value || '').trim(),
-                username: String(document.getElementById('profile-business-name')?.value || '').trim(),
+                email: u.email,
+                role: u.role,
+                businessName: businessName,
+                name: businessName || firstText(u.name, ''),
+                nickname: firstText(u.nickname, businessName, u.username, ''),
                 companyType: String(document.getElementById('profile-company-type')?.value || '').trim(),
                 city: city,
                 location: city,
@@ -668,20 +665,17 @@
                         renderPayments(u);
                         renderServices(u);
                     } catch (_e) {}
-                    if (window.auth && typeof window.auth.getUser === 'function') {
-                        const viewer = getViewer();
-                        if (viewer && String(viewer.id) === String(serverUser.id)) {
-                            const users = typeof window.auth.loadUsers === 'function' ? window.auth.loadUsers() : [];
-                            const merged = typeof window.auth.normalizeUserRecord === 'function'
-                                ? window.auth.normalizeUserRecord(Object.assign({}, viewer, serverUser), users)
-                                : Object.assign({}, viewer, serverUser);
-                            window.auth.currentUser = merged;
-                            if (typeof window.auth.setStoredCurrentUser === 'function') {
-                                window.auth.setStoredCurrentUser(merged);
-                            }
-                            if (typeof window.auth.initAuth === 'function') {
-                                window.auth.initAuth();
-                            }
+                    const viewer = getViewer();
+                    if (viewer && String(viewer.id) === String(serverUser.id) && window.auth) {
+                        const merged = typeof window.auth.mergeUserIntoLocalCache === 'function'
+                            ? window.auth.mergeUserIntoLocalCache(Object.assign({}, viewer, serverUser))
+                            : Object.assign({}, viewer, serverUser);
+                        window.auth.currentUser = merged;
+                        if (typeof window.auth.setStoredCurrentUser === 'function') {
+                            window.auth.setStoredCurrentUser(merged);
+                        }
+                        if (typeof window.auth.initAuth === 'function') {
+                            window.auth.initAuth();
                         }
                     }
                 }

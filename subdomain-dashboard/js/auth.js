@@ -381,6 +381,13 @@ window.anytransportApi = window.anytransportApi || (function () {
             }
             return request('reviews.list', 'GET', null, params);
         },
+        getProviderPublicProfile: function (providerId) {
+            const id = String(providerId || '').trim();
+            if (!id) {
+                return null;
+            }
+            return request('providers.publicProfile', 'GET', null, { providerId: id });
+        },
         saveQuote: function (quote) {
             const response = request('quotes.create', 'POST', { quote: quote || {} });
             return response.quote || quote || null;
@@ -738,6 +745,14 @@ class AuthManager {
             el.style.display = allowProviderDash ? '' : 'none';
         });
 
+        const findProvidersHref = String(window.location.pathname || '').indexOf('subdomain-dashboard') >= 0
+            ? '../find-providers.html'
+            : 'find-providers.html';
+        document.querySelectorAll('.at-nav-find-providers, #navbar-find-providers-link').forEach((el) => {
+            el.href = findProvidersHref;
+            el.style.display = allowProviderDash ? 'none' : '';
+        });
+
         document.querySelectorAll('#navbar-profile-link').forEach((profileLink) => {
             if (allowProviderDash) {
                 const uid = this.currentUser.id ? String(this.currentUser.id) : '';
@@ -776,6 +791,7 @@ class AuthManager {
             '</button>',
             '<div class="dropdown-menu" role="menu" aria-label="User menu">',
             '  <a href="customer-dashboard.html" class="nav-item at-nav-my-requests">My requests</a>',
+            '  <a href="../find-providers.html" class="nav-item at-nav-find-providers" id="navbar-find-providers-link">Find providers</a>',
             '  <a href="dashboard.html" class="nav-item at-nav-provider-dashboard">Dashboard</a>',
             '  <a id="navbar-profile-link" href="customer-dashboard.html" class="nav-item">Profile</a>',
             '</div>'
@@ -936,6 +952,27 @@ class AuthManager {
         window.location.href = 'index.html';
     }
 
+    mergeUserIntoLocalCache(user) {
+        const merged = this.normalizeUserRecord(user || {}, this.loadUsers());
+        if (!merged || !merged.id) {
+            return merged;
+        }
+
+        const users = this.loadUsers();
+        const index = users.findIndex((entry) => entry && entry.id === merged.id);
+        if (index >= 0) {
+            users[index] = { ...users[index], ...merged };
+        } else {
+            users.push({ ...merged });
+        }
+
+        try {
+            localStorage.setItem(this.usersStorageKey, JSON.stringify(users));
+        } catch (_error) {}
+
+        return merged;
+    }
+
     // Save user to localStorage
     saveUser(user) {
         const users = this.loadUsers();
@@ -953,24 +990,15 @@ class AuthManager {
         }
 
         if (window.anytransportApi) {
-            // If the API is available and the user already has a server id, avoid
-            // calling users.upsert to prevent optimistic client conflicts (409).
-            // Server is authoritative — local state will be synchronized by API responses.
-            if (!normalizedUser.id) {
-                const savedUser = window.anytransportApi.saveUser(normalizedUser);
-                if (savedUser && savedUser.id) {
-                    this.currentUser = this.normalizeUserRecord(savedUser, users);
-                    this.setStoredCurrentUser(this.currentUser);
-                    this.initAuth();
-                    return;
-                }
-            } else {
-                // simply persist locally and trust server copy
-                this.currentUser = normalizedUser;
-                this.setStoredCurrentUser(this.currentUser);
-                this.initAuth();
-                return;
-            }
+            const savedUser = window.anytransportApi.saveUser(normalizedUser);
+            const merged = savedUser && savedUser.id
+                ? this.normalizeUserRecord({ ...normalizedUser, ...savedUser }, users)
+                : normalizedUser;
+            this.mergeUserIntoLocalCache(merged);
+            this.currentUser = merged;
+            this.setStoredCurrentUser(merged);
+            this.initAuth();
+            return;
         }
 
         const index = users.findIndex((entry) => {

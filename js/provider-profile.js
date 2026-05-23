@@ -22,16 +22,40 @@
             return;
         }
 
+        const viewer = getViewer();
+        if (!viewer || !viewer.id) {
+            renderError('Sign in to view transport provider profiles.');
+            return;
+        }
+
         loadProvider(userId).then(function (user) {
             if (!user) {
                 renderError('Provider not found.');
                 return;
             }
-            renderProvider(user);
+            const isOwn = viewer && String(viewer.id) === String(user.id);
+            applyProfilePageChrome(user, isOwn);
+            renderProvider(user, isOwn);
+            renderJobHistory(user.id, isOwn);
         }).catch(function (err) {
             console.error(err);
             renderError('Failed to load provider.');
         });
+    }
+
+    function applyProfilePageChrome(user, isOwn) {
+        const name = firstText(user.businessName, user.name, user.nickname, user.username, 'Transport provider');
+        const titleEl = document.querySelector('.profile-page-title');
+        const introEl = document.querySelector('.profile-page-intro');
+        if (titleEl) {
+            titleEl.textContent = isOwn ? 'My Profile' : name;
+        }
+        if (introEl) {
+            introEl.textContent = isOwn
+                ? 'Keep your provider profile current with business details, services, payment options, and photos. The editor below saves as you work so your public profile stays polished.'
+                : 'View this transport provider\'s public profile, customer reviews, and job history before you hire.';
+        }
+        document.body.classList.toggle('provider-profile-public-view', !isOwn);
     }
 
     // Expose a helper to render a compact profile into any container (used by dashboard)
@@ -116,11 +140,6 @@
     }
 
     function loadProvider(userId) {
-        const syncUser = resolveUserRecordSync(userId);
-        if (syncUser) {
-            return Promise.resolve(syncUser);
-        }
-
         const apiBase = String(window.ANYTRANSPORT_API_URL || '../api/index.php' || 'api/index.php').trim();
         const sep = apiBase.indexOf('?') >= 0 ? '&' : '?';
         const apiUrl = apiBase + sep + 'action=users.get&id=' + encodeURIComponent(String(userId || '').trim());
@@ -133,7 +152,8 @@
         });
     }
 
-    function renderProvider(u) {
+    function renderProvider(u, isOwn) {
+        const ownProfile = isOwn !== false && canEditProfile(u);
         setText('provider-name', firstText(u.businessName, u.name, u.nickname, u.username, u.email));
         setText('provider-role', u.role ? capitalize(String(u.role)) : 'Transport Provider');
         const descEl = document.getElementById('provider-description');
@@ -151,11 +171,15 @@
             if (loc) cityEl.textContent = loc;
             else cityEl.innerHTML = '<span class="provider-empty-hint">Not added yet</span>';
         }
-        const contact = revealContact(u) || '';
         const contactEl = document.getElementById('provider-contact');
         if (contactEl) {
-            if (contact) contactEl.textContent = contact;
-            else contactEl.innerHTML = '<span class="provider-empty-hint">Not provided</span>';
+            if (ownProfile) {
+                const contact = revealContact(u) || '';
+                if (contact) contactEl.textContent = contact;
+                else contactEl.innerHTML = '<span class="provider-empty-hint">Not provided</span>';
+            } else {
+                contactEl.innerHTML = '<span class="provider-empty-hint">Contact details are shared through AnyTransport messages after you connect.</span>';
+            }
         }
         const aboutCombined = firstText(u.bio, u.summary, descText, '');
         const aboutEl = document.getElementById('provider-about');
@@ -167,10 +191,92 @@
         renderServices(u);
         renderPayments(u);
         renderPhotos(u);
-        renderActions(u);
+        renderActions(u, ownProfile);
         renderAvatar(u);
-        renderEditor(u);
+        if (ownProfile) {
+            renderEditor(u);
+        } else {
+            const editRoot = document.getElementById('provider-edit');
+            if (editRoot) editRoot.innerHTML = '';
+        }
         renderReviews(u);
+    }
+
+    function renderJobHistory(providerId, isOwn) {
+        const section = document.getElementById('provider-job-history-section');
+        const summaryEl = document.getElementById('provider-job-history-summary');
+        const listEl = document.getElementById('provider-job-history-list');
+        if (!section || !listEl) return;
+
+        section.style.display = '';
+
+        function paint(payload) {
+            const history = payload && Array.isArray(payload.jobHistory) ? payload.jobHistory : [];
+            const stats = payload && payload.stats ? payload.stats : {};
+            const completed = Number(stats.completedJobs) || 0;
+            const quoted = Number(stats.quotedJobs) || history.length;
+            if (summaryEl) {
+                if (!history.length) {
+                    summaryEl.textContent = isOwn
+                        ? 'When you complete jobs on AnyTransport, they appear here for customers to see.'
+                        : 'This provider has no recorded job history on AnyTransport yet.';
+                } else {
+                    summaryEl.textContent = completed + ' completed · ' + quoted + ' total on platform'
+                        + (isOwn ? ' (visible to customers on your profile).' : '.');
+                }
+            }
+            if (!history.length) {
+                listEl.innerHTML = '<p class="provider-empty-hint" style="margin:0;">No jobs to show yet.</p>';
+                return;
+            }
+            listEl.innerHTML = history.map(function (job) {
+                const service = escapeHtml(firstText(job.service, 'Transport job'));
+                const route = escapeHtml(firstText(job.route, 'Route not listed'));
+                const when = escapeHtml(formatReviewWhen(job.date) || 'Date unknown');
+                const formId = job.formId ? ('Form #' + escapeHtml(String(job.formId))) : '';
+                const amount = job.bidAmount != null && Number(job.bidAmount) > 0
+                    ? (' · €' + escapeHtml(String(Number(job.bidAmount).toFixed(2))))
+                    : '';
+                const status = String(job.status || 'Quoted');
+                const statusClass = status === 'Completed'
+                    ? 'provider-job-history-status--completed'
+                    : (status === 'Awarded' ? 'provider-job-history-status--awarded' : 'provider-job-history-status--quoted');
+                return [
+                    '<article class="provider-job-history-item">',
+                    '<h4>' + service + '</h4>',
+                    '<p class="provider-job-history-meta">' + route + (formId ? (' · ' + formId) : '') + ' · ' + when + amount + '</p>',
+                    '<span class="provider-job-history-status ' + statusClass + '">' + escapeHtml(status) + '</span>',
+                    '</article>'
+                ].join('');
+            }).join('');
+        }
+
+        if (window.anytransportApi && typeof window.anytransportApi.getProviderPublicProfile === 'function') {
+            try {
+                paint(window.anytransportApi.getProviderPublicProfile(providerId));
+                return;
+            } catch (_e) {
+                /* fetch fallback */
+            }
+        }
+
+        const apiBase = String(window.ANYTRANSPORT_API_URL || 'api/index.php').trim();
+        const sep = apiBase.indexOf('?') >= 0 ? '&' : '?';
+        const apiUrl = apiBase + sep + 'action=providers.publicProfile&providerId=' + encodeURIComponent(String(providerId || ''));
+        fetch(apiUrl, { credentials: 'include' })
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .then(function (payload) {
+                if (!payload || !payload.ok) {
+                    if (summaryEl) summaryEl.textContent = 'Job history is unavailable right now.';
+                    listEl.innerHTML = '';
+                    return;
+                }
+                paint(payload);
+            })
+            .catch(function () {
+                if (summaryEl) summaryEl.textContent = 'Job history is unavailable right now.';
+                listEl.innerHTML = '';
+            });
     }
 
     function renderReviews(u) {
@@ -355,7 +461,7 @@
         } catch (e) {}
     }
 
-    function renderActions(u) {
+    function renderActions(u, isOwnProfile) {
         const root = document.getElementById('provider-actions');
         if (!root) return;
         root.innerHTML = '';
@@ -363,33 +469,42 @@
         const reviewStatus = String(u.identityReviewStatus || '').trim();
         const statusBadge = document.createElement('div');
         statusBadge.style.marginBottom = '10px';
-        if (reviewStatus === 'approved') {
+        if (reviewStatus === 'approved' || u.verified) {
             statusBadge.className = 'provider-verified-badge';
             statusBadge.innerHTML = '<span aria-hidden="true">\u2713</span> Verified by AnyTransport';
         } else if (reviewStatus === 'rejected') {
             statusBadge.className = 'provider-verified-badge provider-verified-badge--rejected';
             statusBadge.textContent = 'Identity review rejected';
-        } else {
+        } else if (isOwnProfile) {
             statusBadge.className = 'provider-verified-badge provider-verified-badge--pending';
             statusBadge.textContent = 'Verification pending — complete onboarding in your dashboard';
         }
-        root.appendChild(statusBadge);
+        if (statusBadge.textContent || statusBadge.innerHTML) {
+            root.appendChild(statusBadge);
+        }
 
         const viewer = getViewer();
-        const isOwn = viewer && String(viewer.id) === String(u.id);
+        const isOwn = isOwnProfile !== false && viewer && String(viewer.id) === String(u.id);
 
         if (!isOwn) {
             const btnMessage = document.createElement('a');
-            btnMessage.className = 'btn btn-outline';
+            btnMessage.className = 'btn btn-primary';
             btnMessage.href = 'messages.html?to=' + encodeURIComponent(u.id);
             btnMessage.textContent = 'Message provider';
             root.appendChild(btnMessage);
+
+            const btnBack = document.createElement('a');
+            btnBack.className = 'btn btn-outline';
+            btnBack.href = 'customer-dashboard.html';
+            btnBack.textContent = 'Back to My Listing\'s';
+            root.appendChild(btnBack);
+            return;
         }
 
         const btnListings = document.createElement('a');
         btnListings.className = 'btn btn-primary';
-        btnListings.href = 'dashboard.html?provider=' + encodeURIComponent(u.id);
-        btnListings.textContent = isOwn ? 'My listings' : 'View listings';
+        btnListings.href = 'dashboard.html';
+        btnListings.textContent = 'Provider dashboard';
         root.appendChild(btnListings);
     }
 
@@ -619,12 +734,14 @@
             const paymentMethods = collectPaymentMethods();
             const city = String(document.getElementById('profile-city')?.value || '').trim();
             const serviceAddress = String(document.getElementById('profile-service-address')?.value || '').trim();
+            const businessName = String(document.getElementById('profile-business-name')?.value || '').trim();
             return {
                 id: u.id,
-                businessName: String(document.getElementById('profile-business-name')?.value || '').trim(),
-                name: String(document.getElementById('profile-business-name')?.value || '').trim(),
-                nickname: String(document.getElementById('profile-business-name')?.value || '').trim(),
-                username: String(document.getElementById('profile-business-name')?.value || '').trim(),
+                email: u.email,
+                role: u.role,
+                businessName: businessName,
+                name: businessName || firstText(u.name, ''),
+                nickname: firstText(u.nickname, businessName, u.username, ''),
                 companyType: String(document.getElementById('profile-company-type')?.value || '').trim(),
                 city: city,
                 location: city,
@@ -742,20 +859,17 @@
                         renderPayments(u);
                         renderServices(u);
                     } catch (_e) {}
-                    if (window.auth && typeof window.auth.getUser === 'function') {
-                        const viewer = getViewer();
-                        if (viewer && String(viewer.id) === String(serverUser.id)) {
-                            const users = typeof window.auth.loadUsers === 'function' ? window.auth.loadUsers() : [];
-                            const merged = typeof window.auth.normalizeUserRecord === 'function'
-                                ? window.auth.normalizeUserRecord(Object.assign({}, viewer, serverUser), users)
-                                : Object.assign({}, viewer, serverUser);
-                            window.auth.currentUser = merged;
-                            if (typeof window.auth.setStoredCurrentUser === 'function') {
-                                window.auth.setStoredCurrentUser(merged);
-                            }
-                            if (typeof window.auth.initAuth === 'function') {
-                                window.auth.initAuth();
-                            }
+                    const viewer = getViewer();
+                    if (viewer && String(viewer.id) === String(serverUser.id) && window.auth) {
+                        const merged = typeof window.auth.mergeUserIntoLocalCache === 'function'
+                            ? window.auth.mergeUserIntoLocalCache(Object.assign({}, viewer, serverUser))
+                            : Object.assign({}, viewer, serverUser);
+                        window.auth.currentUser = merged;
+                        if (typeof window.auth.setStoredCurrentUser === 'function') {
+                            window.auth.setStoredCurrentUser(merged);
+                        }
+                        if (typeof window.auth.initAuth === 'function') {
+                            window.auth.initAuth();
                         }
                     }
                 }

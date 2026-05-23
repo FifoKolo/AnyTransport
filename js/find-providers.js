@@ -314,6 +314,7 @@
                 '<p class="find-provider-meta">' + escapeHtml(loc) + (dist ? ' · ' + escapeHtml(dist) : '') + '</p>',
                 '<p class="find-provider-services">' + escapeHtml(services) + '</p>',
                 '<div class="find-provider-actions">',
+                '<a class="btn btn-outline btn-sm" href="provider-profile.html?userId=' + encodeURIComponent(String(p.id || '')) + '">View profile</a>',
                 '<a class="btn btn-primary btn-sm" href="' + escapeHtml(msgUrl) + '">Message</a>',
                 inviteBtn,
                 '</div>',

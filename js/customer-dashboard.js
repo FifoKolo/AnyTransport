@@ -654,15 +654,22 @@
                 const preview = escapeHtml(firstLine(bid && bid.message, 220) || 'No bid note provided.');
                 const when = escapeHtml(formatWhen(bid && bid.createdAt));
                 const dir = incoming ? 'In' : 'Out';
+                const providerId = String(bid && bid.providerId || '').trim();
                 const openHref = 'messages.html?quoteId=' + encodeURIComponent(qid)
                     + '&bidId=' + encodeURIComponent(String(bid && bid.id || ''))
-                    + '&to=' + encodeURIComponent(String(bid && bid.providerId || ''));
+                    + '&to=' + encodeURIComponent(providerId);
+                const profileHref = providerId
+                    ? ('provider-profile.html?userId=' + encodeURIComponent(providerId))
+                    : '';
                 return [
                     '<article class="customer-msg-card customer-msg-card--' + (incoming ? 'in' : 'out') + '">',
                     '<div class="customer-msg-meta"><span class="customer-msg-dir">' + dir + '</span> · ' + when + ' · ' + escapeHtml(amountLabel) + '</div>',
                     '<h4 class="customer-msg-title">' + providerLabel + '</h4>',
                     '<p class="customer-msg-text">' + preview + '</p>',
-                    '<div class="customer-msg-actions"><a class="btn btn-secondary btn-sm" href="' + openHref + '" onclick="if(window.setNavbarReturnUrl){setNavbarReturnUrl(window.location.href);}">Open chat</a></div>',
+                    '<div class="customer-msg-actions">',
+                    profileHref ? ('<a class="btn btn-outline btn-sm" href="' + profileHref + '">View profile</a>') : '',
+                    '<a class="btn btn-secondary btn-sm" href="' + openHref + '" onclick="if(window.setNavbarReturnUrl){setNavbarReturnUrl(window.location.href);}">Open chat</a>',
+                    '</div>',
                     '</article>'
                 ].join('');
             }).join('')
@@ -785,8 +792,15 @@
                     return;
                 }
 
+                if (typeof authRef.mergeUserIntoLocalCache === 'function') {
+                    authRef.mergeUserIntoLocalCache(updatedUser);
+                }
                 authRef.currentUser = updatedUser;
-                localStorage.setItem('anytransport_user', JSON.stringify(updatedUser));
+                if (typeof authRef.setStoredCurrentUser === 'function') {
+                    authRef.setStoredCurrentUser(updatedUser);
+                } else {
+                    localStorage.setItem('anytransport_user', JSON.stringify(updatedUser));
+                }
                 if (typeof authRef.initAuth === 'function') {
                     authRef.initAuth();
                 }

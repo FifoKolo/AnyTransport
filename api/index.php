@@ -1968,6 +1968,227 @@ function sanitize_provider_for_discovery($user, $distanceKm = null) {
     return $out;
 }
 
+function provider_ids_match($a, $b) {
+    return trim((string) $a) !== '' && trim((string) $a) === trim((string) $b);
+}
+
+function provider_quote_ids_won($store, $providerId) {
+    $wonIds = array();
+    $providerId = trim((string) $providerId);
+    if ($providerId === '') {
+        return $wonIds;
+    }
+    $quotes = isset($store['quotes']) && is_array($store['quotes']) ? $store['quotes'] : array();
+    $bids = isset($store['bids']) && is_array($store['bids']) ? $store['bids'] : array();
+
+    foreach ($quotes as $quote) {
+        if (!is_array($quote)) {
+            continue;
+        }
+        $quoteId = trim((string) ($quote['id'] ?? ''));
+        if ($quoteId === '') {
+            continue;
+        }
+
+        $explicitWinner = trim((string) ($quote['winningProviderId'] ?? $quote['awardedProviderId'] ?? $quote['selectedProviderId'] ?? $quote['acceptedProviderId'] ?? ''));
+        if ($explicitWinner !== '' && provider_ids_match($explicitWinner, $providerId)) {
+            $wonIds[$quoteId] = true;
+            continue;
+        }
+
+        $quoteBids = array();
+        foreach ($bids as $bid) {
+            if (!is_array($bid)) {
+                continue;
+            }
+            if (trim((string) ($bid['quoteId'] ?? '')) === $quoteId) {
+                $quoteBids[] = $bid;
+            }
+        }
+
+        $hasAcceptedBid = false;
+        foreach ($quoteBids as $bid) {
+            if (!provider_ids_match($bid['providerId'] ?? '', $providerId)) {
+                continue;
+            }
+            $status = strtolower(trim((string) ($bid['status'] ?? '')));
+            if ($status === 'won' || $status === 'accepted' || !empty($bid['accepted'])) {
+                $hasAcceptedBid = true;
+                break;
+            }
+        }
+        if ($hasAcceptedBid) {
+            $wonIds[$quoteId] = true;
+            continue;
+        }
+
+        if (strtolower(trim((string) ($quote['status'] ?? ''))) !== 'claimed') {
+            continue;
+        }
+        $activeBids = array();
+        foreach ($quoteBids as $bid) {
+            if (!is_array($bid)) {
+                continue;
+            }
+            if (strtolower(trim((string) ($bid['status'] ?? 'active'))) === 'active') {
+                $activeBids[] = $bid;
+            }
+        }
+        $lowest = null;
+        foreach ($activeBids as $bid) {
+            $amount = isset($bid['amount']) ? (float) $bid['amount'] : 0.0;
+            if ($lowest === null || $amount < (float) ($lowest['amount'] ?? 0)) {
+                $lowest = $bid;
+            }
+        }
+        if (is_array($lowest) && provider_ids_match($lowest['providerId'] ?? '', $providerId)) {
+            $wonIds[$quoteId] = true;
+        }
+    }
+
+    return array_keys($wonIds);
+}
+
+function quote_route_summary_public($quote) {
+    if (!is_array($quote)) {
+        return '';
+    }
+    $pickup = trim(implode(', ', array_filter(array(
+        trim((string) ($quote['pickupCity'] ?? '')),
+        trim((string) ($quote['pickupPostcode'] ?? ''))
+    ))));
+    $delivery = trim(implode(', ', array_filter(array(
+        trim((string) ($quote['deliveryCity'] ?? '')),
+        trim((string) ($quote['deliveryPostcode'] ?? ''))
+    ))));
+    if ($pickup === '' && $delivery === '') {
+        return '';
+    }
+    if ($pickup === '') {
+        return $delivery;
+    }
+    if ($delivery === '') {
+        return $pickup;
+    }
+    return $pickup . ' → ' . $delivery;
+}
+
+function sanitize_provider_job_history_entry($quote, $bid, $completed) {
+    $quote = is_array($quote) ? $quote : array();
+    $bid = is_array($bid) ? $bid : array();
+    $service = trim((string) ($quote['itemDescription'] ?? $quote['itemType'] ?? $quote['title'] ?? 'Transport job'));
+    $when = trim((string) ($bid['createdAt'] ?? $quote['updatedAt'] ?? $quote['submittedAt'] ?? $quote['createdAt'] ?? ''));
+    $amount = isset($bid['amount']) ? (float) $bid['amount'] : null;
+    $bidStatus = strtolower(trim((string) ($bid['status'] ?? 'active')));
+    $statusLabel = $completed ? 'Completed' : ($bidStatus === 'won' || $bidStatus === 'accepted' ? 'Awarded' : 'Quoted');
+    return array(
+        'quoteId' => trim((string) ($quote['id'] ?? '')),
+        'formId' => trim((string) ($quote['formId'] ?? '')),
+        'service' => $service,
+        'route' => quote_route_summary_public($quote),
+        'status' => $statusLabel,
+        'completed' => !empty($completed),
+        'bidAmount' => $amount !== null && $amount > 0 ? round($amount, 2) : null,
+        'date' => $when
+    );
+}
+
+function build_provider_job_history($store, $providerId, $limit) {
+    $providerId = trim((string) $providerId);
+    $limit = max(1, min(100, (int) $limit));
+    if ($providerId === '') {
+        return array();
+    }
+    $wonSet = array();
+    foreach (provider_quote_ids_won($store, $providerId) as $quoteId) {
+        $wonSet[trim((string) $quoteId)] = true;
+    }
+
+    $entries = array();
+    $seen = array();
+    $bids = isset($store['bids']) && is_array($store['bids']) ? $store['bids'] : array();
+    $quotes = isset($store['quotes']) && is_array($store['quotes']) ? $store['quotes'] : array();
+
+    foreach ($bids as $bid) {
+        if (!is_array($bid)) {
+            continue;
+        }
+        if (!provider_ids_match($bid['providerId'] ?? '', $providerId)) {
+            continue;
+        }
+        $quoteId = trim((string) ($bid['quoteId'] ?? ''));
+        if ($quoteId === '' || isset($seen[$quoteId])) {
+            continue;
+        }
+        $quote = find_quote_by_id($quotes, $quoteId);
+        if (!is_array($quote)) {
+            continue;
+        }
+        $seen[$quoteId] = true;
+        $entries[] = sanitize_provider_job_history_entry($quote, $bid, !empty($wonSet[$quoteId]));
+    }
+
+    foreach (array_keys($wonSet) as $quoteId) {
+        if (isset($seen[$quoteId])) {
+            continue;
+        }
+        $quote = find_quote_by_id($quotes, $quoteId);
+        if (!is_array($quote)) {
+            continue;
+        }
+        $seen[$quoteId] = true;
+        $entries[] = sanitize_provider_job_history_entry($quote, array(), true);
+    }
+
+    usort($entries, function ($a, $b) {
+        $ta = strtotime((string) ($a['date'] ?? ''));
+        $tb = strtotime((string) ($b['date'] ?? ''));
+        return $tb <=> $ta;
+    });
+
+    return array_slice($entries, 0, $limit);
+}
+
+function sanitize_provider_public_profile($user) {
+    if (!is_array($user)) {
+        return array();
+    }
+    $services = array();
+    if (isset($user['services']) && is_array($user['services'])) {
+        $services = array_values(array_filter(array_map('strval', $user['services'])));
+    } elseif (isset($user['categories']) && is_array($user['categories'])) {
+        $services = array_values(array_filter(array_map('strval', $user['categories'])));
+    }
+    $photos = array();
+    if (isset($user['photos']) && is_array($user['photos'])) {
+        $photos = array_values(array_filter(array_map('strval', $user['photos'])));
+    }
+    $paymentMethods = array();
+    if (isset($user['paymentMethods']) && is_array($user['paymentMethods'])) {
+        foreach ($user['paymentMethods'] as $key => $enabled) {
+            if ($enabled) {
+                $paymentMethods[] = (string) $key;
+            }
+        }
+    }
+    $reviewStatus = strtolower(trim((string) ($user['identityReviewStatus'] ?? '')));
+    return array(
+        'id' => trim((string) ($user['id'] ?? '')),
+        'username' => trim((string) ($user['username'] ?? $user['nickname'] ?? '')),
+        'businessName' => trim((string) ($user['businessName'] ?? $user['name'] ?? '')),
+        'description' => trim((string) ($user['description'] ?? $user['about'] ?? $user['businessDescription'] ?? '')),
+        'bio' => trim((string) ($user['bio'] ?? $user['summary'] ?? '')),
+        'city' => trim((string) ($user['serviceAreaCity'] ?? $user['city'] ?? $user['location'] ?? '')),
+        'services' => $services,
+        'avatar' => trim((string) ($user['avatar'] ?? '')),
+        'photos' => $photos,
+        'paymentMethods' => $paymentMethods,
+        'identityReviewStatus' => $reviewStatus,
+        'verified' => $reviewStatus === 'approved' || !empty($user['verified']),
+        'memberSince' => trim((string) ($user['createdAt'] ?? ''))
+    );
+}
+
 function search_discoverable_providers($store, $lat, $lng, $customerMaxKm, $categoryFilter) {
     $lat = (float) $lat;
     $lng = (float) $lng;
@@ -4566,6 +4787,38 @@ switch ($action) {
             'reviews' => $reviews,
             'stats' => $stats,
             'existingReview' => $existingForCustomer
+        ));
+
+    case 'providers.publicProfile':
+        $providerId = trim((string) ($_GET['providerId'] ?? $_GET['id'] ?? ''));
+        if ($providerId === '') {
+            send_json(array('ok' => false, 'error' => 'providerId is required.'), 400);
+        }
+        $sessionUser = get_current_user_record($store);
+        if (!is_array($sessionUser) || trim((string) ($sessionUser['id'] ?? '')) === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        $provider = find_store_user_by_id($store, $providerId);
+        if (!is_array($provider)) {
+            send_json(array('ok' => false, 'error' => 'Provider not found.'), 404);
+        }
+        $role = strtolower(trim((string) ($provider['role'] ?? '')));
+        if ($role !== 'provider') {
+            send_json(array('ok' => false, 'error' => 'This profile is not a transport provider.'), 404);
+        }
+        $history = build_provider_job_history($store, $providerId, 80);
+        $stats = get_provider_review_stats($store, $providerId);
+        send_json(array(
+            'ok' => true,
+            'provider' => sanitize_provider_public_profile($provider),
+            'jobHistory' => $history,
+            'stats' => array(
+                'completedJobs' => count(array_filter($history, function ($entry) {
+                    return is_array($entry) && !empty($entry['completed']);
+                })),
+                'quotedJobs' => count($history),
+                'reviews' => $stats
+            )
         ));
 
     default:

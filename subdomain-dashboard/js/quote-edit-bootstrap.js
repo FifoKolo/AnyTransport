@@ -72,7 +72,7 @@
         if (!q) {
             var err = ensureBanner();
             err.style.display = 'block';
-            err.textContent = 'Could not load that request. Sign in with the same account you used to create it, or open the form from My request forms again.';
+            err.textContent = 'Could not load that request. Sign in with the same account you used to create it, or open the form from My Listing\'s again.';
             return;
         }
 
