@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Messages - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
-    <link rel="stylesheet" href="css/navbar.css?v=20260522-1">
+    <link rel="stylesheet" href="../css/navbar.css?v=20260522-3">
     <style>
         .messages-wrap { max-width: 1000px; margin: 0 auto; padding: 24px 16px 40px; }
         .messages-head { margin-bottom: 16px; }
@@ -104,6 +104,31 @@
         }
         .messages-context-toolbar p { margin: 0; flex: 1 1 180px; font-size: 13px; color: #475569; }
         .messages-context-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .messages-link-form-row {
+            flex: 1 1 100%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            padding-top: 4px;
+            border-top: 1px solid #e2e8f0;
+            margin-top: 4px;
+        }
+        .messages-link-form-row label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #334155;
+            margin: 0;
+        }
+        .messages-link-form-select {
+            flex: 1 1 220px;
+            min-width: 200px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font: inherit;
+            background: #fff;
+        }
         .messages-form-complete-badge {
             display: inline-flex;
             align-items: center;
@@ -181,6 +206,13 @@
                 <button class="btn btn-outline" type="button" onclick="openLoginModal()">Login</button>
             </div>
             <div id="user-menu" style="display: none;">
+                <nav id="navbar-hub-nav" class="navbar-hub-nav" aria-label="Your account" style="display:none;">
+                    <a href="dashboard.html" class="navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link">Dashboard</a>
+                    <a href="customer-dashboard.html?tab=forms" class="navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link">Forms</a>
+                    <a href="customer-dashboard.html?tab=settings" class="navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link">Profile settings</a>
+                    <a href="messages.html" class="navbar-hub-link at-nav-hub-messages is-active" id="navbar-hub-messages-link">Messages</a>
+                    <a href="../find-providers.html" class="navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link">Find providers</a>
+                </nav>
                 <div class="navbar-notification-bell">
                     <button class="notification-bell-btn" id="notification-bell" type="button" title="View notifications" aria-label="View notifications">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -230,6 +262,12 @@
 
         <section id="messages-context-toolbar" class="messages-context-toolbar" style="display:none;" aria-label="Conversation actions">
             <p id="messages-context-summary">Manage this request while you chat.</p>
+            <div id="messages-link-form-wrap" class="messages-link-form-row" style="display:none;">
+                <label for="messages-link-form-select">Link to your request</label>
+                <select id="messages-link-form-select" class="messages-link-form-select" aria-describedby="messages-context-summary">
+                    <option value="">Choose a request form…</option>
+                </select>
+            </div>
             <div class="messages-context-actions">
                 <a id="messages-view-profile-btn" class="btn btn-outline btn-sm" href="#" target="_blank" rel="noopener">View provider profile</a>
                 <button type="button" id="messages-mark-complete-btn" class="btn btn-outline btn-sm" style="display:none;">Mark form complete</button>
@@ -281,9 +319,9 @@
         </div>
     </div>
 
-    <script src="js/auth.js?v=20260522-2"></script>
+    <script src="js/auth.js?v=20260522-5"></script>
     <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/site-navbar.js?v=20260519-2"></script>
-    <script src="js/messages.js?v=20260522-1"></script>
+    <script src="js/messages.js?v=20260522-2"></script>
 </body>
 </html>

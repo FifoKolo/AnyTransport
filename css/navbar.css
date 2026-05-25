@@ -205,8 +205,10 @@ html:has(body > .navbar) {
     display: flex;
     align-items: center;
     gap: 4px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     margin-right: 4px;
+    flex-shrink: 1;
+    min-width: 0;
 }
 
 .navbar-hub-link {
@@ -238,8 +240,15 @@ html:has(body > .navbar) {
 #user-menu {
     display: none;
     align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
+    gap: 10px;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+}
+
+.navbar-right .navbar-notification-bell,
+.navbar-right .nav-dropdown,
+.navbar-right > .btn {
+    flex-shrink: 0;
 }
 
 .nav-contact {
@@ -585,6 +594,7 @@ html:has(body > .navbar) {
 @media (max-width: 600px) {
     .navbar-container {
         flex-wrap: wrap;
+        gap: 10px;
     }
 
     .navbar-menu {
@@ -595,12 +605,35 @@ html:has(body > .navbar) {
     }
 
     .navbar-right {
-        flex-direction: column;
-        width: 100%;
+        flex-direction: row;
+        flex-wrap: wrap;
+        width: auto;
+        max-width: 100%;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-left: auto;
     }
 
-    .navbar-right .btn {
-        width: 100%;
+    #user-menu {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        max-width: 100%;
+    }
+
+    .navbar-hub-nav {
+        max-width: min(52vw, 320px);
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    .navbar-hub-link {
+        font-size: 0.82rem;
+        padding: 6px 8px;
+    }
+
+    .navbar-right > .btn.btn-primary {
+        width: auto;
         text-align: center;
     }
 
