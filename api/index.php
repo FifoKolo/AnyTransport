@@ -1261,6 +1261,46 @@ function find_quote_by_id($quotes, $quoteId) {
     return null;
 }
 
+function remove_customer_reviews_for_quote(&$store, $customerId, $quoteId) {
+    $customerId = trim((string) $customerId);
+    $quoteId = trim((string) $quoteId);
+    $removed = 0;
+    if ($customerId === '' || $quoteId === '' || !isset($store['providerReviews']) || !is_array($store['providerReviews'])) {
+        return $removed;
+    }
+    $kept = array();
+    foreach ($store['providerReviews'] as $review) {
+        if (!is_array($review)) {
+            continue;
+        }
+        if (trim((string) ($review['customerId'] ?? '')) === $customerId
+            && trim((string) ($review['quoteId'] ?? '')) === $quoteId) {
+            $removed++;
+            continue;
+        }
+        $kept[] = $review;
+    }
+    $store['providerReviews'] = $kept;
+    return $removed;
+}
+
+function remove_review_notifications_for_quote(&$store, $quoteId) {
+    $quoteId = trim((string) $quoteId);
+    if ($quoteId === '' || !isset($store['notifications']) || !is_array($store['notifications'])) {
+        return;
+    }
+    $store['notifications'] = array_values(array_filter($store['notifications'], function ($notification) use ($quoteId) {
+        if (!is_array($notification)) {
+            return true;
+        }
+        if (trim((string) ($notification['type'] ?? '')) !== 'provider_review') {
+            return true;
+        }
+        $data = isset($notification['data']) && is_array($notification['data']) ? $notification['data'] : array();
+        return trim((string) ($data['quoteId'] ?? '')) !== $quoteId;
+    }));
+}
+
 function find_provider_review_index($store, $customerId, $providerId, $quoteId) {
     if (!isset($store['providerReviews']) || !is_array($store['providerReviews'])) {
         return -1;
@@ -4726,6 +4766,46 @@ switch ($action) {
         write_store($storeFile, $store);
         refresh_session_cookie();
         send_json(array('ok' => true, 'quote' => attach_quote_media($store, $quote)));
+
+    case 'quotes.revertComplete':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $sessionUser = get_current_user_record($store);
+        if (!is_array($sessionUser)) {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        $quoteId = trim((string) ($input['quoteId'] ?? ''));
+        if ($quoteId === '') {
+            send_json(array('ok' => false, 'error' => 'quoteId is required.'), 400);
+        }
+        $index = find_user_index($store['quotes'], function ($existing) use ($quoteId) {
+            return is_array($existing) && trim((string) ($existing['id'] ?? '')) === $quoteId;
+        });
+        if ($index < 0) {
+            send_json(array('ok' => false, 'error' => 'Request form not found.'), 404);
+        }
+        $quote = $store['quotes'][$index];
+        if (!session_user_owns_quote($sessionUser, $quote)) {
+            send_json(array('ok' => false, 'error' => 'You can only update your own request forms.'), 403);
+        }
+        if (empty($quote['customerFormComplete'])) {
+            send_json(array('ok' => false, 'error' => 'This request form is not marked complete.'), 400);
+        }
+        $customerId = trim((string) ($sessionUser['id'] ?? ''));
+        $removedReviews = remove_customer_reviews_for_quote($store, $customerId, $quoteId);
+        remove_review_notifications_for_quote($store, $quoteId);
+        $quote['customerFormComplete'] = false;
+        $quote['customerFormCompletedAt'] = '';
+        $quote['updatedAt'] = gmdate('c');
+        $store['quotes'][$index] = $quote;
+        write_store($storeFile, $store);
+        refresh_session_cookie();
+        send_json(array(
+            'ok' => true,
+            'quote' => attach_quote_media($store, $quote),
+            'removedReviews' => $removedReviews
+        ));
 
     case 'reviews.create':
         if ($method !== 'POST') {

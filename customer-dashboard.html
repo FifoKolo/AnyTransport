@@ -105,6 +105,26 @@
                     </tbody>
                 </table>
             </div>
+            <div id="customer-completed-quotes-wrap" class="customer-completed-quotes-wrap" style="display:none; margin-top:28px;">
+                <h3 class="customer-completed-heading">Completed request forms</h3>
+                <p class="customer-completed-note muted">These are hidden from the link list in Messages. Open a thread to leave a review or revert the complete status (reverting also removes any review you left for that form).</p>
+                <div class="customer-quotes-table-wrap">
+                    <table class="customer-quotes-table" aria-label="Completed listings">
+                        <thead>
+                            <tr>
+                                <th>Form ID</th>
+                                <th>Submitted</th>
+                                <th>Service</th>
+                                <th>Route</th>
+                                <th>Budget</th>
+                                <th>Status</th>
+                                <th>Bids / actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customer-completed-quotes-body"></tbody>
+                    </table>
+                </div>
+            </div>
         </section>
 
         <section class="customer-tab-panel" data-panel="inbox" role="tabpanel">
@@ -185,6 +205,6 @@
     <script src="js/auth.js?v=20260522-10"></script>
     <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/site-navbar.js?v=20260519-2"></script>
-    <script src="js/customer-dashboard.js?v=20260522-8"></script>
+    <script src="js/customer-dashboard.js?v=20260522-12"></script>
 </body>
 </html>

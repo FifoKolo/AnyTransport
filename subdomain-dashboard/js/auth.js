@@ -365,6 +365,12 @@ window.anytransportApi = window.anytransportApi || (function () {
             });
             return response && response.quote ? response.quote : null;
         },
+        revertQuoteFormComplete: function (quoteId) {
+            const response = request('quotes.revertComplete', 'POST', {
+                quoteId: quoteId ? String(quoteId) : ''
+            });
+            return response && response.quote ? response.quote : null;
+        },
         saveProviderReview: function (providerId, quoteId, rating, text) {
             const response = request('reviews.create', 'POST', {
                 providerId: providerId ? String(providerId) : '',

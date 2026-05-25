@@ -449,6 +449,52 @@
         return Array.from(byId.values());
     }
 
+    function isQuoteFormComplete(quote) {
+        return !!(quote && quote.customerFormComplete);
+    }
+
+    function buildQuoteRowHtml(q, bids, highlightFormId) {
+        const fid = getQuoteLabel(q);
+        const quoteId = String(q.id || '').trim();
+        const isHi = highlightFormId && String(q.formId || '').trim() === highlightFormId;
+        const bidN = countBidsForQuote(q.id, bids);
+        const statusLabel = isQuoteFormComplete(q) ? 'Complete' : String(q.status || 'pending');
+        const status = escapeHtml(statusLabel);
+        const budgetLabel = formatCustomerBudgetLabel(q) || 'Not set';
+        const viewHref = getListingViewHref(q);
+        const viewListingBtn = viewHref
+            ? '<a class="btn btn-sm customer-view-listing-btn" href="' + escapeHtml(viewHref) + '" onclick="if(window.setNavbarReturnUrl){setNavbarReturnUrl(window.location.href);}">View listing</a>'
+            : '';
+        const editQuoteHref = quoteId && !isQuoteFormComplete(q)
+            ? getCreateJobPage() + '?editQuote=' + encodeURIComponent(quoteId)
+            : '';
+        return [
+            '<tr class="customer-quote-row' + (isHi ? ' customer-quote-row--highlight' : '') + (isQuoteFormComplete(q) ? ' customer-quote-row--complete' : '') + '" data-form-id="' + escapeHtml(String(q.formId || '')) + '" data-quote-id="' + escapeHtml(quoteId) + '">',
+            '<td><strong>' + escapeHtml(fid) + '</strong></td>',
+            '<td>' + formatWhen(q.submittedAt || q.createdAt) + '</td>',
+            '<td>' + escapeHtml(getServiceTitle(q)) + '</td>',
+            '<td class="customer-from-to">' + escapeHtml(getFromTo(q)) + '</td>',
+            '<td class="customer-budget-cell">',
+            '<div class="customer-budget-cell-actions">',
+            '<span>' + escapeHtml(budgetLabel) + '</span>',
+            (quoteId && !isQuoteFormComplete(q) ? '<button type="button" class="btn btn-outline btn-sm customer-edit-budget-btn" data-quote-id="' + escapeHtml(quoteId) + '">Edit budget</button>' : ''),
+            '</div>',
+            '</td>',
+            '<td><span class="customer-status customer-status--' + status.toLowerCase().replace(/\s+/g, '-') + '">' + status + '</span></td>',
+            '<td class="customer-actions">',
+            '<div class="customer-actions-row">',
+            '<span class="customer-bid-count" title="Active bids">' + bidN + '</span>',
+            viewListingBtn,
+            (editQuoteHref ? '<a class="btn btn-primary btn-sm" href="' + escapeHtml(editQuoteHref) + '">Edit</a>' : ''),
+            (quoteId && !isQuoteFormComplete(q) ? '<button type="button" class="btn btn-danger btn-sm customer-delete-quote-btn" data-quote-id="' + escapeHtml(quoteId) + '">Delete</button>' : ''),
+            '</div>',
+            '<div class="customer-actions-row">',
+            (quoteId ? '<button type="button" class="btn btn-secondary btn-sm customer-open-form-messages-btn" data-quote-id="' + escapeHtml(quoteId) + '" data-form-id="' + escapeHtml(String(fid || '')) + '">View grouped messages</button>' : ''),
+            '</div>',
+            '</td></tr>'
+        ].join('');
+    }
+
     function renderQuotes(quotes, bids, highlightFormId) {
         const el = document.getElementById('customer-quotes-body');
         if (!el) return;
@@ -461,47 +507,30 @@
         const sorted = quotes.slice().sort(function (a, b) {
             return new Date(b.submittedAt || b.updatedAt || b.createdAt || 0) - new Date(a.submittedAt || a.updatedAt || a.createdAt || 0);
         });
+        const active = sorted.filter(function (q) { return !isQuoteFormComplete(q); });
+        const completed = sorted.filter(function (q) { return isQuoteFormComplete(q); });
 
-        el.innerHTML = sorted.map(function (q) {
-            const fid = getQuoteLabel(q);
-            const quoteId = String(q.id || '').trim();
-            const isHi = highlightFormId && String(q.formId || '').trim() === highlightFormId;
-            const bidN = countBidsForQuote(q.id, bids);
-            const status = escapeHtml(String(q.status || 'pending'));
-            const budgetLabel = formatCustomerBudgetLabel(q) || 'Not set';
-            const viewHref = getListingViewHref(q);
-            const viewListingBtn = viewHref
-                ? '<a class="btn btn-sm customer-view-listing-btn" href="' + escapeHtml(viewHref) + '" onclick="if(window.setNavbarReturnUrl){setNavbarReturnUrl(window.location.href);}">View listing</a>'
-                : '';
-            const editQuoteHref = quoteId
-                ? getCreateJobPage() + '?editQuote=' + encodeURIComponent(quoteId)
-                : '';
-            return [
-                '<tr class="customer-quote-row' + (isHi ? ' customer-quote-row--highlight' : '') + '" data-form-id="' + escapeHtml(String(q.formId || '')) + '" data-quote-id="' + escapeHtml(quoteId) + '">',
-                '<td><strong>' + escapeHtml(fid) + '</strong></td>',
-                '<td>' + formatWhen(q.submittedAt || q.createdAt) + '</td>',
-                '<td>' + escapeHtml(getServiceTitle(q)) + '</td>',
-                '<td class="customer-from-to">' + escapeHtml(getFromTo(q)) + '</td>',
-                '<td class="customer-budget-cell">',
-                '<div class="customer-budget-cell-actions">',
-                '<span>' + escapeHtml(budgetLabel) + '</span>',
-                (quoteId ? '<button type="button" class="btn btn-outline btn-sm customer-edit-budget-btn" data-quote-id="' + escapeHtml(quoteId) + '">Edit budget</button>' : ''),
-                '</div>',
-                '</td>',
-                '<td><span class="customer-status customer-status--' + status.toLowerCase().replace(/\s+/g, '-') + '">' + status + '</span></td>',
-                '<td class="customer-actions">',
-                '<div class="customer-actions-row">',
-                '<span class="customer-bid-count" title="Active bids">' + bidN + '</span>',
-                viewListingBtn,
-                (editQuoteHref ? '<a class="btn btn-primary btn-sm" href="' + escapeHtml(editQuoteHref) + '">Edit</a>' : ''),
-                (quoteId ? '<button type="button" class="btn btn-danger btn-sm customer-delete-quote-btn" data-quote-id="' + escapeHtml(quoteId) + '">Delete</button>' : ''),
-                '</div>',
-                '<div class="customer-actions-row">',
-                (quoteId ? '<button type="button" class="btn btn-secondary btn-sm customer-open-form-messages-btn" data-quote-id="' + escapeHtml(quoteId) + '" data-form-id="' + escapeHtml(String(fid || '')) + '">View grouped messages</button>' : ''),
-                '</div>',
-                '</td></tr>'
-            ].join('');
-        }).join('');
+        if (!active.length) {
+            el.innerHTML = '<tr><td colspan="7" class="customer-empty-cell">No active request forms. Completed forms are listed below.</td></tr>';
+        } else {
+            el.innerHTML = active.map(function (q) {
+                return buildQuoteRowHtml(q, bids, highlightFormId);
+            }).join('');
+        }
+
+        const completedWrap = document.getElementById('customer-completed-quotes-wrap');
+        const completedBody = document.getElementById('customer-completed-quotes-body');
+        if (completedWrap && completedBody) {
+            if (!completed.length) {
+                completedWrap.style.display = 'none';
+                completedBody.innerHTML = '';
+            } else {
+                completedWrap.style.display = '';
+                completedBody.innerHTML = completed.map(function (q) {
+                    return buildQuoteRowHtml(q, bids, highlightFormId);
+                }).join('');
+            }
+        }
     }
 
     function deleteQuoteForUser(authRef, user, quoteId) {

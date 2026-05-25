@@ -388,6 +388,22 @@
         return !role || role === 'user';
     }
 
+    function isQuoteFormComplete(quote) {
+        return !!(quote && quote.customerFormComplete);
+    }
+
+    function redirectMessagesWithoutQuoteId() {
+        try {
+            var url = new URL(window.location.href);
+            url.searchParams.delete('quoteId');
+            window.location.replace(url.pathname + url.search);
+        } catch (_urlErr) {
+            var params = new URLSearchParams(window.location.search || '');
+            var to = String(params.get('to') || '').trim();
+            window.location.replace('messages.html' + (to ? '?to=' + encodeURIComponent(to) : ''));
+        }
+    }
+
     function loadQuoteContext(quoteId) {
         if (!quoteId || !window.anytransportApi) return null;
         if (typeof window.anytransportApi.getQuote === 'function') {
@@ -445,18 +461,32 @@
         }
 
         var quotes = loadCustomerQuotes(me);
+        var activeQuotes = quotes.filter(function (q) {
+            return !isQuoteFormComplete(q);
+        });
         var bids = getAllBids();
         var pid = String(toUserId || '').trim();
+        var resolvedQuoteId = String(quoteId || '').trim();
+        var currentQuote = resolvedQuoteId ? quotes.find(function (q) {
+            return String(q.id || '').trim() === resolvedQuoteId;
+        }) : null;
 
-        if (!quotes.length) {
+        if (currentQuote && isQuoteFormComplete(currentQuote)) {
+            wrap.style.display = 'none';
+            return resolvedQuoteId;
+        }
+
+        if (!activeQuotes.length) {
             wrap.style.display = '';
-            select.innerHTML = '<option value="">No request forms yet — create one under Forms</option>';
+            select.innerHTML = '<option value="">' + (quotes.length
+                ? 'All request forms are marked complete'
+                : 'No request forms yet — create one under Forms') + '</option>';
             select.disabled = true;
-            return String(quoteId || '').trim();
+            return resolvedQuoteId && currentQuote && !isQuoteFormComplete(currentQuote) ? resolvedQuoteId : '';
         }
 
         select.disabled = false;
-        var options = quotes.map(function (q) {
+        var options = activeQuotes.map(function (q) {
             var fid = String(q.formId || q.id || '').trim();
             var label = (fid ? 'Form #' + fid : 'Request') + ' — ' + firstText(q.itemType, q.itemDescription, 'Transport');
             if (quoteHasBidFromProvider(q, pid, bids)) {
@@ -479,7 +509,6 @@
             .join('');
         wrap.style.display = '';
 
-        var resolvedQuoteId = String(quoteId || '').trim();
         if (!resolvedQuoteId) {
             var withBids = options.filter(function (o) { return o.hasBid; });
             if (withBids.length === 1) {
@@ -515,6 +544,7 @@
         var profileBtn = document.getElementById('messages-view-profile-btn');
         var completeBtn = document.getElementById('messages-mark-complete-btn');
         var completeBadge = document.getElementById('messages-form-complete-badge');
+        var revertBtn = document.getElementById('messages-revert-complete-btn');
         var reviewBtn = document.getElementById('messages-leave-review-btn');
         var summaryEl = document.getElementById('messages-context-summary');
 
@@ -532,6 +562,7 @@
             if (profileBtn) profileBtn.style.display = 'none';
             if (completeBtn) completeBtn.style.display = 'none';
             if (completeBadge) completeBadge.style.display = 'none';
+            if (revertBtn) revertBtn.style.display = 'none';
             if (reviewBtn) reviewBtn.style.display = 'none';
             return;
         }
@@ -540,21 +571,25 @@
 
         if (!quoteId) {
             if (summaryEl) {
-                summaryEl.textContent = 'Choose which request form this conversation is about. Then you can mark it complete or leave a review.';
+                summaryEl.textContent = 'Choose which active request form this conversation is about. Completed forms are hidden from this list.';
             }
             if (completeBtn) completeBtn.style.display = 'none';
             if (completeBadge) completeBadge.style.display = 'none';
+            if (revertBtn) revertBtn.style.display = 'none';
             if (reviewBtn) reviewBtn.style.display = 'none';
             return;
         }
 
         var quote = loadQuoteContext(quoteId);
         var formLabel = quote && quote.formId ? ('Form #' + quote.formId) : 'your request';
+        var formComplete = isQuoteFormComplete(quote);
+
         if (summaryEl) {
-            summaryEl.textContent = 'Actions for ' + formLabel + ' with ' + resolveUserName(toUserId) + '.';
+            summaryEl.textContent = formComplete
+                ? formLabel + ' is marked complete. You can still chat below, or revert the status if that was a mistake.'
+                : 'Actions for ' + formLabel + ' with ' + resolveUserName(toUserId) + '.';
         }
 
-        var formComplete = !!(quote && quote.customerFormComplete);
         if (completeBtn) {
             completeBtn.style.display = formComplete ? 'none' : '';
             completeBtn.disabled = false;
@@ -566,14 +601,14 @@
                         alert('Unable to mark the form complete right now.');
                         return;
                     }
-                    if (!window.confirm('Confirm that your request form is complete and ready for the provider to work from?')) {
+                    if (!window.confirm('Mark this request form as complete? It will be removed from your active forms list. You can revert this later, which will also remove any review you left for this form.')) {
                         return;
                     }
                     completeBtn.disabled = true;
                     try {
                         var updated = window.anytransportApi.markQuoteFormComplete(quoteId);
                         if (!updated) throw new Error('No response');
-                        setupConversationToolbar(me, toUserId, quoteId);
+                        redirectMessagesWithoutQuoteId();
                     } catch (err) {
                         completeBtn.disabled = false;
                         alert((err && err.message) ? err.message : 'Could not mark the form complete.');
@@ -583,8 +618,10 @@
         }
         if (completeBadge) {
             completeBadge.style.display = formComplete ? '' : 'none';
+            if (formComplete) {
+                completeBadge.textContent = 'Form marked complete';
+            }
         }
-
         var existingReview = null;
         if (formComplete && window.anytransportApi && typeof window.anytransportApi.listProviderReviews === 'function') {
             try {
@@ -593,6 +630,43 @@
             } catch (_e) {
                 existingReview = null;
             }
+        }
+
+        if (revertBtn && formComplete) {
+            revertBtn.style.display = '';
+            revertBtn.disabled = false;
+            if (!revertBtn.dataset.bound) {
+                revertBtn.dataset.bound = '1';
+                revertBtn.addEventListener('click', function () {
+                    if (!window.anytransportApi || typeof window.anytransportApi.revertQuoteFormComplete !== 'function') {
+                        alert('Unable to revert the complete status right now.');
+                        return;
+                    }
+                    var revertMsg = existingReview
+                        ? 'Reopen this request form? Your ' + String(existingReview.rating || '') + '-star review for this provider will be removed, and the form will return to your active list.'
+                        : 'Reopen this request form? It will appear in your active forms list again.';
+                    if (!window.confirm(revertMsg)) {
+                        return;
+                    }
+                    revertBtn.disabled = true;
+                    try {
+                        var reopened = window.anytransportApi.revertQuoteFormComplete(quoteId);
+                        if (!reopened) throw new Error('No response');
+                        try {
+                            var url = new URL(window.location.href);
+                            url.searchParams.set('quoteId', quoteId);
+                            window.location.replace(url.pathname + url.search);
+                        } catch (_e) {
+                            setupConversationToolbar(me, toUserId, quoteId);
+                        }
+                    } catch (err) {
+                        revertBtn.disabled = false;
+                        alert((err && err.message) ? err.message : 'Could not revert the complete status.');
+                    }
+                });
+            }
+        } else if (revertBtn) {
+            revertBtn.style.display = 'none';
         }
 
         if (reviewBtn) {
