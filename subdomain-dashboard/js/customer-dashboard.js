@@ -681,54 +681,179 @@
             : '<p class="customer-empty">No grouped bid messages found yet.</p>';
     }
 
-    function renderCustomerInbox(userId, quotes, bids, messages) {
-        const el = document.getElementById('customer-messages-list');
-        if (!el) return;
+    const INBOX_FILTER_KEY = 'anytransport_inbox_filter';
+    let inboxViewCache = null;
 
+    function getInboxFilter() {
+        try {
+            const value = String(sessionStorage.getItem(INBOX_FILTER_KEY) || '').trim().toLowerCase();
+            if (value === 'unread' || value === 'direct' || value === 'listings' || value === 'all') {
+                return value;
+            }
+        } catch (_e) {}
+        return 'all';
+    }
+
+    function setInboxFilter(filter) {
+        const value = String(filter || 'all').trim().toLowerCase();
+        try {
+            sessionStorage.setItem(INBOX_FILTER_KEY, value);
+        } catch (_e) {}
+    }
+
+    function setInboxFiltersVisible(visible) {
+        const nav = document.getElementById('customer-inbox-filters');
+        if (nav) {
+            nav.style.display = visible ? 'flex' : 'none';
+        }
+    }
+
+    function getInboxCounts(userId, quotes, bids, messages) {
+        const threads = buildPeerThreads(userId, messages);
+        const quoteList = Array.isArray(quotes) ? quotes : [];
+        const unreadThreadCount = threads.filter(function (t) { return t.unreadCount > 0; }).length;
+        const listingsWithBids = quoteList.filter(function (q) {
+            return getActiveBidsForQuote(String(q && q.id || '').trim(), bids).length > 0;
+        }).length;
+        return {
+            all: threads.length + quoteList.length,
+            unread: unreadThreadCount,
+            direct: threads.length,
+            listings: quoteList.length,
+            listingsWithBids: listingsWithBids
+        };
+    }
+
+    function renderInboxFilterNav(counts, activeFilter) {
+        const nav = document.getElementById('customer-inbox-filters');
+        if (!nav) return;
+        const filter = String(activeFilter || 'all').toLowerCase();
+        const items = [
+            { id: 'all', label: 'All', count: counts.all },
+            { id: 'unread', label: 'Unread', count: counts.unread },
+            { id: 'direct', label: 'Direct', count: counts.direct },
+            { id: 'listings', label: 'Listings', count: counts.listings }
+        ];
+        nav.innerHTML = items.map(function (item) {
+            const isActive = item.id === filter;
+            const countLabel = item.count > 99 ? '99+' : String(item.count);
+            return '<button type="button" class="customer-inbox-filter-btn' + (isActive ? ' active' : '') + '" data-inbox-filter="' + item.id + '" role="tab" aria-selected="' + (isActive ? 'true' : 'false') + '">'
+                + escapeHtml(item.label)
+                + '<span class="customer-inbox-filter-count">' + escapeHtml(countLabel) + '</span>'
+                + '</button>';
+        }).join('');
+        nav.querySelectorAll('.customer-inbox-filter-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const next = String(btn.getAttribute('data-inbox-filter') || 'all').toLowerCase();
+                setInboxFilter(next);
+                if (inboxViewCache) {
+                    renderCustomerInbox(
+                        inboxViewCache.userId,
+                        inboxViewCache.quotes,
+                        inboxViewCache.bids,
+                        inboxViewCache.messages,
+                        next
+                    );
+                }
+            });
+        });
+    }
+
+    function renderUnreadSectionHtml(unreadThreads) {
+        if (!unreadThreads.length) return '';
+        return [
+            '<section class="customer-messages-section" aria-labelledby="customer-unread-heading">',
+            '<h3 id="customer-unread-heading" class="customer-messages-section-title">New &amp; unread',
+            ' <span class="customer-msg-unread-badge">' + (unreadThreads.length > 99 ? '99+' : String(unreadThreads.length)) + '</span></h3>',
+            '<p class="customer-messages-section-hint">Open these chats to clear the unread badge.</p>',
+            unreadThreads.map(function (thread) {
+                return buildConversationCardHtml(thread, { sourceHint: 'Direct' });
+            }).join(''),
+            '</section>'
+        ].join('');
+    }
+
+    function renderDirectSectionHtml(threads, options) {
+        const opts = options || {};
+        if (!threads.length) {
+            return opts.allowEmpty
+                ? '<p class="customer-empty">No direct chats yet. Use <strong>Find providers on map</strong> and tap <strong>Message</strong>.</p>'
+                : '';
+        }
+        const header = opts.showHeader === false ? '' : [
+            '<section class="customer-messages-section" aria-labelledby="customer-direct-heading">',
+            '<h3 id="customer-direct-heading" class="customer-messages-section-title">Direct conversations</h3>',
+            '<p class="customer-messages-section-hint">Chats from Find providers or a provider profile — not tied to a listing bid.</p>'
+        ].join('');
+        const body = threads.map(function (thread) {
+            return buildConversationCardHtml(thread, { sourceHint: 'Direct' });
+        }).join('');
+        const footer = opts.showHeader === false ? '' : '</section>';
+        return header + body + footer;
+    }
+
+    function renderListingsSectionHtml(quotes, bids, options) {
+        const opts = options || {};
+        const inner = renderFormMessageGroupsHtml(quotes, bids);
+        const header = opts.showHeader === false ? '' : [
+            '<section class="customer-messages-section" aria-labelledby="customer-forms-heading">',
+            '<h3 id="customer-forms-heading" class="customer-messages-section-title">Messages on your listings</h3>',
+            '<p class="customer-messages-section-hint">Provider bids on each request form. Open a group to read and reply per bid.</p>'
+        ].join('');
+        const footer = opts.showHeader === false ? '' : '</section>';
+        return header + inner + footer;
+    }
+
+    function buildInboxContentHtml(filter, userId, quotes, bids, messages) {
+        const activeFilter = String(filter || 'all').toLowerCase();
         const threads = buildPeerThreads(userId, messages);
         const unreadThreads = threads.filter(function (t) { return t.unreadCount > 0; });
         const parts = [];
 
+        if (activeFilter === 'unread') {
+            if (unreadThreads.length) {
+                parts.push(renderUnreadSectionHtml(unreadThreads));
+            } else {
+                parts.push('<p class="customer-empty">No unread messages. You are all caught up.</p>');
+            }
+            return parts.join('');
+        }
+
+        if (activeFilter === 'direct') {
+            parts.push(renderDirectSectionHtml(threads, { allowEmpty: true, showHeader: false }));
+            return parts.join('');
+        }
+
+        if (activeFilter === 'listings') {
+            parts.push(renderListingsSectionHtml(quotes, bids, { showHeader: false }));
+            return parts.join('');
+        }
+
         if (unreadThreads.length) {
-            parts.push(
-                '<section class="customer-messages-section" aria-labelledby="customer-unread-heading">',
-                '<h3 id="customer-unread-heading" class="customer-messages-section-title">New &amp; unread',
-                ' <span class="customer-msg-unread-badge">' + (unreadThreads.length > 99 ? '99+' : String(unreadThreads.length)) + '</span></h3>',
-                '<p class="customer-messages-section-hint">Replies and chats you have not opened yet.</p>',
-                unreadThreads.map(function (thread) {
-                    return buildConversationCardHtml(thread, { sourceHint: 'Direct chat' });
-                }).join(''),
-                '</section>'
-            );
+            parts.push(renderUnreadSectionHtml(unreadThreads));
         }
+        parts.push(renderDirectSectionHtml(threads, { allowEmpty: true }));
+        parts.push(renderListingsSectionHtml(quotes, bids));
+        return parts.join('');
+    }
 
-        if (threads.length) {
-            parts.push(
-                '<section class="customer-messages-section" aria-labelledby="customer-direct-heading">',
-                '<h3 id="customer-direct-heading" class="customer-messages-section-title">Direct conversations</h3>',
-                '<p class="customer-messages-section-hint">Includes messages you sent from Find providers or opened from a provider profile.</p>',
-                threads.map(function (thread) {
-                    return buildConversationCardHtml(thread, { sourceHint: 'Platform message' });
-                }).join(''),
-                '</section>'
-            );
-        } else if (!unreadThreads.length) {
-            parts.push(
-                '<section class="customer-messages-section">',
-                '<p class="customer-empty">No direct chats yet. Use <strong>Find providers on map</strong> and tap Message to start a conversation.</p>',
-                '</section>'
-            );
-        }
+    function renderCustomerInbox(userId, quotes, bids, messages, filterOverride) {
+        const el = document.getElementById('customer-messages-list');
+        if (!el) return;
 
-        parts.push(
-            '<section class="customer-messages-section" aria-labelledby="customer-forms-heading">',
-            '<h3 id="customer-forms-heading" class="customer-messages-section-title">Messages on your listings</h3>',
-            '<p class="customer-messages-section-hint">Provider bids grouped by each request form.</p>',
-            renderFormMessageGroupsHtml(quotes, bids),
-            '</section>'
-        );
+        inboxViewCache = {
+            userId: userId,
+            quotes: quotes,
+            bids: bids,
+            messages: messages
+        };
 
-        el.innerHTML = parts.join('');
+        const activeFilter = filterOverride || getInboxFilter();
+        const counts = getInboxCounts(userId, quotes, bids, messages);
+
+        setInboxFiltersVisible(true);
+        renderInboxFilterNav(counts, activeFilter);
+        el.innerHTML = buildInboxContentHtml(activeFilter, userId, quotes, bids, messages);
         renderNavbarMessageBadge(userId, messages);
     }
 
@@ -754,6 +879,7 @@
     function renderGroupedMessagesForQuote(userId, quoteId, formIdLabel, bids, sortMode) {
         const el = document.getElementById('customer-messages-list');
         if (!el) return;
+        setInboxFiltersVisible(false);
         const qid = String(quoteId || '').trim();
         const formLabel = String(formIdLabel || '').trim() || '—';
         const activeSortMode = String(sortMode || 'newest').trim().toLowerCase();
