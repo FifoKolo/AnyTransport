@@ -604,8 +604,18 @@ class AuthManager {
             normalized.nickname = normalized.username;
         }
 
+        const roleKeysEarly = (Array.isArray(normalized.roles) ? normalized.roles : [normalized.role])
+            .map((r) => String(r || '').trim().toLowerCase())
+            .filter((r) => r !== '');
+        const isProviderAccount = roleKeysEarly.includes('provider')
+            || String(normalized.role || '').trim().toLowerCase() === 'provider';
+
+        if (isProviderAccount && String(normalized.role || '').trim().toLowerCase() !== 'provider') {
+            normalized.role = 'provider';
+        }
+
         if (!normalized.identityReviewStatus) {
-            normalized.identityReviewStatus = normalized.role === 'provider' ? 'pending_review' : 'not_required';
+            normalized.identityReviewStatus = isProviderAccount ? 'pending_review' : 'not_required';
         }
 
         if (!Array.isArray(normalized.identityPhotos)) {
@@ -815,7 +825,11 @@ class AuthManager {
             return;
         }
 
-        if (menu.dataset.profileMenuReady !== '1') {
+        const profileMenuVersion = '3';
+        const hasLegacyMenu = !!menu.querySelector(
+            '.at-nav-provider-dashboard, #navbar-profile-link, .at-nav-my-requests, a[href="customer-dashboard.html"]:not([href*="?"])'
+        );
+        if (menu.dataset.profileMenuVersion !== profileMenuVersion || hasLegacyMenu) {
             menu.innerHTML = [
                 '<a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>',
                 '<a href="customer-dashboard.html?tab=forms&my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">My request forms</a>',
@@ -824,6 +838,7 @@ class AuthManager {
                 '<a href="find-providers.html" class="nav-item navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link" role="menuitem">Find providers</a>'
             ].join('');
             menu.dataset.profileMenuReady = '1';
+            menu.dataset.profileMenuVersion = profileMenuVersion;
         }
     }
 
