@@ -335,6 +335,47 @@
         }
     }
 
+    function resolveQuoteOwnerId(quote) {
+        if (!quote || typeof quote !== 'object') return '';
+        return String(firstText(quote.userId, quote.createdBy, '') || '').trim();
+    }
+
+    function isBidListingNotification(message) {
+        return /^New bid on listing/i.test(String(message && message.title || '').trim());
+    }
+
+    function resolveConversationPeerFromBid(me, bid) {
+        if (!bid || typeof bid !== 'object') return '';
+        var providerId = String(bid.providerId || '').trim();
+        var meId = String(me && me.id || '').trim();
+        if (!providerId || !meId) return providerId;
+        if (meId === providerId) {
+            var quote = loadQuoteContext(String(bid.quoteId || '').trim());
+            return resolveQuoteOwnerId(quote);
+        }
+        return providerId;
+    }
+
+    function correctSelfConversationPeer(me, toUserId, bidId, quoteId) {
+        var meId = String(me && me.id || '').trim();
+        var peerId = String(toUserId || '').trim();
+        if (!meId || peerId !== meId) return peerId;
+
+        if (bidId) {
+            var bid = getAllBids().find(function (b) { return String(b.id || '') === bidId; }) || null;
+            var fromBid = resolveConversationPeerFromBid(me, bid);
+            if (fromBid && fromBid !== meId) return fromBid;
+        }
+
+        if (quoteId) {
+            var quote = loadQuoteContext(quoteId);
+            var ownerId = resolveQuoteOwnerId(quote);
+            if (ownerId && ownerId !== meId) return ownerId;
+        }
+
+        return peerId;
+    }
+
     function isCustomerUser(user) {
         if (!user || typeof user !== 'object') return false;
         const role = String(user.role || '').trim().toLowerCase();
@@ -485,7 +526,10 @@
         if (!isCustomerUser(me)) {
             var linkWrapProvider = document.getElementById('messages-link-form-wrap');
             if (linkWrapProvider) linkWrapProvider.style.display = 'none';
-            if (summaryEl) summaryEl.textContent = 'View the provider profile or continue the conversation below.';
+            if (summaryEl) {
+                summaryEl.textContent = 'You are chatting with ' + resolveUserName(toUserId) + '. Continue the conversation below.';
+            }
+            if (profileBtn) profileBtn.style.display = 'none';
             if (completeBtn) completeBtn.style.display = 'none';
             if (completeBadge) completeBadge.style.display = 'none';
             if (reviewBtn) reviewBtn.style.display = 'none';
@@ -662,11 +706,25 @@
         var rows = messages.slice().sort(function (a, b) {
             return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
         }).map(function (m) {
-            var isOut = String(m.fromUserId || '') === String(currentUserId);
-            var senderName = isOut ? resolveUserName(currentUserId) : resolveUserName(m.fromUserId);
-            if (isOut) {
-                senderName = firstText(senderName, 'You');
+            if (isBidListingNotification(m)) {
+                var viewerIsCustomer = String(m.toUserId || '') === String(currentUserId);
+                var providerName = resolveUserName(m.fromUserId);
+                var noticeLabel = viewerIsCustomer
+                    ? (providerName + ' placed a bid')
+                    : 'Your bid notification';
+                var noticeBody = firstText(m.text, '');
+                return [
+                    '<article class="msg-row msg-row--system">',
+                    '<div class="msg-bubble msg-bubble--system">',
+                    '<span class="msg-meta">' + escapeHtml(noticeLabel + ' · ' + formatWhen(m.createdAt)) + '</span>',
+                    '<p class="msg-text">' + escapeHtml(noticeBody) + '</p>',
+                    '</div>',
+                    '</article>'
+                ].join('');
             }
+
+            var isOut = String(m.fromUserId || '') === String(currentUserId);
+            var senderName = isOut ? 'You' : resolveUserName(m.fromUserId);
             var subjectLine = firstText(m.title, '');
             var metaParts = [senderName];
             if (subjectLine && subjectLine.toLowerCase() !== 'message' && subjectLine.toLowerCase() !== String(senderName || '').toLowerCase()) {
@@ -723,7 +781,21 @@
         if (!toUserId && bidId) {
             var allBids = getAllBids();
             var seedBid = allBids.find(function (b) { return String(b.id || '') === bidId; }) || null;
-            if (seedBid) toUserId = String(seedBid.providerId || '');
+            if (seedBid) toUserId = resolveConversationPeerFromBid(me, seedBid);
+        }
+
+        toUserId = correctSelfConversationPeer(me, toUserId, bidId, quoteId);
+
+        if (toUserId && String(toUserId) === String(me.id)) {
+            var selfChatStatus = document.getElementById('messages-status');
+            if (selfChatStatus) {
+                selfChatStatus.textContent = 'This chat link points to your own account. Open the thread from your dashboard messages list instead.';
+            }
+            var selfThreadEl = document.getElementById('messages-thread');
+            if (selfThreadEl) {
+                selfThreadEl.innerHTML = '<p class="messages-empty">Cannot message yourself. Use Dashboard → Messages and open a customer conversation.</p>';
+            }
+            return;
         }
 
         if (!toUserId) {

@@ -18,8 +18,16 @@
         .messages-empty { color: #64748b; font-size: 14px; margin: 0; }
         .msg-row { margin: 0 0 10px; display: flex; }
         .msg-row--out { justify-content: flex-end; }
+        .msg-row--system { justify-content: center; }
         .msg-bubble { max-width: 75%; border-radius: 10px; padding: 10px 12px; border: 1px solid #cbd5e1; background: #f8fafc; }
         .msg-row--out .msg-bubble { background: #0ea5e9; color: #fff; border-color: #0284c7; }
+        .msg-bubble--system {
+            max-width: 92%;
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+            color: #334155;
+        }
+        .msg-row--system .msg-meta { opacity: 1; color: #475569; }
         .msg-meta { display: block; font-size: 11px; opacity: 0.8; margin-bottom: 4px; }
         .msg-text { margin: 0; white-space: pre-wrap; }
         .messages-composer { margin-top: 14px; display: grid; gap: 8px; }
@@ -109,6 +117,41 @@
             color: #475569;
         }
         .messages-context-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .messages-toolbar-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            line-height: 1.2;
+            border-radius: 8px;
+            text-decoration: none;
+            cursor: pointer;
+            border: 1.5px solid transparent;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        .messages-toolbar-btn--outline {
+            background: #fff;
+            color: #1d4ed8;
+            border-color: #60a5fa;
+        }
+        .messages-toolbar-btn--outline:hover {
+            background: #eff6ff;
+            border-color: #2563eb;
+            color: #1e3a8a;
+        }
+        .messages-toolbar-btn--primary {
+            background: #2563eb;
+            color: #fff;
+            border-color: #2563eb;
+        }
+        .messages-toolbar-btn--primary:hover {
+            background: #1d4ed8;
+            border-color: #1d4ed8;
+            color: #fff;
+        }
         .messages-link-form-row {
             flex: 1 1 100%;
             display: flex;
@@ -274,10 +317,10 @@
                 </select>
             </div>
             <div class="messages-context-actions">
-                <a id="messages-view-profile-btn" class="btn btn-outline btn-sm" href="#" target="_blank" rel="noopener">View provider profile</a>
-                <button type="button" id="messages-mark-complete-btn" class="btn btn-outline btn-sm" style="display:none;">Mark form complete</button>
+                <a id="messages-view-profile-btn" class="messages-toolbar-btn messages-toolbar-btn--outline" href="#" target="_blank" rel="noopener">View provider profile</a>
+                <button type="button" id="messages-mark-complete-btn" class="messages-toolbar-btn messages-toolbar-btn--outline" style="display:none;">Mark form complete</button>
                 <span id="messages-form-complete-badge" class="messages-form-complete-badge" style="display:none;">Form marked complete</span>
-                <button type="button" id="messages-leave-review-btn" class="btn btn-primary btn-sm" style="display:none;">Leave a review</button>
+                <button type="button" id="messages-leave-review-btn" class="messages-toolbar-btn messages-toolbar-btn--primary" style="display:none;">Leave a review</button>
             </div>
         </section>
 
@@ -327,6 +370,6 @@
     <script src="js/auth.js?v=20260522-5"></script>
     <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/site-navbar.js?v=20260519-2"></script>
-    <script src="js/messages.js?v=20260522-3"></script>
+    <script src="js/messages.js?v=20260522-4"></script>
 </body>
 </html>
