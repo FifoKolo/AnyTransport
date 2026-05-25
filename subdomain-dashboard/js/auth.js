@@ -712,6 +712,7 @@ class AuthManager {
             if (authMenu) authMenu.style.display = 'none';
             if (userMenu) userMenu.style.display = 'flex';
             this.ensureNavbarAvatarDropdown();
+            this.ensureNavbarHubNav();
             this.updateUserDisplay();
             this.wireNavbarDropdown();
             this.scheduleSyncNavigationForRole();
@@ -721,9 +722,38 @@ class AuthManager {
         }
     }
 
+    isCustomer() {
+        const roles = this.getNormalizedRoles();
+        if (roles.includes('customer')) {
+            return true;
+        }
+        return !this.isProvider() && !this.isAdmin();
+    }
+
+    resolveHubNavHref(relativePath) {
+        const path = String(relativePath || '').trim();
+        if (!path) {
+            return path;
+        }
+        const inSubdomain = String(window.location.pathname || '').indexOf('subdomain-dashboard') >= 0;
+        if (!inSubdomain) {
+            return path;
+        }
+        const file = path.split('?')[0].split('#')[0];
+        const parentPages = {
+            'find-providers.html': true,
+            'provider-profile.html': true,
+            'create-job.html': true,
+            'index.html': true
+        };
+        if (parentPages[file]) {
+            return '../' + path;
+        }
+        return path;
+    }
+
     /**
-     * Customers only see Profile (hub: forms + messages) and the quote flow — not the provider dashboard.
-     * Providers and admins keep Dashboard + provider profile + optional My requests.
+     * Persistent navbar links: Dashboard (providers), Forms, Profile settings, Messages.
      */
     scheduleSyncNavigationForRole() {
         const run = () => this.syncNavigationForRole();
@@ -734,43 +764,132 @@ class AuthManager {
         }
     }
 
+    ensureNavbarHubNav() {
+        const userMenu = document.getElementById('user-menu');
+        if (!userMenu) {
+            return;
+        }
+
+        let hub = document.getElementById('navbar-hub-nav');
+        if (!hub) {
+            hub = document.createElement('nav');
+            hub.id = 'navbar-hub-nav';
+            hub.className = 'navbar-hub-nav';
+            hub.setAttribute('aria-label', 'Your account');
+            hub.innerHTML = [
+                '<a href="dashboard.html" class="navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link">Dashboard</a>',
+                '<a href="customer-dashboard.html?tab=forms" class="navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link">Forms</a>',
+                '<a href="customer-dashboard.html?tab=settings" class="navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link">Profile settings</a>',
+                '<a href="messages.html" class="navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link">Messages</a>',
+                '<a href="find-providers.html" class="navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link">Find providers</a>'
+            ].join('');
+            const bell = userMenu.querySelector('.navbar-notification-bell');
+            if (bell) {
+                userMenu.insertBefore(hub, bell);
+            } else {
+                userMenu.insertBefore(hub, userMenu.firstChild);
+            }
+        }
+
+        hub.style.display = this.currentUser ? 'flex' : 'none';
+    }
+
     syncNavigationForRole() {
-        if (!this.currentUser) return;
+        if (!this.currentUser) {
+            const hub = document.getElementById('navbar-hub-nav');
+            if (hub) {
+                hub.style.display = 'none';
+            }
+            return;
+        }
+
+        this.ensureNavbarHubNav();
+
         const allowProviderDash = this.isProvider() || this.isAdmin();
+        const allowCustomerHub = this.isCustomer();
+        const uid = this.currentUser.id ? String(this.currentUser.id) : '';
 
-        document.querySelectorAll('.at-nav-provider-dashboard').forEach((el) => {
+        const dashboardHref = this.resolveHubNavHref('dashboard.html');
+        const formsHref = this.resolveHubNavHref('customer-dashboard.html?tab=forms');
+        const settingsHref = allowProviderDash && !allowCustomerHub
+            ? this.resolveHubNavHref('provider-profile.html?userId=' + encodeURIComponent(uid))
+            : this.resolveHubNavHref('customer-dashboard.html?tab=settings');
+        const messagesHref = this.resolveHubNavHref('messages.html');
+        const findProvidersHref = this.resolveHubNavHref('find-providers.html');
+
+        document.querySelectorAll('.at-nav-hub-dashboard, #navbar-hub-dashboard-link').forEach((el) => {
+            el.href = dashboardHref;
             el.style.display = allowProviderDash ? '' : 'none';
         });
-        document.querySelectorAll('.at-nav-my-requests').forEach((el) => {
-            el.style.display = allowProviderDash ? '' : 'none';
+        document.querySelectorAll('.at-nav-hub-forms, #navbar-hub-forms-link').forEach((el) => {
+            el.href = formsHref;
+            el.style.display = allowCustomerHub ? '' : 'none';
         });
-
-        const findProvidersHref = String(window.location.pathname || '').indexOf('subdomain-dashboard') >= 0
-            ? '../find-providers.html'
-            : 'find-providers.html';
+        document.querySelectorAll('.at-nav-hub-settings, #navbar-hub-settings-link').forEach((el) => {
+            el.href = settingsHref;
+            el.style.display = '';
+        });
+        document.querySelectorAll('.at-nav-hub-messages, #navbar-hub-messages-link').forEach((el) => {
+            el.href = messagesHref;
+            el.style.display = '';
+        });
         document.querySelectorAll('.at-nav-find-providers, #navbar-find-providers-link').forEach((el) => {
             el.href = findProvidersHref;
-            el.style.display = allowProviderDash ? 'none' : '';
+            el.style.display = allowCustomerHub ? '' : 'none';
+        });
+
+        document.querySelectorAll('.at-nav-provider-dashboard').forEach((el) => {
+            el.style.display = 'none';
+        });
+        document.querySelectorAll('.at-nav-my-requests').forEach((el) => {
+            el.style.display = 'none';
+        });
+        document.querySelectorAll('#navbar-avatar-dropdown .dropdown-menu .nav-item').forEach((el) => {
+            el.style.display = 'none';
         });
 
         document.querySelectorAll('#navbar-profile-link').forEach((profileLink) => {
-            if (allowProviderDash) {
-                const uid = this.currentUser.id ? String(this.currentUser.id) : '';
-                profileLink.href = 'provider-profile.html?userId=' + encodeURIComponent(uid);
-                profileLink.textContent = 'Profile';
-            } else {
-                profileLink.href = 'customer-dashboard.html';
-                profileLink.textContent = 'Profile';
-            }
+            profileLink.style.display = 'none';
         });
 
         document.querySelectorAll('#provider-dashboard-link').forEach((el) => {
-            el.style.display = allowProviderDash ? '' : 'none';
+            el.style.display = 'none';
         });
 
         const avatarLink = document.getElementById('navbar-avatar-home-link');
         if (avatarLink) {
-            avatarLink.href = allowProviderDash ? 'dashboard.html#provider-board' : 'customer-dashboard.html';
+            avatarLink.href = allowProviderDash ? dashboardHref + '#provider-board' : formsHref;
+        }
+
+        const path = String(window.location.pathname || '').toLowerCase();
+        const tab = (() => {
+            try {
+                return String(new URLSearchParams(window.location.search || '').get('tab') || '').trim().toLowerCase();
+            } catch (_e) {
+                return '';
+            }
+        })();
+
+        document.querySelectorAll('.navbar-hub-link').forEach((link) => {
+            link.classList.remove('is-active');
+        });
+
+        if (/dashboard\.html$/i.test(path)) {
+            document.querySelectorAll('.at-nav-hub-dashboard').forEach((el) => el.classList.add('is-active'));
+        } else if (/customer-dashboard\.html$/i.test(path)) {
+            if (tab === 'settings') {
+                document.querySelectorAll('.at-nav-hub-settings').forEach((el) => el.classList.add('is-active'));
+            } else if (tab === 'inbox' || tab === 'messages') {
+                document.querySelectorAll('.at-nav-hub-messages').forEach((el) => el.classList.add('is-active'));
+            } else {
+                document.querySelectorAll('.at-nav-hub-forms').forEach((el) => el.classList.add('is-active'));
+            }
+        } else if (/messages\.html$/i.test(path)) {
+            document.querySelectorAll('.at-nav-hub-messages').forEach((el) => el.classList.add('is-active'));
+        } else if (/provider-profile\.html$/i.test(path)) {
+            document.querySelectorAll('.at-nav-hub-settings').forEach((el) => el.classList.add('is-active'));
+        } else if (/find-providers\.html$/i.test(path)) {
+            document.querySelectorAll('.at-nav-find-providers').forEach((el) => el.classList.add('is-active'));
         }
     }
 

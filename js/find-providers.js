@@ -301,7 +301,8 @@
             const services = Array.isArray(p.services) && p.services.length
                 ? p.services.slice(0, 4).join(' · ')
                 : 'General transport';
-            const selectedQuoteId = select ? String(select.value || '').trim() : '';
+            const quoteSelect = document.getElementById('invite-quote-select');
+            const selectedQuoteId = quoteSelect ? String(quoteSelect.value || '').trim() : '';
             const msgUrl = 'messages.html?to=' + encodeURIComponent(String(p.id || ''))
                 + (selectedQuoteId ? ('&quoteId=' + encodeURIComponent(selectedQuoteId)) : '');
             const canInvite = !p.blockInvites;
@@ -350,7 +351,11 @@
         }
 
         lastResults.forEach(function (p) {
-            if (!p.mapLat || !p.mapLng) return;
+            const mapLat = Number(p.mapLat);
+            const mapLng = Number(p.mapLng);
+            if (!Number.isFinite(mapLat) || !Number.isFinite(mapLng) || (mapLat === 0 && mapLng === 0)) {
+                return;
+            }
             const el = document.createElement('div');
             el.className = 'find-provider-marker';
             el.style.cssText = 'width:14px;height:14px;border-radius:50%;background:#0ea5e9;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;';
@@ -359,14 +364,14 @@
                 + (p.distanceKm != null ? '<br>' + escapeHtml(String(p.distanceKm)) + ' km from you' : '')
                 + (p.blockInvites ? '' : '<br><em>Click list card to invite or message</em>');
             const marker = new mapboxgl.Marker({ element: el })
-                .setLngLat([p.mapLng, p.mapLat])
+                .setLngLat([mapLng, mapLat])
                 .setPopup(new mapboxgl.Popup({ offset: 12 }).setHTML(popupHtml))
                 .addTo(m);
             el.addEventListener('click', function () {
                 focusProvider(p.id);
             });
             markers.push(marker);
-            bounds.extend([p.mapLng, p.mapLat]);
+            bounds.extend([mapLng, mapLat]);
         });
 
         if (!bounds.isEmpty()) {

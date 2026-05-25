@@ -861,6 +861,35 @@
         renderNavbarMessageBadge(user.id, messages);
         wireAccountSettings(authRef, user);
 
+        let initialTab = 'forms';
+        try {
+            const tabParam = String(new URLSearchParams(window.location.search || '').get('tab') || '').trim().toLowerCase();
+            const hashTab = String(window.location.hash || '').replace(/^#/, '').trim().toLowerCase();
+            const tabKey = tabParam || hashTab;
+            if (tabKey === 'settings' || tabKey === 'account') {
+                initialTab = 'settings';
+            } else if (tabKey === 'inbox' || tabKey === 'messages') {
+                initialTab = 'inbox';
+            } else if (tabKey === 'forms' || tabKey === 'listings') {
+                initialTab = 'forms';
+            }
+        } catch (_tabErr) {
+            initialTab = 'forms';
+        }
+        activateTab(initialTab);
+        if (initialTab === 'inbox') {
+            const latestQuotes = loadQuotesMerged(user.id, user.email || '');
+            const latestBids = loadAllBids();
+            const latestMessages = loadMessagesForUser(user.id);
+            renderMessageGroupsIndex(latestQuotes, latestBids);
+            const incomingTs = getIncomingMessageTimestamps(user.id, latestMessages);
+            const newest = incomingTs.length ? Math.max.apply(null, incomingTs) : 0;
+            if (newest > 0) {
+                setLastSeenMessageTs(user.id, newest);
+            }
+            renderNavbarMessageBadge(user.id, latestMessages);
+        }
+
         const quotesBody = document.getElementById('customer-quotes-body');
         if (quotesBody) {
             quotesBody.addEventListener('click', function (event) {
@@ -931,6 +960,17 @@
             btn.addEventListener('click', function () {
                 const tab = btn.getAttribute('data-tab');
                 activateTab(tab);
+                try {
+                    const nextUrl = new URL(window.location.href);
+                    if (tab === 'forms') {
+                        nextUrl.searchParams.set('tab', 'forms');
+                    } else if (tab === 'settings') {
+                        nextUrl.searchParams.set('tab', 'settings');
+                    } else if (tab === 'inbox') {
+                        nextUrl.searchParams.set('tab', 'messages');
+                    }
+                    window.history.replaceState({}, '', nextUrl.pathname + nextUrl.search);
+                } catch (_urlErr) {}
                 if (tab === 'inbox') {
                     const latestQuotes = loadQuotesMerged(user.id, user.email || '');
                     const latestBids = loadAllBids();

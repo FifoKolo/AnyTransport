@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>My profile - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
-    <link rel="stylesheet" href="css/navbar.css?v=20260522-1">
+    <link rel="stylesheet" href="css/navbar.css?v=20260522-2">
     <link rel="stylesheet" href="css/dashboard.css?v=20260522-2">
 </head>
 <body>
@@ -30,6 +30,13 @@
                 <button class="btn btn-outline" type="button" onclick="openLoginModal()">Login</button>
             </div>
             <div id="user-menu" style="display: none;">
+                <nav id="navbar-hub-nav" class="navbar-hub-nav" aria-label="Your account" style="display:none;">
+                    <a href="dashboard.html" class="navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link">Dashboard</a>
+                    <a href="customer-dashboard.html?tab=forms" class="navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link">Forms</a>
+                    <a href="customer-dashboard.html?tab=settings" class="navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link">Profile settings</a>
+                    <a href="messages.html" class="navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link">Messages</a>
+                    <a href="find-providers.html" class="navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link">Find providers</a>
+                </nav>
                 <div class="navbar-notification-bell">
                     <button class="notification-bell-btn" id="notification-bell" type="button" title="View notifications" aria-label="View notifications">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -172,9 +179,9 @@
     </div>
 
     <script src="js/cache-maintenance.js?v=20260322-2"></script>
-    <script src="js/auth.js?v=20260522-2"></script>
+    <script src="js/auth.js?v=20260522-5"></script>
     <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/site-navbar.js?v=20260519-2"></script>
-    <script src="js/customer-dashboard.js?v=20260522-3"></script>
+    <script src="js/customer-dashboard.js?v=20260522-4"></script>
 </body>
 </html>
