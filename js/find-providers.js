@@ -377,16 +377,16 @@
                 + (selectedQuoteId ? ('&quoteId=' + encodeURIComponent(selectedQuoteId)) : '');
             const canInvite = !p.blockInvites;
             const inviteBtn = canInvite
-                ? '<button type="button" class="btn btn-outline btn-sm find-invite-btn" data-provider-id="' + escapeHtml(String(p.id || '')) + '">Invite to quote</button>'
-                : '<span class="profile-help" style="font-size:12px;">Not accepting invites</span>';
+                ? '<button type="button" class="find-provider-action-btn find-provider-action-btn--invite find-invite-btn" data-provider-id="' + escapeHtml(String(p.id || '')) + '">Invite to form</button>'
+                : '<span class="profile-help">Not accepting invites</span>';
             return [
                 '<article class="find-provider-card" data-provider-id="' + escapeHtml(String(p.id || '')) + '">',
                 '<h3>' + escapeHtml(name) + '</h3>',
                 '<p class="find-provider-meta">' + escapeHtml(loc) + (dist ? ' · ' + escapeHtml(dist) : '') + '</p>',
                 '<p class="find-provider-services">' + escapeHtml(services) + '</p>',
                 '<div class="find-provider-actions">',
-                '<a class="btn btn-outline btn-sm" href="provider-profile.html?userId=' + encodeURIComponent(String(p.id || '')) + '">View profile</a>',
-                '<a class="btn btn-primary btn-sm" href="' + escapeHtml(msgUrl) + '">Message</a>',
+                '<a class="find-provider-action-btn find-provider-action-btn--profile" href="provider-profile.html?userId=' + encodeURIComponent(String(p.id || '')) + '">View profile</a>',
+                '<a class="find-provider-action-btn find-provider-action-btn--message" href="' + escapeHtml(msgUrl) + '">Message</a>',
                 inviteBtn,
                 '</div>',
                 '</article>'

@@ -155,6 +155,61 @@
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+    align-items: stretch;
+    margin-top: 4px;
+}
+
+/* Navbar.css sets global .btn-outline to white — override inside provider cards */
+.find-provider-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 calc(33.333% - 6px);
+    min-width: 96px;
+    padding: 9px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
+    border-radius: 8px;
+    text-decoration: none;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    box-sizing: border-box;
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+.find-provider-action-btn--profile,
+.find-provider-action-btn--invite {
+    background: #fff;
+    color: #1d4ed8;
+    border-color: #60a5fa;
+}
+
+.find-provider-action-btn--profile:hover,
+.find-provider-action-btn--invite:hover {
+    background: #eff6ff;
+    border-color: #2563eb;
+    color: #1e3a8a;
+}
+
+.find-provider-action-btn--message {
+    background: #2563eb;
+    color: #fff;
+    border-color: #2563eb;
+}
+
+.find-provider-action-btn--message:hover {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+    color: #fff;
+}
+
+.find-provider-actions .profile-help {
+    flex: 1 1 100%;
+    font-size: 12px;
+    color: #64748b;
+    padding: 6px 0;
 }
 
 .find-providers-empty {
