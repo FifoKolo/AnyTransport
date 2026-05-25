@@ -392,15 +392,34 @@
         return !!(quote && quote.customerFormComplete);
     }
 
-    function redirectMessagesWithoutQuoteId() {
+    function getMessagesQuoteIdFromUrl(fallback) {
+        try {
+            return String(new URLSearchParams(window.location.search || '').get('quoteId') || fallback || '').trim();
+        } catch (_e) {
+            return String(fallback || '').trim();
+        }
+    }
+
+    function setMessagesQuoteIdInUrl(quoteId) {
+        var id = String(quoteId || '').trim();
+        if (!id) return;
         try {
             var url = new URL(window.location.href);
-            url.searchParams.delete('quoteId');
-            window.location.replace(url.pathname + url.search);
+            url.searchParams.set('quoteId', id);
+            window.history.replaceState({}, document.title, url.pathname + url.search);
         } catch (_urlErr) {
-            var params = new URLSearchParams(window.location.search || '');
-            var to = String(params.get('to') || '').trim();
-            window.location.replace('messages.html' + (to ? '?to=' + encodeURIComponent(to) : ''));
+            /* ignore */
+        }
+    }
+
+    function refreshMessagesQuoteContext(me, toUserId, quoteId) {
+        quoteId = setupLinkFormSelector(me, toUserId, quoteId);
+        setupConversationToolbar(me, toUserId, quoteId);
+        var subtitleEl = document.getElementById('messages-subtitle');
+        if (subtitleEl) {
+            var quote = quoteId ? loadQuoteContext(quoteId) : null;
+            var formHint = quote && quote.formId ? (' (Form #' + quote.formId + ')') : (quoteId ? '' : '');
+            subtitleEl.textContent = 'Conversation with ' + resolveUserName(toUserId) + formHint;
         }
     }
 
@@ -640,7 +659,9 @@
                     try {
                         var updated = window.anytransportApi.markQuoteFormComplete(quoteId);
                         if (!updated) throw new Error('No response');
-                        redirectMessagesWithoutQuoteId();
+                        var activeQuoteId = String((updated && updated.id) || quoteId || '').trim();
+                        setMessagesQuoteIdInUrl(activeQuoteId);
+                        refreshMessagesQuoteContext(me, toUserId, activeQuoteId);
                     } catch (err) {
                         completeBtn.disabled = false;
                         alert((err && err.message) ? err.message : 'Could not mark the form complete.');
@@ -726,8 +747,9 @@
                 if (!reviewBtn.dataset.bound) {
                     reviewBtn.dataset.bound = '1';
                     reviewBtn.addEventListener('click', function () {
-                        openReviewModal(me, toUserId, quoteId, function () {
-                            setupConversationToolbar(me, toUserId, quoteId);
+                        var activeQuoteId = getMessagesQuoteIdFromUrl(quoteId);
+                        openReviewModal(me, toUserId, activeQuoteId, function () {
+                            refreshMessagesQuoteContext(me, toUserId, activeQuoteId);
                         });
                     });
                 }
@@ -924,16 +946,8 @@
             return;
         }
 
-        quoteId = setupLinkFormSelector(me, toUserId, quoteId);
-
-        var subtitleEl = document.getElementById('messages-subtitle');
-        if (subtitleEl) {
-            var quote = quoteId ? loadQuoteContext(quoteId) : null;
-            var formHint = quote && quote.formId ? (' (Form #' + quote.formId + ')') : (quoteId ? '' : '');
-            subtitleEl.textContent = 'Conversation with ' + resolveUserName(toUserId) + formHint;
-        }
-
-        setupConversationToolbar(me, toUserId, quoteId);
+        refreshMessagesQuoteContext(me, toUserId, quoteId);
+        quoteId = getMessagesQuoteIdFromUrl(quoteId);
 
         var bidContextEl = document.getElementById('messages-bid-context');
         var bidTextEl = document.getElementById('messages-bid-text');

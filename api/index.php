@@ -1268,13 +1268,27 @@ function remove_customer_reviews_for_quote(&$store, $customerId, $quoteId) {
     if ($customerId === '' || $quoteId === '' || !isset($store['providerReviews']) || !is_array($store['providerReviews'])) {
         return $removed;
     }
+    $formId = '';
+    if (isset($store['quotes']) && is_array($store['quotes'])) {
+        $quote = find_quote_by_id($store['quotes'], $quoteId);
+        if (is_array($quote)) {
+            $formId = trim((string) ($quote['formId'] ?? ''));
+        }
+    }
     $kept = array();
     foreach ($store['providerReviews'] as $review) {
         if (!is_array($review)) {
             continue;
         }
-        if (trim((string) ($review['customerId'] ?? '')) === $customerId
-            && trim((string) ($review['quoteId'] ?? '')) === $quoteId) {
+        if (trim((string) ($review['customerId'] ?? '')) !== $customerId) {
+            $kept[] = $review;
+            continue;
+        }
+        $reviewQuoteId = trim((string) ($review['quoteId'] ?? ''));
+        $reviewFormId = trim((string) ($review['formId'] ?? ''));
+        $matchesQuote = $reviewQuoteId !== '' && $reviewQuoteId === $quoteId;
+        $matchesForm = $formId !== '' && $reviewFormId !== '' && $reviewFormId === $formId;
+        if ($matchesQuote || $matchesForm) {
             $removed++;
             continue;
         }
@@ -4844,15 +4858,42 @@ switch ($action) {
             $store['providerReviews'] = array();
         }
         $existingIndex = find_provider_review_index($store, $customerId, $providerId, $quoteId);
+        $formId = trim((string) ($quote['formId'] ?? ''));
+        if ($existingIndex < 0 && $formId !== '') {
+            foreach ($store['providerReviews'] as $idx => $existingReview) {
+                if (!is_array($existingReview)) {
+                    continue;
+                }
+                if (trim((string) ($existingReview['customerId'] ?? '')) !== $customerId) {
+                    continue;
+                }
+                if (trim((string) ($existingReview['providerId'] ?? '')) !== $providerId) {
+                    continue;
+                }
+                if (trim((string) ($existingReview['formId'] ?? '')) === $formId) {
+                    $existingIndex = (int) $idx;
+                    break;
+                }
+            }
+        }
         if ($existingIndex >= 0) {
-            send_json(array('ok' => false, 'error' => 'You already reviewed this provider for this request.'), 409);
+            $store['providerReviews'][$existingIndex]['rating'] = $rating;
+            $store['providerReviews'][$existingIndex]['text'] = $text;
+            $store['providerReviews'][$existingIndex]['quoteId'] = $quoteId;
+            $store['providerReviews'][$existingIndex]['formId'] = $formId;
+            $store['providerReviews'][$existingIndex]['customerName'] = trim((string) ($sessionUser['username'] ?? $sessionUser['name'] ?? 'Customer'));
+            $store['providerReviews'][$existingIndex]['updatedAt'] = gmdate('c');
+            $review = $store['providerReviews'][$existingIndex];
+            write_store($storeFile, $store);
+            refresh_session_cookie();
+            send_json(array('ok' => true, 'review' => $review, 'stats' => get_provider_review_stats($store, $providerId), 'updated' => true));
         }
         $review = array(
             'id' => make_id('review'),
             'providerId' => $providerId,
             'customerId' => $customerId,
             'quoteId' => $quoteId,
-            'formId' => trim((string) ($quote['formId'] ?? '')),
+            'formId' => $formId,
             'rating' => $rating,
             'text' => $text,
             'customerName' => trim((string) ($sessionUser['username'] ?? $sessionUser['name'] ?? 'Customer')),
