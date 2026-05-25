@@ -203,15 +203,18 @@
     </main>
 
     <script src="js/cache-maintenance.js?v=20260322-2"></script>
-    <script src="js/auth.js?v=20260522-9"></script>
+    <script src="js/auth.js?v=20260522-10"></script>
     <script>
-        (function () {
+        document.addEventListener('DOMContentLoaded', function () {
             try {
+                if (window.auth && typeof auth.refreshSessionUserFromServer === 'function') {
+                    auth.refreshSessionUserFromServer();
+                }
                 if (window.auth && typeof auth.guardProviderDashboardPage === 'function') {
                     auth.guardProviderDashboardPage();
                 }
             } catch (_e) {}
-        })();
+        });
     </script>
     <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/provider-profile.js?v=20260428-1"></script>

@@ -1110,15 +1110,8 @@
             return;
         }
 
-        var allowCustomerForms = true;
-        try {
-            var pageParams = new URLSearchParams(window.location.search || '');
-            allowCustomerForms = pageParams.get('my-requests') === '1' || pageParams.get('tab') === 'forms' || pageParams.get('tab') === 'settings' || pageParams.get('tab') === 'inbox' || pageParams.get('tab') === 'messages';
-        } catch (_pageParamsErr) {
-            allowCustomerForms = true;
-        }
-
-        if (typeof authRef.isProvider === 'function' && authRef.isProvider() && !allowCustomerForms) {
+        if (typeof authRef.shouldRedirectProviderFromCustomerDashboard === 'function' &&
+            authRef.shouldRedirectProviderFromCustomerDashboard()) {
             if (typeof authRef.resolveDefaultHomeHref === 'function') {
                 window.location.replace(authRef.resolveDefaultHomeHref());
             } else {

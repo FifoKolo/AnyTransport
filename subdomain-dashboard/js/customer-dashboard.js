@@ -406,7 +406,7 @@
         var apiQuotes = [];
         if (window.anytransportApi && typeof window.anytransportApi.getQuotes === 'function') {
             try {
-                apiQuotes = window.anytransportApi.getQuotes() || [];
+                apiQuotes = window.anytransportApi.getQuotes(userId, { scope: 'mine' }) || [];
             } catch (e) {
                 if (isAtDebug()) {
                     console.debug('[AnyTransport] customer-dashboard getQuotes (using local merge if any)', e);
@@ -414,6 +414,10 @@
                 apiQuotes = [];
             }
         }
+
+        apiQuotes = apiQuotes.filter(function (q) {
+            return quoteBelongsToUser(q, userId, userEmail);
+        });
 
         var localQuotes = [];
         try {
@@ -1096,9 +1100,23 @@
             return;
         }
 
+        if (typeof authRef.refreshSessionUserFromServer === 'function') {
+            authRef.refreshSessionUserFromServer();
+        }
+
         const user = authRef.getUser();
         if (!user || !user.id) {
             window.location.href = 'index.html';
+            return;
+        }
+
+        if (typeof authRef.shouldRedirectProviderFromCustomerDashboard === 'function' &&
+            authRef.shouldRedirectProviderFromCustomerDashboard()) {
+            if (typeof authRef.resolveDefaultHomeHref === 'function') {
+                window.location.replace(authRef.resolveDefaultHomeHref());
+            } else {
+                window.location.replace('dashboard.html#provider-board');
+            }
             return;
         }
 

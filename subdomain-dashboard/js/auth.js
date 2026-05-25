@@ -838,8 +838,8 @@ class AuthManager {
         const uid = this.currentUser.id ? String(this.currentUser.id) : '';
 
         const dashboardHref = this.resolveHubNavHref('dashboard.html');
-        const formsHref = this.resolveHubNavHref('customer-dashboard.html?tab=forms');
-        const settingsHref = allowProviderDash && !allowCustomerHub
+        const formsHref = this.resolveHubNavHref('customer-dashboard.html?tab=forms&my-requests=1');
+        const settingsHref = allowProviderDash
             ? this.resolveHubNavHref('provider-profile.html?userId=' + encodeURIComponent(uid))
             : this.resolveHubNavHref('customer-dashboard.html?tab=settings');
         const messagesHref = this.resolveHubNavHref('messages.html');
@@ -1286,6 +1286,18 @@ class AuthManager {
         return review === 'pending_review' || review === 'approved' || review === 'rejected';
     }
 
+    shouldRedirectProviderFromCustomerDashboard() {
+        if (!this.isProvider() || this.isAdmin()) {
+            return false;
+        }
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            return params.get('my-requests') !== '1';
+        } catch (_e) {
+            return true;
+        }
+    }
+
     guardProviderDashboardPage() {
         if (!this.isLoggedIn()) {
             return;
@@ -1295,9 +1307,8 @@ class AuthManager {
             return;
         }
         const target = this.resolveHubNavHref('customer-dashboard.html');
-        const q = window.location.search || '';
-        const h = window.location.hash || '';
-        window.location.replace(target + q + h);
+        const q = String(window.location.search || '');
+        window.location.replace(target + q);
     }
 
     isProviderApproved(user) {
