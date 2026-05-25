@@ -537,6 +537,38 @@
         return resolvedQuoteId;
     }
 
+    function setToolbarControlVisible(el, visible) {
+        if (!el) return;
+        if (visible) {
+            el.hidden = false;
+            el.style.removeProperty('display');
+        } else {
+            el.hidden = true;
+            el.style.display = 'none';
+        }
+    }
+
+    function ensureRevertCompleteButton() {
+        var actions = document.querySelector('.messages-context-actions');
+        var btn = document.getElementById('messages-revert-complete-btn');
+        if (btn || !actions) {
+            return btn;
+        }
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'messages-revert-complete-btn';
+        btn.className = 'messages-toolbar-btn messages-toolbar-btn--outline';
+        btn.textContent = 'Revert complete status';
+        btn.hidden = true;
+        var reviewBtn = document.getElementById('messages-leave-review-btn');
+        if (reviewBtn) {
+            actions.insertBefore(btn, reviewBtn);
+        } else {
+            actions.appendChild(btn);
+        }
+        return btn;
+    }
+
     function setupConversationToolbar(me, toUserId, quoteId) {
         var toolbar = document.getElementById('messages-context-toolbar');
         if (!toolbar || !toUserId) return;
@@ -544,7 +576,7 @@
         var profileBtn = document.getElementById('messages-view-profile-btn');
         var completeBtn = document.getElementById('messages-mark-complete-btn');
         var completeBadge = document.getElementById('messages-form-complete-badge');
-        var revertBtn = document.getElementById('messages-revert-complete-btn');
+        var revertBtn = ensureRevertCompleteButton();
         var reviewBtn = document.getElementById('messages-leave-review-btn');
         var summaryEl = document.getElementById('messages-context-summary');
 
@@ -559,11 +591,11 @@
             if (summaryEl) {
                 summaryEl.textContent = 'You are chatting with ' + resolveUserName(toUserId) + '. Continue the conversation below.';
             }
-            if (profileBtn) profileBtn.style.display = 'none';
-            if (completeBtn) completeBtn.style.display = 'none';
-            if (completeBadge) completeBadge.style.display = 'none';
-            if (revertBtn) revertBtn.style.display = 'none';
-            if (reviewBtn) reviewBtn.style.display = 'none';
+            setToolbarControlVisible(profileBtn, false);
+            setToolbarControlVisible(completeBtn, false);
+            setToolbarControlVisible(completeBadge, false);
+            setToolbarControlVisible(revertBtn, false);
+            setToolbarControlVisible(reviewBtn, false);
             return;
         }
 
@@ -573,10 +605,10 @@
             if (summaryEl) {
                 summaryEl.textContent = 'Choose which active request form this conversation is about. Completed forms are hidden from this list.';
             }
-            if (completeBtn) completeBtn.style.display = 'none';
-            if (completeBadge) completeBadge.style.display = 'none';
-            if (revertBtn) revertBtn.style.display = 'none';
-            if (reviewBtn) reviewBtn.style.display = 'none';
+            setToolbarControlVisible(completeBtn, false);
+            setToolbarControlVisible(completeBadge, false);
+            setToolbarControlVisible(revertBtn, false);
+            setToolbarControlVisible(reviewBtn, false);
             return;
         }
 
@@ -591,7 +623,7 @@
         }
 
         if (completeBtn) {
-            completeBtn.style.display = formComplete ? 'none' : '';
+            setToolbarControlVisible(completeBtn, !formComplete);
             completeBtn.disabled = false;
             completeBtn.textContent = 'Mark form complete';
             if (!completeBtn.dataset.bound) {
@@ -617,7 +649,7 @@
             }
         }
         if (completeBadge) {
-            completeBadge.style.display = formComplete ? '' : 'none';
+            setToolbarControlVisible(completeBadge, formComplete);
             if (formComplete) {
                 completeBadge.textContent = 'Form marked complete';
             }
@@ -632,32 +664,46 @@
             }
         }
 
-        if (revertBtn && formComplete) {
-            revertBtn.style.display = '';
+        if (revertBtn) {
+            setToolbarControlVisible(revertBtn, formComplete);
             revertBtn.disabled = false;
-            if (!revertBtn.dataset.bound) {
+            if (formComplete && !revertBtn.dataset.bound) {
                 revertBtn.dataset.bound = '1';
                 revertBtn.addEventListener('click', function () {
                     if (!window.anytransportApi || typeof window.anytransportApi.revertQuoteFormComplete !== 'function') {
                         alert('Unable to revert the complete status right now.');
                         return;
                     }
-                    var revertMsg = existingReview
-                        ? 'Reopen this request form? Your ' + String(existingReview.rating || '') + '-star review for this provider will be removed, and the form will return to your active list.'
+                    var activeQuoteId = String(quoteId || '').trim();
+                    try {
+                        var params = new URLSearchParams(window.location.search || '');
+                        activeQuoteId = String(params.get('quoteId') || activeQuoteId).trim();
+                    } catch (_p) {}
+                    var reviewNow = null;
+                    if (window.anytransportApi && typeof window.anytransportApi.listProviderReviews === 'function') {
+                        try {
+                            var payload = window.anytransportApi.listProviderReviews(toUserId, activeQuoteId);
+                            reviewNow = payload && payload.existingReview ? payload.existingReview : null;
+                        } catch (_r) {
+                            reviewNow = null;
+                        }
+                    }
+                    var revertMsg = reviewNow
+                        ? 'Reopen this request form? Your ' + String(reviewNow.rating || '') + '-star review for this provider will be removed, and the form will return to your active list.'
                         : 'Reopen this request form? It will appear in your active forms list again.';
                     if (!window.confirm(revertMsg)) {
                         return;
                     }
                     revertBtn.disabled = true;
                     try {
-                        var reopened = window.anytransportApi.revertQuoteFormComplete(quoteId);
+                        var reopened = window.anytransportApi.revertQuoteFormComplete(activeQuoteId);
                         if (!reopened) throw new Error('No response');
                         try {
                             var url = new URL(window.location.href);
-                            url.searchParams.set('quoteId', quoteId);
+                            url.searchParams.set('quoteId', activeQuoteId);
                             window.location.replace(url.pathname + url.search);
                         } catch (_e) {
-                            setupConversationToolbar(me, toUserId, quoteId);
+                            setupConversationToolbar(me, toUserId, activeQuoteId);
                         }
                     } catch (err) {
                         revertBtn.disabled = false;
@@ -665,20 +711,18 @@
                     }
                 });
             }
-        } else if (revertBtn) {
-            revertBtn.style.display = 'none';
         }
 
         if (reviewBtn) {
             if (!formComplete) {
-                reviewBtn.style.display = 'none';
+                setToolbarControlVisible(reviewBtn, false);
             } else if (existingReview) {
-                reviewBtn.style.display = 'none';
+                setToolbarControlVisible(reviewBtn, false);
                 if (completeBadge) {
                     completeBadge.textContent = 'Form complete · Review submitted (' + String(existingReview.rating || '') + '★)';
                 }
             } else {
-                reviewBtn.style.display = '';
+                setToolbarControlVisible(reviewBtn, true);
                 if (!reviewBtn.dataset.bound) {
                     reviewBtn.dataset.bound = '1';
                     reviewBtn.addEventListener('click', function () {
