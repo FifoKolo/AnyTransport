@@ -104,10 +104,64 @@
 
     function isProviderPendingReview(user) {
         const role = String(user && user.role || '').toLowerCase().trim();
-        if (role !== 'provider') return false;
-        const status = String(user && user.identityReviewStatus || '').trim();
-        if (status === '') return true;
-        return status === 'pending_review';
+        if (role !== 'provider' && !(auth && auth.isProvider && auth.isProvider())) return false;
+        if (auth && typeof auth.isProviderApproved === 'function' && auth.isProviderApproved(user)) {
+            return false;
+        }
+        const status = String(user && user.identityReviewStatus || '').trim().toLowerCase();
+        if (status === 'approved') return false;
+        if (user && (user.verified === true || user.verified === 1 || user.verified === 'true')) return false;
+        return status === '' || status === 'pending_review' || status === 'pending';
+    }
+
+    function showProviderPendingApprovalState(user) {
+        const board = document.getElementById('provider-board');
+        if (!board) return;
+
+        let banner = document.getElementById('provider-approval-banner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'provider-approval-banner';
+            banner.className = 'provider-approval-banner';
+            banner.setAttribute('role', 'status');
+            const anchor = board.querySelector('.provider-board-header');
+            if (anchor && anchor.parentNode) {
+                anchor.parentNode.insertBefore(banner, anchor.nextSibling);
+            } else {
+                board.insertBefore(banner, board.firstChild);
+            }
+        }
+
+        const statusLabel = String(user && user.identityReviewStatus || 'pending_review').replace(/_/g, ' ');
+        const isRejected = String(user && user.identityReviewStatus || '').trim().toLowerCase() === 'rejected';
+        banner.innerHTML = isRejected
+            ? '<strong>Account not approved.</strong> Your provider verification was rejected. Open <strong>Profile</strong> to update your documents, or contact support if you need help.'
+            : '<strong>Verification in progress.</strong> Your account status is <em>' + escapeHtml(statusLabel) + '</em>. You can use Profile and Messages now; listings and bids unlock after admin approval.';
+
+        [
+            'provider-dashboard-panel',
+            'provider-search-panel',
+            'provider-listings'
+        ].forEach(function (id) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+
+        const messagesPanel = document.getElementById('provider-messages-panel');
+        if (messagesPanel) messagesPanel.style.display = '';
+    }
+
+    function clearProviderPendingApprovalState() {
+        const banner = document.getElementById('provider-approval-banner');
+        if (banner) banner.remove();
+        [
+            'provider-dashboard-panel',
+            'provider-search-panel',
+            'provider-listings'
+        ].forEach(function (id) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = '';
+        });
     }
 
     function getPendingProvidersForReview() {
@@ -204,6 +258,10 @@
             return;
         }
 
+        if (auth.refreshSessionUserFromServer) {
+            auth.refreshSessionUserFromServer();
+        }
+
         const user = auth.getUser();
         // provider-mode 'profile' has been removed from the UI; no action required here
         if (!user) {
@@ -214,13 +272,12 @@
 
         const me = auth.getUser && auth.getUser();
         const isProvider = auth.isProvider && auth.isProvider();
-        const canBeProvider = isProvider && me && (me.verified === true || String(me.identityReviewStatus || '') === 'approved');
+        const canBeProvider = isProvider && auth.isProviderApproved && auth.isProviderApproved(me);
+
         if (isProvider && !canBeProvider) {
-            alert('Your provider account is not yet approved. You will be redirected until approval.');
-            window.setTimeout(() => {
-                window.location.href = 'index.html';
-            }, 0);
-            return;
+            showProviderPendingApprovalState(me);
+        } else {
+            clearProviderPendingApprovalState();
         }
 
         const adminReviewNav = document.getElementById('admin-review-nav');

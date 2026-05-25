@@ -1258,7 +1258,37 @@ class AuthManager {
 
     // Check if user is provider
     isProvider() {
-        return this.getNormalizedRoles().includes('provider');
+        if (this.getNormalizedRoles().includes('provider')) {
+            return true;
+        }
+        return String(this.currentUser && this.currentUser.role || '').trim().toLowerCase() === 'provider';
+    }
+
+    isProviderApproved(user) {
+        const record = user || this.currentUser;
+        if (!record) return false;
+        const status = String(record.identityReviewStatus || '').trim().toLowerCase();
+        if (status === 'approved') return true;
+        const verified = record.verified;
+        return verified === true || verified === 1 || verified === '1' || verified === 'true';
+    }
+
+    refreshSessionUserFromServer() {
+        if (!window.anytransportApi || typeof window.anytransportApi.getCurrentUser !== 'function') {
+            return this.currentUser;
+        }
+        try {
+            const serverUser = window.anytransportApi.getCurrentUser();
+            if (serverUser && serverUser.id) {
+                const merged = this.normalizeUserRecord(serverUser, this.loadUsers());
+                this.mergeUserIntoLocalCache(merged);
+                this.currentUser = merged;
+                this.setStoredCurrentUser(merged);
+            }
+        } catch (_error) {
+            // Keep existing session if refresh fails.
+        }
+        return this.currentUser;
     }
 
     // Check if user is customer
