@@ -562,13 +562,95 @@
         }).join('');
     }
 
-    function renderMessageGroupsIndex(quotes, bids) {
-        const el = document.getElementById('customer-messages-list');
-        if (!el) return;
+    function resolvePeerDisplayName(peerId) {
+        const id = String(peerId || '').trim();
+        if (!id) return 'User';
+        if (!window.anytransportApi || typeof window.anytransportApi.getUserById !== 'function') {
+            return id;
+        }
+        try {
+            const u = window.anytransportApi.getUserById(id);
+            if (!u) return 'User';
+            return firstLine(u.businessName || u.username || u.name || u.nickname || u.email || 'User', 80);
+        } catch (_e) {
+            return id;
+        }
+    }
+
+    function buildPeerThreads(userId, messages) {
+        const uid = String(userId || '').trim();
+        const lastSeenTs = getLastSeenMessageTs(uid);
+        const threads = {};
+
+        (messages || []).forEach(function (m) {
+            const from = String(m && m.fromUserId || '').trim();
+            const to = String(m && m.toUserId || '').trim();
+            if (from !== uid && to !== uid) return;
+            const incoming = to === uid;
+            const peerId = incoming ? from : to;
+            if (!peerId || peerId.indexOf('external:') === 0) return;
+
+            if (!threads[peerId]) {
+                threads[peerId] = {
+                    peerId: peerId,
+                    messages: [],
+                    unreadCount: 0,
+                    latestAt: 0,
+                    latestMessage: null,
+                    latestIncoming: false
+                };
+            }
+            const thread = threads[peerId];
+            thread.messages.push(m);
+            const ts = new Date(m && m.createdAt || 0).getTime() || 0;
+            if (incoming && ts > lastSeenTs) {
+                thread.unreadCount += 1;
+            }
+            if (ts >= thread.latestAt) {
+                thread.latestAt = ts;
+                thread.latestMessage = m;
+                thread.latestIncoming = incoming;
+            }
+        });
+
+        return Object.keys(threads).map(function (key) {
+            return threads[key];
+        }).sort(function (a, b) {
+            return b.latestAt - a.latestAt;
+        });
+    }
+
+    function buildConversationCardHtml(thread, options) {
+        const opts = options || {};
+        const peerName = escapeHtml(resolvePeerDisplayName(thread.peerId));
+        const latest = thread.latestMessage || {};
+        const preview = escapeHtml(firstLine(latest.text, 200) || 'No message text yet');
+        const when = escapeHtml(formatWhen(latest.createdAt));
+        const dir = thread.latestIncoming ? 'In' : 'Out';
+        const openHref = 'messages.html?to=' + encodeURIComponent(String(thread.peerId || ''));
+        const unreadBadge = thread.unreadCount > 0
+            ? ('<span class="customer-msg-unread-badge">' + (thread.unreadCount > 99 ? '99+' : String(thread.unreadCount)) + ' new</span>')
+            : '';
+        const cardClass = 'customer-msg-card customer-msg-card--' + (thread.latestIncoming ? 'in' : 'out')
+            + (thread.unreadCount > 0 ? ' customer-msg-card--unread' : '');
+        const sourceHint = opts.sourceHint ? (' · ' + escapeHtml(opts.sourceHint)) : '';
+
+        return [
+            '<article class="' + cardClass + '">',
+            '<div class="customer-msg-meta"><span class="customer-msg-dir">' + dir + '</span> · ' + when + sourceHint + unreadBadge + '</div>',
+            '<h4 class="customer-msg-title">' + peerName + '</h4>',
+            '<p class="customer-msg-text">' + preview + '</p>',
+            '<div class="customer-msg-actions">',
+            '<a class="btn btn-primary btn-sm" href="' + escapeHtml(openHref) + '" onclick="if(window.setNavbarReturnUrl){setNavbarReturnUrl(window.location.href);}">Open chat</a>',
+            '</div>',
+            '</article>'
+        ].join('');
+    }
+
+    function renderFormMessageGroupsHtml(quotes, bids) {
         const list = Array.isArray(quotes) ? quotes.slice() : [];
         if (!list.length) {
-            el.innerHTML = '<p class="customer-empty">No forms yet. Submit a request to receive provider bids.</p>';
-            return;
+            return '<p class="customer-empty">No forms yet. Submit a request to receive provider bids.</p>';
         }
 
         const rows = list.map(function (quote) {
@@ -594,9 +676,70 @@
             ].join('');
         }).filter(Boolean);
 
-        el.innerHTML = rows.length
+        return rows.length
             ? rows.join('')
             : '<p class="customer-empty">No grouped bid messages found yet.</p>';
+    }
+
+    function renderCustomerInbox(userId, quotes, bids, messages) {
+        const el = document.getElementById('customer-messages-list');
+        if (!el) return;
+
+        const threads = buildPeerThreads(userId, messages);
+        const unreadThreads = threads.filter(function (t) { return t.unreadCount > 0; });
+        const parts = [];
+
+        if (unreadThreads.length) {
+            parts.push(
+                '<section class="customer-messages-section" aria-labelledby="customer-unread-heading">',
+                '<h3 id="customer-unread-heading" class="customer-messages-section-title">New &amp; unread',
+                ' <span class="customer-msg-unread-badge">' + (unreadThreads.length > 99 ? '99+' : String(unreadThreads.length)) + '</span></h3>',
+                '<p class="customer-messages-section-hint">Replies and chats you have not opened yet.</p>',
+                unreadThreads.map(function (thread) {
+                    return buildConversationCardHtml(thread, { sourceHint: 'Direct chat' });
+                }).join(''),
+                '</section>'
+            );
+        }
+
+        if (threads.length) {
+            parts.push(
+                '<section class="customer-messages-section" aria-labelledby="customer-direct-heading">',
+                '<h3 id="customer-direct-heading" class="customer-messages-section-title">Direct conversations</h3>',
+                '<p class="customer-messages-section-hint">Includes messages you sent from Find providers or opened from a provider profile.</p>',
+                threads.map(function (thread) {
+                    return buildConversationCardHtml(thread, { sourceHint: 'Platform message' });
+                }).join(''),
+                '</section>'
+            );
+        } else if (!unreadThreads.length) {
+            parts.push(
+                '<section class="customer-messages-section">',
+                '<p class="customer-empty">No direct chats yet. Use <strong>Find providers on map</strong> and tap Message to start a conversation.</p>',
+                '</section>'
+            );
+        }
+
+        parts.push(
+            '<section class="customer-messages-section" aria-labelledby="customer-forms-heading">',
+            '<h3 id="customer-forms-heading" class="customer-messages-section-title">Messages on your listings</h3>',
+            '<p class="customer-messages-section-hint">Provider bids grouped by each request form.</p>',
+            renderFormMessageGroupsHtml(quotes, bids),
+            '</section>'
+        );
+
+        el.innerHTML = parts.join('');
+        renderNavbarMessageBadge(userId, messages);
+    }
+
+    function renderMessageGroupsIndex(quotes, bids, userId, messages) {
+        if (userId) {
+            renderCustomerInbox(userId, quotes, bids, messages || loadMessagesForUser(userId));
+            return;
+        }
+        const el = document.getElementById('customer-messages-list');
+        if (!el) return;
+        el.innerHTML = renderFormMessageGroupsHtml(quotes, bids);
     }
 
     function activateTab(tabName) {
@@ -864,8 +1007,7 @@
         wireBudgetModal(authRef, user, highlightFormId);
 
         let messages = loadMessagesForUser(user.id);
-        renderMessageGroupsIndex(quotes, bids);
-        renderNavbarMessageBadge(user.id, messages);
+        renderCustomerInbox(user.id, quotes, bids, messages);
         wireAccountSettings(authRef, user);
 
         let initialTab = 'forms';
@@ -888,13 +1030,7 @@
             const latestQuotes = loadQuotesMerged(user.id, user.email || '');
             const latestBids = loadAllBids();
             const latestMessages = loadMessagesForUser(user.id);
-            renderMessageGroupsIndex(latestQuotes, latestBids);
-            const incomingTs = getIncomingMessageTimestamps(user.id, latestMessages);
-            const newest = incomingTs.length ? Math.max.apply(null, incomingTs) : 0;
-            if (newest > 0) {
-                setLastSeenMessageTs(user.id, newest);
-            }
-            renderNavbarMessageBadge(user.id, latestMessages);
+            renderCustomerInbox(user.id, latestQuotes, latestBids, latestMessages);
         }
 
         const quotesBody = document.getElementById('customer-quotes-body');
@@ -926,12 +1062,6 @@
                 const latestBids = loadAllBids();
                 renderGroupedMessagesForQuote(user.id, quoteId, formId, latestBids, 'newest');
                 activateTab('inbox');
-                const incomingTs = getIncomingMessageTimestamps(user.id, loadMessagesForUser(user.id));
-                const newest = incomingTs.length ? Math.max.apply(null, incomingTs) : 0;
-                if (newest > 0) {
-                    setLastSeenMessageTs(user.id, newest);
-                }
-                renderNavbarMessageBadge(user.id, loadMessagesForUser(user.id));
             });
         }
 
@@ -942,7 +1072,8 @@
                 if (backBtn) {
                     const latestQuotes = loadQuotesMerged(user.id, user.email || '');
                     const latestBids = loadAllBids();
-                    renderMessageGroupsIndex(latestQuotes, latestBids);
+                    const latestMessages = loadMessagesForUser(user.id);
+                    renderCustomerInbox(user.id, latestQuotes, latestBids, latestMessages);
                     return;
                 }
                 const openGroupBtn = event.target.closest('.customer-open-form-group-btn');
@@ -982,13 +1113,7 @@
                     const latestQuotes = loadQuotesMerged(user.id, user.email || '');
                     const latestBids = loadAllBids();
                     const latestMessages = loadMessagesForUser(user.id);
-                    renderMessageGroupsIndex(latestQuotes, latestBids);
-                    const incomingTs = getIncomingMessageTimestamps(user.id, latestMessages);
-                    const newest = incomingTs.length ? Math.max.apply(null, incomingTs) : 0;
-                    if (newest > 0) {
-                        setLastSeenMessageTs(user.id, newest);
-                    }
-                    renderNavbarMessageBadge(user.id, latestMessages);
+                    renderCustomerInbox(user.id, latestQuotes, latestBids, latestMessages);
                 }
             });
         });
