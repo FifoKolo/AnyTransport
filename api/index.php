@@ -3167,6 +3167,8 @@ switch ($action) {
                 'name' => $name,
                 'username' => $requestedUsername,
                 'nickname' => $requestedUsername,
+                'role' => 'provider',
+                'roles' => array('provider'),
                 'password' => $password,
                 'phone' => (string) ($formData['phone'] ?? $formData['contact'] ?? $existingByEmail['phone'] ?? ''),
                 'contact' => (string) ($formData['contact'] ?? $formData['phone'] ?? $existingByEmail['contact'] ?? ''),
@@ -3210,6 +3212,7 @@ switch ($action) {
             'contact' => (string) ($formData['contact'] ?? $formData['phone'] ?? ''),
             'city' => (string) ($formData['city'] ?? ''),
             'role' => $role,
+            'roles' => array(strtolower($role) === 'provider' ? 'provider' : 'customer'),
             'identityPhotos' => is_array($formData['identityPhotos'] ?? null) ? array_values($formData['identityPhotos']) : array(),
             'identityReviewStatus' => strtolower($role) === 'provider' ? 'pending_review' : 'not_required',
             'identityReviewSubmittedAt' => strtolower($role) === 'provider' ? gmdate('c') : '',
@@ -3616,12 +3619,14 @@ switch ($action) {
         $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
         $isAdmin = is_admin_user($currentUser);
         $isProvider = strtolower(trim((string) ($currentUser['role'] ?? ''))) === 'provider';
+        $scope = strtolower(trim((string) ($_GET['scope'] ?? '')));
+        $mineOnly = in_array($scope, array('mine', 'own', 'my'), true);
         if (!$isAdmin) {
             if ($currentUserId === '') {
                 send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
             }
-            // Providers need visibility of open marketplace forms, not only self-owned forms.
-            $userId = $isProvider ? '' : $currentUserId;
+            // Default: providers see marketplace listings. scope=mine returns only their own requests.
+            $userId = ($isProvider && !$mineOnly) ? '' : $currentUserId;
         } else {
             $userId = trim((string) ($_GET['userId'] ?? ''));
         }

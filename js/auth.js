@@ -298,9 +298,16 @@ window.anytransportApi = window.anytransportApi || (function () {
             const response = request('users.account.update', 'POST', payload || {});
             return response.user || null;
         },
-        getQuotes: function (userId) {
+        getQuotes: function (userId, options) {
             try {
-                const response = request('quotes.list', 'GET', null, userId ? { userId: userId } : {});
+                const params = {};
+                if (userId) {
+                    params.userId = userId;
+                }
+                if (options && typeof options === 'object' && options.scope) {
+                    params.scope = String(options.scope);
+                }
+                const response = request('quotes.list', 'GET', null, params);
                 return Array.isArray(response.quotes) ? response.quotes : [];
             } catch (err) {
                 if (window.anytransportIsDebug && window.anytransportIsDebug()) {
@@ -718,6 +725,7 @@ class AuthManager {
         if (this.currentUser) {
             if (authMenu) authMenu.style.display = 'none';
             if (userMenu) userMenu.style.display = 'flex';
+            this.refreshSessionUserFromServer();
             this.ensureNavbarAvatarDropdown();
             this.ensureNavbarHubNav();
             this.updateUserDisplay();
@@ -810,7 +818,7 @@ class AuthManager {
         if (menu.dataset.profileMenuReady !== '1') {
             menu.innerHTML = [
                 '<a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>',
-                '<a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Forms</a>',
+                '<a href="customer-dashboard.html?tab=forms&my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">My request forms</a>',
                 '<a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',
                 '<a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>',
                 '<a href="find-providers.html" class="nav-item navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link" role="menuitem">Find providers</a>'
@@ -839,7 +847,7 @@ class AuthManager {
         const uid = this.currentUser.id ? String(this.currentUser.id) : '';
 
         const dashboardHref = this.resolveHubNavHref('dashboard.html');
-        const formsHref = this.resolveHubNavHref('customer-dashboard.html?tab=forms');
+        const formsHref = this.resolveHubNavHref('customer-dashboard.html?tab=forms&my-requests=1');
         const settingsHref = allowProviderDash && !allowCustomerHub
             ? this.resolveHubNavHref('provider-profile.html?userId=' + encodeURIComponent(uid))
             : this.resolveHubNavHref('customer-dashboard.html?tab=settings');
@@ -926,7 +934,7 @@ class AuthManager {
             '</button>',
             '<div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-ready="1">',
             '  <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>',
-            '  <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Forms</a>',
+            '  <a href="customer-dashboard.html?tab=forms&my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">My request forms</a>',
             '  <a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',
             '  <a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>',
             '  <a href="find-providers.html" class="nav-item navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link" role="menuitem">Find providers</a>',
@@ -1288,6 +1296,16 @@ class AuthManager {
         return review === 'pending_review' || review === 'approved' || review === 'rejected';
     }
 
+    resolveDefaultHomeHref() {
+        if (this.isAdmin()) {
+            return this.resolveHubNavHref('dashboard.html#verification-review');
+        }
+        if (this.isProvider()) {
+            return this.resolveHubNavHref('dashboard.html#provider-board');
+        }
+        return this.resolveHubNavHref('customer-dashboard.html?tab=forms');
+    }
+
     guardProviderDashboardPage() {
         if (!this.isLoggedIn()) {
             return;
@@ -1509,6 +1527,9 @@ if (loginForm) {
                     if (startProviderStripeOnboarding(currentUser)) {
                         return;
                     }
+                    closeLoginModal();
+                    window.location.href = auth.resolveDefaultHomeHref();
+                    return;
                 }
 
                 closeLoginModal();
@@ -1773,7 +1794,10 @@ if (signupForm) {
                     window.location.href = returnUrl;
                     return;
                 }
-                // Stay on the current page so users can choose when to open the dashboard.
+                if (currentUser && typeof auth.isProvider === 'function' && auth.isProvider()) {
+                    window.location.href = auth.resolveDefaultHomeHref();
+                    return;
+                }
             }
         } else {
             alert('Please fill in all required fields');

@@ -406,7 +406,7 @@
         var apiQuotes = [];
         if (window.anytransportApi && typeof window.anytransportApi.getQuotes === 'function') {
             try {
-                apiQuotes = window.anytransportApi.getQuotes() || [];
+                apiQuotes = window.anytransportApi.getQuotes(userId, { scope: 'mine' }) || [];
             } catch (e) {
                 if (isAtDebug()) {
                     console.debug('[AnyTransport] customer-dashboard getQuotes (using local merge if any)', e);
@@ -414,6 +414,10 @@
                 apiQuotes = [];
             }
         }
+
+        apiQuotes = apiQuotes.filter(function (q) {
+            return quoteBelongsToUser(q, userId, userEmail);
+        });
 
         var localQuotes = [];
         try {
@@ -1096,9 +1100,30 @@
             return;
         }
 
+        if (typeof authRef.refreshSessionUserFromServer === 'function') {
+            authRef.refreshSessionUserFromServer();
+        }
+
         const user = authRef.getUser();
         if (!user || !user.id) {
             window.location.href = 'index.html';
+            return;
+        }
+
+        var allowCustomerForms = true;
+        try {
+            var pageParams = new URLSearchParams(window.location.search || '');
+            allowCustomerForms = pageParams.get('my-requests') === '1' || pageParams.get('tab') === 'forms' || pageParams.get('tab') === 'settings' || pageParams.get('tab') === 'inbox' || pageParams.get('tab') === 'messages';
+        } catch (_pageParamsErr) {
+            allowCustomerForms = true;
+        }
+
+        if (typeof authRef.isProvider === 'function' && authRef.isProvider() && !allowCustomerForms) {
+            if (typeof authRef.resolveDefaultHomeHref === 'function') {
+                window.location.replace(authRef.resolveDefaultHomeHref());
+            } else {
+                window.location.replace('dashboard.html#provider-board');
+            }
             return;
         }
 
@@ -1126,6 +1151,17 @@
             providerBoardBtn.style.display = showProviderDashNav ? '' : 'none';
             if (showProviderDashNav && typeof authRef.resolveHubNavHref === 'function') {
                 providerBoardBtn.href = authRef.resolveHubNavHref('dashboard.html') + '#provider-board';
+            }
+        }
+
+        if (showProviderDashNav) {
+            var introMuted = document.querySelector('.customer-dashboard-intro .muted');
+            if (introMuted) {
+                introMuted.textContent = 'Manage your own transport requests here, or open the provider dashboard to bid on customer listings.';
+            }
+            var findProvidersBtn = document.querySelector('.customer-dashboard-actions .btn-primary[href*="find-providers"]');
+            if (findProvidersBtn) {
+                findProvidersBtn.style.display = 'none';
             }
         }
 

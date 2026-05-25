@@ -95,10 +95,13 @@
         if (window.auth && typeof window.auth.isLoggedIn === 'function' && window.auth.isLoggedIn()) {
             var user = window.auth.getUser && window.auth.getUser();
             var role = user && String(user.role || '').toLowerCase();
-            if (role === 'provider' || role === 'admin') {
-                return 'dashboard.html';
+            if (window.auth && typeof window.auth.resolveDefaultHomeHref === 'function') {
+                return window.auth.resolveDefaultHomeHref();
             }
-            return 'customer-dashboard.html';
+            if (role === 'provider' || role === 'admin') {
+                return 'dashboard.html#provider-board';
+            }
+            return 'customer-dashboard.html?tab=forms';
         }
 
         return 'index.html';
