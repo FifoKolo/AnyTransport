@@ -753,7 +753,7 @@ class AuthManager {
     }
 
     /**
-     * Persistent navbar links: Dashboard (providers), Forms, Profile settings, Messages.
+     * Account links (Dashboard, Forms, etc.) live in the profile avatar dropdown.
      */
     scheduleSyncNavigationForRole() {
         const run = () => this.syncNavigationForRole();
@@ -764,34 +764,46 @@ class AuthManager {
         }
     }
 
-    ensureNavbarHubNav() {
+    ensureNavbarProfileMenu() {
         const userMenu = document.getElementById('user-menu');
         if (!userMenu) {
             return;
         }
 
-        let hub = document.getElementById('navbar-hub-nav');
-        if (!hub) {
-            hub = document.createElement('nav');
-            hub.id = 'navbar-hub-nav';
-            hub.className = 'navbar-hub-nav';
-            hub.setAttribute('aria-label', 'Your account');
-            hub.innerHTML = [
-                '<a href="dashboard.html" class="navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link">Dashboard</a>',
-                '<a href="customer-dashboard.html?tab=forms" class="navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link">Forms</a>',
-                '<a href="customer-dashboard.html?tab=settings" class="navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link">Profile settings</a>',
-                '<a href="messages.html" class="navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link">Messages</a>',
-                '<a href="find-providers.html" class="navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link">Find providers</a>'
-            ].join('');
-            const bell = userMenu.querySelector('.navbar-notification-bell');
-            if (bell) {
-                userMenu.insertBefore(hub, bell);
-            } else {
-                userMenu.insertBefore(hub, userMenu.firstChild);
-            }
+        const hub = document.getElementById('navbar-hub-nav');
+        if (hub) {
+            hub.style.display = 'none';
+            hub.setAttribute('aria-hidden', 'true');
         }
 
-        hub.style.display = this.currentUser ? 'flex' : 'none';
+        let dropdownRoot = userMenu.querySelector('#navbar-avatar-dropdown');
+        if (!dropdownRoot) {
+            this.ensureNavbarAvatarDropdown();
+            dropdownRoot = userMenu.querySelector('#navbar-avatar-dropdown');
+        }
+        if (!dropdownRoot) {
+            return;
+        }
+
+        let menu = dropdownRoot.querySelector('.dropdown-menu');
+        if (!menu) {
+            return;
+        }
+
+        if (menu.dataset.profileMenuReady !== '1') {
+            menu.innerHTML = [
+                '<a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Dashboard</a>',
+                '<a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Forms</a>',
+                '<a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',
+                '<a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>',
+                '<a href="find-providers.html" class="nav-item navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link" role="menuitem">Find providers</a>'
+            ].join('');
+            menu.dataset.profileMenuReady = '1';
+        }
+    }
+
+    ensureNavbarHubNav() {
+        this.ensureNavbarProfileMenu();
     }
 
     syncNavigationForRole() {
@@ -803,7 +815,7 @@ class AuthManager {
             return;
         }
 
-        this.ensureNavbarHubNav();
+        this.ensureNavbarProfileMenu();
 
         const allowProviderDash = this.isProvider() || this.isAdmin();
         const allowCustomerHub = this.isCustomer();
@@ -838,21 +850,7 @@ class AuthManager {
             el.style.display = allowCustomerHub ? '' : 'none';
         });
 
-        document.querySelectorAll('.at-nav-provider-dashboard').forEach((el) => {
-            el.style.display = 'none';
-        });
-        document.querySelectorAll('.at-nav-my-requests').forEach((el) => {
-            el.style.display = 'none';
-        });
-        document.querySelectorAll('#navbar-avatar-dropdown .dropdown-menu .nav-item').forEach((el) => {
-            el.style.display = 'none';
-        });
-
-        document.querySelectorAll('#navbar-profile-link').forEach((profileLink) => {
-            profileLink.style.display = 'none';
-        });
-
-        document.querySelectorAll('#provider-dashboard-link').forEach((el) => {
+        document.querySelectorAll('.at-nav-provider-dashboard, .at-nav-my-requests, #navbar-profile-link, #provider-dashboard-link').forEach((el) => {
             el.style.display = 'none';
         });
 
@@ -871,7 +869,7 @@ class AuthManager {
             }
         })();
 
-        document.querySelectorAll('.navbar-hub-link').forEach((link) => {
+        document.querySelectorAll('.navbar-hub-link, #navbar-avatar-dropdown .dropdown-menu .nav-item').forEach((link) => {
             link.classList.remove('is-active');
         });
 
@@ -909,11 +907,12 @@ class AuthManager {
             '<button type="button" class="nav-toggle" aria-haspopup="true" aria-expanded="false">',
             '  <div class="navbar-avatar" id="navbar-user-avatar">U</div>',
             '</button>',
-            '<div class="dropdown-menu" role="menu" aria-label="User menu">',
-            '  <a href="customer-dashboard.html" class="nav-item at-nav-my-requests">My requests</a>',
-            '  <a href="find-providers.html" class="nav-item at-nav-find-providers" id="navbar-find-providers-link">Find providers</a>',
-            '  <a href="dashboard.html" class="nav-item at-nav-provider-dashboard">Dashboard</a>',
-            '  <a id="navbar-profile-link" href="customer-dashboard.html" class="nav-item">Profile</a>',
+            '<div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-ready="1">',
+            '  <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Dashboard</a>',
+            '  <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Forms</a>',
+            '  <a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',
+            '  <a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>',
+            '  <a href="find-providers.html" class="nav-item navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link" role="menuitem">Find providers</a>',
             '</div>'
         ].join('');
 

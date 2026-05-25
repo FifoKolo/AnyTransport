@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>My profile - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
-    <link rel="stylesheet" href="css/navbar.css?v=20260522-2">
+    <link rel="stylesheet" href="css/navbar.css?v=20260522-5">
     <link rel="stylesheet" href="css/dashboard.css?v=20260522-4">
 </head>
 <body>
@@ -30,13 +30,6 @@
                 <button class="btn btn-outline" type="button" onclick="openLoginModal()">Login</button>
             </div>
             <div id="user-menu" style="display: none;">
-                <nav id="navbar-hub-nav" class="navbar-hub-nav" aria-label="Your account" style="display:none;">
-                    <a href="dashboard.html" class="navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link">Dashboard</a>
-                    <a href="customer-dashboard.html?tab=forms" class="navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link">Forms</a>
-                    <a href="customer-dashboard.html?tab=settings" class="navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link">Profile settings</a>
-                    <a href="messages.html" class="navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link">Messages</a>
-                    <a href="find-providers.html" class="navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link">Find providers</a>
-                </nav>
                 <div class="navbar-notification-bell">
                     <button class="notification-bell-btn" id="notification-bell" type="button" title="View notifications" aria-label="View notifications">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -59,11 +52,12 @@
                     <button type="button" class="nav-toggle" aria-haspopup="true" aria-expanded="false">
                         <div class="navbar-avatar" id="navbar-user-avatar">U</div>
                     </button>
-                    <div class="dropdown-menu" role="menu" aria-label="User menu">
-                            <a href="customer-dashboard.html" class="nav-item at-nav-my-requests">My requests</a>
-                            <a href="find-providers.html" class="nav-item at-nav-find-providers" id="navbar-find-providers-link">Find providers</a>
-                            <a href="dashboard.html" class="nav-item at-nav-provider-dashboard">Dashboard</a>
-                            <a id="navbar-profile-link" href="customer-dashboard.html" class="nav-item">Profile</a>
+                    <div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-ready="1">
+                            <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Dashboard</a>
+                            <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Forms</a>
+                            <a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>
+                            <a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>
+                            <a href="find-providers.html" class="nav-item navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link" role="menuitem">Find providers</a>
                     </div>
                 </div>
                 <button class="btn btn-primary" type="button" onclick="logout()" style="margin-left: 10px;">Logout</button>
@@ -187,7 +181,7 @@
     </div>
 
     <script src="js/cache-maintenance.js?v=20260322-2"></script>
-    <script src="js/auth.js?v=20260522-5"></script>
+    <script src="js/auth.js?v=20260522-7"></script>
     <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/site-navbar.js?v=20260519-2"></script>
     <script src="js/customer-dashboard.js?v=20260522-6"></script>
