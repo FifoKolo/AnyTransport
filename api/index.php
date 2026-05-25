@@ -2280,12 +2280,32 @@ function send_provider_job_invite_email($provider, $customerName, $quoteLabel, $
     return send_email_simple($provider['email'], $subject, $body);
 }
 
-function provider_public_name($user, $fallback = 'Provider') {
+function user_display_name($user, $fallback = 'Someone') {
     if (!is_array($user)) {
         return $fallback;
     }
-    $name = trim((string) ($user['username'] ?? $user['nickname'] ?? $user['name'] ?? $user['email'] ?? ''));
-    return $name !== '' ? $name : $fallback;
+    $role = strtolower(trim((string) ($user['role'] ?? '')));
+    $fields = $role === 'provider'
+        ? array('businessName', 'name', 'username', 'nickname', 'displayName')
+        : array('username', 'nickname', 'name', 'displayName', 'businessName');
+    foreach ($fields as $field) {
+        $value = trim((string) ($user[$field] ?? ''));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+    $email = trim((string) ($user['email'] ?? ''));
+    if ($email !== '') {
+        $local = strstr($email, '@', true);
+        if ($local !== false && $local !== '') {
+            return $local;
+        }
+    }
+    return $fallback;
+}
+
+function provider_public_name($user, $fallback = 'Provider') {
+    return user_display_name($user, $fallback);
 }
 
 function listing_details_url_for_quote($quoteId) {
@@ -4253,17 +4273,26 @@ switch ($action) {
         // Keep recent 200 messages to avoid uncontrolled growth
         $store['messages'] = array_slice($store['messages'], 0, 200);
 
+        $senderName = user_display_name($sessionUser, 'A user');
+        $previewText = $text;
+        if (function_exists('mb_strlen') && mb_strlen($previewText) > 120) {
+            $previewText = mb_substr($previewText, 0, 117) . '...';
+        } elseif (strlen($previewText) > 120) {
+            $previewText = substr($previewText, 0, 117) . '...';
+        }
+
         // Add in-app notification for recipient that deep-links to messages thread.
         $store['notifications'][] = array(
             'id' => make_id('ntf'),
             'userId' => $toUserId,
-            'title' => 'New message received',
-            'message' => trim((string) ($savedMessage['title'] ?? 'Message')),
+            'title' => 'Message from ' . $senderName,
+            'message' => $previewText !== '' ? $previewText : 'New message',
             'type' => 'message_received',
             'read' => false,
             'createdAt' => gmdate('c'),
             'data' => array(
                 'fromUserId' => $fromUserId,
+                'fromUserName' => $senderName,
                 'toUserId' => $toUserId,
                 'quoteId' => trim((string) ($message['quoteId'] ?? '')),
                 'bidId' => trim((string) ($message['bidId'] ?? ''))
@@ -4291,8 +4320,11 @@ switch ($action) {
         }
 
         if ($recipient && !empty($recipient['email'])) {
-            $subject = 'New message from ' . (string) ($message['title'] ?? 'Provider');
-            $body = "You have received a new message from " . (string) ($fromUserId) . "\n\n";
+            $subject = 'New message from ' . $senderName;
+            $body = "You have received a new message from " . $senderName . " on AnyTransport.\n\n";
+            if ($messageTitle !== '') {
+                $body .= "Subject: " . $messageTitle . "\n\n";
+            }
             $body .= $text . "\n\n";
             $body .= "View and respond in your dashboard: " . get_app_url('messages.html?reply=' . rawurlencode($token)) . "\n";
             $body .= "This inbox is not monitored. Please use the link above to reply.\n";
@@ -4387,8 +4419,13 @@ switch ($action) {
             }
         }
         if ($recipient && !empty($recipient['email'])) {
-            $subject = 'Reply received';
-            $body = "You received a reply via email from " . $fromEmail . "\n\n" . $text . "\n\n" . "View messages: " . get_app_url('messages.html') . "\n";
+            $replySenderName = is_array($fromUser)
+                ? user_display_name($fromUser, $fromEmail)
+                : $fromEmail;
+            $subject = 'Reply from ' . $replySenderName;
+            $body = "You received a reply from " . $replySenderName . " on AnyTransport.\n\n";
+            $body .= $text . "\n\n";
+            $body .= "View messages: " . get_app_url('messages.html') . "\n";
             send_email_simple($recipient['email'], $subject, $body);
         }
 
