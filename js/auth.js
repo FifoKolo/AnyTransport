@@ -617,6 +617,13 @@ class AuthManager {
             normalized.identityReviewedBy = '';
         }
 
+        const roleKey = String(normalized.role || 'customer').trim().toLowerCase();
+        if (!Array.isArray(normalized.roles) || !normalized.roles.length) {
+            normalized.roles = roleKey === 'admin' ? ['admin'] : [roleKey || 'customer'];
+        } else if (roleKey && !normalized.roles.some((r) => String(r || '').trim().toLowerCase() === roleKey)) {
+            normalized.roles = normalized.roles.concat([roleKey]);
+        }
+
         return normalized;
     }
 
@@ -723,11 +730,21 @@ class AuthManager {
     }
 
     isCustomer() {
+        if (this.isAdmin()) {
+            return false;
+        }
         const roles = this.getNormalizedRoles();
         if (roles.includes('customer')) {
             return true;
         }
-        return !this.isProvider() && !this.isAdmin();
+        if (String(this.currentUser && this.currentUser.role || '').trim().toLowerCase() === 'customer') {
+            return true;
+        }
+        // Providers can also post and manage their own transport requests.
+        if (this.isProvider()) {
+            return true;
+        }
+        return false;
     }
 
     resolveHubNavHref(relativePath) {
@@ -792,7 +809,7 @@ class AuthManager {
 
         if (menu.dataset.profileMenuReady !== '1') {
             menu.innerHTML = [
-                '<a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Dashboard</a>',
+                '<a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>',
                 '<a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Forms</a>',
                 '<a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',
                 '<a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>',
@@ -908,7 +925,7 @@ class AuthManager {
             '  <div class="navbar-avatar" id="navbar-user-avatar">U</div>',
             '</button>',
             '<div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-ready="1">',
-            '  <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Dashboard</a>',
+            '  <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>',
             '  <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Forms</a>',
             '  <a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',
             '  <a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>',
@@ -1257,10 +1274,32 @@ class AuthManager {
 
     // Check if user is provider
     isProvider() {
+        const user = this.currentUser;
+        if (!user) {
+            return false;
+        }
         if (this.getNormalizedRoles().includes('provider')) {
             return true;
         }
-        return String(this.currentUser && this.currentUser.role || '').trim().toLowerCase() === 'provider';
+        if (String(user.role || '').trim().toLowerCase() === 'provider') {
+            return true;
+        }
+        const review = String(user.identityReviewStatus || '').trim().toLowerCase();
+        return review === 'pending_review' || review === 'approved' || review === 'rejected';
+    }
+
+    guardProviderDashboardPage() {
+        if (!this.isLoggedIn()) {
+            return;
+        }
+        this.refreshSessionUserFromServer();
+        if (this.isAdmin() || this.isProvider()) {
+            return;
+        }
+        const target = this.resolveHubNavHref('customer-dashboard.html');
+        const q = window.location.search || '';
+        const h = window.location.hash || '';
+        window.location.replace(target + q + h);
     }
 
     isProviderApproved(user) {
@@ -1288,11 +1327,6 @@ class AuthManager {
             // Keep existing session if refresh fails.
         }
         return this.currentUser;
-    }
-
-    // Check if user is customer
-    isCustomer() {
-        return this.getNormalizedRoles().includes('customer');
     }
 
     isAdmin() {

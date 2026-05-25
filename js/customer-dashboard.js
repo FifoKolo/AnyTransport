@@ -1108,8 +1108,12 @@
         }
 
         var pdLink = document.getElementById('provider-dashboard-link');
+        var providerBoardBtn = document.getElementById('customer-open-provider-board-btn');
         var showProviderDashNav = false;
         try {
+            if (typeof authRef.refreshSessionUserFromServer === 'function') {
+                authRef.refreshSessionUserFromServer();
+            }
             showProviderDashNav = typeof authRef.isProvider === 'function' && authRef.isProvider();
             if (!showProviderDashNav && typeof authRef.isAdmin === 'function') {
                 showProviderDashNav = authRef.isAdmin();
@@ -1117,6 +1121,12 @@
         } catch (_e) {}
         if (pdLink && !showProviderDashNav) {
             pdLink.style.display = 'none';
+        }
+        if (providerBoardBtn) {
+            providerBoardBtn.style.display = showProviderDashNav ? '' : 'none';
+            if (showProviderDashNav && typeof authRef.resolveHubNavHref === 'function') {
+                providerBoardBtn.href = authRef.resolveHubNavHref('dashboard.html') + '#provider-board';
+            }
         }
 
         let highlightFormId = '';

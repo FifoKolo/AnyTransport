@@ -203,17 +203,12 @@
     </main>
 
     <script src="js/cache-maintenance.js?v=20260322-2"></script>
-    <script src="js/auth.js?v=20260522-6"></script>
+    <script src="js/auth.js?v=20260522-8"></script>
     <script>
-        (function redirectCustomersAwayFromProviderDashboard() {
+        (function () {
             try {
-                if (!window.auth || !auth.isLoggedIn()) return;
-                var ok = auth.isProvider && auth.isProvider();
-                var admin = auth.isAdmin && auth.isAdmin();
-                if (!ok && !admin) {
-                    var q = window.location.search || '';
-                    var h = window.location.hash || '';
-                    window.location.replace('customer-dashboard.html' + q + h);
+                if (window.auth && typeof auth.guardProviderDashboardPage === 'function') {
+                    auth.guardProviderDashboardPage();
                 }
             } catch (_e) {}
         })();
