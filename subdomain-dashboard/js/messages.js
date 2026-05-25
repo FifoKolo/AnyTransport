@@ -337,7 +337,7 @@
 
     function isCustomerUser(user) {
         if (!user || typeof user !== 'object') return false;
-        var role = String(user.role || '').trim().toLowerCase();
+        const role = String(user.role || '').trim().toLowerCase();
         if (role === 'customer') return true;
         if (Array.isArray(user.roles) && user.roles.some(function (r) {
             return String(r || '').trim().toLowerCase() === 'customer';
@@ -359,6 +359,114 @@
         return null;
     }
 
+    function loadCustomerQuotes(me) {
+        var quotes = [];
+        if (me && window.anytransportApi && typeof window.anytransportApi.getQuotes === 'function') {
+            try {
+                quotes = window.anytransportApi.getQuotes(me.id) || [];
+            } catch (_e) {
+                quotes = [];
+            }
+        }
+        if (!quotes.length) {
+            try {
+                var raw = localStorage.getItem('anytransport_quote_requests');
+                var parsed = raw ? JSON.parse(raw) : [];
+                quotes = Array.isArray(parsed) ? parsed : [];
+            } catch (_e2) {
+                quotes = [];
+            }
+        }
+        return quotes.filter(function (q) {
+            return q && String(q.id || '').trim();
+        });
+    }
+
+    function quoteHasBidFromProvider(quote, providerId, bids) {
+        var qid = String(quote && quote.id || '').trim();
+        var pid = String(providerId || '').trim();
+        if (!qid || !pid) return false;
+        return (bids || []).some(function (b) {
+            return String(b.quoteId || '').trim() === qid && String(b.providerId || '').trim() === pid;
+        });
+    }
+
+    function setupLinkFormSelector(me, toUserId, quoteId) {
+        var wrap = document.getElementById('messages-link-form-wrap');
+        var select = document.getElementById('messages-link-form-select');
+        if (!wrap || !select) {
+            return String(quoteId || '').trim();
+        }
+
+        if (!isCustomerUser(me)) {
+            wrap.style.display = 'none';
+            return String(quoteId || '').trim();
+        }
+
+        var quotes = loadCustomerQuotes(me);
+        var bids = getAllBids();
+        var pid = String(toUserId || '').trim();
+
+        if (!quotes.length) {
+            wrap.style.display = '';
+            select.innerHTML = '<option value="">No request forms yet — create one under Forms</option>';
+            select.disabled = true;
+            return String(quoteId || '').trim();
+        }
+
+        select.disabled = false;
+        var options = quotes.map(function (q) {
+            var fid = String(q.formId || q.id || '').trim();
+            var label = (fid ? 'Form #' + fid : 'Request') + ' — ' + firstText(q.itemType, q.itemDescription, 'Transport');
+            if (quoteHasBidFromProvider(q, pid, bids)) {
+                label += ' · provider bid';
+            }
+            return {
+                id: String(q.id || '').trim(),
+                label: label,
+                hasBid: quoteHasBidFromProvider(q, pid, bids)
+            };
+        });
+        options.sort(function (a, b) {
+            return (b.hasBid ? 1 : 0) - (a.hasBid ? 1 : 0);
+        });
+
+        select.innerHTML = ['<option value="">Choose a request form to link…</option>']
+            .concat(options.map(function (o) {
+                return '<option value="' + escapeHtml(o.id) + '">' + escapeHtml(o.label) + '</option>';
+            }))
+            .join('');
+        wrap.style.display = '';
+
+        var resolvedQuoteId = String(quoteId || '').trim();
+        if (!resolvedQuoteId) {
+            var withBids = options.filter(function (o) { return o.hasBid; });
+            if (withBids.length === 1) {
+                resolvedQuoteId = withBids[0].id;
+            }
+        }
+        if (resolvedQuoteId) {
+            select.value = resolvedQuoteId;
+        }
+
+        if (!select.dataset.bound) {
+            select.dataset.bound = '1';
+            select.addEventListener('change', function () {
+                var chosen = String(select.value || '').trim();
+                if (!chosen) return;
+                try {
+                    var url = new URL(window.location.href);
+                    url.searchParams.set('quoteId', chosen);
+                    window.location.href = url.pathname + url.search;
+                } catch (_urlErr) {
+                    window.location.search = '?to=' + encodeURIComponent(pid) + '&quoteId=' + encodeURIComponent(chosen);
+                }
+            });
+        }
+
+        return resolvedQuoteId;
+    }
+
     function setupConversationToolbar(me, toUserId, quoteId) {
         var toolbar = document.getElementById('messages-context-toolbar');
         if (!toolbar || !toUserId) return;
@@ -371,10 +479,12 @@
 
         toolbar.style.display = '';
         if (profileBtn) {
-            profileBtn.href = '../provider-profile.html?userId=' + encodeURIComponent(toUserId);
+            profileBtn.href = 'provider-profile.html?userId=' + encodeURIComponent(toUserId);
         }
 
         if (!isCustomerUser(me)) {
+            var linkWrapProvider = document.getElementById('messages-link-form-wrap');
+            if (linkWrapProvider) linkWrapProvider.style.display = 'none';
             if (summaryEl) summaryEl.textContent = 'View the provider profile or continue the conversation below.';
             if (completeBtn) completeBtn.style.display = 'none';
             if (completeBadge) completeBadge.style.display = 'none';
@@ -382,8 +492,12 @@
             return;
         }
 
+        quoteId = setupLinkFormSelector(me, toUserId, quoteId);
+
         if (!quoteId) {
-            if (summaryEl) summaryEl.textContent = 'View the provider profile. Link a request from your dashboard to mark the form complete or leave a review.';
+            if (summaryEl) {
+                summaryEl.textContent = 'Choose which request form this conversation is about. Then you can mark it complete or leave a review.';
+            }
             if (completeBtn) completeBtn.style.display = 'none';
             if (completeBadge) completeBadge.style.display = 'none';
             if (reviewBtn) reviewBtn.style.display = 'none';
@@ -610,6 +724,8 @@
             if (threadEl) threadEl.innerHTML = '<p class="messages-empty">No chat selected yet. Open a thread from your profile messages.</p>';
             return;
         }
+
+        quoteId = setupLinkFormSelector(me, toUserId, quoteId);
 
         var subtitleEl = document.getElementById('messages-subtitle');
         if (subtitleEl) {
