@@ -154,10 +154,80 @@
         return firstText(p.serviceAreaCity, 'Location not set');
     }
 
+    function providerAvatarUrl(p) {
+        const avatar = firstText(p && p.avatar, '');
+        if (avatar) {
+            return avatar;
+        }
+        if (p && Array.isArray(p.photos) && p.photos.length) {
+            return String(p.photos[0] || '').trim();
+        }
+        return '';
+    }
+
+    function isLikelyImageUrl(url) {
+        const value = String(url || '').trim();
+        if (!value) {
+            return false;
+        }
+        return /^(https?:|data:image|\/|\.\.?\/|assets\/|blob:)/i.test(value);
+    }
+
+    function createDefaultSilhouetteSvg() {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('class', 'find-provider-marker-silhouette');
+        svg.setAttribute('aria-hidden', 'true');
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute(
+            'd',
+            'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'
+        );
+        path.setAttribute('fill', 'currentColor');
+        svg.appendChild(path);
+        return svg;
+    }
+
+    function createProviderMapMarkerElement(p) {
+        const el = document.createElement('div');
+        el.className = 'find-provider-marker';
+        el.setAttribute('data-provider-id', String(p.id || ''));
+        el.setAttribute('role', 'img');
+        el.setAttribute('aria-label', providerDisplayName(p));
+
+        const avatarWrap = document.createElement('div');
+        avatarWrap.className = 'find-provider-marker-avatar';
+
+        const url = providerAvatarUrl(p);
+        if (isLikelyImageUrl(url)) {
+            const img = document.createElement('img');
+            img.className = 'find-provider-marker-img';
+            img.src = url;
+            img.alt = '';
+            img.loading = 'lazy';
+            img.decoding = 'async';
+            img.onerror = function () {
+                img.remove();
+                avatarWrap.classList.add('find-provider-marker-avatar--default');
+                avatarWrap.appendChild(createDefaultSilhouetteSvg());
+            };
+            avatarWrap.appendChild(img);
+        } else {
+            avatarWrap.classList.add('find-provider-marker-avatar--default');
+            avatarWrap.appendChild(createDefaultSilhouetteSvg());
+        }
+
+        el.appendChild(avatarWrap);
+        return el;
+    }
+
     function focusProvider(providerId) {
         activeProviderId = String(providerId || '');
         document.querySelectorAll('.find-provider-card').forEach(function (card) {
             card.classList.toggle('is-active', card.getAttribute('data-provider-id') === activeProviderId);
+        });
+        document.querySelectorAll('.find-provider-marker').forEach(function (markerEl) {
+            markerEl.classList.toggle('is-active', markerEl.getAttribute('data-provider-id') === activeProviderId);
         });
         const provider = lastResults.find(function (p) {
             return String(p.id) === activeProviderId;
@@ -356,16 +426,17 @@
             if (!Number.isFinite(mapLat) || !Number.isFinite(mapLng) || (mapLat === 0 && mapLng === 0)) {
                 return;
             }
-            const el = document.createElement('div');
-            el.className = 'find-provider-marker';
-            el.style.cssText = 'width:14px;height:14px;border-radius:50%;background:#0ea5e9;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;';
+            const el = createProviderMapMarkerElement(p);
+            if (String(p.id) === activeProviderId) {
+                el.classList.add('is-active');
+            }
             const popupHtml = '<strong>' + escapeHtml(providerDisplayName(p)) + '</strong><br>'
                 + escapeHtml(providerLocationLabel(p))
                 + (p.distanceKm != null ? '<br>' + escapeHtml(String(p.distanceKm)) + ' km from you' : '')
                 + (p.blockInvites ? '' : '<br><em>Click list card to invite or message</em>');
-            const marker = new mapboxgl.Marker({ element: el })
+            const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
                 .setLngLat([mapLng, mapLat])
-                .setPopup(new mapboxgl.Popup({ offset: 12 }).setHTML(popupHtml))
+                .setPopup(new mapboxgl.Popup({ offset: 28 }).setHTML(popupHtml))
                 .addTo(m);
             el.addEventListener('click', function () {
                 focusProvider(p.id);
