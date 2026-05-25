@@ -719,6 +719,58 @@
         }, 30000);
     }
 
+    function activateProviderMode(mode, user, activeButton) {
+        const modeSwitch = document.getElementById('provider-mode-switch');
+        const dashboardPanel = document.getElementById('provider-dashboard-panel');
+        const searchPanel = document.getElementById('provider-search-panel');
+        const messagesPanel = document.getElementById('provider-messages-panel');
+        const listingsContainer = document.getElementById('provider-listings');
+        const record = user || (auth && auth.getUser ? auth.getUser() : null);
+
+        if (mode === 'profile') {
+            showTab('profile');
+            return;
+        }
+
+        state.activeProviderMode = mode;
+
+        if (modeSwitch) {
+            modeSwitch.querySelectorAll('.provider-mode-btn').forEach((node) => {
+                node.classList.toggle('active', activeButton ? node === activeButton : node.getAttribute('data-mode') === mode);
+            });
+        }
+
+        if (dashboardPanel) dashboardPanel.classList.toggle('active', mode === 'dashboard');
+        if (searchPanel) searchPanel.classList.toggle('active', mode === 'search');
+        if (messagesPanel) messagesPanel.classList.toggle('active', mode === 'messages');
+        if (listingsContainer) listingsContainer.style.display = mode === 'messages' ? 'none' : '';
+
+        if (mode === 'messages') {
+            renderProviderMessages(record);
+            return;
+        }
+
+        renderProviderListings(record);
+    }
+
+    function applyProviderModeFromHash(user) {
+        const hash = String(window.location.hash || '').replace(/^#/, '').trim().toLowerCase();
+        if (!hash) {
+            return;
+        }
+        if (hash === 'profile') {
+            activateProviderMode('profile', user);
+            return;
+        }
+        if (hash === 'provider-search-panel' || hash === 'search' || hash === 'provider-search') {
+            activateProviderMode('search', user);
+            return;
+        }
+        if (hash === 'messages' || hash === 'provider-messages' || hash === 'provider-messages-panel') {
+            activateProviderMode('messages', user);
+        }
+    }
+
     function wireProviderControls(user) {
         const renderSearchModeIfActive = () => {
             if (state.activeProviderMode === 'search') {
@@ -727,40 +779,20 @@
         };
 
         const modeSwitch = document.getElementById('provider-mode-switch');
-        const dashboardPanel = document.getElementById('provider-dashboard-panel');
-        const searchPanel = document.getElementById('provider-search-panel');
-        const messagesPanel = document.getElementById('provider-messages-panel');
-        const listingsContainer = document.getElementById('provider-listings');
         if (modeSwitch) {
             modeSwitch.addEventListener('click', (event) => {
                 const btn = event.target.closest('.provider-mode-btn');
                 if (!btn) return;
+                if (btn.tagName === 'A') {
+                    return;
+                }
                 const modeAttr = btn.getAttribute('data-mode');
                 const mode = modeAttr === 'search' ? 'search' : modeAttr === 'messages' ? 'messages' : modeAttr === 'profile' ? 'profile' : 'dashboard';
-
-                if (mode === 'profile') {
-                    showTab('profile');
-                    return;
-                }
-
-                state.activeProviderMode = mode;
-
-                modeSwitch.querySelectorAll('.provider-mode-btn').forEach((node) => {
-                    node.classList.toggle('active', node === btn);
-                });
-
-                if (dashboardPanel) dashboardPanel.classList.toggle('active', mode === 'dashboard');
-                if (searchPanel) searchPanel.classList.toggle('active', mode === 'search');
-                if (messagesPanel) messagesPanel.classList.toggle('active', mode === 'messages');
-                if (listingsContainer) listingsContainer.style.display = mode === 'messages' ? 'none' : '';
-                if (mode === 'messages') {
-                    renderProviderMessages(user);
-                    return;
-                }
-                // ensure listing rendering only for dashboard/search modes
-                renderProviderListings(user);
+                activateProviderMode(mode, user, btn);
             });
         }
+
+        applyProviderModeFromHash(user);
 
         const dashboardTabs = document.getElementById('provider-dashboard-tabs');
         if (dashboardTabs) {

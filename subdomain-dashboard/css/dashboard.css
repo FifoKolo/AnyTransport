@@ -407,8 +407,10 @@
     margin-top: 3px;
 }
 
-.provider-mode-switch {
+.provider-mode-switch,
+.profile-page-switch {
     display: inline-flex;
+    flex-wrap: wrap;
     gap: 8px;
     background: #eaf3fc;
     border: 1px solid #d2e4f4;
@@ -417,17 +419,9 @@
     margin-bottom: 12px;
 }
 
-.profile-page-switch {
-    display: inline-flex;
-    gap: 8px;
-    background: #eaf3fc;
-    border: 1px solid #d2e4f4;
-    border-radius: 10px;
-    padding: 4px;
-    margin-bottom: 18px;
-}
-
-.profile-page-switch .provider-mode-btn {
+.provider-mode-switch .provider-mode-btn,
+.profile-page-switch .provider-mode-btn,
+.provider-mode-btn {
     appearance: none;
     border: none;
     border-radius: 8px;
@@ -440,25 +434,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    white-space: nowrap;
 }
 
-.profile-page-switch .provider-mode-btn.active {
-    background: #fff;
-    color: #0f6ca5;
-    box-shadow: 0 4px 10px rgba(42, 98, 135, 0.16);
-}
-
-.provider-mode-btn {
-    appearance: none;
-    border: none;
-    border-radius: 8px;
-    padding: 9px 16px;
-    color: #3f5f73;
-    font-weight: 700;
-    background: transparent;
-    cursor: pointer;
-}
-
+.provider-mode-switch .provider-mode-btn.active,
+.profile-page-switch .provider-mode-btn.active,
 .provider-mode-btn.active {
     background: #fff;
     color: #0f6ca5;

@@ -6,16 +6,13 @@
     <title>Provider Profile - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260522-5">
+    <link rel="stylesheet" href="css/dashboard.css?v=20260522-6">
     <link rel="stylesheet" href="css/listing-details.css?v=20260422-11">
     <style>
         .profile-page-shell { max-width: 1220px; margin: 0 auto; padding: 0 16px 36px; }
         .profile-page-title { margin: 18px 0 8px; font-size: 2rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; }
         .profile-page-intro { margin: 0 0 18px; color: #64748b; font-size: 1rem; line-height: 1.55; max-width: 760px; }
-        .profile-page-switch { display: flex; gap: 0; width: 100%; background: linear-gradient(180deg, #f7fbff 0%, #edf5fb 100%); border: 1px solid #cfddea; border-bottom: 0; border-radius: 18px 18px 0 0; overflow: hidden; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05); }
-        .profile-page-switch .provider-mode-btn { appearance: none; border: none; border-radius: 0; padding: 14px 16px; color: #1f5f8f; font-weight: 800; background: transparent; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
-        .profile-page-switch .provider-mode-btn { flex: 1; border-right: 1px solid #cfddea; }
-        .profile-page-switch .provider-mode-btn:last-child { border-right: 0; }
-        .profile-page-switch .provider-mode-btn.active { background: linear-gradient(180deg, #1971a2 0%, #115b86 100%); color: #fff; box-shadow: inset 0 -1px 0 rgba(255,255,255,.12); }
+        .profile-page-shell .provider-mode-switch { margin-bottom: 18px; }
         .provider-profile { display: grid; grid-template-columns: minmax(0, 1.08fr) 360px; gap: 22px; align-items: start; }
         .provider-card { background: #fff; padding: 22px 24px; border-radius: 18px; box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08); border: 1px solid #e5edf5; }
         .provider-card--hero { background: linear-gradient(165deg, #ffffff 0%, #f4f9fd 55%, #eef5fb 100%); border-color: #d8e4ef; }
@@ -100,7 +97,7 @@
         .provider-job-history-status--completed { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
         .provider-job-history-status--quoted { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
         .provider-job-history-status--awarded { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
-        body.provider-profile-public-view .profile-page-switch,
+        body.provider-profile-public-view .provider-mode-switch,
         body.provider-profile-public-view #provider-edit { display: none !important; }
         body.provider-profile-public-view .profile-page-title { font-size: 1.6rem; }
         .profile-upload-preview { margin-left: 0; }
@@ -174,9 +171,10 @@
     <main class="profile-page-shell">
         <h1 class="profile-page-title">My Profile</h1>
         <p class="profile-page-intro">Keep your provider profile current with business details, services, payment options, and photos. The editor below saves as you work so your public profile stays polished.</p>
-        <section class="profile-page-switch" aria-label="Profile navigation switch">
+        <section class="provider-mode-switch" aria-label="Provider navigation">
             <a class="provider-mode-btn" href="dashboard.html">Dashboard</a>
             <a class="provider-mode-btn" href="dashboard.html#provider-search-panel">Search Deliveries</a>
+            <a class="provider-mode-btn" href="messages.html">Messages</a>
             <a class="provider-mode-btn active" href="provider-profile.html" aria-current="page">Profile</a>
         </section>
 
