@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Provider Profile - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
-    <link rel="stylesheet" href="css/navbar.css?v=20260522-1">
+    <link rel="stylesheet" href="css/navbar.css?v=20260522-5">
     <link rel="stylesheet" href="css/listing-details.css?v=20260422-11">
     <style>
         .profile-page-shell { max-width: 1220px; margin: 0 auto; padding: 0 16px 36px; }
@@ -157,11 +157,12 @@
                         <button type="button" class="nav-toggle" aria-haspopup="true" aria-expanded="false">
                             <div class="navbar-avatar" id="navbar-user-avatar">U</div>
                         </button>
-                        <div class="dropdown-menu" role="menu" aria-label="User menu">
-                            <a href="customer-dashboard.html" class="nav-item at-nav-my-requests">My requests</a>
-                            <a href="find-providers.html" class="nav-item at-nav-find-providers" id="navbar-find-providers-link">Find providers</a>
-                            <a href="dashboard.html" class="nav-item at-nav-provider-dashboard">Dashboard</a>
-                            <a id="navbar-profile-link" href="customer-dashboard.html" class="nav-item">Profile</a>
+                        <div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-version="3">
+                            <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>
+                            <a href="customer-dashboard.html?tab=forms&amp;my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">My request forms</a>
+                            <a href="provider-profile.html" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>
+                            <a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>
+                            <a href="find-providers.html" class="nav-item navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link" role="menuitem">Find providers</a>
                         </div>
                     </div>
                     <button class="btn btn-primary" onclick="logout()" style="margin-left: 10px;">Logout</button>
@@ -238,7 +239,8 @@
         <div id="provider-edit" style="margin-top:24px;"></div>
     </main>
 
-    <script src="js/auth.js?v=20260522-4"></script>
+    <script src="js/auth.js?v=20260522-11"></script>
+    <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/provider-profile.js?v=20260522-4"></script>
 </body>
 </html>
