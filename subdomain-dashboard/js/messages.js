@@ -774,6 +774,20 @@
         }
         renderThread(me.id, conversation);
 
+        try {
+            var incomingTs = (conversation || [])
+                .filter(function (m) { return String(m && m.toUserId || '') === String(me.id); })
+                .map(function (m) { return new Date(m && m.createdAt || 0).getTime() || 0; })
+                .filter(function (ts) { return ts > 0; });
+            if (incomingTs.length) {
+                var newest = Math.max.apply(null, incomingTs);
+                localStorage.setItem('anytransport_customer_msg_seen_ts_' + String(me.id), String(newest));
+                if (window.auth && typeof window.auth.initAuth === 'function') {
+                    window.auth.initAuth();
+                }
+            }
+        } catch (_seenErr) {}
+
         var form = document.getElementById('messages-form');
         var status = document.getElementById('messages-status');
         if (!form) return;
