@@ -113,8 +113,16 @@
 
         <section class="customer-tab-panel" data-panel="inbox" role="tabpanel">
             <h2 class="visually-hidden">Messages</h2>
-            <div id="customer-messages-list" class="customer-messages-list">
-                <p class="customer-empty">Loading…</p>
+            <div class="customer-inbox-panel">
+                <nav id="customer-inbox-filters" class="customer-inbox-filters" role="tablist" aria-label="Filter messages">
+                    <button type="button" class="customer-inbox-filter-btn active" data-inbox-filter="all" role="tab" aria-selected="true">All</button>
+                    <button type="button" class="customer-inbox-filter-btn" data-inbox-filter="unread" role="tab" aria-selected="false">Unread</button>
+                    <button type="button" class="customer-inbox-filter-btn" data-inbox-filter="direct" role="tab" aria-selected="false">Direct</button>
+                    <button type="button" class="customer-inbox-filter-btn" data-inbox-filter="listings" role="tab" aria-selected="false">Listings</button>
+                </nav>
+                <div id="customer-messages-list" class="customer-messages-list">
+                    <p class="customer-empty">Loading…</p>
+                </div>
             </div>
         </section>
     </main>

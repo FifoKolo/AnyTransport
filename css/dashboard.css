@@ -2226,6 +2226,79 @@
     color: #5a6f7e;
 }
 
+.customer-inbox-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.customer-inbox-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 4px;
+    background: #f1f5f9;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.customer-inbox-filter-btn {
+    border: 1px solid transparent;
+    background: transparent;
+    color: #475569;
+    font-size: 0.88rem;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.customer-inbox-filter-btn:hover {
+    background: #fff;
+    color: #0f172a;
+}
+
+.customer-inbox-filter-btn.active {
+    background: #fff;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.customer-inbox-filter-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: #334155;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.customer-inbox-filter-btn.active .customer-inbox-filter-count {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.customer-inbox-filter-btn[data-inbox-filter="unread"] .customer-inbox-filter-count {
+    background: #2563eb;
+    color: #fff;
+}
+
+.customer-inbox-filter-btn.active[data-inbox-filter="unread"] .customer-inbox-filter-count {
+    background: #1d4ed8;
+    color: #fff;
+}
+
 .customer-messages-list {
     display: flex;
     flex-direction: column;
