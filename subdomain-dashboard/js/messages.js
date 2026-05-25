@@ -663,12 +663,21 @@
             return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
         }).map(function (m) {
             var isOut = String(m.fromUserId || '') === String(currentUserId);
-            var title = firstText(m.title, 'Message');
+            var senderName = isOut ? resolveUserName(currentUserId) : resolveUserName(m.fromUserId);
+            if (isOut) {
+                senderName = firstText(senderName, 'You');
+            }
+            var subjectLine = firstText(m.title, '');
+            var metaParts = [senderName];
+            if (subjectLine && subjectLine.toLowerCase() !== 'message' && subjectLine.toLowerCase() !== String(senderName || '').toLowerCase()) {
+                metaParts.push(subjectLine);
+            }
+            metaParts.push(formatWhen(m.createdAt));
             var body = firstText(m.text, '');
             return [
                 '<article class="msg-row ' + (isOut ? 'msg-row--out' : 'msg-row--in') + '">',
                 '<div class="msg-bubble">',
-                '<span class="msg-meta">' + escapeHtml(title) + ' · ' + escapeHtml(formatWhen(m.createdAt)) + '</span>',
+                '<span class="msg-meta">' + escapeHtml(metaParts.join(' · ')) + '</span>',
                 '<p class="msg-text">' + escapeHtml(body) + '</p>',
                 '</div>',
                 '</article>'
