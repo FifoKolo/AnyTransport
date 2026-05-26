@@ -725,6 +725,62 @@ function send_provider_review_email($provider, $status, $notes = '') {
     return send_email_simple($providerEmail, $subject, $body);
 }
 
+function send_provider_customer_rating_email($provider, $review, $isUpdate = false) {
+    if (!is_array($provider) || empty($provider['email']) || !is_array($review)) {
+        return false;
+    }
+
+    $providerName = provider_public_name($provider, 'there');
+    $customerName = trim((string) ($review['customerName'] ?? 'A customer'));
+    if ($customerName === '') {
+        $customerName = 'A customer';
+    }
+    $rating = (int) ($review['rating'] ?? 0);
+    if ($rating < 1) {
+        $rating = 1;
+    } elseif ($rating > 5) {
+        $rating = 5;
+    }
+    $comment = trim((string) ($review['text'] ?? ''));
+    $formId = trim((string) ($review['formId'] ?? ''));
+    $quoteId = trim((string) ($review['quoteId'] ?? ''));
+    $listingLabel = $formId !== '' ? ('Form #' . $formId) : ($quoteId !== '' ? $quoteId : 'your listing');
+
+    $subject = $isUpdate
+        ? 'Customer updated their review on ' . $listingLabel
+        : 'New customer review on ' . $listingLabel;
+
+    $body = "Hi " . $providerName . ",\n\n";
+    if ($isUpdate) {
+        $body .= $customerName . " updated their review for " . $listingLabel . ".\n\n";
+    } else {
+        $body .= $customerName . " left a new review for " . $listingLabel . ".\n\n";
+    }
+    $body .= "From: " . $customerName . "\n";
+    $body .= "Rating: " . $rating . " out of 5 stars\n";
+    if ($comment !== '') {
+        $body .= "Comment:\n" . $comment . "\n\n";
+    } else {
+        $body .= "Comment: (no written comment)\n\n";
+    }
+
+    $providerId = trim((string) ($provider['id'] ?? ''));
+    if ($providerId !== '') {
+        $profileUrl = get_app_url('provider-profile.html?userId=' . rawurlencode($providerId));
+        if ($profileUrl !== '' && $profileUrl !== '/') {
+            $body .= "View this review on your public profile:\n" . $profileUrl . "\n\n";
+        }
+    }
+    $dashboardUrl = get_app_url('dashboard.html');
+    if ($dashboardUrl !== '' && $dashboardUrl !== '/') {
+        $body .= "Open your provider dashboard:\n" . $dashboardUrl . "\n\n";
+    }
+    $body .= "This inbox is not monitored. Please use your provider dashboard for messages.\n\n";
+    $body .= "Regards,\nAnyTransport";
+
+    return send_email_simple($provider['email'], $subject, $body);
+}
+
 function send_customer_welcome_email($customer) {
     $customerEmail = trim((string) ($customer['email'] ?? ''));
     if ($customerEmail === '') {
@@ -4854,6 +4910,10 @@ switch ($action) {
         if (!is_discoverable_provider($provider)) {
             send_json(array('ok' => false, 'error' => 'Provider not found.'), 404);
         }
+        $customerName = trim((string) ($sessionUser['username'] ?? $sessionUser['name'] ?? 'Customer'));
+        if ($customerName === '') {
+            $customerName = 'Customer';
+        }
         if (!isset($store['providerReviews']) || !is_array($store['providerReviews'])) {
             $store['providerReviews'] = array();
         }
@@ -4881,9 +4941,18 @@ switch ($action) {
             $store['providerReviews'][$existingIndex]['text'] = $text;
             $store['providerReviews'][$existingIndex]['quoteId'] = $quoteId;
             $store['providerReviews'][$existingIndex]['formId'] = $formId;
-            $store['providerReviews'][$existingIndex]['customerName'] = trim((string) ($sessionUser['username'] ?? $sessionUser['name'] ?? 'Customer'));
+            $store['providerReviews'][$existingIndex]['customerName'] = $customerName;
             $store['providerReviews'][$existingIndex]['updatedAt'] = gmdate('c');
             $review = $store['providerReviews'][$existingIndex];
+            add_user_notification(
+                $store,
+                $providerId,
+                'Customer updated their review',
+                $customerName . ' updated their ' . $rating . '-star review on listing ' . trim((string) ($formId !== '' ? $formId : $quoteId)) . '.',
+                'provider_review',
+                array('quoteId' => $quoteId, 'reviewId' => trim((string) ($review['id'] ?? '')), 'fromUserId' => $customerId)
+            );
+            send_provider_customer_rating_email($provider, $review, true);
             write_store($storeFile, $store);
             refresh_session_cookie();
             send_json(array('ok' => true, 'review' => $review, 'stats' => get_provider_review_stats($store, $providerId), 'updated' => true));
@@ -4896,7 +4965,7 @@ switch ($action) {
             'formId' => $formId,
             'rating' => $rating,
             'text' => $text,
-            'customerName' => trim((string) ($sessionUser['username'] ?? $sessionUser['name'] ?? 'Customer')),
+            'customerName' => $customerName,
             'createdAt' => gmdate('c')
         );
         array_unshift($store['providerReviews'], $review);
@@ -4905,10 +4974,11 @@ switch ($action) {
             $store,
             $providerId,
             'New customer review',
-            trim((string) ($review['customerName'] ?? 'A customer')) . ' left a ' . $rating . '-star review on listing ' . trim((string) ($review['formId'] ?? $quoteId)) . '.',
+            $customerName . ' left a ' . $rating . '-star review on listing ' . trim((string) ($formId !== '' ? $formId : $quoteId)) . '.',
             'provider_review',
             array('quoteId' => $quoteId, 'reviewId' => $review['id'], 'fromUserId' => $customerId)
         );
+        send_provider_customer_rating_email($provider, $review, false);
         write_store($storeFile, $store);
         refresh_session_cookie();
         send_json(array('ok' => true, 'review' => $review, 'stats' => get_provider_review_stats($store, $providerId)));
