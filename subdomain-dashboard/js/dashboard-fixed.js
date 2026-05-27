@@ -114,6 +114,12 @@
         return status === '' || status === 'pending_review' || status === 'pending';
     }
 
+    function canProviderAccessListings(user) {
+        const role = String(user && user.role || '').toLowerCase().trim();
+        if (role !== 'provider') return true;
+        return !isProviderPendingReview(user);
+    }
+
     function showProviderPendingApprovalState(user) {
         const board = document.getElementById('provider-board');
         if (!board) return;
@@ -941,6 +947,10 @@
 
             const getDetailsBtn = event.target.closest('.get-details-btn');
             if (getDetailsBtn) {
+                if (!canProviderAccessListings(user)) {
+                    alert('Your account is still pending review. Listings unlock after admin approval.');
+                    return;
+                }
                 const formId = String(getDetailsBtn.getAttribute('data-form-id') || '').trim();
                 if (formId) {
                     window.location.href = 'listing-details.html?id=' + encodeURIComponent(formId);
@@ -972,6 +982,10 @@
 
             const placeBidBtn = event.target.closest('.place-bid-btn');
             if (placeBidBtn) {
+                if (!canProviderAccessListings(user)) {
+                    alert('Your account is still pending review. Bidding unlocks after admin approval.');
+                    return;
+                }
                 placeBid(placeBidBtn.getAttribute('data-quote-id'), user);
                 return;
             }
@@ -1410,6 +1424,10 @@
     function renderProviderListings(user) {
         const container = document.getElementById('provider-listings');
         if (!container) return;
+        if (!canProviderAccessListings(user)) {
+            container.innerHTML = '<div class="empty-inventory">Your account is pending admin review. Listings and bidding will appear after approval.</div>';
+            return;
+        }
 
         syncProviderSearchCategorySelect(user);
 
