@@ -887,9 +887,15 @@ class AuthManager {
             el.href = settingsHref;
             el.style.display = '';
         });
+        const allowMessages = this.canProviderAccessMessages();
         document.querySelectorAll('.at-nav-hub-messages, #navbar-hub-messages-link').forEach((el) => {
             el.href = messagesHref;
-            el.style.display = '';
+            el.style.display = allowMessages ? '' : 'none';
+            if (!allowMessages) {
+                el.setAttribute('aria-hidden', 'true');
+            } else {
+                el.removeAttribute('aria-hidden');
+            }
         });
         document.querySelectorAll('.at-nav-find-providers, #navbar-find-providers-link').forEach((el) => {
             el.href = findProvidersHref;
@@ -1359,6 +1365,20 @@ class AuthManager {
         if (status === 'approved') return true;
         const verified = record.verified;
         return verified === true || verified === 1 || verified === '1' || verified === 'true';
+    }
+
+    isProviderPendingReview(user) {
+        const record = user || this.currentUser;
+        if (!record) return false;
+        if (!this.isProvider()) return false;
+        if (this.isProviderApproved(record)) return false;
+        const status = String(record.identityReviewStatus || '').trim().toLowerCase();
+        return status === '' || status === 'pending_review' || status === 'pending';
+    }
+
+    canProviderAccessMessages(user) {
+        if (!this.isProvider()) return true;
+        return !this.isProviderPendingReview(user);
     }
 
     refreshSessionUserFromServer() {

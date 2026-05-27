@@ -2384,6 +2384,16 @@
     text-align: center;
 }
 
+.customer-empty a {
+    font-weight: 600;
+    color: #1e3a5f;
+    text-decoration: underline;
+}
+
+.customer-empty a:hover {
+    color: #0f172a;
+}
+
 .customer-settings-form {
     max-width: 720px;
     background: #fff;

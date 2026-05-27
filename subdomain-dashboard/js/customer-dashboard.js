@@ -93,6 +93,28 @@
         return isSubdomainDashboardPath() ? '../create-job.html' : 'create-job.html';
     }
 
+    function getFindProvidersPage() {
+        if (window.auth && typeof window.auth.resolveHubNavHref === 'function') {
+            return window.auth.resolveHubNavHref('find-providers.html');
+        }
+        return isSubdomainDashboardPath() ? '../find-providers.html' : 'find-providers.html';
+    }
+
+    function getMessagesPage() {
+        if (window.auth && typeof window.auth.resolveHubNavHref === 'function') {
+            return window.auth.resolveHubNavHref('messages.html');
+        }
+        return isSubdomainDashboardPath() ? 'messages.html' : 'messages.html';
+    }
+
+    function buildDirectChatsEmptyHtml() {
+        const findHref = escapeHtml(getFindProvidersPage());
+        const messagesHref = escapeHtml(getMessagesPage());
+        return '<p class="customer-empty">No direct chats yet. Use '
+            + '<a href="' + findHref + '">Find providers on map</a> and tap '
+            + '<a href="' + messagesHref + '">Message</a>.</p>';
+    }
+
     function getListingViewHref(q) {
         const base = getListingDetailsPage();
         const id = String(q && q.id || '').trim();
@@ -816,9 +838,7 @@
     function renderDirectSectionHtml(threads, options) {
         const opts = options || {};
         if (!threads.length) {
-            return opts.allowEmpty
-                ? '<p class="customer-empty">No direct chats yet. Use <strong>Find providers on map</strong> and tap <strong>Message</strong>.</p>'
-                : '';
+            return opts.allowEmpty ? buildDirectChatsEmptyHtml() : '';
         }
         const header = opts.showHeader === false ? '' : [
             '<section class="customer-messages-section" aria-labelledby="customer-direct-heading">',

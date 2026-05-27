@@ -142,19 +142,26 @@
         const isRejected = String(user && user.identityReviewStatus || '').trim().toLowerCase() === 'rejected';
         banner.innerHTML = isRejected
             ? '<strong>Account not approved.</strong> Your provider verification was rejected. Open <strong>Profile</strong> to update your documents, or contact support if you need help.'
-            : '<strong>Verification in progress.</strong> Your account status is <em>' + escapeHtml(statusLabel) + '</em>. You can use Profile and Messages now; listings and bids unlock after admin approval.';
+            : '<strong>Verification in progress.</strong> Your account status is <em>' + escapeHtml(statusLabel) + '</em>. You can use <strong>Profile</strong> while we review your account; messages, listings, and bids unlock after admin approval.';
 
         [
             'provider-dashboard-panel',
             'provider-search-panel',
-            'provider-listings'
+            'provider-listings',
+            'provider-messages-panel'
         ].forEach(function (id) {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
         });
 
-        const messagesPanel = document.getElementById('provider-messages-panel');
-        if (messagesPanel) messagesPanel.style.display = '';
+        document.querySelectorAll('.provider-mode-btn[data-mode="messages"]').forEach(function (btn) {
+            btn.style.display = 'none';
+            btn.setAttribute('aria-hidden', 'true');
+        });
+        document.querySelectorAll('.provider-mode-switch a[href*="messages"]').forEach(function (link) {
+            link.style.display = 'none';
+            link.setAttribute('aria-hidden', 'true');
+        });
     }
 
     function clearProviderPendingApprovalState() {
@@ -163,10 +170,20 @@
         [
             'provider-dashboard-panel',
             'provider-search-panel',
-            'provider-listings'
+            'provider-listings',
+            'provider-messages-panel'
         ].forEach(function (id) {
             const el = document.getElementById(id);
             if (el) el.style.display = '';
+        });
+
+        document.querySelectorAll('.provider-mode-btn[data-mode="messages"]').forEach(function (btn) {
+            btn.style.display = '';
+            btn.removeAttribute('aria-hidden');
+        });
+        document.querySelectorAll('.provider-mode-switch a[href*="messages"]').forEach(function (link) {
+            link.style.display = '';
+            link.removeAttribute('aria-hidden');
         });
     }
 
@@ -738,6 +755,12 @@
             return;
         }
 
+        if (mode === 'messages' && !canProviderAccessListings(record)) {
+            alert('Your account is still pending review. Messages unlock after admin approval — use Profile for now.');
+            activateProviderMode('profile', record, activeButton);
+            return;
+        }
+
         state.activeProviderMode = mode;
 
         if (modeSwitch) {
@@ -773,7 +796,11 @@
             return;
         }
         if (hash === 'messages' || hash === 'provider-messages' || hash === 'provider-messages-panel') {
-            activateProviderMode('messages', user);
+            if (canProviderAccessListings(user)) {
+                activateProviderMode('messages', user);
+            } else {
+                activateProviderMode('profile', user);
+            }
         }
     }
 

@@ -204,6 +204,7 @@
         renderPayments(u);
         renderPhotos(u);
         renderActions(u, ownProfile);
+        syncPendingProviderNav(u, ownProfile);
         renderAvatar(u);
         if (ownProfile) {
             renderEditor(u);
@@ -522,6 +523,24 @@
             img.alt = 'Provider photo';
             root.appendChild(img);
         } catch (e) {}
+    }
+
+    function syncPendingProviderNav(u, ownProfile) {
+        if (!ownProfile) return;
+        const pending = window.auth
+            && typeof window.auth.isProviderPendingReview === 'function'
+            && window.auth.isProviderPendingReview(u);
+        document.querySelectorAll(
+            '.provider-mode-switch a[href*="messages"], .provider-mode-btn[data-mode="messages"], .at-nav-hub-messages, #navbar-hub-messages-link'
+        ).forEach(function (el) {
+            if (pending) {
+                el.style.display = 'none';
+                el.setAttribute('aria-hidden', 'true');
+            } else {
+                el.style.display = '';
+                el.removeAttribute('aria-hidden');
+            }
+        });
     }
 
     function renderActions(u, isOwnProfile) {

@@ -898,6 +898,15 @@
             return;
         }
 
+        if (window.auth.isProvider && window.auth.isProvider()
+            && window.auth.isProviderPendingReview && window.auth.isProviderPendingReview(me)) {
+            var profileHref = (typeof window.auth.resolveHubNavHref === 'function'
+                ? window.auth.resolveHubNavHref('provider-profile.html?userId=' + encodeURIComponent(String(me.id)))
+                : ('../provider-profile.html?userId=' + encodeURIComponent(String(me.id))));
+            window.location.replace(profileHref);
+            return;
+        }
+
         var params = new URLSearchParams(window.location.search || '');
         var toUserId = String(params.get('to') || '').trim();
         var bidId = String(params.get('bidId') || '').trim();
