@@ -2817,6 +2817,7 @@ function normalizeServiceValue(serviceValue) {
     if (lowered === 'car transport') return 'Car/Campervan Transport';
     if (lowered === 'trailer/caravan transport') return 'Caravan/Trailer Transport';
     if (lowered === 'trailers & campervans transport') return 'Caravan/Trailer Transport';
+    if (lowered === 'man power only' || lowered === 'manpower only') return 'Man Power';
 
     return raw;
 }
@@ -3233,7 +3234,7 @@ function isIndustrialService(serviceValue) {
 }
 
 function isManPowerService(serviceValue) {
-    return normalizeServiceValue(serviceValue) === 'Man Power Only';
+    return normalizeServiceValue(serviceValue) === 'Man Power';
 }
 
 function isParkingLevelService(serviceValue) {
@@ -22231,7 +22232,7 @@ document.addEventListener('DOMContentLoaded', function() {
             hidePackagingSection();
             hideFreightSection();
             hideClearanceSection();
-        } else if (value === 'Man Power Only') {
+        } else if (value === 'Man Power') {
             if (inventorySection) {
                 inventorySection.style.display = 'none';
                 inventorySection.classList.add('progressive-hidden');
@@ -29423,7 +29424,7 @@ function getMultiStopCategorySectionsMarkup(stopId) {
             stopId,
             'Boats|Clearance|Freight|Vehicle Parts|Packaging|Specialist & Antiques|Customized Items'
         ),
-        buildMultiStopSectionFromTemplate('manpower-transport-section', stopId, 'Man Power Only'),
+        buildMultiStopSectionFromTemplate('manpower-transport-section', stopId, 'Man Power'),
         buildMultiStopSectionFromTemplate('other-job-description-section', stopId, 'Other'),
         buildMultiStopPianoSection(stopId)
     ];

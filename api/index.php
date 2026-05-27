@@ -418,7 +418,7 @@ function normalize_user($user) {
 
     // Keep paymentMethods and legacy flat flags aligned so the provider profile UI persists reliably.
     $pm = isset($normalized['paymentMethods']) && is_array($normalized['paymentMethods']) ? $normalized['paymentMethods'] : array();
-    foreach (array('cash', 'cheque', 'visa', 'mastercard', 'paypal', 'americanExpress', 'bankTransfer') as $pmKey) {
+    foreach (array('cash', 'cheque', 'visa', 'mastercard', 'paypal', 'americanExpress', 'bankTransfer', 'revolut', 'other') as $pmKey) {
         if (!array_key_exists($pmKey, $pm)) {
             $pm[$pmKey] = false;
         } else {

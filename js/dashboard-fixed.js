@@ -1315,7 +1315,7 @@
     const PROFILE_SPECIALTY_SYNONYM_GROUPS = [
         ['office removals', 'office relocation', 'office removal', 'office move'],
         ['house removals', 'house removal', 'home removals', 'home removal'],
-        ['man power only', 'man and van', 'man with van', 'manpower only'],
+        ['man power', 'man power only', 'man and van', 'man with van', 'manpower only'],
         ['specialist antiques', 'specialist and antiques', 'antiques'],
         ['customized items', 'specialized items', 'custom items'],
         ['caravan trailer transport', 'caravan transport', 'trailer transport'],

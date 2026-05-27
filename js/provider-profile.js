@@ -425,7 +425,9 @@
             mastercard: 'Mastercard',
             paypal: 'PayPal',
             americanExpress: 'American Express',
-            bankTransfer: 'Bank transfer'
+            bankTransfer: 'Bank transfer',
+            revolut: 'Revolut',
+            other: 'Other'
         };
         return map[key] || capitalize(String(key || '').replace(/([A-Z])/g, ' $1').trim());
     }
@@ -564,7 +566,7 @@
             'Boats',
             'Office Removals',
             'Industrial',
-            'Man Power Only',
+            'Man Power',
             'Pets',
             'Other'
         ];
@@ -633,20 +635,13 @@
             '          <div class="profile-form-label">Full address <span style="font-weight:400;color:#64748b;">(optional)</span></div>',
             '          <div>',
             '            <input id="profile-service-address" class="form-input" type="text" placeholder="Street address for more accurate placement" value="' + escapeAttribute(firstText(u.serviceAreaAddress, '')) + '"' + disabledAttr + '>',
-            '            <div class="profile-help">Optional. Used for a more precise map pin when you allow it below.</div>',
+            '            <div class="profile-help">Optional. Used for a more precise map pin.</div>',
             '          </div>',
-            '        </div>',
-            '        <div class="profile-check-grid" style="margin-top:8px;">',
-            buildCheckbox('showExactAddressOnMap', 'Show my exact address on the customer map (otherwise only town/city area)', !!u.showExactAddressOnMap, disabledAttr),
             '        </div>',
             '        <div id="profile-location-status" class="profile-help" style="margin-top:8px;" aria-live="polite"></div>',
             '        <div class="profile-form-row">',
             '          <div class="profile-form-label">Contact</div>',
             '          <div><input id="profile-contact" class="form-input" type="text" value="' + escapeAttribute(firstText(u.phone, u.contact, u.email, '')) + '"' + disabledAttr + '></div>',
-            '        </div>',
-            '        <div class="profile-form-row">',
-            '          <div class="profile-form-label">Website</div>',
-            '          <div><input id="profile-website" class="form-input" type="url" value="' + escapeAttribute(firstText(u.website, u.url, '')) + '"' + disabledAttr + '></div>',
             '        </div>',
             '        <div class="profile-footer-actions">',
             '          <span id="profile-save-status" class="profile-save-status" aria-live="polite"></span>',
@@ -662,6 +657,8 @@
             buildCheckbox('paypal', 'Paypal', paymentMethods.paypal, disabledAttr),
             buildCheckbox('americanExpress', 'American Express', paymentMethods.americanExpress, disabledAttr),
             buildCheckbox('bankTransfer', 'Bank Transfer', paymentMethods.bankTransfer, disabledAttr),
+            buildCheckbox('revolut', 'Revolut', paymentMethods.revolut, disabledAttr),
+            buildCheckbox('other', 'Other', paymentMethods.other, disabledAttr),
             '      </div>',
             '      <h3 class="profile-section-title" style="margin-top:20px;">Jobs you specialise in</h3>',
             '      <div class="profile-muted">These specialties also control which open jobs appear on your provider dashboard. Select the categories you specialise in. Please limit to your top 8 (only due to space - it won\'t affect anything). Leaving them blank we will automatically use your job history.</div>',
@@ -672,18 +669,13 @@
             '      </div>',
             '      <h3 class="profile-section-title" style="margin-top:20px;">Modes of transport</h3>',
             '      <div class="profile-muted">Select the types of transport you currently operate so customers can quickly see if you are a fit.</div>',
-            '      <div class="profile-check-grid">',
-            transportModeOptions.map(function (option) {
-                return buildTransportModeCheckbox(option, transportModeMatches(option, u), disabledAttr);
-            }).join(''),
-            '      </div>',
+            '      <div class="profile-check-grid" id="profile-transport-modes-grid"></div>',
             '      <div id="profile-custom-transport-wrap" style="margin-top:12px;">',
             '        <div class="profile-help">Add other vehicle types you operate (e.g. Horse box, 7.5 tonne).</div>',
             '        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center;">',
             '          <input id="profile-custom-transport-input" class="form-input" type="text" placeholder="Vehicle name" maxlength="60" style="flex:1; min-width:180px;"' + disabledAttr + '>',
             (isEditable ? '          <button type="button" id="profile-custom-transport-add" class="btn btn-outline">Add vehicle</button>' : ''),
             '        </div>',
-            '        <div id="profile-custom-transport-list" class="provider-transport-chip-list" style="margin-top:10px;"></div>',
             '      </div>',
             '      <h3 class="profile-section-title" style="margin-top:20px;">Auto-bid settings</h3>',
             '      <div class="profile-muted">When enabled on a listing, auto-bid lowers your quote when another provider undercuts you. Cooldown applies between each automatic bid.</div>',
@@ -792,10 +784,10 @@
                 serviceAreaAddress: serviceAddress,
                 serviceAreaLat: cachedCoords.lat || 0,
                 serviceAreaLng: cachedCoords.lng || 0,
-                showExactAddressOnMap: !!document.getElementById('showExactAddressOnMap')?.checked,
+                showExactAddressOnMap: false,
                 phone: String(document.getElementById('profile-contact')?.value || '').trim(),
                 contact: String(document.getElementById('profile-contact')?.value || '').trim(),
-                website: String(document.getElementById('profile-website')?.value || '').trim(),
+                website: firstText(u.website, u.url, ''),
                 description: String(document.getElementById('profile-about')?.value || '').trim(),
                 businessDescription: String(document.getElementById('profile-about')?.value || '').trim(),
                 about: String(document.getElementById('profile-about')?.value || '').trim(),
@@ -977,22 +969,35 @@
             });
         }
 
-        function renderCustomTransportList() {
-            const list = document.getElementById('profile-custom-transport-list');
-            if (!list) return;
-            if (!customTransportModes.length) {
-                list.innerHTML = '<span class="profile-help">No additional vehicles added yet.</span>';
-                return;
+        function readCheckedTransportModeKeys() {
+            const keys = {};
+            const grid = document.getElementById('profile-transport-modes-grid');
+            if (!grid) return keys;
+            grid.querySelectorAll('input[data-transport-mode-label]:checked').forEach(function (input) {
+                const key = transportModeKey(input.getAttribute('data-transport-mode-label'));
+                if (key) keys[key] = true;
+            });
+            return keys;
+        }
+
+        function renderTransportModesGrid() {
+            const grid = document.getElementById('profile-transport-modes-grid');
+            if (!grid) return;
+            const checkedKeys = readCheckedTransportModeKeys();
+            const hasChecked = Object.keys(checkedKeys).length > 0;
+            function isChecked(option) {
+                const key = transportModeKey(option);
+                if (hasChecked) return !!checkedKeys[key];
+                return transportModeMatches(option, u);
             }
-            list.innerHTML = customTransportModes.map(function (mode, index) {
-                return [
-                    '<span class="provider-transport-chip provider-transport-chip--editable">',
-                    transportModeIconSvg(mode),
-                    '<span>' + escapeHtml(mode) + '</span>',
-                    (isEditable ? '<button type="button" class="profile-transport-remove-btn" data-custom-transport-index="' + index + '" aria-label="Remove ' + escapeAttribute(mode) + '">×</button>' : ''),
-                    '</span>'
-                ].join('');
-            }).join('');
+            grid.innerHTML =
+                transportModeOptions.map(function (option) {
+                    return buildTransportModeCheckbox(option, isChecked(option), disabledAttr);
+                }).join('') +
+                customTransportModes.map(function (mode, index) {
+                    return buildCustomTransportModeCheckbox(mode, isChecked(mode), disabledAttr, index, isEditable);
+                }).join('');
+            editorCustomTransportModes = customTransportModes.slice();
         }
 
         function addCustomTransportMode() {
@@ -1003,21 +1008,34 @@
                 alert('That vehicle is already listed above — tick it there instead.');
                 return;
             }
-            const key = name.toLowerCase();
-            if (customTransportModes.some(function (entry) { return entry.toLowerCase() === key; })) {
+            const key = transportModeKey(name);
+            if (customTransportModes.some(function (entry) { return transportModeKey(entry) === key; })) {
                 alert('You already added that vehicle.');
                 return;
             }
+            const checkedKeys = readCheckedTransportModeKeys();
+            checkedKeys[key] = true;
             customTransportModes.push(name);
-            editorCustomTransportModes = customTransportModes.slice();
             if (input) input.value = '';
-            renderCustomTransportList();
+            const grid = document.getElementById('profile-transport-modes-grid');
+            if (grid) {
+                grid.innerHTML =
+                    transportModeOptions.map(function (option) {
+                        return buildTransportModeCheckbox(option, !!checkedKeys[transportModeKey(option)], disabledAttr);
+                    }).join('') +
+                    customTransportModes.map(function (mode, index) {
+                        return buildCustomTransportModeCheckbox(mode, !!checkedKeys[transportModeKey(mode)], disabledAttr, index, isEditable);
+                    }).join('');
+                editorCustomTransportModes = customTransportModes.slice();
+            }
             queueAutosave();
         }
 
         const customTransportAddBtn = document.getElementById('profile-custom-transport-add');
         const customTransportInput = document.getElementById('profile-custom-transport-input');
-        const customTransportList = document.getElementById('profile-custom-transport-list');
+        const transportModesGrid = document.getElementById('profile-transport-modes-grid');
+
+        renderTransportModesGrid();
 
         if (customTransportAddBtn && isEditable) {
             customTransportAddBtn.addEventListener('click', addCustomTransportMode);
@@ -1030,20 +1048,19 @@
                 }
             });
         }
-        if (customTransportList && isEditable) {
-            customTransportList.addEventListener('click', function (event) {
+        if (transportModesGrid && isEditable) {
+            transportModesGrid.addEventListener('click', function (event) {
                 const btn = event.target.closest('.profile-transport-remove-btn');
                 if (!btn) return;
+                event.preventDefault();
+                event.stopPropagation();
                 const index = Number(btn.getAttribute('data-custom-transport-index'));
                 if (!Number.isFinite(index) || index < 0) return;
                 customTransportModes.splice(index, 1);
-                editorCustomTransportModes = customTransportModes.slice();
-                renderCustomTransportList();
+                renderTransportModesGrid();
                 queueAutosave();
             });
         }
-
-        renderCustomTransportList();
         renderPhotoPreviews();
         lastSavedSignature = payloadSignature(buildPayload());
         updateAboutWordCount();
@@ -1066,7 +1083,7 @@
                 if (target.id === 'profile-about') {
                     updateAboutWordCount();
                 }
-                if (target.matches && target.matches('#profile-business-name, #profile-about, #profile-company-type, #profile-city, #profile-service-address, #profile-contact, #profile-website')) {
+                if (target.matches && target.matches('#profile-business-name, #profile-about, #profile-company-type, #profile-city, #profile-service-address, #profile-contact')) {
                     queueAutosave();
                 }
             });
@@ -1101,7 +1118,9 @@
             mastercard: !!(methods.mastercard || u.mastercard),
             paypal: !!(methods.paypal || u.paypal),
             americanExpress: !!(methods.americanExpress || u.americanExpress),
-            bankTransfer: !!(methods.bankTransfer || u.bankTransfer)
+            bankTransfer: !!(methods.bankTransfer || u.bankTransfer),
+            revolut: !!methods.revolut,
+            other: !!methods.other
         };
     }
 
@@ -1138,6 +1157,21 @@
         return buildCheckboxHtml(id, labelHtml, checked, ' data-transport-mode-label="' + escapeAttribute(option) + '"' + (disabledAttr || ''));
     }
 
+    function buildCustomTransportModeCheckbox(option, checked, disabledAttr, index, editable) {
+        const id = 'transport_mode_custom_' + String(index) + '_' + option.replace(/[^a-z0-9]+/ig, '_').toLowerCase();
+        const removeBtn = editable
+            ? '<button type="button" class="profile-transport-remove-btn" data-custom-transport-index="' + index + '" aria-label="Remove ' + escapeAttribute(option) + '">×</button>'
+            : '';
+        const labelHtml = '<span class="provider-transport-custom-label">' +
+            '<span class="provider-transport-option-label">' + transportModeIconSvg(option) + '<span>' + escapeHtml(option) + '</span></span>' +
+            removeBtn +
+            '</span>';
+        return '<label class="profile-transport-custom-row"><input type="checkbox" id="' + escapeAttribute(id) + '"' +
+            (checked ? ' checked' : '') +
+            ' data-transport-mode-label="' + escapeAttribute(option) + '" data-custom-transport="1"' + (disabledAttr || '') +
+            '> <span>' + labelHtml + '</span></label>';
+    }
+
     function serviceMatches(option, u) {
         const values = [];
         // Collect array fields
@@ -1164,7 +1198,7 @@
                 'piano transport': ['piano'],
                 'caravan trailer transport': ['caravan transport', 'trailer transport'],
                 'motorbike transport': ['motorbike', 'motorbikes'],
-                'man power only': ['manpower only'],
+                'man power': ['man power only', 'manpower only', 'manpower'],
                 'specialist antiques': ['specialist and antiques'],
                 'vehicle parts': ['vehicle part'],
                 'office removals': ['office removal'],
@@ -1205,9 +1239,8 @@
         nodes.forEach(function (input) {
             values.push(String(input.getAttribute('data-transport-mode-label') || '').trim());
         });
-        const merged = values.concat(editorCustomTransportModes);
         const seen = {};
-        return merged.filter(function (mode) {
+        return values.filter(function (mode) {
             const key = String(mode || '').trim().toLowerCase();
             if (!key || key === 'other') return false;
             if (seen[key]) return false;
@@ -1224,7 +1257,9 @@
             mastercard: !!document.getElementById('mastercard')?.checked,
             paypal: !!document.getElementById('paypal')?.checked,
             americanExpress: !!document.getElementById('americanExpress')?.checked,
-            bankTransfer: !!document.getElementById('bankTransfer')?.checked
+            bankTransfer: !!document.getElementById('bankTransfer')?.checked,
+            revolut: !!document.getElementById('revolut')?.checked,
+            other: !!document.getElementById('other')?.checked
         };
     }
 
