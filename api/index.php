@@ -418,7 +418,7 @@ function normalize_user($user) {
 
     // Keep paymentMethods and legacy flat flags aligned so the provider profile UI persists reliably.
     $pm = isset($normalized['paymentMethods']) && is_array($normalized['paymentMethods']) ? $normalized['paymentMethods'] : array();
-    foreach (array('cash', 'cheque', 'visa', 'mastercard', 'paypal', 'americanExpress', 'bankTransfer', 'revolut', 'other') as $pmKey) {
+    foreach (array('cash', 'cheque', 'visa', 'mastercard', 'paypal', 'americanExpress', 'bankTransfer', 'revolut') as $pmKey) {
         if (!array_key_exists($pmKey, $pm)) {
             $pm[$pmKey] = false;
         } else {
@@ -447,6 +447,25 @@ function normalize_user($user) {
         $pm['bankTransfer'] = true;
     }
     $normalized['paymentMethods'] = $pm;
+    if (!isset($normalized['paymentMethodsCustom']) || !is_array($normalized['paymentMethodsCustom'])) {
+        $normalized['paymentMethodsCustom'] = array();
+    } else {
+        $seenCustom = array();
+        $cleanCustom = array();
+        foreach ($normalized['paymentMethodsCustom'] as $item) {
+            $label = trim((string) $item);
+            if ($label === '') {
+                continue;
+            }
+            $customKey = strtolower(preg_replace('/[^a-z0-9]+/', ' ', $label));
+            if ($customKey === '' || isset($seenCustom[$customKey])) {
+                continue;
+            }
+            $seenCustom[$customKey] = true;
+            $cleanCustom[] = $label;
+        }
+        $normalized['paymentMethodsCustom'] = $cleanCustom;
+    }
     $normalized['acceptsCash'] = !empty($pm['cash']);
     $normalized['cash'] = !empty($pm['cash']);
     $normalized['cheque'] = !empty($pm['cheque']);
@@ -3442,7 +3461,7 @@ switch ($action) {
                 'description', 'businessDescription', 'about', 'bio', 'summary',
                 'services', 'categories', 'skills', 'photos', 'avatar', 'coverImage',
                 'transportModes',
-                'website', 'companyType', 'paymentMethods', 'acceptsCash', 'paypal', 'visa', 'mastercard', 'bankTransfer', 'americanExpress', 'cheque', 'cash',
+                'website', 'companyType', 'paymentMethods', 'paymentMethodsCustom', 'acceptsCash', 'paypal', 'visa', 'mastercard', 'bankTransfer', 'americanExpress', 'cheque', 'cash',
                 'blockInvites', 'muteInviteEmails',
                 'serviceAreaCity', 'serviceAreaAddress', 'serviceAreaLat', 'serviceAreaLng',
                 'showExactAddressOnMap',

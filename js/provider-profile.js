@@ -1,5 +1,6 @@
 (function () {
     const STANDARD_TRANSPORT_MODES = ['Car', 'Motorbike', 'Bicycle', 'Van', 'Truck', 'Trailer'];
+    const STANDARD_PAYMENT_METHOD_KEYS = ['cash', 'cheque', 'visa', 'mastercard', 'paypal', 'americanExpress', 'bankTransfer', 'revolut'];
     let editorCustomTransportModes = [];
 
     document.addEventListener('DOMContentLoaded', init);
@@ -426,25 +427,61 @@
             paypal: 'PayPal',
             americanExpress: 'American Express',
             bankTransfer: 'Bank transfer',
-            revolut: 'Revolut',
-            other: 'Other'
+            revolut: 'Revolut'
         };
         return map[key] || capitalize(String(key || '').replace(/([A-Z])/g, ' $1').trim());
+    }
+
+    function paymentMethodNameKey(name) {
+        return String(name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    }
+
+    function isStandardPaymentMethodName(name) {
+        const key = paymentMethodNameKey(name);
+        if (!key) return false;
+        return STANDARD_PAYMENT_METHOD_KEYS.some(function (entry) {
+            return paymentMethodNameKey(entry) === key || paymentMethodNameKey(paymentMethodLabel(entry)) === key;
+        });
+    }
+
+    function getCustomPaymentMethods(u) {
+        if (!u || typeof u !== 'object') return [];
+        if (Array.isArray(u.paymentMethodsCustom)) {
+            return u.paymentMethodsCustom.map(function (item) { return String(item || '').trim(); }).filter(Boolean);
+        }
+        const pm = u.paymentMethods && typeof u.paymentMethods === 'object' ? u.paymentMethods : {};
+        const standard = {};
+        STANDARD_PAYMENT_METHOD_KEYS.forEach(function (key) { standard[key] = true; });
+        standard.other = true;
+        const names = [];
+        Object.keys(pm).forEach(function (key) {
+            if (!pm[key] || standard[key]) return;
+            names.push(paymentMethodLabel(key));
+        });
+        return names;
+    }
+
+    function getDisplayedPaymentMethods(u) {
+        const parts = [];
+        const methods = normalizePaymentMethods(u);
+        STANDARD_PAYMENT_METHOD_KEYS.forEach(function (key) {
+            if (methods[key]) parts.push(paymentMethodLabel(key));
+        });
+        getCustomPaymentMethods(u).forEach(function (name) {
+            parts.push(name);
+        });
+        return parts;
     }
 
     function renderPayments(u) {
         const el = document.getElementById('provider-payments');
         if (!el) return;
-        const pm = u.paymentMethods || {};
-        if (typeof pm === 'object' && pm !== null && Object.keys(pm).length) {
-            const parts = [];
-            Object.keys(pm).forEach(function (k) {
-                if (pm[k]) parts.push(paymentMethodLabel(k));
-            });
-            if (parts.length) {
-                el.textContent = parts.join(' · ');
-                return;
-            }
+        const parts = getDisplayedPaymentMethods(u);
+        if (parts.length) {
+            el.innerHTML = '<div class="provider-transport-chip-list">' + parts.map(function (name) {
+                return '<span class="provider-transport-chip"><span>' + escapeHtml(name) + '</span></span>';
+            }).join('') + '</div>';
+            return;
         }
         const inferred = [];
         if (u.acceptsCash || u.cash) inferred.push('Cash');
@@ -552,6 +589,7 @@
         const existingPhotos = normalizePhotos(u.photos || u.images || u.media || []);
         const currentAvatar = firstText(u.avatar, existingPhotos[0] || '');
         const paymentMethods = normalizePaymentMethods(u);
+        let customPaymentMethods = getCustomPaymentMethods(u);
         const serviceOptions = [
             'House Removals',
             'Customized Items',
@@ -649,16 +687,13 @@
             '    </div>',
             '    <div class="profile-workspace-right">',
             '      <h3 class="profile-section-title">Payment methods you accept</h3>',
-            '      <div class="profile-check-grid">',
-            buildCheckbox('cash', 'Cash', paymentMethods.cash, disabledAttr),
-            buildCheckbox('cheque', 'Cheque', paymentMethods.cheque, disabledAttr),
-            buildCheckbox('visa', 'Visa card', paymentMethods.visa, disabledAttr),
-            buildCheckbox('mastercard', 'Mastercard', paymentMethods.mastercard, disabledAttr),
-            buildCheckbox('paypal', 'Paypal', paymentMethods.paypal, disabledAttr),
-            buildCheckbox('americanExpress', 'American Express', paymentMethods.americanExpress, disabledAttr),
-            buildCheckbox('bankTransfer', 'Bank Transfer', paymentMethods.bankTransfer, disabledAttr),
-            buildCheckbox('revolut', 'Revolut', paymentMethods.revolut, disabledAttr),
-            buildCheckbox('other', 'Other', paymentMethods.other, disabledAttr),
+            '      <div class="profile-check-grid" id="profile-payment-methods-grid"></div>',
+            '      <div id="profile-custom-payment-wrap" style="margin-top:12px;">',
+            '        <div class="profile-help">Add other payment methods you accept (e.g. Apple Pay, Klarna).</div>',
+            '        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center;">',
+            '          <input id="profile-custom-payment-input" class="form-input" type="text" placeholder="Payment method name" maxlength="60" style="flex:1; min-width:180px;"' + disabledAttr + '>',
+            (isEditable ? '          <button type="button" id="profile-custom-payment-add" class="btn btn-outline">Add payment method</button>' : ''),
+            '        </div>',
             '      </div>',
             '      <h3 class="profile-section-title" style="margin-top:20px;">Jobs you specialise in</h3>',
             '      <div class="profile-muted">These specialties also control which open jobs appear on your provider dashboard. Select the categories you specialise in. Please limit to your top 8 (only due to space - it won\'t affect anything). Leaving them blank we will automatically use your job history.</div>',
@@ -767,6 +802,7 @@
             const services = collectCheckedServices();
             const transportModes = collectCheckedTransportModes();
             const paymentMethods = collectPaymentMethods();
+            const paymentMethodsCustom = collectCheckedCustomPaymentMethods();
             const city = String(document.getElementById('profile-city')?.value || '').trim();
             const serviceAddress = String(document.getElementById('profile-service-address')?.value || '').trim();
             const businessName = String(document.getElementById('profile-business-name')?.value || '').trim();
@@ -796,6 +832,7 @@
                 skills: services,
                 transportModes: transportModes,
                 paymentMethods: paymentMethods,
+                paymentMethodsCustom: paymentMethodsCustom,
                 acceptsCash: !!paymentMethods.cash,
                 paypal: !!paymentMethods.paypal,
                 visa: !!paymentMethods.visa,
@@ -969,6 +1006,97 @@
             });
         }
 
+        function readCheckedPaymentMethodKeys() {
+            const keys = {};
+            const grid = document.getElementById('profile-payment-methods-grid');
+            if (!grid) return keys;
+            grid.querySelectorAll('input[data-payment-method-label]:checked').forEach(function (input) {
+                const key = paymentMethodNameKey(input.getAttribute('data-payment-method-label'));
+                if (key) keys[key] = true;
+            });
+            return keys;
+        }
+
+        function renderPaymentMethodsGrid(checkedKeysOverride) {
+            const grid = document.getElementById('profile-payment-methods-grid');
+            if (!grid) return;
+            const checkedKeys = checkedKeysOverride || readCheckedPaymentMethodKeys();
+            const hasChecked = Object.keys(checkedKeys).length > 0;
+            function isStandardChecked(key) {
+                if (hasChecked) return !!checkedKeys[paymentMethodNameKey(paymentMethodLabel(key))];
+                return !!paymentMethods[key];
+            }
+            function isCustomChecked(name) {
+                const key = paymentMethodNameKey(name);
+                if (hasChecked) return !!checkedKeys[key];
+                return customPaymentMethods.some(function (entry) { return paymentMethodNameKey(entry) === key; });
+            }
+            grid.innerHTML =
+                buildCheckbox('cash', 'Cash', isStandardChecked('cash'), disabledAttr) +
+                buildCheckbox('cheque', 'Cheque', isStandardChecked('cheque'), disabledAttr) +
+                buildCheckbox('visa', 'Visa card', isStandardChecked('visa'), disabledAttr) +
+                buildCheckbox('mastercard', 'Mastercard', isStandardChecked('mastercard'), disabledAttr) +
+                buildCheckbox('paypal', 'Paypal', isStandardChecked('paypal'), disabledAttr) +
+                buildCheckbox('americanExpress', 'American Express', isStandardChecked('americanExpress'), disabledAttr) +
+                buildCheckbox('bankTransfer', 'Bank Transfer', isStandardChecked('bankTransfer'), disabledAttr) +
+                buildCheckbox('revolut', 'Revolut', isStandardChecked('revolut'), disabledAttr) +
+                customPaymentMethods.map(function (name, index) {
+                    return buildCustomPaymentMethodCheckbox(name, isCustomChecked(name), disabledAttr, index, isEditable);
+                }).join('');
+        }
+
+        function addCustomPaymentMethod() {
+            const input = document.getElementById('profile-custom-payment-input');
+            const name = String(input && input.value || '').trim();
+            if (!name) return;
+            if (isStandardPaymentMethodName(name)) {
+                alert('That payment method is already listed above — tick it there instead.');
+                return;
+            }
+            const key = paymentMethodNameKey(name);
+            if (customPaymentMethods.some(function (entry) { return paymentMethodNameKey(entry) === key; })) {
+                alert('You already added that payment method.');
+                return;
+            }
+            const checkedKeys = readCheckedPaymentMethodKeys();
+            checkedKeys[key] = true;
+            customPaymentMethods.push(name);
+            if (input) input.value = '';
+            renderPaymentMethodsGrid(checkedKeys);
+            queueAutosave();
+        }
+
+        const customPaymentAddBtn = document.getElementById('profile-custom-payment-add');
+        const customPaymentInput = document.getElementById('profile-custom-payment-input');
+        const paymentMethodsGrid = document.getElementById('profile-payment-methods-grid');
+
+        renderPaymentMethodsGrid();
+
+        if (customPaymentAddBtn && isEditable) {
+            customPaymentAddBtn.addEventListener('click', addCustomPaymentMethod);
+        }
+        if (customPaymentInput && isEditable) {
+            customPaymentInput.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    addCustomPaymentMethod();
+                }
+            });
+        }
+        if (paymentMethodsGrid && isEditable) {
+            paymentMethodsGrid.addEventListener('click', function (event) {
+                const btn = event.target.closest('.profile-payment-remove-btn');
+                if (!btn) return;
+                event.preventDefault();
+                event.stopPropagation();
+                const index = Number(btn.getAttribute('data-custom-payment-index'));
+                if (!Number.isFinite(index) || index < 0) return;
+                customPaymentMethods.splice(index, 1);
+                renderPaymentMethodsGrid();
+                queueAutosave();
+            });
+        }
+
         function readCheckedTransportModeKeys() {
             const keys = {};
             const grid = document.getElementById('profile-transport-modes-grid');
@@ -1119,8 +1247,7 @@
             paypal: !!(methods.paypal || u.paypal),
             americanExpress: !!(methods.americanExpress || u.americanExpress),
             bankTransfer: !!(methods.bankTransfer || u.bankTransfer),
-            revolut: !!methods.revolut,
-            other: !!methods.other
+            revolut: !!methods.revolut
         };
     }
 
@@ -1149,6 +1276,21 @@
 
     function buildCheckboxHtml(id, labelHtml, checked, extraAttrs) {
         return '<label><input type="checkbox" id="' + escapeAttribute(id) + '"' + (checked ? ' checked' : '') + (extraAttrs || '') + '> <span>' + labelHtml + '</span></label>';
+    }
+
+    function buildCustomPaymentMethodCheckbox(option, checked, disabledAttr, index, editable) {
+        const id = 'payment_method_custom_' + String(index) + '_' + option.replace(/[^a-z0-9]+/ig, '_').toLowerCase();
+        const removeBtn = editable
+            ? '<button type="button" class="profile-payment-remove-btn profile-transport-remove-btn" data-custom-payment-index="' + index + '" aria-label="Remove ' + escapeAttribute(option) + '">×</button>'
+            : '';
+        const labelHtml = '<span class="provider-transport-custom-label">' +
+            '<span>' + escapeHtml(option) + '</span>' +
+            removeBtn +
+            '</span>';
+        return '<label class="profile-transport-custom-row"><input type="checkbox" id="' + escapeAttribute(id) + '"' +
+            (checked ? ' checked' : '') +
+            ' data-payment-method-label="' + escapeAttribute(option) + '" data-custom-payment="1"' + (disabledAttr || '') +
+            '> <span>' + labelHtml + '</span></label>';
     }
 
     function buildTransportModeCheckbox(option, checked, disabledAttr) {
@@ -1258,9 +1400,22 @@
             paypal: !!document.getElementById('paypal')?.checked,
             americanExpress: !!document.getElementById('americanExpress')?.checked,
             bankTransfer: !!document.getElementById('bankTransfer')?.checked,
-            revolut: !!document.getElementById('revolut')?.checked,
-            other: !!document.getElementById('other')?.checked
+            revolut: !!document.getElementById('revolut')?.checked
         };
+    }
+
+    function collectCheckedCustomPaymentMethods() {
+        const names = [];
+        const grid = document.getElementById('profile-payment-methods-grid');
+        if (!grid) return names;
+        grid.querySelectorAll('input[data-custom-payment="1"][data-payment-method-label]:checked').forEach(function (input) {
+            const name = String(input.getAttribute('data-payment-method-label') || '').trim();
+            if (!name) return;
+            const key = paymentMethodNameKey(name);
+            if (names.some(function (entry) { return paymentMethodNameKey(entry) === key; })) return;
+            names.push(name);
+        });
+        return names;
     }
 
     function getTransportModes(u) {
