@@ -222,9 +222,7 @@
         const modes = getTransportModes(u);
         if (modes.length) {
             el.innerHTML = '<div class="provider-transport-chip-list">' + modes.map(function (mode) {
-                const lower = String(mode || '').toLowerCase();
-                const icon = lower === 'bicycle' ? bicycleIconSvg() : '';
-                return '<span class="provider-transport-chip">' + icon + '<span>' + escapeHtml(mode) + '</span></span>';
+                return '<span class="provider-transport-chip">' + transportModeIconSvg(mode) + '<span>' + escapeHtml(mode) + '</span></span>';
             }).join('') + '</div>';
             return;
         }
@@ -871,8 +869,7 @@
 
     function buildTransportModeCheckbox(option, checked, disabledAttr) {
         const id = 'transport_mode_' + option.replace(/[^a-z0-9]+/ig, '_').toLowerCase();
-        const icon = String(option).toLowerCase() === 'bicycle' ? bicycleIconSvg() : '';
-        const labelHtml = '<span class="provider-transport-option-label">' + icon + '<span>' + escapeHtml(option) + '</span></span>';
+        const labelHtml = '<span class="provider-transport-option-label">' + transportModeIconSvg(option) + '<span>' + escapeHtml(option) + '</span></span>';
         return buildCheckboxHtml(id, labelHtml, checked, ' data-transport-mode-label="' + escapeAttribute(option) + '"' + (disabledAttr || ''));
     }
 
@@ -985,18 +982,8 @@
         });
     }
 
-    function bicycleIconSvg() {
-        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="18" height="18" aria-hidden="true" focusable="false" style="display:inline-block; vertical-align:middle;">'
-            + '<circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="4"/>'
-            + '<circle cx="30" cy="65" r="12" fill="none" stroke="currentColor" stroke-width="4"/>'
-            + '<circle cx="70" cy="65" r="12" fill="none" stroke="currentColor" stroke-width="4"/>'
-            + '<circle cx="52" cy="65" r="3" fill="currentColor"/>'
-            + '<polyline points="30,65 48,45 62,45 70,65" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>'
-            + '<line x1="48" y1="45" x2="52" y2="65" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>'
-            + '<line x1="30" y1="65" x2="40" y2="40" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>'
-            + '<line x1="36" y1="40" x2="44" y2="40" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>'
-            + '<polyline points="62,45 60,35 66,35" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>'
-            + '</svg>';
+    function transportModeIconSvg(mode) {
+        return typeof window.transportModeIconSvg === 'function' ? window.transportModeIconSvg(mode) : '';
     }
 
     // Utilities

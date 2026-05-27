@@ -392,7 +392,8 @@
             const transportModes = getTransportModes(p);
             const transportModesMarkup = transportModes.length
                 ? '<div class="find-provider-transport-chips">' + transportModes.slice(0, 4).map(function (mode) {
-                    return '<span class="find-provider-transport-chip">' + escapeHtml(mode) + '</span>';
+                    const icon = typeof window.transportModeIconSvg === 'function' ? window.transportModeIconSvg(mode) : '';
+                    return '<span class="find-provider-transport-chip">' + icon + '<span>' + escapeHtml(mode) + '</span></span>';
                 }).join('') + '</div>'
                 : '';
             const quoteSelect = document.getElementById('invite-quote-select');
