@@ -529,7 +529,7 @@
         if (!el) return;
 
         if (!quotes.length) {
-            el.innerHTML = '<tr><td colspan="7" class="customer-empty-cell">You have not submitted any request forms yet. <a href="index.html#services">Create a request</a>.</td></tr>';
+            el.innerHTML = '<tr><td colspan="7" class="customer-empty-cell">You have not submitted any request forms yet. <a href="index.html#services">Create a listing</a>.</td></tr>';
             return;
         }
 
