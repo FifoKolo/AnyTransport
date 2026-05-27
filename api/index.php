@@ -3441,6 +3441,7 @@ switch ($action) {
                 'city', 'town', 'location', 'phone', 'contact',
                 'description', 'businessDescription', 'about', 'bio', 'summary',
                 'services', 'categories', 'skills', 'photos', 'avatar', 'coverImage',
+                'transportModes',
                 'website', 'companyType', 'paymentMethods', 'acceptsCash', 'paypal', 'visa', 'mastercard', 'bankTransfer', 'americanExpress', 'cheque', 'cash',
                 'blockInvites', 'muteInviteEmails',
                 'serviceAreaCity', 'serviceAreaAddress', 'serviceAreaLat', 'serviceAreaLng',

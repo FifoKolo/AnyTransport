@@ -283,6 +283,13 @@
                     }
                     return;
                 }
+                if (mode === 'range' && fields.customerBudgetMin != null && fields.customerBudgetMax != null && fields.customerBudgetMax < fields.customerBudgetMin) {
+                    if (status) {
+                        status.textContent = 'Maximum budget must be greater than or equal to minimum budget.';
+                        status.classList.add('is-error');
+                    }
+                    return;
+                }
                 saveBtn.disabled = true;
                 if (status) {
                     status.textContent = 'Saving…';

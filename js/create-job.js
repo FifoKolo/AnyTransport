@@ -18100,8 +18100,7 @@ document.addEventListener('DOMContentLoaded', function () {
         };
         const getMultiFloorDisplayName = (itemName, tabName) => {
             const trackingKey = getMultiFloorTrackingKey(itemName, tabName);
-            const boxPrefixMatch = trackingKey.match(/^([^\-]+)\s-\s(Small Boxes|Medium Boxes|Large Boxes|XL Boxes|Extra Large Boxes)$/i);
-            return boxPrefixMatch && boxPrefixMatch[2] ? boxPrefixMatch[2] : trackingKey;
+            return getItemDisplayName(trackingKey);
         };
 
         const resolveTrackingKeyForTabItem = (itemName, tabName) => {

@@ -71,6 +71,12 @@
             const contact = escapeHtml(firstText(contactVal || 'Not provided'));
             const about = escapeHtml(firstText(u.description, u.businessDescription, u.about, 'No description provided.'));
             const services = Array.isArray(u.services) && u.services.length ? '<ul>' + u.services.map(s => '<li>' + escapeHtml(s) + '</li>').join('') + '</ul>' : 'Not provided';
+            const transportModes = getTransportModes(u);
+            const transportModesHtml = transportModes.length
+                ? '<div style="display:flex; gap:6px; flex-wrap:wrap;">' + transportModes.map(function (mode) {
+                    return '<span class="provider-transport-chip">' + escapeHtml(mode) + '</span>';
+                }).join('') + '</div>'
+                : 'Not provided';
             const initial = escapeHtml(String((u.name || '').toString().charAt(0) || 'P'));
             return '<div class="provider-card">' +
                 '<div style="display:flex;gap:12px;align-items:center;">' +
@@ -81,6 +87,7 @@
                 '<div style="margin-top:8px;"><span class="label">Contact</span><div class="profile-value">' + contact + '</div></div>' +
                 '<div style="margin-top:8px;"><span class="label">About</span><div class="profile-value">' + about + '</div></div>' +
                 '<div style="margin-top:8px;"><span class="label">Services</span><div class="profile-value">' + services + '</div></div>' +
+                '<div style="margin-top:8px;"><span class="label">Modes of transport</span><div class="profile-value">' + transportModesHtml + '</div></div>' +
                 '</div>';
         }
 
@@ -189,6 +196,7 @@
         }
 
         renderServices(u);
+        renderTransportModes(u);
         renderPayments(u);
         renderPhotos(u);
         renderActions(u, ownProfile);
@@ -393,6 +401,21 @@
         el.innerHTML = '<span class="provider-empty-hint">Add specialties in the editor below so customers see what you offer.</span>';
     }
 
+    function renderTransportModes(u) {
+        const el = document.getElementById('provider-transport-modes');
+        if (!el) return;
+        const modes = getTransportModes(u);
+        if (modes.length) {
+            el.innerHTML = '<div class="provider-transport-chip-list">' + modes.map(function (mode) {
+                const lower = String(mode || '').toLowerCase();
+                const icon = lower === 'bicycle' ? bicycleIconSvg() : '';
+                return '<span class="provider-transport-chip">' + icon + '<span>' + escapeHtml(mode) + '</span></span>';
+            }).join('') + '</div>';
+            return;
+        }
+        el.innerHTML = '<span class="provider-empty-hint">Add your transport modes in the editor below so customers know what vehicles you operate.</span>';
+    }
+
     function paymentMethodLabel(key) {
         const map = {
             cash: 'Cash',
@@ -544,6 +567,16 @@
             'Pets',
             'Other'
         ];
+        const transportModeOptions = [
+            'Car',
+            'Motorbike',
+            'Bicycle',
+            'Van',
+            'Luton Van',
+            'Truck',
+            'Trailer',
+            'Other'
+        ];
         let pendingPhotos = [];
 
         root.innerHTML = [
@@ -643,6 +676,13 @@
                 return buildCheckbox('service_' + option.replace(/[^a-z0-9]+/ig, '_').toLowerCase(), option, serviceMatches(option, u), ' data-service-label="' + escapeAttribute(option) + '"' + disabledAttr);
             }).join(''),
             '      </div>',
+            '      <h3 class="profile-section-title" style="margin-top:20px;">Modes of transport</h3>',
+            '      <div class="profile-muted">Select the types of transport you currently operate so customers can quickly see if you are a fit.</div>',
+            '      <div class="profile-check-grid">',
+            transportModeOptions.map(function (option) {
+                return buildTransportModeCheckbox(option, transportModeMatches(option, u), disabledAttr);
+            }).join(''),
+            '      </div>',
             '      <h3 class="profile-section-title" style="margin-top:20px;">Auto-bid settings</h3>',
             '      <div class="profile-muted">When enabled on a listing, auto-bid lowers your quote when another provider undercuts you. Cooldown applies between each automatic bid.</div>',
             '      <div class="profile-form-row" style="margin-top:12px;">',
@@ -731,6 +771,7 @@
 
         function buildPayload() {
             const services = collectCheckedServices();
+            const transportModes = collectCheckedTransportModes();
             const paymentMethods = collectPaymentMethods();
             const city = String(document.getElementById('profile-city')?.value || '').trim();
             const serviceAddress = String(document.getElementById('profile-service-address')?.value || '').trim();
@@ -759,6 +800,7 @@
                 services: services,
                 categories: services,
                 skills: services,
+                transportModes: transportModes,
                 paymentMethods: paymentMethods,
                 acceptsCash: !!paymentMethods.cash,
                 paypal: !!paymentMethods.paypal,
@@ -835,6 +877,7 @@
                 console.info('[Provider Profile] autosave payload', {
                     userId: payload.id,
                     services: payload.services,
+                    transportModes: payload.transportModes,
                     paymentMethods: payload.paymentMethods,
                     blockInvites: payload.blockInvites,
                     muteInviteEmails: payload.muteInviteEmails
@@ -858,6 +901,7 @@
                     try {
                         renderPayments(u);
                         renderServices(u);
+                        renderTransportModes(u);
                     } catch (_e) {}
                     const viewer = getViewer();
                     if (viewer && String(viewer.id) === String(serverUser.id) && window.auth) {
@@ -1015,6 +1059,17 @@
         return '<label><input type="checkbox" id="' + escapeAttribute(id) + '"' + (checked ? ' checked' : '') + (extraAttrs || '') + '> <span>' + escapeHtml(label) + '</span></label>';
     }
 
+    function buildCheckboxHtml(id, labelHtml, checked, extraAttrs) {
+        return '<label><input type="checkbox" id="' + escapeAttribute(id) + '"' + (checked ? ' checked' : '') + (extraAttrs || '') + '> <span>' + labelHtml + '</span></label>';
+    }
+
+    function buildTransportModeCheckbox(option, checked, disabledAttr) {
+        const id = 'transport_mode_' + option.replace(/[^a-z0-9]+/ig, '_').toLowerCase();
+        const icon = String(option).toLowerCase() === 'bicycle' ? bicycleIconSvg() : '';
+        const labelHtml = '<span class="provider-transport-option-label">' + icon + '<span>' + escapeHtml(option) + '</span></span>';
+        return buildCheckboxHtml(id, labelHtml, checked, ' data-transport-mode-label="' + escapeAttribute(option) + '"' + (disabledAttr || ''));
+    }
+
     function serviceMatches(option, u) {
         const values = [];
         // Collect array fields
@@ -1075,6 +1130,16 @@
         return values.filter(Boolean);
     }
 
+    function collectCheckedTransportModes() {
+        const values = [];
+        const scoped = document.querySelectorAll('#provider-edit input[data-transport-mode-label]:checked');
+        const nodes = scoped.length ? scoped : document.querySelectorAll('input[data-transport-mode-label]:checked');
+        nodes.forEach(function (input) {
+            values.push(String(input.getAttribute('data-transport-mode-label') || '').trim());
+        });
+        return values.filter(Boolean);
+    }
+
     function collectPaymentMethods() {
         return {
             cash: !!document.getElementById('cash')?.checked,
@@ -1085,6 +1150,47 @@
             americanExpress: !!document.getElementById('americanExpress')?.checked,
             bankTransfer: !!document.getElementById('bankTransfer')?.checked
         };
+    }
+
+    function getTransportModes(u) {
+        if (!u || typeof u !== 'object') return [];
+        const candidates = [];
+        if (Array.isArray(u.transportModes)) candidates.push.apply(candidates, u.transportModes);
+        if (Array.isArray(u.transportMode)) candidates.push.apply(candidates, u.transportMode);
+        if (Array.isArray(u.transportTypes)) candidates.push.apply(candidates, u.transportTypes);
+        if (typeof u.transportModes === 'string') candidates.push.apply(candidates, String(u.transportModes).split(/[,;]+/));
+        if (typeof u.transportMode === 'string') candidates.push.apply(candidates, String(u.transportMode).split(/[,;]+/));
+        const normalized = [];
+        candidates.forEach(function (mode) {
+            const value = String(mode || '').trim();
+            if (!value) return;
+            const key = value.toLowerCase();
+            if (normalized.some(function (entry) { return entry.toLowerCase() === key; })) return;
+            normalized.push(value);
+        });
+        return normalized;
+    }
+
+    function transportModeMatches(option, u) {
+        const target = String(option || '').trim().toLowerCase();
+        if (!target) return false;
+        return getTransportModes(u).some(function (mode) {
+            return String(mode || '').trim().toLowerCase() === target;
+        });
+    }
+
+    function bicycleIconSvg() {
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="18" height="18" aria-hidden="true" focusable="false" style="display:inline-block; vertical-align:middle;">'
+            + '<circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="4"/>'
+            + '<circle cx="30" cy="65" r="12" fill="none" stroke="currentColor" stroke-width="4"/>'
+            + '<circle cx="70" cy="65" r="12" fill="none" stroke="currentColor" stroke-width="4"/>'
+            + '<circle cx="52" cy="65" r="3" fill="currentColor"/>'
+            + '<polyline points="30,65 48,45 62,45 70,65" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>'
+            + '<line x1="48" y1="45" x2="52" y2="65" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>'
+            + '<line x1="30" y1="65" x2="40" y2="40" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>'
+            + '<line x1="36" y1="40" x2="44" y2="40" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>'
+            + '<polyline points="62,45 60,35 66,35" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>'
+            + '</svg>';
     }
 
     // Utilities

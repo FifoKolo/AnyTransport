@@ -103,6 +103,9 @@
         .profile-upload-preview { margin-left: 0; }
         .profile-section-note { padding: 14px 16px; border: 1px solid #dbe7f2; background: #fff; border-radius: 14px; color:#475569; line-height:1.5; }
         .profile-section-note strong { color:#0f172a; }
+        .provider-transport-chip-list { display:flex; flex-wrap:wrap; gap:8px; }
+        .provider-transport-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #dbe7f2; background:#f8fbff; color:#1e3a5f; font-weight:600; font-size:.88rem; }
+        .provider-transport-option-label { display:inline-flex; align-items:center; gap:7px; }
         #provider-edit { margin-top: 28px !important; }
         @media (max-width: 980px) {
             .provider-profile { grid-template-columns: 1fr; }
@@ -218,6 +221,11 @@
                 <div class="provider-card provider-aside-card" style="margin-top:14px;">
                     <h3>Payment methods</h3>
                     <div id="provider-payments">—</div>
+                </div>
+
+                <div class="provider-card provider-aside-card" style="margin-top:14px;">
+                    <h3>Modes of transport</h3>
+                    <div id="provider-transport-modes">—</div>
                 </div>
 
                 <div class="provider-card provider-aside-card" style="margin-top:14px;">

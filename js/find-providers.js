@@ -33,6 +33,24 @@
         return '';
     }
 
+    function getTransportModes(provider) {
+        if (!provider || typeof provider !== 'object') return [];
+        const raw = [];
+        if (Array.isArray(provider.transportModes)) raw.push.apply(raw, provider.transportModes);
+        if (Array.isArray(provider.transportMode)) raw.push.apply(raw, provider.transportMode);
+        if (Array.isArray(provider.transportTypes)) raw.push.apply(raw, provider.transportTypes);
+        if (typeof provider.transportModes === 'string') raw.push.apply(raw, provider.transportModes.split(/[,;]+/));
+        const normalized = [];
+        raw.forEach(function (entry) {
+            const value = String(entry || '').trim();
+            if (!value) return;
+            const key = value.toLowerCase();
+            if (normalized.some(function (existing) { return existing.toLowerCase() === key; })) return;
+            normalized.push(value);
+        });
+        return normalized;
+    }
+
     function setStatus(text, isError) {
         const el = document.getElementById('find-providers-status');
         if (!el) return;
@@ -371,6 +389,12 @@
             const services = Array.isArray(p.services) && p.services.length
                 ? p.services.slice(0, 4).join(' · ')
                 : 'General transport';
+            const transportModes = getTransportModes(p);
+            const transportModesMarkup = transportModes.length
+                ? '<div class="find-provider-transport-chips">' + transportModes.slice(0, 4).map(function (mode) {
+                    return '<span class="find-provider-transport-chip">' + escapeHtml(mode) + '</span>';
+                }).join('') + '</div>'
+                : '';
             const quoteSelect = document.getElementById('invite-quote-select');
             const selectedQuoteId = quoteSelect ? String(quoteSelect.value || '').trim() : '';
             const msgUrl = 'messages.html?to=' + encodeURIComponent(String(p.id || ''))
@@ -384,6 +408,7 @@
                 '<h3>' + escapeHtml(name) + '</h3>',
                 '<p class="find-provider-meta">' + escapeHtml(loc) + (dist ? ' · ' + escapeHtml(dist) : '') + '</p>',
                 '<p class="find-provider-services">' + escapeHtml(services) + '</p>',
+                transportModesMarkup,
                 '<div class="find-provider-actions">',
                 '<a class="find-provider-action-btn find-provider-action-btn--profile" href="provider-profile.html?userId=' + encodeURIComponent(String(p.id || '')) + '">View profile</a>',
                 '<a class="find-provider-action-btn find-provider-action-btn--message" href="' + escapeHtml(msgUrl) + '">Message</a>',
@@ -433,6 +458,7 @@
             const popupHtml = '<strong>' + escapeHtml(providerDisplayName(p)) + '</strong><br>'
                 + escapeHtml(providerLocationLabel(p))
                 + (p.distanceKm != null ? '<br>' + escapeHtml(String(p.distanceKm)) + ' km from you' : '')
+                + (getTransportModes(p).length ? ('<br>Transport: ' + escapeHtml(getTransportModes(p).slice(0, 4).join(' · '))) : '')
                 + (p.blockInvites ? '' : '<br><em>Click list card to invite or message</em>');
             const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
                 .setLngLat([mapLng, mapLat])
