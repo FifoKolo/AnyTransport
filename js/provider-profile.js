@@ -578,7 +578,7 @@
             const btnBack = document.createElement('a');
             btnBack.className = 'btn btn-outline';
             btnBack.href = 'customer-dashboard.html';
-            btnBack.textContent = 'Back to My Listing\'s';
+            btnBack.textContent = 'Back to My Listings';
             root.appendChild(btnBack);
             return;
         }

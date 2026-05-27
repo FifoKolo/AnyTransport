@@ -741,6 +741,12 @@ class AuthManager {
             this.scheduleSyncNavigationForRole();
         } else {
             if (authMenu) authMenu.style.display = 'flex';
+            if (authMenu) {
+                authMenu.innerHTML = [
+                    '<button class="btn btn-outline" type="button" onclick="openLoginModal()">Login</button>',
+                    '<button class="btn btn-primary" type="button" onclick="openSignupModal(\'customer\')" style="margin-left: 8px;">Sign Up</button>'
+                ].join('');
+            }
             if (userMenu) userMenu.style.display = 'none';
         }
     }
@@ -822,14 +828,15 @@ class AuthManager {
             return;
         }
 
-        const profileMenuVersion = '3';
+        const profileMenuVersion = '4';
         const hasLegacyMenu = !!menu.querySelector(
             '.at-nav-provider-dashboard, #navbar-profile-link, .at-nav-my-requests, a[href="customer-dashboard.html"]:not([href*="?"])'
-        );
+        ) || !menu.querySelector('.at-nav-hub-listings');
         if (menu.dataset.profileMenuVersion !== profileMenuVersion || hasLegacyMenu) {
             menu.innerHTML = [
                 '<a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>',
-                '<a href="customer-dashboard.html?tab=forms&my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">My request forms</a>',
+                '<a href="customer-dashboard.html?tab=forms&my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">My Request Forms</a>',
+                '<a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-listings" id="navbar-hub-listings-link" role="menuitem">My Listings</a>',
                 '<a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',
                 '<a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>',
                 '<a href="find-providers.html" class="nav-item navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link" role="menuitem">Find providers</a>'
@@ -859,7 +866,8 @@ class AuthManager {
         const uid = this.currentUser.id ? String(this.currentUser.id) : '';
 
         const dashboardHref = this.resolveHubNavHref('dashboard.html');
-        const formsHref = this.resolveHubNavHref('customer-dashboard.html?tab=forms&my-requests=1');
+        const requestFormsHref = this.resolveHubNavHref('customer-dashboard.html?tab=forms&my-requests=1');
+        const listingsHref = this.resolveHubNavHref('customer-dashboard.html?tab=forms');
         const settingsHref = allowProviderDash
             ? this.resolveHubNavHref('provider-profile.html?userId=' + encodeURIComponent(uid))
             : this.resolveHubNavHref('customer-dashboard.html?tab=settings');
@@ -871,7 +879,11 @@ class AuthManager {
             el.style.display = allowProviderDash ? '' : 'none';
         });
         document.querySelectorAll('.at-nav-hub-forms, #navbar-hub-forms-link').forEach((el) => {
-            el.href = formsHref;
+            el.href = requestFormsHref;
+            el.style.display = allowCustomerHub ? '' : 'none';
+        });
+        document.querySelectorAll('.at-nav-hub-listings, #navbar-hub-listings-link').forEach((el) => {
+            el.href = listingsHref;
             el.style.display = allowCustomerHub ? '' : 'none';
         });
         document.querySelectorAll('.at-nav-hub-settings, #navbar-hub-settings-link').forEach((el) => {
@@ -899,7 +911,7 @@ class AuthManager {
 
         const avatarLink = document.getElementById('navbar-avatar-home-link');
         if (avatarLink) {
-            avatarLink.href = allowProviderDash ? dashboardHref + '#provider-board' : formsHref;
+            avatarLink.href = allowProviderDash ? dashboardHref + '#provider-board' : listingsHref;
         }
 
         const path = String(window.location.pathname || '').toLowerCase();
@@ -922,8 +934,10 @@ class AuthManager {
                 document.querySelectorAll('.at-nav-hub-settings').forEach((el) => el.classList.add('is-active'));
             } else if (tab === 'inbox' || tab === 'messages') {
                 document.querySelectorAll('.at-nav-hub-messages').forEach((el) => el.classList.add('is-active'));
-            } else {
+            } else if (search.indexOf('my-requests=1') >= 0) {
                 document.querySelectorAll('.at-nav-hub-forms').forEach((el) => el.classList.add('is-active'));
+            } else {
+                document.querySelectorAll('.at-nav-hub-listings').forEach((el) => el.classList.add('is-active'));
             }
         } else if (/messages\.html$/i.test(path)) {
             document.querySelectorAll('.at-nav-hub-messages').forEach((el) => el.classList.add('is-active'));
@@ -951,7 +965,8 @@ class AuthManager {
             '</button>',
             '<div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-ready="1">',
             '  <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>',
-            '  <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Forms</a>',
+            '  <a href="customer-dashboard.html?tab=forms&my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">My Request Forms</a>',
+            '  <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-listings" id="navbar-hub-listings-link" role="menuitem">My Listings</a>',
             '  <a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',
             '  <a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>',
             '  <a href="find-providers.html" class="nav-item navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link" role="menuitem">Find providers</a>',
