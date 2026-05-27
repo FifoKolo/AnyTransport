@@ -1,4 +1,7 @@
 (function () {
+    const STANDARD_TRANSPORT_MODES = ['Car', 'Motorbike', 'Bicycle', 'Van', 'Truck', 'Trailer'];
+    let editorCustomTransportModes = [];
+
     document.addEventListener('DOMContentLoaded', init);
 
     function init() {
@@ -565,16 +568,9 @@
             'Pets',
             'Other'
         ];
-        const transportModeOptions = [
-            'Car',
-            'Motorbike',
-            'Bicycle',
-            'Van',
-            'Luton Van',
-            'Truck',
-            'Trailer',
-            'Other'
-        ];
+        const transportModeOptions = STANDARD_TRANSPORT_MODES.slice();
+        let customTransportModes = getCustomTransportModes(u);
+        editorCustomTransportModes = customTransportModes.slice();
         let pendingPhotos = [];
 
         root.innerHTML = [
@@ -680,6 +676,14 @@
             transportModeOptions.map(function (option) {
                 return buildTransportModeCheckbox(option, transportModeMatches(option, u), disabledAttr);
             }).join(''),
+            '      </div>',
+            '      <div id="profile-custom-transport-wrap" style="margin-top:12px;">',
+            '        <div class="profile-help">Add other vehicle types you operate (e.g. Horse box, 7.5 tonne).</div>',
+            '        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center;">',
+            '          <input id="profile-custom-transport-input" class="form-input" type="text" placeholder="Vehicle name" maxlength="60" style="flex:1; min-width:180px;"' + disabledAttr + '>',
+            (isEditable ? '          <button type="button" id="profile-custom-transport-add" class="btn btn-outline">Add vehicle</button>' : ''),
+            '        </div>',
+            '        <div id="profile-custom-transport-list" class="provider-transport-chip-list" style="margin-top:10px;"></div>',
             '      </div>',
             '      <h3 class="profile-section-title" style="margin-top:20px;">Auto-bid settings</h3>',
             '      <div class="profile-muted">When enabled on a listing, auto-bid lowers your quote when another provider undercuts you. Cooldown applies between each automatic bid.</div>',
@@ -973,6 +977,73 @@
             });
         }
 
+        function renderCustomTransportList() {
+            const list = document.getElementById('profile-custom-transport-list');
+            if (!list) return;
+            if (!customTransportModes.length) {
+                list.innerHTML = '<span class="profile-help">No additional vehicles added yet.</span>';
+                return;
+            }
+            list.innerHTML = customTransportModes.map(function (mode, index) {
+                return [
+                    '<span class="provider-transport-chip provider-transport-chip--editable">',
+                    transportModeIconSvg(mode),
+                    '<span>' + escapeHtml(mode) + '</span>',
+                    (isEditable ? '<button type="button" class="profile-transport-remove-btn" data-custom-transport-index="' + index + '" aria-label="Remove ' + escapeAttribute(mode) + '">×</button>' : ''),
+                    '</span>'
+                ].join('');
+            }).join('');
+        }
+
+        function addCustomTransportMode() {
+            const input = document.getElementById('profile-custom-transport-input');
+            const name = String(input && input.value || '').trim();
+            if (!name) return;
+            if (isStandardTransportMode(name)) {
+                alert('That vehicle is already listed above — tick it there instead.');
+                return;
+            }
+            const key = name.toLowerCase();
+            if (customTransportModes.some(function (entry) { return entry.toLowerCase() === key; })) {
+                alert('You already added that vehicle.');
+                return;
+            }
+            customTransportModes.push(name);
+            editorCustomTransportModes = customTransportModes.slice();
+            if (input) input.value = '';
+            renderCustomTransportList();
+            queueAutosave();
+        }
+
+        const customTransportAddBtn = document.getElementById('profile-custom-transport-add');
+        const customTransportInput = document.getElementById('profile-custom-transport-input');
+        const customTransportList = document.getElementById('profile-custom-transport-list');
+
+        if (customTransportAddBtn && isEditable) {
+            customTransportAddBtn.addEventListener('click', addCustomTransportMode);
+        }
+        if (customTransportInput && isEditable) {
+            customTransportInput.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    addCustomTransportMode();
+                }
+            });
+        }
+        if (customTransportList && isEditable) {
+            customTransportList.addEventListener('click', function (event) {
+                const btn = event.target.closest('.profile-transport-remove-btn');
+                if (!btn) return;
+                const index = Number(btn.getAttribute('data-custom-transport-index'));
+                if (!Number.isFinite(index) || index < 0) return;
+                customTransportModes.splice(index, 1);
+                editorCustomTransportModes = customTransportModes.slice();
+                renderCustomTransportList();
+                queueAutosave();
+            });
+        }
+
+        renderCustomTransportList();
         renderPhotoPreviews();
         lastSavedSignature = payloadSignature(buildPayload());
         updateAboutWordCount();
@@ -1134,7 +1205,15 @@
         nodes.forEach(function (input) {
             values.push(String(input.getAttribute('data-transport-mode-label') || '').trim());
         });
-        return values.filter(Boolean);
+        const merged = values.concat(editorCustomTransportModes);
+        const seen = {};
+        return merged.filter(function (mode) {
+            const key = String(mode || '').trim().toLowerCase();
+            if (!key || key === 'other') return false;
+            if (seen[key]) return false;
+            seen[key] = true;
+            return true;
+        });
     }
 
     function collectPaymentMethods() {
@@ -1168,11 +1247,33 @@
         return normalized;
     }
 
+    function transportModeKey(mode) {
+        return typeof window.normalizeTransportModeKey === 'function'
+            ? window.normalizeTransportModeKey(mode)
+            : String(mode || '').trim().toLowerCase();
+    }
+
+    function isStandardTransportMode(mode) {
+        const key = transportModeKey(mode);
+        return STANDARD_TRANSPORT_MODES.some(function (entry) {
+            return transportModeKey(entry) === key;
+        });
+    }
+
+    function getCustomTransportModes(u) {
+        return getTransportModes(u).filter(function (mode) {
+            const key = transportModeKey(mode);
+            if (!key || key === 'other') return false;
+            if (key === 'luton van') return true;
+            return !isStandardTransportMode(mode);
+        });
+    }
+
     function transportModeMatches(option, u) {
-        const target = String(option || '').trim().toLowerCase();
+        const target = transportModeKey(option);
         if (!target) return false;
         return getTransportModes(u).some(function (mode) {
-            return String(mode || '').trim().toLowerCase() === target;
+            return transportModeKey(mode) === target;
         });
     }
 
