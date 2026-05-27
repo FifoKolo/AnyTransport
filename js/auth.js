@@ -2006,7 +2006,7 @@ function showConfirmationModal() {
 
         const dashboardBtn = document.getElementById('confirmation-view-dashboard-btn');
         if (dashboardBtn) {
-            dashboardBtn.textContent = 'View my requests';
+            dashboardBtn.textContent = 'View my listings';
             const target = formIdText ? ('customer-dashboard.html?highlightForm=' + encodeURIComponent(formIdText)) : 'customer-dashboard.html';
             dashboardBtn.onclick = function () {
                 window.location.href = target;
