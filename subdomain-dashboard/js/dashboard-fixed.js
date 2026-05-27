@@ -1077,17 +1077,20 @@
                 }
                 try {
                     if (statusBadge) {
+                        statusBadge.style.display = 'inline-flex';
                         statusBadge.textContent = 'Sending...';
                         statusBadge.style.color = '#1d4ed8';
                     }
                     if (window.anytransportApi && typeof window.anytransportApi.notifyQuoteOwner === 'function') {
                         window.anytransportApi.notifyQuoteOwner(quoteId, reason);
                         if (statusBadge) {
+                            statusBadge.style.display = 'inline-flex';
                             statusBadge.textContent = 'Sent';
                             statusBadge.style.color = '#166534';
                         }
                     } else {
                         if (statusBadge) {
+                            statusBadge.style.display = 'inline-flex';
                             statusBadge.textContent = 'Email unavailable';
                             statusBadge.style.color = '#991b1b';
                         }
@@ -1095,6 +1098,7 @@
                     }
                 } catch (error) {
                     if (statusBadge) {
+                        statusBadge.style.display = 'inline-flex';
                         statusBadge.textContent = 'Failed';
                         statusBadge.style.color = '#991b1b';
                     }
@@ -1724,7 +1728,7 @@
                     '<div class="actions review-actions" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
                     '<button type="button" class="btn btn-primary admin-view-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">View form</button>',
                     '<button type="button" class="btn btn-secondary admin-email-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">Email form owner</button>',
-                    '<span class="admin-email-status" style="display:inline-flex; align-items:center; font-weight:700; color:#64748b;">Not sent</span>',
+                    '<span class="admin-email-status" style="display:none; align-items:center; font-weight:700; color:#64748b;"></span>',
                     '</div>',
                     '</div>',
                     '</div>',

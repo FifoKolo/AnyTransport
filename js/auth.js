@@ -1747,6 +1747,17 @@ if (signupForm) {
             }
 
             pendingIdentityPhotos = identityPhotos;
+            // Persist photos with signup so admin review has immediate access,
+            // even if the follow-up Stripe upload fails.
+            formData.identityPhotos = identityPhotos.map((entry) => ({
+                label: entry.label || 'identity-photo',
+                name: entry.name || entry.label || 'identity-photo',
+                type: entry.type || 'image/jpeg',
+                size: Number(entry.size || 0),
+                dataUrl: entry.dataUrl || '',
+                previewDataUrl: entry.dataUrl || '',
+                uploadedAt: entry.uploadedAt || new Date().toISOString()
+            }));
         }
 
         // Validate emails match
@@ -1772,6 +1783,7 @@ if (signupForm) {
                     try {
                         if (window.anytransportApi && typeof window.anytransportApi.identityPhotosUpload === 'function' && Array.isArray(pendingIdentityPhotos) && pendingIdentityPhotos.length) {
                             let uploadedCount = 0;
+                            let failedUploads = 0;
                             for (const entry of pendingIdentityPhotos) {
                                 const photoData = entry && entry.dataUrl ? String(entry.dataUrl) : '';
                                 if (!photoData) continue;
@@ -1785,14 +1797,25 @@ if (signupForm) {
                                     if (uploadResp && Array.isArray(uploadResp.uploaded) && uploadResp.uploaded.length) {
                                         uploadedCount += uploadResp.uploaded.length;
                                     }
-                                } catch (_err) {
-                                    // keep attempting next photo
+                                } catch (err) {
+                                    failedUploads += 1;
+                                    if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                                        console.warn('[AnyTransport] identity photo Stripe upload failed', err);
+                                    }
                                 }
                             }
                             if (uploadedCount > 0) {
                                 try {
                                     AuthManager.showTransientMessage('Identity photos uploaded successfully.');
                                 } catch (_m) {}
+                            }
+                            if (failedUploads > 0) {
+                                const warning = 'Your account was created and your photos were saved for admin review, but ' + failedUploads + ' photo upload' + (failedUploads === 1 ? '' : 's') + ' to Stripe failed. Please open your dashboard and re-upload if needed.';
+                                try {
+                                    AuthManager.showTransientMessage(warning, 'error');
+                                } catch (_m) {
+                                    alert(warning);
+                                }
                             }
                         }
                     } catch (_e) {}
