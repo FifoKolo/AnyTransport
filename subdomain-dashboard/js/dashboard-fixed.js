@@ -1704,6 +1704,8 @@
                 const quoteId = String(quote.id || '').trim();
                 const formId = escapeHtml(firstText(quote.formId, quoteId, '—'));
                 const owner = escapeHtml(firstText(quote.customerEmail, quote.customerName, quote.userId, 'Unknown'));
+                const customerFullName = escapeHtml(firstText(quote.customerName, quote.fullName, quote.name));
+                const customerPhone = escapeHtml(firstText(quote.customerPhone, quote.phone, quote.customerTel, quote.contactNumber));
                 return [
                     '<article class="provider-listing" style="margin-bottom:12px;">',
                     '<div class="listing-row body" style="grid-template-columns: 160px 1fr 1fr;">',
@@ -1713,6 +1715,8 @@
                     '</div>',
                     '<div class="listing-cell">',
                     '<div class="listing-sub">Owner: ' + owner + '</div>',
+                    (customerFullName ? '<div class="listing-sub">Full name: ' + customerFullName + '</div>' : ''),
+                    (customerPhone ? '<div class="listing-sub">Phone: ' + customerPhone + '</div>' : ''),
                     '<div class="listing-sub">' + escapeHtml(firstText(quote.itemDescription, quote.itemType, 'Transport request')) + '</div>',
                     '</div>',
                     '<div class="listing-cell review-actions-cell">',
