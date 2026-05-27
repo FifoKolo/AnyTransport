@@ -3131,6 +3131,9 @@ $selected = choose_richest_store($preferredStoreFile, $storeFile);
 $store = $selected['store'];
 if (!empty($selected['file']) && $selected['file'] !== $storeFile) {
     @file_put_contents(__DIR__ . '/email.log', gmdate('c') . " | store_read_selected source={$selected['file']} active={$storeFile} score=" . (string) ($selected['score'] ?? -1) . "\n", FILE_APPEND | LOCK_EX);
+    // Keep reads and writes on the same physical store file for this request.
+    // Otherwise data can be read from one file but persisted to another.
+    $storeFile = $selected['file'];
 }
 $input = read_json_input();
 
