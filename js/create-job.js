@@ -26860,6 +26860,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (hasLoginModal && canOpenModal) {
                     try {
                         sessionStorage.setItem('anytransport_auth_return_url', window.location.href);
+                        sessionStorage.setItem('anytransport_customer_quote_flow', '1');
                     } catch (_error) {
                         // Ignore storage write issues and still open the modal.
                     }
@@ -26870,9 +26871,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 window.location.href = 'index.html#login';
             };
 
+            const blockProviderCustomerQuoteSubmit = () => {
+                if (typeof auth === 'undefined' || !auth.isLoggedIn()) {
+                    return false;
+                }
+                if (typeof auth.isAdmin === 'function' && auth.isAdmin()) {
+                    return false;
+                }
+                if (typeof auth.isProvider !== 'function' || !auth.isProvider()) {
+                    return false;
+                }
+                alert('This listing form is for customers only. Please sign in with a customer account, or create one using Sign Up.');
+                return true;
+            };
+
             if (typeof auth === 'undefined' || !auth.isLoggedIn()) {
                 console.log('[QUOTE FORM] Submit blocked: user not logged in');
                 promptLoginForPricing();
+                return;
+            }
+
+            if (blockProviderCustomerQuoteSubmit()) {
+                console.log('[QUOTE FORM] Submit blocked: provider account on customer form');
                 return;
             }
 

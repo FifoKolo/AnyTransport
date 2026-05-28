@@ -1411,9 +1411,109 @@ const auth = new AuthManager();
 window.auth = auth;
 
 // Modal Functions
+function markCustomerQuoteAuthContext() {
+    try {
+        if (/create-job\.html/i.test(window.location.pathname || window.location.href || '')) {
+            sessionStorage.setItem('anytransport_customer_quote_flow', '1');
+        }
+    } catch (_error) {
+        // Ignore storage access issues.
+    }
+}
+
+function getStoredAuthReturnUrl() {
+    try {
+        return String(sessionStorage.getItem('anytransport_auth_return_url') || '').trim();
+    } catch (_error) {
+        return '';
+    }
+}
+
+function isCustomerQuoteAuthContext() {
+    try {
+        if (sessionStorage.getItem('anytransport_customer_quote_flow') === '1') {
+            return true;
+        }
+    } catch (_error) {
+        // Ignore storage access issues.
+    }
+    return /create-job\.html/i.test(getStoredAuthReturnUrl());
+}
+
+function clearCustomerQuoteAuthContext() {
+    try {
+        sessionStorage.removeItem('anytransport_customer_quote_flow');
+    } catch (_error) {
+        // Ignore storage access issues.
+    }
+}
+
+function resumeAuthAfterLogin(currentUser) {
+    const isAdmin = currentUser && (
+        (Array.isArray(currentUser.roles) && currentUser.roles.includes('admin'))
+        || String(currentUser.role || '').toLowerCase() === 'admin'
+    );
+    const pendingQuote = sessionStorage.getItem('pending_quote_submission') || localStorage.getItem('pending_quote_submission');
+    const returnUrl = getStoredAuthReturnUrl();
+    const inCustomerQuoteFlow = isCustomerQuoteAuthContext() || !!pendingQuote;
+
+    if (inCustomerQuoteFlow && currentUser && typeof auth.isProvider === 'function' && auth.isProvider() && !isAdmin) {
+        clearCustomerQuoteAuthContext();
+        sessionStorage.removeItem('pending_quote_submission');
+        localStorage.removeItem('pending_quote_submission');
+        const message = 'This form is for customer transport requests. Please sign in with a customer account, or use Sign Up to create one.';
+        const notice = document.getElementById('login-modal-notice');
+        if (notice) {
+            notice.textContent = message;
+            notice.style.display = 'block';
+        } else {
+            alert(message);
+        }
+        if (returnUrl && /create-job\.html/i.test(returnUrl)) {
+            window.location.href = returnUrl;
+        }
+        return true;
+    }
+
+    if (pendingQuote) {
+        sessionStorage.removeItem('pending_quote_submission');
+        localStorage.removeItem('pending_quote_submission');
+        clearCustomerQuoteAuthContext();
+        sessionStorage.removeItem('anytransport_auth_return_url');
+        if (typeof showConfirmationModal === 'function') {
+            showConfirmationModal();
+        }
+        return true;
+    }
+
+    if (isAdmin) {
+        clearCustomerQuoteAuthContext();
+        sessionStorage.removeItem('anytransport_auth_return_url');
+        window.location.href = auth.resolveHubNavHref('dashboard.html#verification-review');
+        return true;
+    }
+
+    if (inCustomerQuoteFlow && returnUrl) {
+        clearCustomerQuoteAuthContext();
+        sessionStorage.removeItem('anytransport_auth_return_url');
+        window.location.href = returnUrl;
+        return true;
+    }
+
+    if (returnUrl) {
+        clearCustomerQuoteAuthContext();
+        sessionStorage.removeItem('anytransport_auth_return_url');
+        window.location.href = returnUrl;
+        return true;
+    }
+
+    return false;
+}
+
 function openLoginModal() {
     try {
         sessionStorage.setItem('anytransport_auth_return_url', window.location.href);
+        markCustomerQuoteAuthContext();
     } catch (_error) {
         // Ignore storage access issues; auth flow still works with default redirect.
     }
@@ -1568,7 +1668,6 @@ if (loginForm) {
             try {
                 const loginResult = auth.login(email, password);
                 const currentUser = getUserFromAuthResult(loginResult);
-                const isAdmin = currentUser && ((Array.isArray(currentUser.roles) && currentUser.roles.includes('admin')) || String(currentUser.role || '').toLowerCase() === 'admin');
 
                 if (currentUser && String(currentUser.role || '') === 'provider') {
                     if (startProviderStripeOnboarding(currentUser)) {
@@ -1578,25 +1677,13 @@ if (loginForm) {
 
                 closeLoginModal();
 
-                // Check if we're redirecting after form submission
-                const pendingQuote = sessionStorage.getItem('pending_quote_submission') || localStorage.getItem('pending_quote_submission');
-                if (pendingQuote) {
-                    sessionStorage.removeItem('pending_quote_submission');
-                    localStorage.removeItem('pending_quote_submission');
-                    showConfirmationModal();
-                } else {
-                    if (isAdmin) {
-                        sessionStorage.removeItem('anytransport_auth_return_url');
-                        window.location.href = 'dashboard.html#verification-review';
-                        return;
-                    }
-                    const returnUrl = sessionStorage.getItem('anytransport_auth_return_url');
-                    if (returnUrl) {
-                        sessionStorage.removeItem('anytransport_auth_return_url');
-                        window.location.href = returnUrl;
-                        return;
-                    }
-                    // Stay on the current page so the landing page remains the default.
+                if (resumeAuthAfterLogin(currentUser)) {
+                    return;
+                }
+
+                if (currentUser && typeof auth.isProvider === 'function' && auth.isProvider()) {
+                    window.location.href = auth.resolveDefaultHomeHref();
+                    return;
                 }
             } catch (error) {
                 const message = error && error.message ? error.message : 'Unable to log in.';
@@ -1841,27 +1928,14 @@ if (signupForm) {
                 return;
             }
             closeSignupModal();
-            
-            // Check if we're redirecting after form submission
-            const pendingQuote = sessionStorage.getItem('pending_quote_submission') || localStorage.getItem('pending_quote_submission');
-            if (pendingQuote) {
-                sessionStorage.removeItem('pending_quote_submission');
-                localStorage.removeItem('pending_quote_submission');
-                showConfirmationModal();
-            } else {
-                const isAdmin = currentUser && ((Array.isArray(currentUser.roles) && currentUser.roles.includes('admin')) || String(currentUser.role || '').toLowerCase() === 'admin');
-                if (isAdmin) {
-                    sessionStorage.removeItem('anytransport_auth_return_url');
-                    window.location.href = 'dashboard.html#verification-review';
-                    return;
-                }
-                const returnUrl = sessionStorage.getItem('anytransport_auth_return_url');
-                if (returnUrl) {
-                    sessionStorage.removeItem('anytransport_auth_return_url');
-                    window.location.href = returnUrl;
-                    return;
-                }
-                // Stay on the current page so users can choose when to open the dashboard.
+
+            if (resumeAuthAfterLogin(currentUser)) {
+                return;
+            }
+
+            if (currentUser && typeof auth.isProvider === 'function' && auth.isProvider()) {
+                window.location.href = auth.resolveDefaultHomeHref();
+                return;
             }
         } else {
             alert('Please fill in all required fields');
