@@ -10218,6 +10218,11 @@ window.hydrateCreateJobFormFromSavedQuote = function hydrateCreateJobFormFromSav
         window.pendingServiceFromUrl = itemType;
     }
 
+    const transportSpace = normalizeTransportSpaceValue(q.transportSpace);
+    if (transportSpace) {
+        setSelectedTransportSpace(transportSpace);
+    }
+
     const petsRaw = q.petsJson || (q.petDetails && q.petDetails.pets);
     if (typeof petsRaw === 'string' && petsRaw.trim()) {
         setEl('pets-json-hidden', petsRaw);
@@ -20046,6 +20051,24 @@ function getSelectedTransportSpace() {
     }
 }
 
+function setSelectedTransportSpace(value) {
+    const normalized = normalizeTransportSpaceValue(value);
+    if (!normalized) {
+        return false;
+    }
+    try {
+        sessionStorage.setItem(TRANSPORT_SPACE_STORAGE_KEY, normalized);
+        return true;
+    } catch (_e) {
+        return false;
+    }
+}
+
+function getOverviewTransportSpaceSummary() {
+    const value = getSelectedTransportSpace();
+    return value ? getTransportSpaceLabel(value) : '—';
+}
+
 // Quote Request Form
 document.addEventListener('DOMContentLoaded', function() {
     getSelectedTransportSpace();
@@ -21139,6 +21162,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const placeholderMap = {
                 'summary-service': 'Example: House Removals',
+                'summary-transport-space': 'Example: Dedicated Transport Space',
                 'summary-pickup-type': 'Example: House',
                 'summary-delivery-type': 'Example: Apartment',
                 'summary-pickup-elevator': 'Example: Yes',
@@ -21270,6 +21294,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 setSummaryValue('summary-service', stopCount ? `Multi-stop (${stopCount} stops)` : 'Multi-stop');
+                setSummaryValue('summary-transport-space', getOverviewTransportSpaceSummary());
                 setSummaryValue('summary-pickup-type', firstType || '—');
                 setSummaryValue('summary-delivery-type', lastType || '—');
                 setSummaryValue('summary-floors', floorSummary || '—');
@@ -21507,6 +21532,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             setSummaryValue('summary-service', getServiceDisplayName(serviceLabel || '') || '—');
+            setSummaryValue('summary-transport-space', getOverviewTransportSpaceSummary());
             setSummaryValue('summary-pickup-type', pickupType || '—');
             setSummaryValue('summary-delivery-type', deliveryType || '—');
             setSummaryValue('summary-pickup-elevator', getOverviewElevatorStatus('pickup'));
@@ -35354,6 +35380,30 @@ function openOverviewEditModal(valueId) {
             setOverviewFieldValue('item-description-hidden', value);
             if (typeof window.setActiveServiceIcon === 'function') {
                 window.setActiveServiceIcon(value);
+            }
+            refreshOverviewAfterEdit();
+            modal.classList.remove('active');
+        };
+    } else if (valueId === 'summary-transport-space') {
+        const current = getSelectedTransportSpace() || 'dedicated';
+        title.textContent = 'Edit Transport Space';
+        subtitle.textContent = 'Choose dedicated vehicle space or shared space for this listing.';
+        body.innerHTML = `
+            <div class="overview-editor-field">
+                <label for="overview-edit-transport-space">Transport space</label>
+                <select id="overview-edit-transport-space">
+                    <option value="dedicated" ${current === 'dedicated' ? 'selected' : ''}>Dedicated Transport Space</option>
+                    <option value="shared" ${current === 'shared' ? 'selected' : ''}>Shared Space</option>
+                </select>
+                <p style="margin:8px 0 0;font-size:0.9rem;color:#64748b;line-height:1.45;">
+                    Dedicated means only your items are transported. Shared means your items may share vehicle space with another customer&apos;s order.
+                </p>
+            </div>
+        `;
+        onSave = () => {
+            const value = body.querySelector('#overview-edit-transport-space')?.value || '';
+            if (!setSelectedTransportSpace(value)) {
+                return;
             }
             refreshOverviewAfterEdit();
             modal.classList.remove('active');
