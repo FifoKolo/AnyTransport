@@ -1,4 +1,4 @@
-/** Diagnostics: `?at_debug=1` (session), `localStorage.setItem('anytransport_debug','1')`, or `window.ANYTRANSPORT_DEBUG = true`. */
+﻿/** Diagnostics: `?at_debug=1` (session), `localStorage.setItem('anytransport_debug','1')`, or `window.ANYTRANSPORT_DEBUG = true`. */
 (function () {
     window.anytransportIsDebug = function anytransportIsDebug() {
         try {
@@ -844,7 +844,7 @@ class AuthManager {
         if (menu.dataset.profileMenuVersion !== profileMenuVersion || hasLegacyMenu) {
             menu.innerHTML = [
                 '<a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>',
-                '<a href="customer-dashboard.html?tab=forms&my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">My Request Forms</a>',
+                '<a href="customer-dashboard.html?tab=forms&my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Active listings</a>',
                 '<a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-listings" id="navbar-hub-listings-link" role="menuitem">My Listings</a>',
                 '<a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',
                 '<a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>',
@@ -975,7 +975,7 @@ class AuthManager {
             '</button>',
             '<div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-ready="1">',
             '  <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>',
-            '  <a href="customer-dashboard.html?tab=forms&my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">My Request Forms</a>',
+            '  <a href="customer-dashboard.html?tab=forms&my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Active listings</a>',
             '  <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-listings" id="navbar-hub-listings-link" role="menuitem">My Listings</a>',
             '  <a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',
             '  <a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>',
@@ -2129,7 +2129,7 @@ function showConfirmationModal() {
         const formIdLabel = document.getElementById('confirmation-form-id');
         if (formIdLabel) {
             if (formIdText) {
-                formIdLabel.textContent = 'Form ID: ' + formIdText;
+                formIdLabel.textContent = 'Listing ID: ' + formIdText;
                 formIdLabel.style.display = 'block';
             } else {
                 formIdLabel.textContent = '';

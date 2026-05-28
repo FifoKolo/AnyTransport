@@ -1,4 +1,4 @@
-// --- Contact/Email Validation System ---
+﻿// --- Contact/Email Validation System ---
 const contactBlocker = {
     // Spelled-out number words
     numberWords: ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'],
@@ -6450,11 +6450,11 @@ document.addEventListener('DOMContentLoaded', function () {
             modal.innerHTML = `
                 <div class="reset-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="reset-confirm-title" aria-describedby="reset-confirm-copy">
                     <div class="reset-confirm-icon" aria-hidden="true">!</div>
-                    <h3 class="reset-confirm-title" id="reset-confirm-title">Reset Form Progress?</h3>
-                    <p class="reset-confirm-copy" id="reset-confirm-copy">This will clear all form data and return you to Step 1. This action cannot be undone.</p>
+                    <h3 class="reset-confirm-title" id="reset-confirm-title">Reset listing progress?</h3>
+                    <p class="reset-confirm-copy" id="reset-confirm-copy">This will clear all listing data and return you to Step 1. This action cannot be undone.</p>
                     <div class="reset-confirm-actions">
                         <button type="button" class="reset-confirm-btn cancel" id="reset-confirm-cancel">Keep Editing</button>
-                        <button type="button" class="reset-confirm-btn danger" id="reset-confirm-confirm">Reset Form</button>
+                        <button type="button" class="reset-confirm-btn danger" id="reset-confirm-confirm">Reset listing</button>
                     </div>
                 </div>
             `;
@@ -6635,7 +6635,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 try {
                     shouldReset = await showResetConfirmationModal();
                 } catch (_error) {
-                    shouldReset = window.confirm('This will clear all form data and return you to Step 1. Continue?');
+                    shouldReset = window.confirm('This will clear all listing data and return you to Step 1. Continue?');
                 }
 
                 if (!shouldReset) return;
@@ -23391,7 +23391,7 @@ document.addEventListener('DOMContentLoaded', function() {
         petsList.innerHTML = '';
 
         if (pets.length === 0) {
-            petsList.innerHTML = '<div class="dimensions-list-empty">No pets added yet. Fill in the form below and click <strong>Add Another Pet</strong>.</div>';
+            petsList.innerHTML = '<div class="dimensions-list-empty">No pets added yet. Fill in the details below and click <strong>Add Another Pet</strong>.</div>';
             updatePetEntryTitle();
             return;
         }
@@ -23577,7 +23577,7 @@ document.addEventListener('DOMContentLoaded', function() {
             deleteFormBtn.style.display = (hasDraft || isEditing) ? '' : 'none';
             Array.from(deleteFormBtn.childNodes).forEach((node) => {
                 if (node.nodeType === Node.TEXT_NODE && String(node.textContent || '').trim()) {
-                    node.textContent = isEditing ? ' Cancel edit' : ' Clear form';
+                    node.textContent = isEditing ? ' Cancel edit' : ' Clear entry';
                 }
             });
         }
@@ -27797,7 +27797,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 try {
                     savedQuote = saveQuoteLocally(quoteData);
                 } catch (error) {
-                    alert(error && error.message ? error.message : 'Unable to save this form. Please try again.');
+                    alert(error && error.message ? error.message : 'Unable to save this listing. Please try again.');
                     return;
                 }
             }

@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
     const STANDARD_TRANSPORT_MODES = ['Car', 'Motorbike', 'Bicycle', 'Van', 'Truck', 'Trailer'];
     const STANDARD_PAYMENT_METHOD_KEYS = ['cash', 'cheque', 'visa', 'mastercard', 'paypal', 'americanExpress', 'bankTransfer', 'revolut'];
     let editorCustomTransportModes = [];
@@ -246,7 +246,7 @@
                 const service = escapeHtml(firstText(job.service, 'Transport job'));
                 const route = escapeHtml(firstText(job.route, 'Route not listed'));
                 const when = escapeHtml(formatReviewWhen(job.date) || 'Date unknown');
-                const formId = job.formId ? ('Form #' + escapeHtml(String(job.formId))) : '';
+                const formId = job.formId ? ('Listing #' + escapeHtml(String(job.formId))) : '';
                 const amount = job.bidAmount != null && Number(job.bidAmount) > 0
                     ? (' · €' + escapeHtml(String(Number(job.bidAmount).toFixed(2))))
                     : '';
@@ -326,7 +326,7 @@
                 const who = escapeHtml(firstText(review.customerName, 'Customer'));
                 const when = review.createdAt ? escapeHtml(formatReviewWhen(review.createdAt)) : '';
                 const text = escapeHtml(firstText(review.text, ''));
-                const formId = review.formId ? (' · Form #' + escapeHtml(String(review.formId))) : '';
+                const formId = review.formId ? (' · Listing #' + escapeHtml(String(review.formId))) : '';
                 return '<li style="margin-bottom:10px;"><strong>' + stars + '</strong> ' + who
                     + (when ? (' · ' + when) : '') + formId
                     + (text ? ('<div style="margin-top:4px;color:#475569;">' + text + '</div>') : '')

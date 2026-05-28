@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
     const LISTING_STORAGE_KEY = 'anytransport_quote_requests';
     const BID_STORAGE_KEY = 'anytransport_provider_bids';
     const SAVED_MESSAGES_STORAGE_KEY = 'anytransport_provider_saved_messages';
@@ -37,7 +37,7 @@
         const transportSpaceLabel = getTransportSpaceDisplay(quote);
         subtitleEl.textContent = transportSpaceLabel
             ? ('Listing ' + listingId + ' • ' + transportSpaceLabel)
-            : ('Listing ' + listingId + ' • Full submitted form details');
+            : ('Listing ' + listingId + ' • Full listing details');
 
         const isAdmin = isAdminUser();
         const showQuoteTools = isTransportProviderUser();
@@ -579,18 +579,18 @@
         wrapper.style.borderTop = '1px solid #e2e8f0';
         wrapper.innerHTML = [
             '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
-            '<button type="button" class="btn btn-danger provider-report-open">Report this form</button>',
+            '<button type="button" class="btn btn-danger provider-report-open">Report this listing</button>',
             '<span class="provider-report-status" style="font-size:13px; color:#64748b;"></span>',
             '</div>',
             '<div class="provider-report-modal" style="display:none; position:fixed; inset:0; z-index:1200;">',
             '<div class="provider-report-modal-backdrop" style="position:absolute; inset:0; background:rgba(15, 23, 42, 0.45);"></div>',
             '<div style="position:relative; max-width:520px; margin:8vh auto; background:#fff; border-radius:12px; border:1px solid #e2e8f0; box-shadow:0 20px 45px rgba(15, 23, 42, 0.25); padding:16px;">',
-            '<h4 style="margin:0 0 8px;">Report this form</h4>',
+            '<h4 style="margin:0 0 8px;">Report this listing</h4>',
             '<p style="margin:0 0 10px; color:#64748b; font-size:13px;">If this listing looks suspicious (fake/scam/abuse), report it to admin.</p>',
             '<div style="display:grid; gap:8px;">',
             '<select class="form-input provider-report-reason">',
             '<option value="">Select reason</option>',
-            '<option value="false_form">False or misleading form</option>',
+            '<option value="false_form">False or misleading listing</option>',
             '<option value="suspected_scam">Suspected scam</option>',
             '<option value="abusive_user">Abusive user behaviour</option>',
             '<option value="other">Other issue</option>',
