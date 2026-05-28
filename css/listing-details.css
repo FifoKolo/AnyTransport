@@ -741,6 +741,16 @@ body.listing-details--customer .details-workspace {
     background: linear-gradient(180deg, #f7fbff 0%, #eef7ff 100%);
 }
 
+.modern-stat-card--transport-space {
+    border-color: #f9a8d4;
+    background: linear-gradient(180deg, #fff5f9 0%, #ffe8f1 100%);
+}
+
+.modern-stat-card--transport-space strong,
+.modern-stat-card--transport-space .modern-stat-value {
+    color: #be185d;
+}
+
 .modern-stat-card--span-2 {
     grid-column: 1 / -1;
 }

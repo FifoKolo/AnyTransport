@@ -1008,6 +1008,16 @@
     text-align: center;
 }
 
+.requirement-item--transport-space {
+    border-color: #f9a8d4;
+    background: linear-gradient(180deg, #fff5f9 0%, #ffe8f1 100%);
+    grid-column: 1 / -1;
+}
+
+.requirement-item--transport-space .requirement-value {
+    color: #be185d;
+}
+
 .requirement-label {
     font-size: 0.75rem;
     text-transform: uppercase;

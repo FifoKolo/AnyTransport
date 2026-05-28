@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>AnyTransport - We save you money moving anything, anywhere</title>
-    <link rel="stylesheet" href="css/style.css?v=20260322-1">
+    <link rel="stylesheet" href="css/style.css?v=20260528-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260522-1">
     <link rel="stylesheet" href="css/house-removal.css?v=20260322-1">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
@@ -166,24 +166,26 @@
         <section class="hero-section">
             <div class="hero-container">
                 <div class="hero-content">
-                    <div class="hero-content-box">
-                        <h1>Low Cost House Removals</h1>
-                        <p class="hero-subtitle">Get quotes from local transport companies and save up to 75%!</p>
-                        
-                        <div class="hero-cta-group">
-                            <button class="btn btn-cta btn-hero-cta" onclick="scrollToServicesSection()">
-                                Start a Quote
-                            </button>
-                        </div>
+                    <p class="hero-transport-lead">Choose how you want your items transported, then pick a service below.</p>
+                    <div class="hero-transport-choices" id="hero-transport-choices" role="group" aria-label="Transport space type">
+                        <button type="button" class="hero-content-box hero-transport-card" data-transport-space="dedicated" aria-pressed="false">
+                            <h2 class="hero-transport-card-title">Dedicated Transport Space</h2>
+                            <p class="hero-subtitle hero-transport-card-desc">Your transport provider delivers only your items — the vehicle space is reserved for your order.</p>
+                            <span class="btn btn-cta btn-hero-cta hero-transport-card-cta">Select</span>
+                        </button>
+                        <button type="button" class="hero-content-box hero-transport-card" data-transport-space="shared" aria-pressed="false">
+                            <h2 class="hero-transport-card-title">Shared Space</h2>
+                            <p class="hero-subtitle hero-transport-card-desc">You are fine with your items sharing vehicle space with another customer&apos;s order — often a more economical option.</p>
+                            <span class="btn btn-cta btn-hero-cta hero-transport-card-cta">Select</span>
+                        </button>
                     </div>
+                    <p class="hero-transport-hint" id="hero-transport-hint" role="status">Select dedicated or shared space, then choose a service below.</p>
                 </div>
                 
                 <div class="hero-image">
                     <img src="https://images.unsplash.com/photo-1586864387634-27a89e72d4a9?w=600" alt="Transport Van" />
                 </div>
             </div>
-        </section>
-
         </section>
 
         <!-- How We Work Section -->
@@ -248,98 +250,99 @@
         <section class="services-section" id="services">
             <div class="section-container">
                 <h2>Which service would you like to avail of?</h2>
-                <div class="services-grid">
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=House%20Removals&freshStart=1'">
+                <p class="services-transport-reminder" id="services-transport-reminder">Choose dedicated or shared transport space above before selecting a service.</p>
+                <div class="services-grid" id="services-grid">
+                    <div class="service-card" data-service="House Removals" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1600518464441-9154a4dea21b?w=400" alt="House Removals">
                         <div class="service-overlay">
                             <h3>House Removals</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Customized%20Items&freshStart=1'">
+                    <div class="service-card" data-service="Customized Items" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1581783898377-1c85bf937427?w=400" alt="Customized Items">
                         <div class="service-overlay">
                             <h3>Customized Items</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Campervan%2FCar%20Transport&freshStart=1'">
+                    <div class="service-card" data-service="Campervan/Car Transport" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=400" alt="Car/Campervan Transport">
                         <div class="service-overlay">
                             <h3>Car/Campervan Transport</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Piano%20Transport&freshStart=1'">
+                    <div class="service-card" data-service="Piano Transport" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=400" alt="Piano Transport">
                         <div class="service-overlay">
                             <h3>Piano Transport</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Caravan%2FTrailer%20Transport&freshStart=1'">
+                    <div class="service-card" data-service="Caravan/Trailer Transport" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400" alt="Caravan/Trailer Transport">
                         <div class="service-overlay">
                             <h3>Caravan/Trailer Transport</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Motorbike%20Transport&freshStart=1'">
+                    <div class="service-card" data-service="Motorbike Transport" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=400" alt="Motorbike Transport">
                         <div class="service-overlay">
                             <h3>Motorbike Transport</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Specialist%20%26%20Antiques&freshStart=1'">
+                    <div class="service-card" data-service="Specialist & Antiques" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1513694203232-719a280e022f?w=400" alt="Specialist & Antiques">
                         <div class="service-overlay">
                             <h3>Specialist & Antiques</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Vehicle%20Parts&freshStart=1'">
+                    <div class="service-card" data-service="Vehicle Parts" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?w=400" alt="Vehicle Parts">
                         <div class="service-overlay">
                             <h3>Vehicle Parts</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Freight&freshStart=1'">
+                    <div class="service-card" data-service="Freight" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400" alt="Freight">
                         <div class="service-overlay">
                             <h3>Freight</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Clearance&freshStart=1'">
+                    <div class="service-card" data-service="Clearance" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1581783898377-1c85bf937427?w=400" alt="Clearance">
                         <div class="service-overlay">
                             <h3>Clearance</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Boats&freshStart=1'">
+                    <div class="service-card" data-service="Boats" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400" alt="Boats">
                         <div class="service-overlay">
                             <h3>Boats</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Office%20Removals&freshStart=1'">
+                    <div class="service-card" data-service="Office Removals" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1497366216548-37526070297c?w=400" alt="Office Removals">
                         <div class="service-overlay">
                             <h3>Office Removals</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Industrial&freshStart=1'">
+                    <div class="service-card" data-service="Industrial" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=400" alt="Industrial">
                         <div class="service-overlay">
                             <h3>Industrial</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Man%20Power&freshStart=1'">
+                    <div class="service-card" data-service="Man Power" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=400" alt="Man Power">
                         <div class="service-overlay">
                             <h3>Man Power</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Pets&freshStart=1'">
+                    <div class="service-card" data-service="Pets" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=400" alt="Pets">
                         <div class="service-overlay">
                             <h3>Pets</h3>
                         </div>
                     </div>
-                    <div class="service-card" onclick="try{sessionStorage.setItem('anytransport_force_fresh_start_v1','1');}catch(e){};window.location.href='create-job.html?service=Other&freshStart=1'">
+                    <div class="service-card" data-service="Other" role="button" tabindex="0">
                         <img src="https://images.unsplash.com/photo-1586864387967-d02ef85d93e8?w=400" alt="Other">
                         <div class="service-overlay">
                             <h3>Other</h3>
@@ -595,12 +598,108 @@
         </footer>
     </main>
 <script>
-function scrollToServicesSection() {
-    const section = document.getElementById('services');
-    if (section) {
-        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+(function () {
+    var TRANSPORT_SPACE_KEY = 'anytransport_transport_space';
+
+    function getTransportSpace() {
+        try {
+            var stored = sessionStorage.getItem(TRANSPORT_SPACE_KEY);
+            if (stored === 'dedicated' || stored === 'shared') {
+                return stored;
+            }
+        } catch (_e) {}
+        return '';
     }
-}
+
+    function transportSpaceLabel(value) {
+        return value === 'shared' ? 'Shared Space' : 'Dedicated Transport Space';
+    }
+
+    function setTransportSpace(value) {
+        if (value !== 'dedicated' && value !== 'shared') {
+            return;
+        }
+        try {
+            sessionStorage.setItem(TRANSPORT_SPACE_KEY, value);
+        } catch (_e) {}
+        document.querySelectorAll('.hero-transport-card').forEach(function (card) {
+            var selected = card.getAttribute('data-transport-space') === value;
+            card.classList.toggle('is-selected', selected);
+            card.setAttribute('aria-pressed', selected ? 'true' : 'false');
+            var cta = card.querySelector('.hero-transport-card-cta');
+            if (cta) {
+                cta.textContent = selected ? 'Selected' : 'Select';
+            }
+        });
+        var hint = document.getElementById('hero-transport-hint');
+        if (hint) {
+            hint.textContent = transportSpaceLabel(value) + ' selected — choose a service below.';
+        }
+        var reminder = document.getElementById('services-transport-reminder');
+        if (reminder) {
+            reminder.textContent = 'Transport space: ' + transportSpaceLabel(value) + '. Tap a service to continue.';
+            reminder.classList.add('is-ready');
+        }
+        document.querySelectorAll('.service-card[data-service]').forEach(function (card) {
+            card.classList.remove('service-card--blocked');
+        });
+    }
+
+    window.navigateToService = function (serviceName) {
+        var space = getTransportSpace();
+        if (!space) {
+            var heroHint = document.getElementById('hero-transport-hint');
+            if (heroHint) {
+                heroHint.textContent = 'Please choose dedicated or shared transport space first.';
+            }
+            document.querySelector('.hero-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+        }
+        try {
+            sessionStorage.setItem('anytransport_force_fresh_start_v1', '1');
+        } catch (_e) {}
+        var url = 'create-job.html?service=' + encodeURIComponent(serviceName)
+            + '&freshStart=1&transportSpace=' + encodeURIComponent(space);
+        window.location.href = url;
+    };
+
+    document.querySelectorAll('.hero-transport-card').forEach(function (card) {
+        card.addEventListener('click', function () {
+            setTransportSpace(card.getAttribute('data-transport-space'));
+        });
+    });
+
+    var grid = document.getElementById('services-grid');
+    if (grid) {
+        grid.addEventListener('click', function (event) {
+            var card = event.target.closest('.service-card[data-service]');
+            if (!card) {
+                return;
+            }
+            window.navigateToService(card.getAttribute('data-service'));
+        });
+        grid.addEventListener('keydown', function (event) {
+            if (event.key !== 'Enter' && event.key !== ' ') {
+                return;
+            }
+            var card = event.target.closest('.service-card[data-service]');
+            if (!card) {
+                return;
+            }
+            event.preventDefault();
+            window.navigateToService(card.getAttribute('data-service'));
+        });
+    }
+
+    var initial = getTransportSpace();
+    if (initial) {
+        setTransportSpace(initial);
+    } else {
+        document.querySelectorAll('.service-card[data-service]').forEach(function (card) {
+            card.classList.add('service-card--blocked');
+        });
+    }
+})();
 </script>
 </body>
 <script>

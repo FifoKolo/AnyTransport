@@ -1920,7 +1920,7 @@
             '<div class="listing-cell">Preview</div>',
             '<div class="listing-cell">',
             '<div class="listing-title">' + escapeHtml(getQuoteTitle(previewQuote)) + '</div>',
-            '<div class="listing-sub">Listing ' + escapeHtml(getFormIdLabel(previewQuote)) + ' • ' + escapeHtml(previewQuote.itemDescription || 'General move') + '</div>',
+            '<div class="listing-sub">Listing ' + escapeHtml(getFormIdLabel(previewQuote)) + (getTransportSpaceLabel(previewQuote) ? (' • ' + getTransportSpaceLabel(previewQuote)) : '') + ' • ' + escapeHtml(previewQuote.itemDescription || 'General move') + '</div>',
             '</div>',
             '<div class="listing-cell">' + escapeHtml(getFromLabel(previewQuote)) + '</div>',
             '<div class="listing-cell">' + escapeHtml(getToLabel(previewQuote)) + '</div>',
@@ -1943,13 +1943,15 @@
         const isFocused = !!state.focusedFormId && formId === state.focusedFormId;
 
         const quickQuoteText = lowest ? ('€' + Number(lowest.amount).toFixed(2)) : 'No bids';
+        const transportSpace = getTransportSpaceLabel(quote);
+        const transportSpaceSuffix = transportSpace ? (' • ' + transportSpace) : '';
         return [
             '<article class="provider-listing' + (isFocused ? ' is-focused-form' : '') + '" data-quote-id="' + escapeHtml(quote.id) + '" data-form-id="' + escapeHtml(formId) + '">',
             '<div class="listing-row body listing-row-toggle" role="button" tabindex="0" aria-expanded="false">',
             '<div class="listing-cell">' + escapeHtml(timeAgoLabel(quote.submittedAt)) + '</div>',
             '<div class="listing-cell">',
             '<div class="listing-title">' + escapeHtml(getQuoteTitle(quote)) + '</div>',
-            '<div class="listing-sub">Listing ' + escapeHtml(getFormIdLabel(quote)) + ' • ' + escapeHtml(quote.itemDescription || 'General move') + '</div>',
+            '<div class="listing-sub">Listing ' + escapeHtml(getFormIdLabel(quote)) + transportSpaceSuffix + ' • ' + escapeHtml(quote.itemDescription || 'General move') + '</div>',
             '</div>',
             '<div class="listing-cell">' + escapeHtml(getFromLabel(quote)) + '</div>',
             '<div class="listing-cell">' + escapeHtml(getToLabel(quote)) + '</div>',
@@ -1979,7 +1981,8 @@
         const timeLines = getPreferredTimesLines(quote);
         const storageLines = getStorageLines(quote);
         const spaceRequiredLines = getSpaceRequiredLines(quote);
-        
+        const transportSpaceLabel = getTransportSpaceLabel(quote) || 'Not specified';
+
         // Build full pickup address
         const pickupFull = pickupCity + (pickupPostcode ? ', ' + pickupPostcode : '');
         // Build full delivery address
@@ -2020,8 +2023,12 @@
             '<span class="requirement-label">Storage</span>',
             '<span class="requirement-value">' + renderRequirementLines(storageLines) + '</span>',
             '</div>',
+            '<div class="requirement-item requirement-item--transport-space">',
+            '<span class="requirement-label">Transport space</span>',
+            '<span class="requirement-value">' + escapeHtml(transportSpaceLabel) + '</span>',
+            '</div>',
             '<div class="requirement-item">',
-            '<span class="requirement-label">Space Required</span>',
+            '<span class="requirement-label">Volume estimate</span>',
             '<span class="requirement-value">' + renderRequirementLines(spaceRequiredLines) + '</span>',
             '</div>',
             '</div>',
@@ -2124,6 +2131,15 @@
         const endDate = parseDateValue(firstText(quote.serviceStorageEndDatetime, quote['service-storage-end-datetime']));
         const durationLabel = formatDurationLabel(startDate, endDate);
         return [durationLabel ? 'Yes, for ' + durationLabel : 'Yes, duration pending'];
+    }
+
+    function getTransportSpaceLabel(quote) {
+        const label = firstText(quote && quote.transportSpaceLabel, '');
+        if (label) return label;
+        const raw = String((quote && quote.transportSpace) || '').trim().toLowerCase();
+        if (raw === 'dedicated') return 'Dedicated Transport Space';
+        if (raw === 'shared') return 'Shared Space';
+        return '';
     }
 
     function getSpaceRequiredLines(quote) {

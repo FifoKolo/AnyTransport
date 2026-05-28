@@ -763,7 +763,7 @@ function send_provider_customer_rating_email($provider, $review, $isUpdate = fal
     $comment = trim((string) ($review['text'] ?? ''));
     $formId = trim((string) ($review['formId'] ?? ''));
     $quoteId = trim((string) ($review['quoteId'] ?? ''));
-    $listingLabel = $formId !== '' ? ('Form #' . $formId) : ($quoteId !== '' ? $quoteId : 'your listing');
+    $listingLabel = $formId !== '' ? ('Listing #' . $formId) : ($quoteId !== '' ? $quoteId : 'your listing');
 
     $subject = $isUpdate
         ? 'Customer updated their review on ' . $listingLabel
@@ -817,7 +817,7 @@ function send_customer_welcome_email($customer) {
     $subject = 'Welcome to AnyTransport';
     $body = "Hi " . $customerName . ",\n\n";
     $body .= "Thank you for creating your AnyTransport account.\n\n";
-    $body .= "You can request transport quotes, track your forms, and message providers from your profile:\n";
+    $body .= "You can request transport quotes, track your listings, and message providers from your profile:\n";
     $body .= $dashboardUrl . "\n\n";
     $body .= "To submit a new request, visit:\n";
     $body .= $quoteUrl . "\n\n";
@@ -1515,6 +1515,8 @@ function quote_scalar_change_fields() {
         'pickupLiftAvailable' => 'Pickup lift access',
         'deliveryLiftAvailable' => 'Delivery lift access',
         'itemType' => 'Service type',
+        'transportSpace' => 'Transport space',
+        'transportSpaceLabel' => 'Transport space type',
         'itemDescription' => 'Item description',
         'instructions' => 'Instructions',
         'serviceSpecialInstructions' => 'Special instructions',
@@ -1530,8 +1532,8 @@ function quote_scalar_change_fields() {
         'customerBudgetMode' => 'Budget preference',
         'customerBudgetMin' => 'Budget (minimum)',
         'customerBudgetMax' => 'Budget (maximum)',
-        'customerFormComplete' => 'Form marked complete',
-        'customerFormCompletedAt' => 'Form completed at',
+        'customerFormComplete' => 'Listing marked complete',
+        'customerFormCompletedAt' => 'Listing completed at',
     );
 }
 
@@ -1761,7 +1763,7 @@ function send_provider_quote_updated_email($provider, $quoteLabel, $quoteId, $ch
     if ($customerName !== '') {
         $body .= " (" . $customerName . ")";
     }
-    $body .= " updated their request form " . $quoteLabel . ".\n\n";
+    $body .= " updated their listing " . $quoteLabel . ".\n\n";
     $body .= "Changes:\n";
     foreach ($changes as $line) {
         $body .= "• " . $line . "\n";
@@ -4038,11 +4040,11 @@ switch ($action) {
             if ($isQuoteUpdate) {
                 $subject = 'Your request was updated';
                 $body = "Hi " . $customerName . ",\n\n";
-                $body .= "Your request form has been updated successfully.\n";
+                $body .= "Your listing has been updated successfully.\n";
             } else {
                 $subject = 'We received your request';
                 $body = "Hi " . $customerName . ",\n\n";
-                $body .= "Your request form has been submitted successfully.\n";
+                $body .= "Your listing has been submitted successfully.\n";
             }
             if ($formReference !== '') {
                 $body .= "Reference: " . $formReference . "\n";
@@ -4112,11 +4114,11 @@ switch ($action) {
 
         $name = trim((string) ($recipient['name'] ?? $recipient['username'] ?? $quote['customerName'] ?? 'there'));
         $formReference = trim((string) ($quote['formId'] ?? $quote['id'] ?? $quoteId));
-        $subject = 'Update about your AnyTransport form ' . $formReference;
+        $subject = 'Update about your AnyTransport listing ' . $formReference;
         $body = "Hello " . $name . ",\n\n";
-        $body .= "An admin reviewed your request form (" . $formReference . ") and sent this note:\n\n";
+        $body .= "An admin reviewed your listing (" . $formReference . ") and sent this note:\n\n";
         $body .= $reason . "\n\n";
-        $body .= "You can view your form in your dashboard:\n";
+        $body .= "You can view your listing in your dashboard:\n";
         $body .= get_app_url('customer-dashboard.html') . "\n\n";
         $body .= "Regards,\nAnyTransport";
 

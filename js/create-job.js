@@ -20017,8 +20017,39 @@ const MULTI_STOP_OFFICE_ITEMS = [
     { name: 'Add more items', category: 'other' }
 ];
 
+const TRANSPORT_SPACE_STORAGE_KEY = 'anytransport_transport_space';
+
+function normalizeTransportSpaceValue(raw) {
+    const value = String(raw || '').trim().toLowerCase();
+    return value === 'dedicated' || value === 'shared' ? value : '';
+}
+
+function getTransportSpaceLabel(value) {
+    return value === 'shared' ? 'Shared Space' : 'Dedicated Transport Space';
+}
+
+function getSelectedTransportSpace() {
+    try {
+        const params = new URLSearchParams(window.location.search || '');
+        const fromQuery = normalizeTransportSpaceValue(params.get('transportSpace'));
+        if (fromQuery) {
+            sessionStorage.setItem(TRANSPORT_SPACE_STORAGE_KEY, fromQuery);
+            return fromQuery;
+        }
+    } catch (_e) {
+        // Ignore URL parsing issues.
+    }
+    try {
+        return normalizeTransportSpaceValue(sessionStorage.getItem(TRANSPORT_SPACE_STORAGE_KEY));
+    } catch (_e2) {
+        return '';
+    }
+}
+
 // Quote Request Form
 document.addEventListener('DOMContentLoaded', function() {
+    getSelectedTransportSpace();
+
     // Collapsible Additional Information Section
     const toggleBtn = document.getElementById('additional-toggle');
     const section = document.querySelector('.collapsible-section');
@@ -27068,6 +27099,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
             quoteData.itemType = itemTypeValue;
             quoteData.itemDescription = firstItemName || itemTypeValue;
+
+            const transportSpace = getSelectedTransportSpace();
+            if (transportSpace) {
+                quoteData.transportSpace = transportSpace;
+                quoteData.transportSpaceLabel = getTransportSpaceLabel(transportSpace);
+            }
 
             if (itemTypeValue === 'Piano Transport') {
                 quoteData.pianosJson = getElementValue('pianos-json-hidden');

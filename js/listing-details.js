@@ -34,7 +34,10 @@
         const listingId = getFormIdLabel(quote);
 
         titleEl.textContent = getQuoteTitle(quote);
-        subtitleEl.textContent = 'Listing ' + listingId + ' • Full submitted form details';
+        const transportSpaceLabel = getTransportSpaceDisplay(quote);
+        subtitleEl.textContent = transportSpaceLabel
+            ? ('Listing ' + listingId + ' • ' + transportSpaceLabel)
+            : ('Listing ' + listingId + ' • Full submitted form details');
 
         const isAdmin = isAdminUser();
         const showQuoteTools = isTransportProviderUser();
@@ -345,9 +348,11 @@
         const distance = firstText(formatDistance(quote), 'Not provided');
         const moveDate = firstText(getMoveDate(quote), 'Not provided');
         const service = firstText(getServiceLabel(quote), 'Not provided');
+        const transportSpace = getTransportSpaceDisplay(quote) || 'Not specified';
 
         root.innerHTML = [
             buildSidebarInfoRow('Listing ID', listingId),
+            buildSidebarInfoRow('Transport space', transportSpace),
             buildSidebarInfoRow('Number of bids', '<span id="sidebar-bid-count">0</span>', true),
             buildSidebarInfoRow('Distance', distance),
             buildSidebarInfoRow('Pickup date', moveDate),
@@ -649,6 +654,21 @@
         return firstText(quote && quote.formId, quote && quote.id, quote && quote.quoteId, quote && quote.requestId, 'Not provided');
     }
 
+    function getTransportSpaceDisplay(quote) {
+        const label = firstText(quote && quote.transportSpaceLabel, '');
+        if (label) {
+            return label;
+        }
+        const raw = String((quote && quote.transportSpace) || '').trim().toLowerCase();
+        if (raw === 'dedicated') {
+            return 'Dedicated Transport Space';
+        }
+        if (raw === 'shared') {
+            return 'Shared Space';
+        }
+        return '';
+    }
+
     function getWatchlistStorageKey(providerId) {
         return 'anytransport_provider_watchlist_' + String(providerId || 'guest').trim();
     }
@@ -737,7 +757,9 @@
         const storageSummary = getStorageSummary(quote);
         const budgetSummary = getCustomerBudgetSummary(quote);
         const averageVolumeSummary = isProvider ? getAverageVolumeSummary(quote) : '';
+        const transportSpaceSummary = getTransportSpaceDisplay(quote) || 'Not specified';
         const stats = [
+            buildModernStat('Transport space', transportSpaceSummary, 'modern-stat-card--span-2 modern-stat-card--transport-space'),
             buildModernStat('Collection', collection, '', 'Lift: ' + pickupLiftStatus),
             buildModernStat('Delivery', delivery, '', 'Lift: ' + deliveryLiftStatus),
             buildModernStat('Distance', distance),

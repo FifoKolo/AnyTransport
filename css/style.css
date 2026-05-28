@@ -79,6 +79,89 @@ body {
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
 }
 
+.hero-transport-lead {
+    font-size: 1.05rem;
+    color: #64748b;
+    margin: 0 0 20px;
+    line-height: 1.5;
+}
+
+.hero-transport-choices {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    margin-bottom: 16px;
+}
+
+.hero-transport-card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    text-align: left;
+    width: 100%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    font: inherit;
+    color: inherit;
+}
+
+.hero-transport-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 44px rgba(0, 0, 0, 0.12);
+}
+
+.hero-transport-card.is-selected {
+    border-color: #f50057;
+    box-shadow: 0 14px 44px rgba(245, 0, 87, 0.15);
+}
+
+.hero-transport-card-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin: 0 0 12px;
+    line-height: 1.25;
+    color: #1e293b;
+}
+
+.hero-transport-card-desc {
+    flex: 1;
+    margin-bottom: 24px;
+    font-size: 1rem;
+    line-height: 1.55;
+}
+
+.hero-transport-card .hero-transport-card-cta {
+    pointer-events: none;
+    margin-top: auto;
+}
+
+.hero-transport-hint {
+    margin: 0 0 20px;
+    font-size: 0.95rem;
+    color: #64748b;
+}
+
+.services-transport-reminder {
+    text-align: center;
+    color: #64748b;
+    margin: -8px 0 24px;
+    font-size: 0.98rem;
+}
+
+.services-transport-reminder.is-ready {
+    color: #0f766e;
+    font-weight: 600;
+}
+
+.service-card--blocked {
+    opacity: 0.72;
+}
+
+.service-card[data-service] {
+    cursor: pointer;
+}
+
 .quote-form {
     background: white;
     padding: 30px;
@@ -809,6 +892,14 @@ body {
 }
 
 @media (max-width: 768px) {
+    .hero-transport-choices {
+        grid-template-columns: 1fr;
+    }
+
+    .hero-transport-card {
+        padding: 32px 28px;
+    }
+
     .hero-content h1 {
         font-size: 2rem;
     }
