@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
@@ -3799,7 +3799,7 @@ switch ($action) {
         $quoteId = trim((string) ($_GET['id'] ?? ''));
         $formId = trim((string) ($_GET['formId'] ?? ''));
         if ($quoteId === '' && $formId === '') {
-            send_json(array('ok' => false, 'error' => 'Quote id or formId is required.'), 400);
+            send_json(array('ok' => false, 'error' => 'Quote id or listing ID is required.'), 400);
         }
         $found = null;
         foreach ($store['quotes'] as $quote) {
@@ -4109,7 +4109,7 @@ switch ($action) {
 
         $to = trim((string) ($recipient['email'] ?? $quote['customerEmail'] ?? ''));
         if ($to === '') {
-            send_json(array('ok' => false, 'error' => 'No email address found for this form owner.'), 400);
+            send_json(array('ok' => false, 'error' => 'No email address found for this listing owner.'), 400);
         }
 
         $name = trim((string) ($recipient['name'] ?? $recipient['username'] ?? $quote['customerName'] ?? 'there'));
@@ -4140,7 +4140,7 @@ switch ($action) {
         }
         $role = strtolower(trim((string) ($sessionUser['role'] ?? '')));
         if ($role !== 'provider' && !is_admin_user($sessionUser)) {
-            send_json(array('ok' => false, 'error' => 'Only providers can report forms.'), 403);
+            send_json(array('ok' => false, 'error' => 'Only providers can report listings.'), 403);
         }
         $quoteId = trim((string) ($input['quoteId'] ?? ''));
         $reason = trim((string) ($input['reason'] ?? ''));
@@ -4150,7 +4150,7 @@ switch ($action) {
         }
         $quote = find_quote_by_id($store['quotes'], $quoteId);
         if (!is_array($quote)) {
-            send_json(array('ok' => false, 'error' => 'Form not found.'), 404);
+            send_json(array('ok' => false, 'error' => 'Listing not found.'), 404);
         }
         if (!isset($store['formReports']) || !is_array($store['formReports'])) {
             $store['formReports'] = array();
@@ -4778,12 +4778,12 @@ switch ($action) {
         }
         $quote = find_quote_by_id($store['quotes'], $quoteId);
         if (!is_array($quote)) {
-            send_json(array('ok' => false, 'error' => 'Request form not found.'), 404);
+            send_json(array('ok' => false, 'error' => 'Listing not found.'), 404);
         }
         $ownerId = trim((string) ($quote['userId'] ?? $quote['createdBy'] ?? ''));
         if ($ownerId === '' || $ownerId !== $customerId) {
             if (!session_user_owns_quote($sessionUser, $quote)) {
-                send_json(array('ok' => false, 'error' => 'You can only invite providers to your own request forms.'), 403);
+                send_json(array('ok' => false, 'error' => 'You can only invite providers to your own listings.'), 403);
             }
         }
         $provider = find_store_user_by_id($store, $providerId);
@@ -4804,7 +4804,7 @@ switch ($action) {
         }
         ensure_store_provider_invites($store);
         if (find_provider_invite_index($store, $quoteId, $providerId) >= 0) {
-            send_json(array('ok' => true, 'alreadyInvited' => true, 'message' => 'This provider was already invited to this form.'));
+            send_json(array('ok' => true, 'alreadyInvited' => true, 'message' => 'This provider was already invited to this listing.'));
         }
         $quoteLabel = trim((string) ($quote['formId'] ?? $quoteId));
         $customerName = trim((string) ($sessionUser['username'] ?? $sessionUser['nickname'] ?? $sessionUser['name'] ?? 'A customer'));
@@ -4848,11 +4848,11 @@ switch ($action) {
             return is_array($existing) && trim((string) ($existing['id'] ?? '')) === $quoteId;
         });
         if ($index < 0) {
-            send_json(array('ok' => false, 'error' => 'Request form not found.'), 404);
+            send_json(array('ok' => false, 'error' => 'Listing not found.'), 404);
         }
         $quote = $store['quotes'][$index];
         if (!session_user_owns_quote($sessionUser, $quote)) {
-            send_json(array('ok' => false, 'error' => 'You can only mark your own request forms as complete.'), 403);
+            send_json(array('ok' => false, 'error' => 'You can only mark your own listings as complete.'), 403);
         }
         $quote['customerFormComplete'] = true;
         $quote['customerFormCompletedAt'] = gmdate('c');
@@ -4878,14 +4878,14 @@ switch ($action) {
             return is_array($existing) && trim((string) ($existing['id'] ?? '')) === $quoteId;
         });
         if ($index < 0) {
-            send_json(array('ok' => false, 'error' => 'Request form not found.'), 404);
+            send_json(array('ok' => false, 'error' => 'Listing not found.'), 404);
         }
         $quote = $store['quotes'][$index];
         if (!session_user_owns_quote($sessionUser, $quote)) {
-            send_json(array('ok' => false, 'error' => 'You can only update your own request forms.'), 403);
+            send_json(array('ok' => false, 'error' => 'You can only update your own listings.'), 403);
         }
         if (empty($quote['customerFormComplete'])) {
-            send_json(array('ok' => false, 'error' => 'This request form is not marked complete.'), 400);
+            send_json(array('ok' => false, 'error' => 'This listing is not marked complete.'), 400);
         }
         $customerId = trim((string) ($sessionUser['id'] ?? ''));
         $removedReviews = remove_customer_reviews_for_quote($store, $customerId, $quoteId);
@@ -4923,13 +4923,13 @@ switch ($action) {
         }
         $quote = find_quote_by_id($store['quotes'], $quoteId);
         if (!is_array($quote)) {
-            send_json(array('ok' => false, 'error' => 'Request form not found.'), 404);
+            send_json(array('ok' => false, 'error' => 'Listing not found.'), 404);
         }
         if (!session_user_owns_quote($sessionUser, $quote)) {
-            send_json(array('ok' => false, 'error' => 'You can only review providers for your own request forms.'), 403);
+            send_json(array('ok' => false, 'error' => 'You can only review providers for your own listings.'), 403);
         }
         if (empty($quote['customerFormComplete'])) {
-            send_json(array('ok' => false, 'error' => 'Mark your request form as complete before leaving a review.'), 400);
+            send_json(array('ok' => false, 'error' => 'Mark your listing as complete before leaving a review.'), 400);
         }
         $provider = find_store_user_by_id($store, $providerId);
         if (!is_discoverable_provider($provider)) {

@@ -1,4 +1,4 @@
-/* global anytransportApi */
+﻿/* global anytransportApi */
 (function () {
     'use strict';
 
@@ -189,12 +189,12 @@
         if (!modal || !q) return;
         budgetEditQuoteId = String(q.id || '').trim();
         if (!budgetEditQuoteId) {
-            alert('This form cannot be updated (missing ID).');
+            alert('This listing cannot be updated (missing ID).');
             return;
         }
         const label = document.getElementById('customer-budget-form-label');
         if (label) {
-            label.textContent = 'Form #' + getQuoteLabel(q);
+            label.textContent = 'Listing #' + getQuoteLabel(q);
         }
         const status = document.getElementById('customer-budget-save-status');
         if (status) {
@@ -233,7 +233,7 @@
             }) || null;
         }
         if (!quote) {
-            alert('Request form not found.');
+            alert('Listing not found.');
             return false;
         }
 
@@ -529,7 +529,7 @@
         if (!el) return;
 
         if (!quotes.length) {
-            el.innerHTML = '<tr><td colspan="7" class="customer-empty-cell">You have not submitted any request forms yet. <a href="index.html#services">Create a listing</a>.</td></tr>';
+            el.innerHTML = '<tr><td colspan="7" class="customer-empty-cell">You have not submitted any listings yet. <a href="index.html#services">Create a listing</a>.</td></tr>';
             return;
         }
 
@@ -540,7 +540,7 @@
         const completed = sorted.filter(function (q) { return isQuoteFormComplete(q); });
 
         if (!active.length) {
-            el.innerHTML = '<tr><td colspan="7" class="customer-empty-cell">No active request forms. Completed forms are listed below.</td></tr>';
+            el.innerHTML = '<tr><td colspan="7" class="customer-empty-cell">No active listings. Completed listings are listed below.</td></tr>';
         } else {
             el.innerHTML = active.map(function (q) {
                 return buildQuoteRowHtml(q, bids, highlightFormId);
@@ -565,7 +565,7 @@
     function deleteQuoteForUser(authRef, user, quoteId) {
         const id = String(quoteId || '').trim();
         if (!id) return false;
-        if (!confirm('Delete this request form? This cannot be undone.')) return false;
+        if (!confirm('Delete this listing? This cannot be undone.')) return false;
 
         try {
             if (window.anytransportApi && typeof window.anytransportApi.deleteQuote === 'function') {
@@ -578,7 +578,7 @@
                 localStorage.setItem(LISTING_STORAGE_KEY, JSON.stringify(filtered));
             }
         } catch (error) {
-            alert(error && error.message ? error.message : 'Unable to delete this form right now.');
+            alert(error && error.message ? error.message : 'Unable to delete this listing right now.');
             return false;
         }
 
@@ -712,7 +712,7 @@
     function renderFormMessageGroupsHtml(quotes, bids) {
         const list = Array.isArray(quotes) ? quotes.slice() : [];
         if (!list.length) {
-            return '<p class="customer-empty">No forms yet. Submit a request to receive provider bids.</p>';
+            return '<p class="customer-empty">No listings yet. Submit a request to receive provider bids.</p>';
         }
 
         const rows = list.map(function (quote) {
@@ -723,11 +723,11 @@
             const formLabel = getQuoteLabel(quote);
             const summaryText = latestBid
                 ? firstLine(latestBid.message, 150)
-                : 'No bids yet for this form.';
+                : 'No bids yet for this listing.';
             const latestWhen = latestBid ? formatWhen(latestBid.createdAt) : formatWhen(quote.submittedAt || quote.createdAt);
             return [
                 '<article class="customer-msg-card customer-msg-card--in" style="margin-bottom:12px;">',
-                '<div class="customer-msg-meta">Form ' + escapeHtml(formLabel) + ' · ' + escapeHtml(latestWhen) + '</div>',
+                '<div class="customer-msg-meta">Listing ' + escapeHtml(formLabel) + ' · ' + escapeHtml(latestWhen) + '</div>',
                 '<h4 class="customer-msg-title">' + escapeHtml(getServiceTitle(quote)) + '</h4>',
                 '<p class="customer-msg-text">' + escapeHtml(summaryText) + '</p>',
                 '<div class="customer-msg-actions">',
@@ -858,7 +858,7 @@
         const header = opts.showHeader === false ? '' : [
             '<section class="customer-messages-section" aria-labelledby="customer-forms-heading">',
             '<h3 id="customer-forms-heading" class="customer-messages-section-title">Messages on your listings</h3>',
-            '<p class="customer-messages-section-hint">Provider bids on each request form. Open a group to read and reply per bid.</p>'
+            '<p class="customer-messages-section-hint">Provider bids on each listing. Open a group to read and reply per bid.</p>'
         ].join('');
         const footer = opts.showHeader === false ? '' : '</section>';
         return header + inner + footer;
@@ -944,16 +944,16 @@
         const formLabel = String(formIdLabel || '').trim() || '—';
         const activeSortMode = String(sortMode || 'newest').trim().toLowerCase();
         if (!qid) {
-            el.innerHTML = '<p class="customer-empty">Unable to load grouped messages for this form.</p>';
+            el.innerHTML = '<p class="customer-empty">Unable to load grouped messages for this listing.</p>';
             return;
         }
         const groupedBids = sortGroupedBids(getActiveBidsForQuote(qid, bids), activeSortMode);
         if (!groupedBids.length) {
             el.innerHTML = [
                 '<article class="customer-msg-card customer-msg-card--in">',
-                '<div class="customer-msg-meta">Form ' + escapeHtml(formLabel) + '</div>',
+                '<div class="customer-msg-meta">Listing ' + escapeHtml(formLabel) + '</div>',
                 '<h4 class="customer-msg-title">No bids yet</h4>',
-                '<p class="customer-msg-text">This form has no active bids/messages yet.</p>',
+                '<p class="customer-msg-text">This listing has no active bids/messages yet.</p>',
                 '<div class="customer-msg-actions"><button type="button" class="btn btn-outline btn-sm customer-back-to-groups-btn">Back to grouped forms</button></div>',
                 '</article>'
             ].join('');
@@ -961,9 +961,9 @@
         }
         el.innerHTML = [
             '<article class="customer-msg-card customer-msg-card--in">',
-            '<div class="customer-msg-meta">Grouped by form</div>',
-            '<h4 class="customer-msg-title">Form ' + escapeHtml(formLabel) + ' · ' + groupedBids.length + ' bid' + (groupedBids.length === 1 ? '' : 's') + '</h4>',
-            '<p class="customer-msg-text">All bid messages for this form are listed below.</p>',
+            '<div class="customer-msg-meta">Grouped by listing</div>',
+            '<h4 class="customer-msg-title">Listing ' + escapeHtml(formLabel) + ' · ' + groupedBids.length + ' bid' + (groupedBids.length === 1 ? '' : 's') + '</h4>',
+            '<p class="customer-msg-text">All bid messages for this listing are listed below.</p>',
             '<div class="customer-msg-actions customer-msg-toolbar">',
             '<label for="customer-group-sort-select" style="font-size:12px; color:#334155; font-weight:600;">Sort bids</label>',
             '<select id="customer-group-sort-select" class="form-input customer-group-sort-select" data-quote-id="' + escapeHtml(qid) + '" data-form-id="' + escapeHtml(formLabel) + '" style="max-width:240px;">',

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -54,7 +54,7 @@
                     </button>
                     <div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-ready="1">
                         <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Dashboard</a>
-                        <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Forms</a>
+                        <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Listings</a>
                         <a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>
                         <a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>
                         <a href="find-providers.html" class="nav-item navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link" role="menuitem">Find providers</a>
@@ -71,7 +71,7 @@
         <header class="customer-dashboard-header">
             <div class="customer-dashboard-intro">
                 <h1>Hello, <span id="customer-user-name">Customer</span></h1>
-                <p class="muted">Your profile: request history, messages from providers, and live edits to your forms.</p>
+                <p class="muted">Your profile: request history, messages from providers, and live edits to your listings.</p>
             </div>
             <div class="customer-dashboard-actions">
                 <a class="btn btn-primary" href="../find-providers.html">Find providers on map</a>
@@ -89,7 +89,7 @@
                 <table class="customer-quotes-table" aria-label="My listings">
                     <thead>
                         <tr>
-                            <th>Form ID</th>
+                            <th>Listing ID</th>
                             <th>Submitted</th>
                             <th>Service</th>
                             <th>Route</th>
@@ -104,13 +104,13 @@
                 </table>
             </div>
             <div id="customer-completed-quotes-wrap" class="customer-completed-quotes-wrap" style="display:none; margin-top:28px;">
-                <h3 class="customer-completed-heading">Completed request forms</h3>
-                <p class="customer-completed-note muted">These are hidden from the link list in Messages. Open a thread to leave a review or revert the complete status (reverting also removes any review you left for that form).</p>
+                <h3 class="customer-completed-heading">Completed listings</h3>
+                <p class="customer-completed-note muted">These are hidden from the link list in Messages. Open a thread to leave a review or revert the complete status (reverting also removes any review you left for that listing).</p>
                 <div class="customer-quotes-table-wrap">
                     <table class="customer-quotes-table" aria-label="Completed listings">
                         <thead>
                             <tr>
-                                <th>Form ID</th>
+                                <th>Listing ID</th>
                                 <th>Submitted</th>
                                 <th>Service</th>
                                 <th>Route</th>

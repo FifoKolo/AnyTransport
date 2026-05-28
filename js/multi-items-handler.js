@@ -2900,7 +2900,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (deleteFormBtn) {
                 deleteFormBtn.style.display = hasDraft ? '' : 'none';
-                deleteFormBtn.textContent = isEditing ? 'Cancel edit' : 'Clear form';
+                deleteFormBtn.textContent = isEditing ? 'Cancel edit' : 'Clear entry';
             }
 
             if (addAnotherBtn) {

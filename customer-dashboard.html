@@ -54,7 +54,7 @@
                     </button>
                     <div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-version="4">
                             <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>
-                            <a href="customer-dashboard.html?tab=forms&amp;my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">My Request Forms</a>
+                            <a href="customer-dashboard.html?tab=forms&amp;my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Active listings</a>
                             <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-listings" id="navbar-hub-listings-link" role="menuitem">My Listings</a>
                             <a href="provider-profile.html" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>
                             <a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>
@@ -72,7 +72,7 @@
         <header class="customer-dashboard-header">
             <div class="customer-dashboard-intro">
                 <h1>Hello, <span id="customer-user-name">Customer</span></h1>
-                <p class="muted">Your profile: request history, messages from providers, and live edits to your forms.</p>
+                <p class="muted">Your profile: request history, messages from providers, and live edits to your listings.</p>
             </div>
             <div class="customer-dashboard-actions">
                 <a id="customer-open-provider-board-btn" class="btn btn-outline" href="dashboard.html#provider-board" style="display:none;">Provider dashboard</a>
@@ -92,7 +92,7 @@
                 <table class="customer-quotes-table" aria-label="My listings">
                     <thead>
                         <tr>
-                            <th>Form ID</th>
+                            <th>Listing ID</th>
                             <th>Submitted</th>
                             <th>Service</th>
                             <th>Route</th>
@@ -107,13 +107,13 @@
                 </table>
             </div>
             <div id="customer-completed-quotes-wrap" class="customer-completed-quotes-wrap" style="display:none; margin-top:28px;">
-                <h3 class="customer-completed-heading">Completed request forms</h3>
-                <p class="customer-completed-note muted">These are hidden from the link list in Messages. Open a thread to leave a review or revert the complete status (reverting also removes any review you left for that form).</p>
+                <h3 class="customer-completed-heading">Completed listings</h3>
+                <p class="customer-completed-note muted">These are hidden from the link list in Messages. Open a thread to leave a review or revert the complete status (reverting also removes any review you left for that listing).</p>
                 <div class="customer-quotes-table-wrap">
                     <table class="customer-quotes-table" aria-label="Completed listings">
                         <thead>
                             <tr>
-                                <th>Form ID</th>
+                                <th>Listing ID</th>
                                 <th>Submitted</th>
                                 <th>Service</th>
                                 <th>Route</th>
@@ -203,9 +203,9 @@
     </div>
 
     <script src="js/cache-maintenance.js?v=20260322-2"></script>
-    <script src="js/auth.js?v=20260522-10"></script>
+    <script src="js/auth.js?v=20260528-9"></script>
     <script src="js/notifications.js?v=20260420-4"></script>
-    <script src="js/site-navbar.js?v=20260519-2"></script>
-    <script src="js/customer-dashboard.js?v=20260522-12"></script>
+    <script src="js/site-navbar.js?v=20260528-9"></script>
+    <script src="js/customer-dashboard.js?v=20260528-9"></script>
 </body>
 </html>

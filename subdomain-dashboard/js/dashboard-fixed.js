@@ -1,4 +1,4 @@
-// Dashboard supports both customer and provider workflows.
+﻿// Dashboard supports both customer and provider workflows.
 (function () {
     const BID_STORAGE_KEY = 'anytransport_provider_bids';
     const LISTING_STORAGE_KEY = 'anytransport_quote_requests';
@@ -1759,7 +1759,7 @@
                     '<article class="provider-listing" style="margin-bottom:12px;">',
                     '<div class="listing-row body" style="grid-template-columns: 160px 1fr 1fr;">',
                     '<div class="listing-cell">',
-                    '<div class="listing-title">Form ' + formId + '</div>',
+                    '<div class="listing-title">Listing ' + formId + '</div>',
                     '<div class="listing-sub">' + escapeHtml(formatDateTime(quote.submittedAt || quote.createdAt || '')) + '</div>',
                     '</div>',
                     '<div class="listing-cell">',
@@ -1771,15 +1771,15 @@
                     '<div class="listing-cell review-actions-cell">',
                     '<textarea class="form-input admin-form-note" rows="3" placeholder="Reason to email the user"></textarea>',
                     '<div class="actions review-actions" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
-                    '<button type="button" class="btn btn-primary admin-view-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">View form</button>',
-                    '<button type="button" class="btn btn-secondary admin-email-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">Email form owner</button>',
+                    '<button type="button" class="btn btn-primary admin-view-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">View listing</button>',
+                    '<button type="button" class="btn btn-secondary admin-email-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">Email listing owner</button>',
                     '<span class="admin-email-status" style="display:none; align-items:center; font-weight:700; color:#64748b;"></span>',
                     '</div>',
                     '</div>',
                     '</div>',
                     '</article>'
                 ].join('');
-            }).join('') : '<div class="empty-inventory">No forms found.</div>';
+            }).join('') : '<div class="empty-inventory">No listings found.</div>';
 
             const groupedReportsByForm = {};
             openReports.forEach((report) => {
@@ -1834,7 +1834,7 @@
                     '<article class="provider-listing" style="margin-bottom:12px;">',
                     '<div class="listing-row body" style="grid-template-columns: 200px 1fr 1fr;">',
                     '<div class="listing-cell">',
-                    '<div class="listing-title">Form ' + formId + '</div>',
+                    '<div class="listing-title">Listing ' + formId + '</div>',
                     '<div class="listing-sub">Latest: ' + createdAt + '</div>',
                     '<div class="listing-sub">By: ' + reportedBy + '</div>',
                     '</div>',
@@ -1844,7 +1844,7 @@
                     '</div>',
                     '<div class="listing-cell review-actions-cell">',
                     '<div class="actions review-actions" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
-                    '<button type="button" class="btn btn-primary admin-view-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">View form</button>',
+                    '<button type="button" class="btn btn-primary admin-view-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">View listing</button>',
                     '<button type="button" class="btn btn-outline admin-report-group-toggle" data-group-key="' + escapeHtml(group.key) + '">' + (isExpanded ? 'Hide reports' : 'Expand reports') + '</button>',
                     '</div>',
                     '</div>',
@@ -1863,7 +1863,7 @@
                 '<a href="#admin-section-approved" class="admin-side-nav-link">Approved providers</a>',
                 '<a href="#admin-section-rejected" class="admin-side-nav-link">Rejected providers</a>',
                 '<a href="#admin-section-reports" class="admin-side-nav-link">Provider reports</a>',
-                '<a href="#admin-section-forms" class="admin-side-nav-link">Submitted forms</a>',
+                '<a href="#admin-section-forms" class="admin-side-nav-link">Submitted listings</a>',
                 '</nav>',
                 '</aside>',
                 '<div>',
@@ -1897,7 +1897,7 @@
                 reportRows,
                 '</section>',
                 '<section id="admin-section-forms">',
-                '<h3 style="margin:0 0 10px;">All submitted forms</h3>',
+                '<h3 style="margin:0 0 10px;">All submitted listings</h3>',
                 quoteRows,
                 '</section>',
                 '</div>',
@@ -1915,7 +1915,7 @@
         const myBidText = myBid ? ('Your bid €' + Number(myBid.amount).toFixed(2)) : 'Not bid yet';
 
         return [
-            '<article class="provider-listing provider-listing-preview" data-quote-id="' + escapeHtml(previewQuote.id) + '" aria-label="Transport provider form preview">',
+            '<article class="provider-listing provider-listing-preview" data-quote-id="' + escapeHtml(previewQuote.id) + '" aria-label="Transport provider listing preview">',
             '<div class="listing-row body listing-row-toggle" role="button" tabindex="0" aria-expanded="false">',
             '<div class="listing-cell">Preview</div>',
             '<div class="listing-cell">',
@@ -2034,7 +2034,7 @@
             '</div>',
             '</div>',
             
-            '<p class="quick-info-hint">Click "Get Details" to open the full form, including the complete bidding section.</p>',
+            '<p class="quick-info-hint">Click "Get Details" to open the full listing, including the complete bidding section.</p>',
             '</div>',
             '</section>'
         ].join('');
@@ -2577,7 +2577,7 @@
             '<div class="overview-step-header">',
             '<div>',
             '<h4>Step 8: Overview</h4>',
-            '<div class="map-meta">Complete summary pulled from the form data</div>',
+            '<div class="map-meta">Complete summary pulled from the listing data</div>',
             '</div>',
             '<span class="preview-badge">Overview</span>',
             '</div>',

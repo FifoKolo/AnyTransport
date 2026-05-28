@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -273,7 +273,7 @@
                     </button>
                     <div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-ready="1">
                         <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Dashboard</a>
-                        <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Forms</a>
+                        <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Listings</a>
                         <a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>
                         <a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>
                         <a href="find-providers.html" class="nav-item navbar-hub-link at-nav-find-providers" id="navbar-find-providers-link" role="menuitem">Find providers</a>
@@ -300,15 +300,15 @@
         <section id="messages-context-toolbar" class="messages-context-toolbar" style="display:none;" aria-label="Conversation actions">
             <p id="messages-context-summary">Manage this request while you chat.</p>
             <div id="messages-link-form-wrap" class="messages-link-form-row" style="display:none;">
-                <label for="messages-link-form-select">Link to your request</label>
+                <label for="messages-link-form-select">Link to your listing</label>
                 <select id="messages-link-form-select" class="messages-link-form-select" aria-describedby="messages-context-summary">
-                    <option value="">Choose a request form…</option>
+                    <option value="">Choose a listing…</option>
                 </select>
             </div>
             <div class="messages-context-actions">
                 <a id="messages-view-profile-btn" class="messages-toolbar-btn messages-toolbar-btn--outline" href="#" target="_blank" rel="noopener">View provider profile</a>
-                <button type="button" id="messages-mark-complete-btn" class="messages-toolbar-btn messages-toolbar-btn--outline" hidden>Mark form complete</button>
-                <span id="messages-form-complete-badge" class="messages-form-complete-badge" hidden>Form marked complete</span>
+                <button type="button" id="messages-mark-complete-btn" class="messages-toolbar-btn messages-toolbar-btn--outline" hidden>Mark listing complete</button>
+                <span id="messages-form-complete-badge" class="messages-form-complete-badge" hidden>Listing marked complete</span>
                 <button type="button" id="messages-revert-complete-btn" class="messages-toolbar-btn messages-toolbar-btn--outline" hidden>Revert complete status</button>
                 <button type="button" id="messages-leave-review-btn" class="messages-toolbar-btn messages-toolbar-btn--primary" hidden>Leave a review</button>
             </div>
@@ -339,7 +339,7 @@
     <div id="messages-review-modal" class="messages-review-modal" role="dialog" aria-modal="true" aria-labelledby="messages-review-title" hidden>
         <div class="messages-review-dialog">
             <h2 id="messages-review-title">Review this provider</h2>
-            <p style="margin:0;color:#64748b;font-size:14px;">Share your experience after your request form is complete.</p>
+            <p style="margin:0;color:#64748b;font-size:14px;">Share your experience after your listing is complete.</p>
             <div id="messages-review-stars" class="messages-review-stars" role="group" aria-label="Star rating">
                 <button type="button" data-rating="1" aria-label="1 star">★</button>
                 <button type="button" data-rating="2" aria-label="2 stars">★</button>

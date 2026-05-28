@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -27,7 +27,7 @@
                     <button class="btn btn-outline" type="button" onclick="openLoginModal()">Login</button>
                 </div>
                 <div id="user-menu" style="display: none;">
-                    <a href="customer-dashboard.html" class="btn btn-outline" style="margin-right:8px;">My requests</a>
+                    <a href="customer-dashboard.html" class="btn btn-outline" style="margin-right:8px;">My listings</a>
                     <button class="btn btn-primary" type="button" onclick="logout()">Logout</button>
                 </div>
             </div>
@@ -37,7 +37,7 @@
     <main class="find-providers-wrap">
         <header class="find-providers-header">
             <h1>Find transport providers near you</h1>
-            <p>Search by your town or address and set how far you want to look (km). Approved providers in that area appear on the map — message them or invite them to quote on one of your request forms.</p>
+            <p>Search by your town or address and set how far you want to look (km). Approved providers in that area appear on the map — message them or invite them to quote on one of your listings.</p>
         </header>
 
         <div class="find-providers-search">
@@ -78,7 +78,7 @@
             <button type="button" class="find-invite-modal-close" data-invite-close aria-label="Close">&times;</button>
             <h2 id="invite-modal-title">Invite to quote</h2>
             <p id="invite-modal-provider" class="find-invite-modal-sub"></p>
-            <label for="invite-quote-select">Choose one of your request forms</label>
+            <label for="invite-quote-select">Choose one of your listings</label>
             <select id="invite-quote-select" class="form-input"></select>
             <p id="invite-modal-status" class="find-invite-modal-status" aria-live="polite"></p>
             <div class="find-invite-modal-actions">
@@ -88,8 +88,8 @@
         </div>
     </div>
 
-    <script src="js/auth.js?v=20260522-11"></script>
+    <script src="js/auth.js?v=20260528-9"></script>
     <script src="js/transport-mode-icons.js?v=20260522-1"></script>
-    <script src="js/find-providers.js?v=20260522-6"></script>
+    <script src="js/find-providers.js?v=20260528-9"></script>
 </body>
 </html>

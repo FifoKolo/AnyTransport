@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
     'use strict';
 
     const MAPBOX_TOKEN = 'pk.eyJ1IjoiZmlsa28iLCJhIjoiY2x6dmdlODUwMDZsMjJqcGcxY2U2b290dCJ9.9DRj6-luEwljI3xea5ATHQ';
@@ -289,25 +289,25 @@
         const status = document.getElementById('invite-modal-status');
         if (!modal || !select) return;
         if (sub) {
-            sub.textContent = 'Invite ' + providerDisplayName(provider) + ' to submit a quote on your form.';
+            sub.textContent = 'Invite ' + providerDisplayName(provider) + ' to submit a quote on your listing.';
         }
         if (status) {
             status.textContent = '';
             status.classList.remove('find-invite-modal-status--error');
         }
-        select.innerHTML = '<option value="">Loading your forms…</option>';
+        select.innerHTML = '<option value="">Loading your listings…</option>';
         modal.hidden = false;
 
         loadCustomerQuotes().then(function (quotes) {
             if (!quotes.length) {
-                select.innerHTML = '<option value="">No request forms yet</option>';
+                select.innerHTML = '<option value="">No listings yet</option>';
                 return;
             }
             select.innerHTML = [
-                '<option value="">Select a form…</option>'
+                '<option value="">Select a listing…</option>'
             ].concat(quotes.map(function (q) {
                 const fid = String(q.formId || q.id || '').trim();
-                const label = (fid ? 'Form ' + fid : 'Request') + ' — ' + firstText(q.itemType, q.itemDescription, 'Transport');
+                const label = (fid ? 'Listing ' + fid : 'Request') + ' — ' + firstText(q.itemType, q.itemDescription, 'Transport');
                 return '<option value="' + escapeHtml(String(q.id || '')) + '">' + escapeHtml(label) + '</option>';
             })).join('');
         });
@@ -325,7 +325,7 @@
         const quoteId = select ? String(select.value || '').trim() : '';
         if (!inviteTargetProvider || !quoteId) {
             if (status) {
-                status.textContent = 'Choose one of your request forms.';
+                status.textContent = 'Choose one of your listings.';
                 status.classList.add('find-invite-modal-status--error');
             }
             return;
@@ -353,7 +353,7 @@
             );
             if (status) {
                 status.textContent = result && result.alreadyInvited
-                    ? 'This provider was already invited to that form.'
+                    ? 'This provider was already invited to that listing.'
                     : 'Invitation sent. They will be notified by email and in their dashboard.';
             }
         } catch (err) {
@@ -402,7 +402,7 @@
                 + (selectedQuoteId ? ('&quoteId=' + encodeURIComponent(selectedQuoteId)) : '');
             const canInvite = !p.blockInvites;
             const inviteBtn = canInvite
-                ? '<button type="button" class="find-provider-action-btn find-provider-action-btn--invite find-invite-btn" data-provider-id="' + escapeHtml(String(p.id || '')) + '">Invite to form</button>'
+                ? '<button type="button" class="find-provider-action-btn find-provider-action-btn--invite find-invite-btn" data-provider-id="' + escapeHtml(String(p.id || '')) + '">Invite to listing</button>'
                 : '<span class="profile-help">Not accepting invites</span>';
             return [
                 '<article class="find-provider-card" data-provider-id="' + escapeHtml(String(p.id || '')) + '">',

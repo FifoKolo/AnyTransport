@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
     'use strict';
 
     function escapeHtml(s) {
@@ -418,7 +418,7 @@
         var subtitleEl = document.getElementById('messages-subtitle');
         if (subtitleEl) {
             var quote = quoteId ? loadQuoteContext(quoteId) : null;
-            var formHint = quote && quote.formId ? (' (Form #' + quote.formId + ')') : (quoteId ? '' : '');
+            var formHint = quote && quote.formId ? (' (Listing #' + quote.formId + ')') : (quoteId ? '' : '');
             subtitleEl.textContent = 'Conversation with ' + resolveUserName(toUserId) + formHint;
         }
     }
@@ -498,8 +498,8 @@
         if (!activeQuotes.length) {
             wrap.style.display = '';
             select.innerHTML = '<option value="">' + (quotes.length
-                ? 'All request forms are marked complete'
-                : 'No request forms yet — create one under Forms') + '</option>';
+                ? 'All listings are marked complete'
+                : 'No listings yet — create one under My Listings') + '</option>';
             select.disabled = true;
             return resolvedQuoteId && currentQuote && !isQuoteFormComplete(currentQuote) ? resolvedQuoteId : '';
         }
@@ -507,7 +507,7 @@
         select.disabled = false;
         var options = activeQuotes.map(function (q) {
             var fid = String(q.formId || q.id || '').trim();
-            var label = (fid ? 'Form #' + fid : 'Request') + ' — ' + firstText(q.itemType, q.itemDescription, 'Transport');
+            var label = (fid ? 'Listing #' + fid : 'Request') + ' — ' + firstText(q.itemType, q.itemDescription, 'Transport');
             if (quoteHasBidFromProvider(q, pid, bids)) {
                 label += ' · provider bid';
             }
@@ -521,7 +521,7 @@
             return (b.hasBid ? 1 : 0) - (a.hasBid ? 1 : 0);
         });
 
-        select.innerHTML = ['<option value="">Choose a request form to link…</option>']
+        select.innerHTML = ['<option value="">Choose a listing to link…</option>']
             .concat(options.map(function (o) {
                 return '<option value="' + escapeHtml(o.id) + '">' + escapeHtml(o.label) + '</option>';
             }))
@@ -622,7 +622,7 @@
 
         if (!quoteId) {
             if (summaryEl) {
-                summaryEl.textContent = 'Choose which active request form this conversation is about. Completed forms are hidden from this list.';
+                summaryEl.textContent = 'Choose which active listing this conversation is about. Completed listings are hidden from this list.';
             }
             setToolbarControlVisible(completeBtn, false);
             setToolbarControlVisible(completeBadge, false);
@@ -632,7 +632,7 @@
         }
 
         var quote = loadQuoteContext(quoteId);
-        var formLabel = quote && quote.formId ? ('Form #' + quote.formId) : 'your request';
+        var formLabel = quote && quote.formId ? ('Listing #' + quote.formId) : 'your request';
         var formComplete = isQuoteFormComplete(quote);
 
         if (summaryEl) {
@@ -644,15 +644,15 @@
         if (completeBtn) {
             setToolbarControlVisible(completeBtn, !formComplete);
             completeBtn.disabled = false;
-            completeBtn.textContent = 'Mark form complete';
+            completeBtn.textContent = 'Mark listing complete';
             if (!completeBtn.dataset.bound) {
                 completeBtn.dataset.bound = '1';
                 completeBtn.addEventListener('click', function () {
                     if (!window.anytransportApi || typeof window.anytransportApi.markQuoteFormComplete !== 'function') {
-                        alert('Unable to mark the form complete right now.');
+                        alert('Unable to mark the listing complete right now.');
                         return;
                     }
-                    if (!window.confirm('Mark this request form as complete? It will be removed from your active forms list. You can revert this later, which will also remove any review you left for this form.')) {
+                    if (!window.confirm('Mark this listing as complete? It will be removed from your active listings list. You can revert this later, which will also remove any review you left for this listing.')) {
                         return;
                     }
                     completeBtn.disabled = true;
@@ -664,7 +664,7 @@
                         refreshMessagesQuoteContext(me, toUserId, activeQuoteId);
                     } catch (err) {
                         completeBtn.disabled = false;
-                        alert((err && err.message) ? err.message : 'Could not mark the form complete.');
+                        alert((err && err.message) ? err.message : 'Could not mark the listing complete.');
                     }
                 });
             }
@@ -672,7 +672,7 @@
         if (completeBadge) {
             setToolbarControlVisible(completeBadge, formComplete);
             if (formComplete) {
-                completeBadge.textContent = 'Form marked complete';
+                completeBadge.textContent = 'Listing marked complete';
             }
         }
         var existingReview = null;
@@ -710,8 +710,8 @@
                         }
                     }
                     var revertMsg = reviewNow
-                        ? 'Reopen this request form? Your ' + String(reviewNow.rating || '') + '-star review for this provider will be removed, and the form will return to your active list.'
-                        : 'Reopen this request form? It will appear in your active forms list again.';
+                        ? 'Reopen this listing? Your ' + String(reviewNow.rating || '') + '-star review for this provider will be removed, and the listing will return to your active list.'
+                        : 'Reopen this listing? It will appear in your active listings list again.';
                     if (!window.confirm(revertMsg)) {
                         return;
                     }
@@ -740,7 +740,7 @@
             } else if (existingReview) {
                 setToolbarControlVisible(reviewBtn, false);
                 if (completeBadge) {
-                    completeBadge.textContent = 'Form complete · Review submitted (' + String(existingReview.rating || '') + '★)';
+                    completeBadge.textContent = 'Listing complete · Review submitted (' + String(existingReview.rating || '') + '★)';
                 }
             } else {
                 setToolbarControlVisible(reviewBtn, true);
