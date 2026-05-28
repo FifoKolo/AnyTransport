@@ -1448,6 +1448,22 @@ function clearCustomerQuoteAuthContext() {
     }
 }
 
+function shouldDeferProviderStripeOnboarding() {
+    return isCustomerQuoteAuthContext();
+}
+
+function isSameDocumentUrl(a, b) {
+    try {
+        const left = new URL(String(a || ''), window.location.origin);
+        const right = new URL(String(b || ''), window.location.origin);
+        return left.origin === right.origin
+            && left.pathname === right.pathname
+            && left.search === right.search;
+    } catch (_error) {
+        return String(a || '').split('#')[0] === String(b || '').split('#')[0];
+    }
+}
+
 function resumeAuthAfterLogin(currentUser) {
     const isAdmin = currentUser && (
         (Array.isArray(currentUser.roles) && currentUser.roles.includes('admin'))
@@ -1478,6 +1494,12 @@ function resumeAuthAfterLogin(currentUser) {
     if (inCustomerQuoteFlow && returnUrl) {
         clearCustomerQuoteAuthContext();
         sessionStorage.removeItem('anytransport_auth_return_url');
+        if (isSameDocumentUrl(window.location.href, returnUrl)) {
+            if (typeof auth.syncNavigationForRole === 'function') {
+                auth.syncNavigationForRole();
+            }
+            return true;
+        }
         window.location.href = returnUrl;
         return true;
     }
@@ -1592,12 +1614,20 @@ function switchToLogin() {
 
 function getProviderReturnPath() {
     const path = String(window.location.pathname || '/');
+    if (/create-job\.html$/i.test(path)) {
+        const search = String(window.location.search || '');
+        const hash = String(window.location.hash || '');
+        return path.replace(/^\//, '') + search + hash;
+    }
     const folder = path.slice(0, path.lastIndexOf('/') + 1);
     return folder + 'dashboard.html';
 }
 
 function startProviderStripeOnboarding(user) {
     if (!user || String(user.role || '') !== 'provider') {
+        return false;
+    }
+    if (shouldDeferProviderStripeOnboarding()) {
         return false;
     }
 
@@ -1651,7 +1681,7 @@ if (loginForm) {
                 const loginResult = auth.login(email, password);
                 const currentUser = getUserFromAuthResult(loginResult);
 
-                if (currentUser && String(currentUser.role || '') === 'provider') {
+                if (currentUser && String(currentUser.role || '') === 'provider' && !shouldDeferProviderStripeOnboarding()) {
                     if (startProviderStripeOnboarding(currentUser)) {
                         return;
                     }
@@ -1663,7 +1693,7 @@ if (loginForm) {
                     return;
                 }
 
-                if (currentUser && typeof auth.isProvider === 'function' && auth.isProvider()) {
+                if (currentUser && typeof auth.isProvider === 'function' && auth.isProvider() && !shouldDeferProviderStripeOnboarding()) {
                     window.location.href = auth.resolveDefaultHomeHref();
                     return;
                 }
@@ -1901,7 +1931,7 @@ if (signupForm) {
                         }
                     } catch (_e) {}
 
-                    if (startProviderStripeOnboarding(currentUser)) {
+                    if (!shouldDeferProviderStripeOnboarding() && startProviderStripeOnboarding(currentUser)) {
                         return;
                     }
                 }
@@ -1915,7 +1945,7 @@ if (signupForm) {
                 return;
             }
 
-            if (currentUser && typeof auth.isProvider === 'function' && auth.isProvider()) {
+            if (currentUser && typeof auth.isProvider === 'function' && auth.isProvider() && !shouldDeferProviderStripeOnboarding()) {
                 window.location.href = auth.resolveDefaultHomeHref();
                 return;
             }
