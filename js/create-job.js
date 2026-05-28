@@ -26871,28 +26871,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 window.location.href = 'index.html#login';
             };
 
-            const blockProviderCustomerQuoteSubmit = () => {
-                if (typeof auth === 'undefined' || !auth.isLoggedIn()) {
-                    return false;
-                }
-                if (typeof auth.isAdmin === 'function' && auth.isAdmin()) {
-                    return false;
-                }
-                if (typeof auth.isProvider !== 'function' || !auth.isProvider()) {
-                    return false;
-                }
-                alert('This listing form is for customers only. Please sign in with a customer account, or create one using Sign Up.');
-                return true;
-            };
-
             if (typeof auth === 'undefined' || !auth.isLoggedIn()) {
                 console.log('[QUOTE FORM] Submit blocked: user not logged in');
                 promptLoginForPricing();
-                return;
-            }
-
-            if (blockProviderCustomerQuoteSubmit()) {
-                console.log('[QUOTE FORM] Submit blocked: provider account on customer form');
                 return;
             }
 
@@ -27802,9 +27783,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (isUpdateOnlyFlow) {
                 const highlightId = String(quoteData.formId || '').trim();
-                const dashUrl = highlightId
-                    ? `customer-dashboard.html?highlightForm=${encodeURIComponent(highlightId)}`
-                    : 'customer-dashboard.html';
+                const dashUrl = typeof window.resolveMyListingsDashboardHref === 'function'
+                    ? window.resolveMyListingsDashboardHref(highlightId)
+                    : (highlightId
+                        ? `customer-dashboard.html?tab=forms&my-requests=1&highlightForm=${encodeURIComponent(highlightId)}`
+                        : 'customer-dashboard.html?tab=forms&my-requests=1');
                 window.location.href = dashUrl;
                 return;
             }

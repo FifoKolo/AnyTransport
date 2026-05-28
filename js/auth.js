@@ -1477,24 +1477,6 @@ function resumeAuthAfterLogin(currentUser) {
     const returnUrl = getStoredAuthReturnUrl();
     const inCustomerQuoteFlow = isCustomerQuoteAuthContext() || !!pendingQuote;
 
-    if (inCustomerQuoteFlow && currentUser && typeof auth.isProvider === 'function' && auth.isProvider() && !isAdmin) {
-        clearCustomerQuoteAuthContext();
-        sessionStorage.removeItem('pending_quote_submission');
-        localStorage.removeItem('pending_quote_submission');
-        const message = 'This form is for customer transport requests. Please sign in with a customer account, or use Sign Up to create one.';
-        const notice = document.getElementById('login-modal-notice');
-        if (notice) {
-            notice.textContent = message;
-            notice.style.display = 'block';
-        } else {
-            alert(message);
-        }
-        if (returnUrl && /create-job\.html/i.test(returnUrl)) {
-            window.location.href = returnUrl;
-        }
-        return true;
-    }
-
     if (pendingQuote) {
         sessionStorage.removeItem('pending_quote_submission');
         localStorage.removeItem('pending_quote_submission');
@@ -2076,6 +2058,23 @@ if (document.body.classList.contains('protected')) {
     requireLogin();
 }
 
+function resolveMyListingsDashboardHref(formId) {
+    const params = new URLSearchParams();
+    params.set('tab', 'forms');
+    params.set('my-requests', '1');
+    const fid = String(formId || '').trim();
+    if (fid) {
+        params.set('highlightForm', fid);
+    }
+    const path = 'customer-dashboard.html?' + params.toString();
+    if (typeof auth !== 'undefined' && auth && typeof auth.resolveHubNavHref === 'function') {
+        return auth.resolveHubNavHref(path);
+    }
+    return path;
+}
+
+window.resolveMyListingsDashboardHref = resolveMyListingsDashboardHref;
+
 // Confirmation Modal Functions
 function showConfirmationModal() {
     const modal = document.getElementById('confirmation-modal');
@@ -2110,7 +2109,7 @@ function showConfirmationModal() {
         const dashboardBtn = document.getElementById('confirmation-view-dashboard-btn');
         if (dashboardBtn) {
             dashboardBtn.textContent = 'View my listings';
-            const target = formIdText ? ('customer-dashboard.html?highlightForm=' + encodeURIComponent(formIdText)) : 'customer-dashboard.html';
+            const target = resolveMyListingsDashboardHref(formIdText);
             dashboardBtn.onclick = function () {
                 window.location.href = target;
             };
