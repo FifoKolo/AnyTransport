@@ -26378,6 +26378,40 @@ document.addEventListener('DOMContentLoaded', function() {
     window.updateProgressiveFlow = updateProgressiveFlow;
     if (quoteForm) {
         let explicitQuoteSubmitRequested = false;
+        let quoteSubmitInFlight = false;
+
+        const setQuoteSubmitButtonsBusy = (busy) => {
+            ['get-prices-btn', 'update-saved-form-btn'].forEach((id) => {
+                const btn = document.getElementById(id);
+                if (!btn) return;
+                btn.disabled = !!busy;
+                btn.setAttribute('aria-busy', busy ? 'true' : 'false');
+                if (busy) {
+                    if (!btn.dataset.busyLabelStored) {
+                        btn.dataset.busyLabelStored = btn.textContent || '';
+                    }
+                    btn.textContent = 'Submitting…';
+                } else if (btn.dataset.busyLabelStored) {
+                    btn.textContent = btn.dataset.busyLabelStored;
+                    delete btn.dataset.busyLabelStored;
+                }
+            });
+        };
+
+        const releaseQuoteSubmitLock = () => {
+            quoteSubmitInFlight = false;
+            setQuoteSubmitButtonsBusy(false);
+        };
+
+        const acquireQuoteSubmitLock = () => {
+            if (quoteSubmitInFlight) {
+                return false;
+            }
+            quoteSubmitInFlight = true;
+            setQuoteSubmitButtonsBusy(true);
+            return true;
+        };
+
         const getPricesBtn = document.getElementById('get-prices-btn');
         if (getPricesBtn) {
             getPricesBtn.addEventListener('click', () => {
@@ -26832,6 +26866,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('[QUOTE FORM] Submit blocked: text input active');
                 return;
             }
+            if (!isExplicitSubmit) {
+                console.log('[QUOTE FORM] Submit blocked: not an explicit submit');
+                return;
+            }
+            if (!acquireQuoteSubmitLock()) {
+                console.log('[QUOTE FORM] Submit ignored: submission already in progress');
+                return;
+            }
+
+            let quoteSubmitKeepLocked = false;
+            try {
             console.log('[QUOTE FORM] Submit validation passed, checking auth');
 
             const ensureFormErrorSummary = () => {
@@ -27788,6 +27833,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     : (highlightId
                         ? `customer-dashboard.html?tab=forms&my-requests=1&highlightForm=${encodeURIComponent(highlightId)}`
                         : 'customer-dashboard.html?tab=forms&my-requests=1');
+                quoteSubmitKeepLocked = true;
                 window.location.href = dashUrl;
                 return;
             }
@@ -27797,7 +27843,13 @@ document.addEventListener('DOMContentLoaded', function() {
             sessionStorage.setItem('pending_quote_submission', 'true');
 
             console.log('[QUOTE FORM] Showing confirmation modal');
+            quoteSubmitKeepLocked = true;
             showConfirmationModal();
+            } finally {
+                if (!quoteSubmitKeepLocked) {
+                    releaseQuoteSubmitLock();
+                }
+            }
         });
     }
 
