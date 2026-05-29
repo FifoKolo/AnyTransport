@@ -35,6 +35,7 @@
         focusedFormId: '',
         activeTab: '',
         adminReviewQuery: '',
+        adminListingQuery: '',
         adminShowRejected: false,
         adminExpandedReportGroups: {},
         adminReviewRefreshTimer: null
@@ -1174,6 +1175,13 @@
                 return;
             }
 
+            const clearListingSearchBtn = event.target.closest('.admin-listing-search-clear');
+            if (clearListingSearchBtn) {
+                state.adminListingQuery = '';
+                renderAdminReviewQueue();
+                return;
+            }
+
             const clearSearchBtn = event.target.closest('.admin-provider-search-clear');
             if (clearSearchBtn) {
                 state.adminReviewQuery = '';
@@ -1246,6 +1254,31 @@
                 const quoteId = String(adminViewFormBtn.getAttribute('data-quote-id') || '').trim();
                 if (!quoteId) return;
                 window.location.href = 'listing-details.html?quoteId=' + encodeURIComponent(quoteId);
+                return;
+            }
+
+            const adminEditFormBtn = event.target.closest('.admin-edit-form-btn');
+            if (adminEditFormBtn) {
+                const quoteId = String(adminEditFormBtn.getAttribute('data-quote-id') || '').trim();
+                const ownerEmail = String(adminEditFormBtn.getAttribute('data-owner-email') || '').trim();
+                if (!quoteId) return;
+                let href = 'create-job.html?editQuote=' + encodeURIComponent(quoteId) + '&admin=1';
+                if (ownerEmail) {
+                    href += '&ownerEmail=' + encodeURIComponent(ownerEmail);
+                }
+                window.location.href = href;
+                return;
+            }
+
+            const adminDuplicateFormBtn = event.target.closest('.admin-duplicate-form-btn');
+            if (adminDuplicateFormBtn) {
+                adminDuplicateListing(adminDuplicateFormBtn);
+                return;
+            }
+
+            const adminCreateFormBtn = event.target.closest('.admin-create-form-btn');
+            if (adminCreateFormBtn) {
+                adminCreateListingForCustomer();
                 return;
             }
 
@@ -1377,6 +1410,15 @@
         });
 
         document.addEventListener('input', (event) => {
+            const adminListingSearchInput = event.target.closest('.admin-listing-search');
+            if (adminListingSearchInput) {
+                state.adminListingQuery = String(adminListingSearchInput.value || '').trim();
+                if (state.activeTab === 'verification-review') {
+                    renderAdminReviewQueue();
+                }
+                return;
+            }
+
             const adminSearchInput = event.target.closest('.admin-provider-search');
             if (adminSearchInput) {
                 state.adminReviewQuery = String(adminSearchInput.value || '').trim();
@@ -1724,6 +1766,30 @@
         });
     }
 
+    function matchesAdminListingQuery(quote, query, userNameById) {
+        const q = String(query || '').trim().toLowerCase();
+        if (!q) {
+            return true;
+        }
+        const ownerId = String(quote && (quote.userId || quote.createdBy) || '').trim();
+        const ownerFromUser = ownerId && userNameById && userNameById[ownerId] ? String(userNameById[ownerId]) : '';
+        const haystack = [
+            quote && quote.formId,
+            quote && quote.id,
+            quote && quote.customerEmail,
+            quote && quote.customerName,
+            quote && quote.fullName,
+            quote && quote.name,
+            quote && quote.username,
+            quote && quote.customerPhone,
+            quote && quote.phone,
+            quote && quote.contactNumber,
+            ownerId,
+            ownerFromUser
+        ].join(' ').toLowerCase();
+        return haystack.indexOf(q) >= 0;
+    }
+
     function renderAdminReviewQueue() {
         const container = document.getElementById('provider-review-queue');
         if (!container) return;
@@ -1844,7 +1910,9 @@
                     + '</tr>';
             }).join('') : '<tr><td colspan="6" class="customer-empty-cell">No rejected providers found.</td></tr>';
 
-            const quoteRows = allQuotes.length ? allQuotes.slice().sort((a, b) => {
+            const listingQuery = String(state.adminListingQuery || '').trim();
+            const quotesForListings = allQuotes.filter((quote) => matchesAdminListingQuery(quote, listingQuery, userNameById));
+            const quoteRows = quotesForListings.length ? quotesForListings.slice().sort((a, b) => {
                 return new Date(b.submittedAt || b.createdAt || 0) - new Date(a.submittedAt || a.createdAt || 0);
             }).map((quote) => {
                 const quoteId = String(quote.id || '').trim();
@@ -1869,6 +1937,8 @@
                     '<textarea class="form-input admin-form-note" rows="3" placeholder="Optional message to include in an email"></textarea>',
                     '<div class="actions review-actions" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
                     '<button type="button" class="btn btn-primary admin-view-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">View listing</button>',
+                    '<button type="button" class="btn btn-outline admin-edit-form-btn" data-quote-id="' + escapeHtml(quoteId) + '" data-owner-email="' + escapeHtml(firstText(quote.customerEmail, '')) + '">Edit form</button>',
+                    '<button type="button" class="btn btn-outline admin-duplicate-form-btn" data-quote-id="' + escapeHtml(quoteId) + '" data-owner-email="' + escapeHtml(firstText(quote.customerEmail, '')) + '">Duplicate</button>',
                     '<button type="button" class="btn btn-secondary admin-email-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">Email listing owner</button>',
                     '<button type="button" class="btn btn-danger admin-delete-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">Delete listing</button>',
                     '<span class="admin-email-status" style="display:none; align-items:center; font-weight:700; color:#64748b;"></span>',
@@ -1877,7 +1947,15 @@
                     '</div>',
                     '</article>'
                 ].join('');
-            }).join('') : '<div class="empty-inventory">No listings found.</div>';
+            }).join('') : (
+                listingQuery
+                    ? '<div class="empty-inventory">No listings match your search.</div>'
+                    : '<div class="empty-inventory">No listings found.</div>'
+            );
+
+            const listingCountLabel = listingQuery
+                ? (quotesForListings.length + ' of ' + allQuotes.length + ' listings')
+                : (allQuotes.length + ' listings');
 
             const groupedReportsByForm = {};
             openReports.forEach((report) => {
@@ -1995,7 +2073,14 @@
                 reportRows,
                 '</section>',
                 '<section id="admin-section-forms">',
-                '<h3 style="margin:0 0 10px;">All submitted listings</h3>',
+                '<div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-bottom:10px;">',
+                '<h3 style="margin:0;">All submitted listings (' + escapeHtml(listingCountLabel) + ')</h3>',
+                '<button type="button" class="btn btn-primary admin-create-form-btn">Create listing for customer</button>',
+                '</div>',
+                '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">',
+                '<input class="form-input admin-listing-search" type="search" placeholder="Search by listing ID, name, or email" value="' + escapeHtml(state.adminListingQuery || '') + '" style="min-width:min(100%, 320px); flex:1;">',
+                '<button type="button" class="btn btn-outline admin-listing-search-clear">Clear</button>',
+                '</div>',
                 quoteRows,
                 '</section>',
                 '</div>',
@@ -3422,6 +3507,58 @@
         saveAllBids(filteredBids);
 
         renderAll(user);
+    }
+
+    function adminCreateListingForCustomer() {
+        if (!(auth.isAdmin && auth.isAdmin())) {
+            alert('Admin access required.');
+            return;
+        }
+        const email = prompt('Customer email for the new listing:', '');
+        if (email === null) return;
+        const normalized = String(email || '').trim().toLowerCase();
+        if (!normalized || normalized.indexOf('@') < 1) {
+            alert('Please enter a valid customer email.');
+            return;
+        }
+        window.location.href = 'create-job.html?adminCreate=1&ownerEmail=' + encodeURIComponent(normalized);
+    }
+
+    function adminDuplicateListing(button) {
+        if (!(auth.isAdmin && auth.isAdmin())) {
+            alert('Admin access required.');
+            return;
+        }
+        const quoteId = String(button.getAttribute('data-quote-id') || '').trim();
+        const defaultEmail = String(button.getAttribute('data-owner-email') || '').trim();
+        if (!quoteId) return;
+        const emailInput = prompt(
+            'Customer email for the duplicated listing (new listing ID will be generated):',
+            defaultEmail
+        );
+        if (emailInput === null) return;
+        const ownerEmail = String(emailInput || defaultEmail || '').trim().toLowerCase();
+        if (!window.anytransportApi || typeof window.anytransportApi.duplicateQuoteAsAdmin !== 'function') {
+            alert('Duplicate listing is not available right now.');
+            return;
+        }
+        try {
+            const resp = window.anytransportApi.duplicateQuoteAsAdmin(quoteId, { ownerEmail: ownerEmail });
+            const quote = resp && resp.quote ? resp.quote : null;
+            if (!quote || !quote.id) {
+                alert((resp && resp.error) || 'Unable to duplicate listing.');
+                return;
+            }
+            const newFormId = String(quote.formId || '').trim();
+            alert('Listing duplicated as #' + (newFormId || quote.id) + '. You can review and edit the form now.');
+            let href = 'create-job.html?editQuote=' + encodeURIComponent(quote.id) + '&admin=1';
+            if (ownerEmail) {
+                href += '&ownerEmail=' + encodeURIComponent(ownerEmail);
+            }
+            window.location.href = href;
+        } catch (error) {
+            alert(error && error.message ? error.message : 'Unable to duplicate listing.');
+        }
     }
 
     function adminDeleteQuote(quoteId, user, reason) {

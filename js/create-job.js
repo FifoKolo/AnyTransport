@@ -3843,6 +3843,37 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         })();
 
+        (function showAdminListingAssistBanner() {
+            try {
+                const isAdmin = typeof auth !== 'undefined' && auth && typeof auth.isAdmin === 'function' && auth.isAdmin();
+                if (!isAdmin) return;
+                const p = new URLSearchParams(window.location.search || '');
+                const ownerEmail = String(p.get('ownerEmail') || '').trim();
+                const isEdit = !!String(p.get('editQuote') || p.get('resumeQuote') || '').trim();
+                const isCreate = String(p.get('adminCreate') || '') === '1';
+                if (!isEdit && !isCreate && !ownerEmail) return;
+
+                const banner = document.createElement('div');
+                banner.setAttribute('role', 'status');
+                banner.style.cssText = 'margin:12px auto 16px; max-width:960px; padding:12px 14px; border-radius:10px; border:1px solid #bfdbfe; background:#eff6ff; color:#1e3a8a; font-size:14px; line-height:1.45;';
+                let text = 'Admin mode: this listing will be saved for the customer';
+                if (ownerEmail) {
+                    text += ' (' + ownerEmail + ')';
+                }
+                text += '. A new listing ID is assigned when you duplicate; editing keeps the same ID unless you duplicate first.';
+                banner.textContent = text;
+
+                const anchor = document.querySelector('.create-job-container') || document.querySelector('main') || document.body;
+                if (anchor && anchor.firstChild) {
+                    anchor.insertBefore(banner, anchor.firstChild);
+                } else if (anchor) {
+                    anchor.appendChild(banner);
+                }
+            } catch (_e) {
+                /* ignore */
+            }
+        })();
+
         (function hydrateEditQuoteFromUrlEarly() {
             if (!window.__anytransportHasEditQuoteInUrl || !window.__anytransportHasEditQuoteInUrl()) {
                 return;
@@ -27515,14 +27546,42 @@ document.addEventListener('DOMContentLoaded', function() {
             const isUpdateOnlyFlow = Boolean(isUpdateSavedFormSubmit && editQuoteId);
 
             console.log('[QUOTE FORM] All service validations passed');
+            const isAdminListingSave = typeof auth !== 'undefined' && auth && typeof auth.isAdmin === 'function' && auth.isAdmin();
+            let adminOwnerEmail = '';
+            let adminCreateMode = false;
+            try {
+                const adminParams = new URLSearchParams(window.location.search || '');
+                adminCreateMode = String(adminParams.get('adminCreate') || '') === '1' || String(adminParams.get('admin') || '') === '1';
+                adminOwnerEmail = String(adminParams.get('ownerEmail') || '').trim().toLowerCase();
+            } catch (_adminParamErr) {
+                adminOwnerEmail = '';
+                adminCreateMode = false;
+            }
+
             let selectedQuoteEmail = currentUser.email;
             if (!isUpdateOnlyFlow) {
-                console.log('[QUOTE FORM] showing email confirmation modal');
-                selectedQuoteEmail = await showQuoteEmailConfirmation(currentUser.email);
-                if (!selectedQuoteEmail) {
-                    console.log('[QUOTE FORM] Email confirmation cancelled/failed');
-                    return;
+                if (isAdminListingSave && adminOwnerEmail) {
+                    selectedQuoteEmail = adminOwnerEmail;
+                } else if (!isAdminListingSave) {
+                    console.log('[QUOTE FORM] showing email confirmation modal');
+                    selectedQuoteEmail = await showQuoteEmailConfirmation(currentUser.email);
+                    if (!selectedQuoteEmail) {
+                        console.log('[QUOTE FORM] Email confirmation cancelled/failed');
+                        return;
+                    }
+                } else if (isAdminListingSave) {
+                    const prompted = prompt('Customer email for this listing:', adminOwnerEmail || currentUser.email || '');
+                    if (prompted === null) {
+                        return;
+                    }
+                    selectedQuoteEmail = String(prompted || '').trim().toLowerCase();
+                    if (!selectedQuoteEmail || selectedQuoteEmail.indexOf('@') < 1) {
+                        alert('Please enter a valid customer email.');
+                        return;
+                    }
                 }
+            } else if (isAdminListingSave && adminOwnerEmail) {
+                selectedQuoteEmail = adminOwnerEmail;
             }
             console.log('[QUOTE FORM] proceeding to save');
 
@@ -27530,6 +27589,9 @@ document.addEventListener('DOMContentLoaded', function() {
             quoteData.customerName = currentUser.name || quoteData.customerName;
             quoteData.customerEmail = selectedQuoteEmail;
             quoteData.customerPhone = currentUser.phone || '';
+            if (isAdminListingSave) {
+                quoteData.ownerEmail = selectedQuoteEmail;
+            }
 
             if (isUpdateOnlyFlow && editQuoteId) {
                 quoteData.id = editQuoteId;
@@ -27540,8 +27602,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 quoteData.id = Math.random().toString(36).substr(2, 9);
             }
             quoteData.status = 'pending'; // Awaiting quote from AnyTransport
-            quoteData.userId = currentUser.id; // Link to user
-            quoteData.createdBy = currentUser.id; // Matches API + local listing filters
+            if (!isAdminListingSave || adminCreateMode) {
+                quoteData.userId = currentUser.id;
+                quoteData.createdBy = currentUser.id;
+            }
 
             const cloneForStorage = (value) => {
                 try {
@@ -27786,7 +27850,10 @@ document.addEventListener('DOMContentLoaded', function() {
             let savedQuote = null;
             if (window.anytransportApi && typeof window.anytransportApi.saveQuote === 'function') {
                 try {
-                    savedQuote = window.anytransportApi.saveQuote(quoteData);
+                    const saveOptions = (isAdminListingSave && selectedQuoteEmail)
+                        ? { ownerEmail: selectedQuoteEmail }
+                        : undefined;
+                    savedQuote = window.anytransportApi.saveQuote(quoteData, saveOptions);
                 } catch (err) {
                     console.warn('[QUOTE FORM] API saveQuote failed; using local backup.', err && err.message ? err.message : err);
                     savedQuote = null;

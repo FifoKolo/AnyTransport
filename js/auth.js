@@ -403,9 +403,25 @@ window.anytransportApi = window.anytransportApi || (function () {
             }
             return request('providers.publicProfile', 'GET', null, { providerId: id });
         },
-        saveQuote: function (quote) {
-            const response = request('quotes.create', 'POST', { quote: quote || {} });
+        saveQuote: function (quote, options) {
+            const payload = { quote: quote || {} };
+            const opts = options && typeof options === 'object' ? options : {};
+            if (opts.ownerEmail) {
+                payload.ownerEmail = String(opts.ownerEmail);
+            }
+            if (opts.ownerUserId) {
+                payload.ownerUserId = String(opts.ownerUserId);
+            }
+            const response = request('quotes.create', 'POST', payload);
             return response.quote || quote || null;
+        },
+        duplicateQuoteAsAdmin: function (sourceQuoteId, options) {
+            const opts = options && typeof options === 'object' ? options : {};
+            return request('quotes.admin.duplicate', 'POST', {
+                sourceQuoteId: sourceQuoteId ? String(sourceQuoteId) : '',
+                ownerEmail: opts.ownerEmail ? String(opts.ownerEmail) : '',
+                ownerUserId: opts.ownerUserId ? String(opts.ownerUserId) : ''
+            });
         },
         deleteQuote: function (quoteId, options) {
             const payload = { quoteId: quoteId ? String(quoteId) : '' };

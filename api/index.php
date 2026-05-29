@@ -1901,6 +1901,166 @@ function normalize_quote($quote, $quotes) {
     return $normalized;
 }
 
+function apply_quote_ownership_on_save(&$store, $sessionUser, &$normalized, $input, $isQuoteUpdate, $previousQuote) {
+    if (!is_array($sessionUser)) {
+        return;
+    }
+
+    $isAdmin = is_admin_user($sessionUser);
+    $ownerUserId = trim((string) ($input['ownerUserId'] ?? $normalized['ownerUserId'] ?? ''));
+    $ownerEmail = strtolower(trim((string) ($input['ownerEmail'] ?? $normalized['ownerEmail'] ?? '')));
+
+    if (!$isAdmin) {
+        $sid = trim((string) ($sessionUser['id'] ?? ''));
+        if ($sid !== '') {
+            $normalized['userId'] = $sid;
+            $normalized['createdBy'] = $sid;
+        }
+        return;
+    }
+
+    $adminId = trim((string) ($sessionUser['id'] ?? ''));
+    if ($adminId !== '') {
+        $normalized['lastSavedByAdminId'] = $adminId;
+        $normalized['lastSavedByAdminAt'] = gmdate('c');
+    }
+
+    if ($isQuoteUpdate && is_array($previousQuote)) {
+        $prevUserId = trim((string) ($previousQuote['userId'] ?? $previousQuote['createdBy'] ?? ''));
+        $prevEmail = strtolower(trim((string) ($previousQuote['customerEmail'] ?? '')));
+
+        if ($ownerUserId !== '') {
+            $normalized['userId'] = $ownerUserId;
+            $normalized['createdBy'] = $ownerUserId;
+        } elseif ($ownerEmail !== '') {
+            $owner = find_user_by_email($store['users'], $ownerEmail);
+            if (is_array($owner)) {
+                $uid = trim((string) ($owner['id'] ?? ''));
+                $normalized['userId'] = $uid;
+                $normalized['createdBy'] = $uid;
+            }
+            $normalized['customerEmail'] = $ownerEmail;
+        } else {
+            if ($prevUserId !== '') {
+                $normalized['userId'] = $prevUserId;
+                $normalized['createdBy'] = trim((string) ($previousQuote['createdBy'] ?? $prevUserId));
+            }
+            if ($prevEmail !== '') {
+                $normalized['customerEmail'] = $prevEmail;
+            }
+        }
+        return;
+    }
+
+    if ($ownerUserId !== '') {
+        $normalized['userId'] = $ownerUserId;
+        $normalized['createdBy'] = $ownerUserId;
+    } elseif ($ownerEmail !== '') {
+        $owner = find_user_by_email($store['users'], $ownerEmail);
+        if (is_array($owner)) {
+            $uid = trim((string) ($owner['id'] ?? ''));
+            $normalized['userId'] = $uid;
+            $normalized['createdBy'] = $uid;
+        }
+        $normalized['customerEmail'] = $ownerEmail;
+    }
+
+    if ($adminId !== '') {
+        $normalized['adminCreated'] = true;
+        $normalized['adminCreatedBy'] = $adminId;
+        $normalized['adminCreatedAt'] = gmdate('c');
+    }
+}
+
+function duplicate_quote_media_records(&$store, $storeDir, $sourceQuoteId, $newQuoteId, $ownerUserId) {
+    $sourceQuoteId = trim((string) $sourceQuoteId);
+    $newQuoteId = trim((string) $newQuoteId);
+    $ownerUserId = trim((string) $ownerUserId);
+    if ($sourceQuoteId === '' || $newQuoteId === '' || !isset($store['quoteMedia']) || !is_array($store['quoteMedia'])) {
+        return;
+    }
+
+    foreach ($store['quoteMedia'] as $media) {
+        if (!is_array($media) || trim((string) ($media['quoteId'] ?? '')) !== $sourceQuoteId) {
+            continue;
+        }
+        $rel = trim((string) ($media['relativePath'] ?? ''));
+        if ($rel === '') {
+            continue;
+        }
+        $sourcePath = $storeDir . '/' . $rel;
+        if (!is_file($sourcePath)) {
+            continue;
+        }
+
+        $ext = pathinfo($rel, PATHINFO_EXTENSION);
+        if ($ext === '') {
+            $ext = 'bin';
+        }
+        $mediaId = make_id('media');
+        $userFolder = $ownerUserId !== '' ? $ownerUserId : trim((string) ($media['userId'] ?? 'shared'));
+        $relative = 'quote-media/' . $userFolder . '/' . $mediaId . '.' . $ext;
+        $destPath = $storeDir . '/' . $relative;
+        $dir = dirname($destPath);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        if (!@copy($sourcePath, $destPath)) {
+            continue;
+        }
+
+        $store['quoteMedia'][] = array(
+            'id' => $mediaId,
+            'userId' => $ownerUserId !== '' ? $ownerUserId : trim((string) ($media['userId'] ?? '')),
+            'quoteId' => $newQuoteId,
+            'relativePath' => $relative,
+            'mimeType' => trim((string) ($media['mimeType'] ?? 'application/octet-stream')),
+            'createdAt' => gmdate('c'),
+            'clonedFromMediaId' => trim((string) ($media['id'] ?? ''))
+        );
+    }
+}
+
+function duplicate_quote_for_admin(&$store, $storeFile, $storeDir, $sourceQuoteId, $ownerUserId = '', $ownerEmail = '', $adminUser = null) {
+    $sourceQuoteId = trim((string) $sourceQuoteId);
+    $source = find_store_quote_by_id($store, $sourceQuoteId);
+    if (!is_array($source)) {
+        return array('ok' => false, 'error' => 'Listing not found.');
+    }
+
+    $copy = $source;
+    unset($copy['id'], $copy['formId']);
+    $copy['clonedFromQuoteId'] = $sourceQuoteId;
+    $copy['clonedFromFormId'] = trim((string) ($source['formId'] ?? ''));
+    $copy['status'] = 'pending';
+    $copy['createdAt'] = gmdate('c');
+    $copy['updatedAt'] = gmdate('c');
+    $copy['submittedAt'] = gmdate('c');
+    $copy['customerFormComplete'] = !empty($source['customerFormComplete']);
+
+    $normalized = normalize_quote($copy, $store['quotes']);
+    $input = array(
+        'ownerUserId' => trim((string) $ownerUserId),
+        'ownerEmail' => trim((string) $ownerEmail)
+    );
+    if ($input['ownerEmail'] === '') {
+        $input['ownerEmail'] = trim((string) ($source['customerEmail'] ?? ''));
+    }
+    apply_quote_ownership_on_save($store, $adminUser, $normalized, $input, false, null);
+
+    $store['quotes'][] = $normalized;
+    duplicate_quote_media_records(
+        $store,
+        $storeDir,
+        $sourceQuoteId,
+        trim((string) ($normalized['id'] ?? '')),
+        trim((string) ($normalized['userId'] ?? ''))
+    );
+    write_store($storeFile, $store);
+
+    return array('ok' => true, 'quote' => $normalized);
+}
+
 /** Stable JSON string for comparing quote field values. */
 function quote_value_fingerprint($value) {
     if (is_array($value) || is_object($value)) {
@@ -4636,14 +4796,6 @@ switch ($action) {
         $quote = is_array($input['quote'] ?? null) ? $input['quote'] : array();
         $normalized = normalize_quote($quote, $store['quotes']);
         $sessionUser = get_current_user_record($store);
-        if (is_array($sessionUser)) {
-            $sid = trim((string) ($sessionUser['id'] ?? ''));
-            if ($sid !== '') {
-                // Always attach the logged-in account as owner so "My requests" works for every role (providers book jobs too).
-                $normalized['userId'] = $sid;
-                $normalized['createdBy'] = $sid;
-            }
-        }
         $index = find_user_index($store['quotes'], function ($existing) use ($normalized) {
             return trim((string) ($existing['id'] ?? '')) === trim((string) ($normalized['id'] ?? ''));
         });
@@ -4658,6 +4810,12 @@ switch ($action) {
             $normalized = $store['quotes'][$index];
         } else {
             $store['quotes'][] = $normalized;
+        }
+        apply_quote_ownership_on_save($store, $sessionUser, $normalized, $input, $isQuoteUpdate, $previousQuote);
+        if ($isQuoteUpdate) {
+            $store['quotes'][$index] = $normalized;
+        } else {
+            $store['quotes'][count($store['quotes']) - 1] = $normalized;
         }
 
         if ($isQuoteUpdate && is_array($previousQuote) && session_user_owns_quote($sessionUser, $previousQuote)) {
@@ -4701,6 +4859,33 @@ switch ($action) {
 
         refresh_session_cookie();
         send_json(array('ok' => true, 'quote' => $normalized));
+
+    case 'quotes.admin.duplicate':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $currentUser = get_current_user_record($store);
+        if (!is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin access required.'), 403);
+        }
+
+        $sourceQuoteId = trim((string) ($input['sourceQuoteId'] ?? $input['quoteId'] ?? ''));
+        if ($sourceQuoteId === '') {
+            send_json(array('ok' => false, 'error' => 'Source listing id is required.'), 400);
+        }
+
+        $ownerUserId = trim((string) ($input['ownerUserId'] ?? ''));
+        $ownerEmail = trim((string) ($input['ownerEmail'] ?? ''));
+        $result = duplicate_quote_for_admin($store, $storeFile, $storeDir, $sourceQuoteId, $ownerUserId, $ownerEmail, $currentUser);
+        if (empty($result['ok'])) {
+            send_json(array('ok' => false, 'error' => (string) ($result['error'] ?? 'Unable to duplicate listing.')), 400);
+        }
+
+        refresh_session_cookie();
+        send_json(array(
+            'ok' => true,
+            'quote' => attach_quote_media($store, $result['quote'])
+        ));
 
     case 'quotes.admin.notify':
         if ($method !== 'POST') {

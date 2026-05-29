@@ -39,6 +39,8 @@
             ? ('Listing ' + listingId + ' • ' + transportSpaceLabel)
             : ('Listing ' + listingId + ' • Full listing details');
 
+        window.__listingDetailsQuote = quote;
+
         const isAdmin = isAdminUser();
         const showQuoteTools = isTransportProviderUser();
         if (!showQuoteTools) {
@@ -77,6 +79,58 @@
         var eyebrow = document.querySelector('.details-hero .eyebrow');
         if (eyebrow) {
             eyebrow.textContent = isAdmin ? 'Admin review' : 'Your request';
+        }
+
+        if (!isAdmin) return;
+        var hero = document.querySelector('.details-hero');
+        if (!hero || hero.querySelector('#admin-listing-tools')) return;
+        var quoteId = '';
+        try {
+            quoteId = String(new URLSearchParams(window.location.search || '').get('quoteId') || '').trim();
+        } catch (_e) {
+            quoteId = '';
+        }
+        if (!quoteId) return;
+
+        var tools = document.createElement('div');
+        tools.id = 'admin-listing-tools';
+        tools.style.cssText = 'margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;';
+        var ownerEmail = '';
+        try {
+            var q = window.__listingDetailsQuote;
+            ownerEmail = q && q.customerEmail ? String(q.customerEmail) : '';
+        } catch (_e2) {
+            ownerEmail = '';
+        }
+        tools.innerHTML = ''
+            + '<a class="btn btn-outline" href="create-job.html?editQuote=' + encodeURIComponent(quoteId) + '&admin=1'
+            + (ownerEmail ? '&ownerEmail=' + encodeURIComponent(ownerEmail) : '') + '">Edit form</a>'
+            + '<button type="button" class="btn btn-outline" id="admin-listing-duplicate-btn">Duplicate listing</button>';
+        hero.appendChild(tools);
+
+        var dupBtn = document.getElementById('admin-listing-duplicate-btn');
+        if (dupBtn && !dupBtn.dataset.bound) {
+            dupBtn.dataset.bound = '1';
+            dupBtn.addEventListener('click', function () {
+                if (!window.anytransportApi || typeof window.anytransportApi.duplicateQuoteAsAdmin !== 'function') {
+                    alert('Duplicate is not available.');
+                    return;
+                }
+                var email = prompt('Customer email for the duplicated listing:', ownerEmail || '');
+                if (email === null) return;
+                try {
+                    var resp = window.anytransportApi.duplicateQuoteAsAdmin(quoteId, { ownerEmail: String(email || ownerEmail || '').trim() });
+                    var quote = resp && resp.quote ? resp.quote : null;
+                    if (!quote || !quote.id) {
+                        alert((resp && resp.error) || 'Unable to duplicate.');
+                        return;
+                    }
+                    window.location.href = 'create-job.html?editQuote=' + encodeURIComponent(quote.id) + '&admin=1'
+                        + (email ? '&ownerEmail=' + encodeURIComponent(String(email).trim()) : '');
+                } catch (err) {
+                    alert(err && err.message ? err.message : 'Unable to duplicate.');
+                }
+            });
         }
     }
 
