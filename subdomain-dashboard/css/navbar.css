@@ -229,7 +229,7 @@ html:has(body > .navbar) {
     gap: 8px;
 }
 
-.btn-outline {
+.navbar .btn-outline {
     background: rgba(255, 255, 255, 0.15);
     color: white;
     border: 1px solid rgba(255, 255, 255, 0.3);
@@ -238,7 +238,7 @@ html:has(body > .navbar) {
     transition: all 0.3s;
 }
 
-.btn-outline:hover {
+.navbar .btn-outline:hover {
     background: rgba(255, 255, 255, 0.25);
     border-color: rgba(255, 255, 255, 0.5);
 }

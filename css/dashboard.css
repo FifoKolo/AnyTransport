@@ -759,6 +759,23 @@
     color: rgba(255, 255, 255, 1);
 }
 
+/* navbar.css used to style all .btn-outline for the header; keep admin actions readable */
+#provider-review-queue .btn-outline,
+.admin-review-layout .btn-outline,
+.provider-listing .review-actions .btn-outline {
+    background-color: #fff;
+    color: #1e293b;
+    border: 1px solid #cbd5e1;
+}
+
+#provider-review-queue .btn-outline:hover,
+.admin-review-layout .btn-outline:hover,
+.provider-listing .review-actions .btn-outline:hover {
+    background-color: #f1f5f9;
+    border-color: #94a3b8;
+    color: #0f172a;
+}
+
 .listing-title {
     font-weight: 700;
     color: #1b3342;
