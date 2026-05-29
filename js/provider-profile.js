@@ -92,6 +92,12 @@
                 '<div style="margin-top:8px;"><span class="label">About</span><div class="profile-value">' + about + '</div></div>' +
                 '<div style="margin-top:8px;"><span class="label">Services</span><div class="profile-value">' + services + '</div></div>' +
                 '<div style="margin-top:8px;"><span class="label">Modes of transport</span><div class="profile-value">' + transportModesHtml + '</div></div>' +
+                (function () {
+                    const fleet = formatVehicleCountLabel(u);
+                    return fleet
+                        ? '<div style="margin-top:8px;"><span class="label">Vehicles available</span><div class="profile-value">' + escapeHtml(fleet) + '</div></div>'
+                        : '';
+                })() +
                 '</div>';
         }
 
@@ -201,6 +207,7 @@
 
         renderServices(u);
         renderTransportModes(u);
+        renderVehicleCount(u);
         renderPayments(u);
         renderPhotos(u);
         renderActions(u, ownProfile);
@@ -417,6 +424,39 @@
             return;
         }
         el.innerHTML = '<span class="provider-empty-hint">Add your transport modes in the editor below so customers know what vehicles you operate.</span>';
+    }
+
+    function formatVehicleCountLabel(u) {
+        const raw = u && (u.vehicleCount ?? u.vehiclesAvailable ?? u.fleetSize);
+        if (raw === null || raw === undefined || raw === '') {
+            return '';
+        }
+        const count = parseInt(raw, 10);
+        if (!Number.isFinite(count) || count < 0) {
+            return '';
+        }
+        return count + (count === 1 ? ' vehicle' : ' vehicles');
+    }
+
+    function parseVehicleCountFromInput() {
+        const el = document.getElementById('profile-vehicle-count');
+        if (!el) return null;
+        const raw = String(el.value || '').trim();
+        if (raw === '') return null;
+        const count = parseInt(raw, 10);
+        if (!Number.isFinite(count) || count < 0) return null;
+        return Math.min(9999, count);
+    }
+
+    function renderVehicleCount(u) {
+        const el = document.getElementById('provider-vehicle-count');
+        if (!el) return;
+        const label = formatVehicleCountLabel(u);
+        if (label) {
+            el.textContent = label;
+            return;
+        }
+        el.innerHTML = '<span class="provider-empty-hint">Add how many vehicles you have available in the editor below.</span>';
     }
 
     function paymentMethodLabel(key) {
@@ -731,6 +771,15 @@
             (isEditable ? '          <button type="button" id="profile-custom-transport-add" class="btn btn-outline">Add vehicle</button>' : ''),
             '        </div>',
             '      </div>',
+            '      <h3 class="profile-section-title" style="margin-top:20px;">Vehicles available</h3>',
+            '      <div class="profile-muted">How many vehicles do you have available for jobs?</div>',
+            '      <div class="profile-form-row" style="margin-top:12px;">',
+            '        <div class="profile-form-label">Number of vehicles</div>',
+            '        <div>',
+            '          <input id="profile-vehicle-count" class="form-input" type="number" min="0" max="9999" step="1" placeholder="e.g. 2" value="' + escapeAttribute(u.vehicleCount != null && u.vehicleCount !== '' ? String(u.vehicleCount) : '') + '"' + disabledAttr + '>',
+            '          <div class="profile-help">Optional. Shown on your public profile so customers know your capacity.</div>',
+            '        </div>',
+            '      </div>',
             '      <h3 class="profile-section-title" style="margin-top:20px;">Don\'t want any more invitations to bid?</h3>',
             '      <div class="profile-muted">Please tick here to prevent customers inviting you to quote.</div>',
             '      <div class="profile-check-grid" style="margin-top:14px;">',
@@ -841,6 +890,7 @@
                 categories: services,
                 skills: services,
                 transportModes: transportModes,
+                vehicleCount: parseVehicleCountFromInput(),
                 paymentMethods: paymentMethods,
                 paymentMethodsCustom: paymentMethodsCustom,
                 acceptsCash: !!paymentMethods.cash,
@@ -942,6 +992,7 @@
                         renderPayments(u);
                         renderServices(u);
                         renderTransportModes(u);
+                        renderVehicleCount(u);
                     } catch (_e) {}
                     const viewer = getViewer();
                     if (viewer && String(viewer.id) === String(serverUser.id) && window.auth) {
@@ -1220,7 +1271,7 @@
                 if (target.id === 'profile-about') {
                     updateAboutWordCount();
                 }
-                if (target.matches && target.matches('#profile-business-name, #profile-about, #profile-company-type, #profile-city, #profile-service-address, #profile-contact')) {
+                if (target.matches && target.matches('#profile-business-name, #profile-about, #profile-company-type, #profile-city, #profile-service-address, #profile-contact, #profile-vehicle-count')) {
                     queueAutosave();
                 }
             });

@@ -379,6 +379,12 @@ function normalize_user($user) {
 
     unset($normalized['autoBidCooldownSeconds'], $normalized['autoBidWarQuietMinutes'], $normalized['autoBidWarQuietSeconds']);
 
+    if (!array_key_exists('vehicleCount', $normalized) || $normalized['vehicleCount'] === '' || $normalized['vehicleCount'] === null) {
+        $normalized['vehicleCount'] = null;
+    } else {
+        $normalized['vehicleCount'] = max(0, min(9999, (int) $normalized['vehicleCount']));
+    }
+
     $cityValue = trim((string) ($normalized['serviceAreaCity'] ?? $normalized['city'] ?? $normalized['town'] ?? $normalized['location'] ?? ''));
     if ($cityValue !== '') {
         $normalized['serviceAreaCity'] = $cityValue;
@@ -2294,6 +2300,9 @@ function sanitize_provider_public_profile($user) {
         'bio' => trim((string) ($user['bio'] ?? $user['summary'] ?? '')),
         'city' => trim((string) ($user['serviceAreaCity'] ?? $user['city'] ?? $user['location'] ?? '')),
         'services' => $services,
+        'vehicleCount' => isset($user['vehicleCount']) && $user['vehicleCount'] !== null && $user['vehicleCount'] !== ''
+            ? max(0, min(9999, (int) $user['vehicleCount']))
+            : null,
         'avatar' => trim((string) ($user['avatar'] ?? '')),
         'photos' => $photos,
         'paymentMethods' => $paymentMethods,
@@ -3634,7 +3643,7 @@ switch ($action) {
                 'city', 'town', 'location', 'phone', 'contact',
                 'description', 'businessDescription', 'about', 'bio', 'summary',
                 'services', 'categories', 'skills', 'photos', 'avatar', 'coverImage',
-                'transportModes',
+                'transportModes', 'vehicleCount',
                 'website', 'companyType', 'paymentMethods', 'paymentMethodsCustom', 'acceptsCash', 'paypal', 'visa', 'mastercard', 'bankTransfer', 'americanExpress', 'cheque', 'cash',
                 'blockInvites', 'muteInviteEmails',
                 'serviceAreaCity', 'serviceAreaAddress', 'serviceAreaLat', 'serviceAreaLng',
