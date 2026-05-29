@@ -346,81 +346,93 @@
     document.addEventListener('DOMContentLoaded', initDashboard);
 
     function initDashboard() {
-        if (!auth || !auth.isLoggedIn || !auth.isLoggedIn()) {
-            alert('You need to sign in to access your dashboard');
-            window.location.href = 'index.html';
-            return;
+        const canUsePageLoader =
+            typeof window.anytransportShowPageLoader === 'function' &&
+            typeof window.anytransportHidePageLoader === 'function';
+        if (canUsePageLoader) {
+            window.anytransportShowPageLoader();
         }
+        try {
+            if (!auth || !auth.isLoggedIn || !auth.isLoggedIn()) {
+                alert('You need to sign in to access your dashboard');
+                window.location.href = 'index.html';
+                return;
+            }
 
-        if (auth.refreshSessionUserFromServer) {
-            auth.refreshSessionUserFromServer();
-        }
+            if (auth.refreshSessionUserFromServer) {
+                auth.refreshSessionUserFromServer();
+            }
 
-        const user = auth.getUser();
-        // provider-mode 'profile' has been removed from the UI; no action required here
-        if (!user) {
-            alert('Session expired. Please sign in again.');
-            window.location.href = 'index.html';
-            return;
-        }
+            const user = auth.getUser();
+            // provider-mode 'profile' has been removed from the UI; no action required here
+            if (!user) {
+                alert('Session expired. Please sign in again.');
+                window.location.href = 'index.html';
+                return;
+            }
 
-        const me = auth.getUser && auth.getUser();
-        const isProvider = auth.isProvider && auth.isProvider();
-        const canBeProvider = isProvider && auth.isProviderApproved && auth.isProviderApproved(me);
+            const me = auth.getUser && auth.getUser();
+            const isProvider = auth.isProvider && auth.isProvider();
+            const canBeProvider = isProvider && auth.isProviderApproved && auth.isProviderApproved(me);
 
-        if (isProvider && !canBeProvider) {
-            showProviderPendingApprovalState(me);
-        } else {
-            clearProviderPendingApprovalState();
-        }
+            if (isProvider && !canBeProvider) {
+                showProviderPendingApprovalState(me);
+            } else {
+                clearProviderPendingApprovalState();
+            }
 
-        const adminReviewNav = document.getElementById('admin-review-nav');
-        if (adminReviewNav) {
-            adminReviewNav.style.display = auth.isAdmin && auth.isAdmin() ? '' : 'none';
-        }
+            const adminReviewNav = document.getElementById('admin-review-nav');
+            if (adminReviewNav) {
+                adminReviewNav.style.display = auth.isAdmin && auth.isAdmin() ? '' : 'none';
+            }
 
-        // If the inline nav only contains one visible item (e.g. only "Profile"), hide it to avoid a lonely pill.
-        consolidateInlineNav();
-
-        loadUserInfo(user);
-        wireTabs();
-        wireProviderControls(user);
-        wireDashboardActions(user);
-        loadProfileForm(user);
-        ensureDemoListingsExist();
-        applyFocusedFormContext();
-        renderAll(user);
-
-        if (canBeProvider) {
-            showTab('provider-board');
-        } else {
-            showTab('provider-board');
-            hideProviderOnlyTabs();
-        }
-
-        // If the signed-in user is an admin, restrict the UI to admin-only views.
-        if (auth.isAdmin && auth.isAdmin()) {
-            document.querySelectorAll('.nav-item').forEach((item) => {
-                try {
-                    if (item.getAttribute('data-tab') !== 'verification-review') item.style.display = 'none';
-                } catch (_e) {
-                    // ignore
-                }
-            });
-            const modeSwitch = document.getElementById('provider-mode-switch');
-            if (modeSwitch) modeSwitch.style.display = 'none';
-            // Ensure admin sees the verification review immediately
-            showTab('verification-review');
-            // Re-check inline nav visibility after adjustments
+            // If the inline nav only contains one visible item (e.g. only "Profile"), hide it to avoid a lonely pill.
             consolidateInlineNav();
-            return;
-        }
 
-        // Re-check inline nav visibility after provider-only tabs may have been hidden
-        consolidateInlineNav();
+            loadUserInfo(user);
+            wireTabs();
+            wireProviderControls(user);
+            wireDashboardActions(user);
+            loadProfileForm(user);
+            ensureDemoListingsExist();
+            applyFocusedFormContext();
+            renderAll(user);
 
-        if (state.focusedFormId && auth.isProvider && auth.isProvider()) {
-            requestAnimationFrame(() => focusHighlightedProviderListing());
+            if (canBeProvider) {
+                showTab('provider-board');
+            } else {
+                showTab('provider-board');
+                hideProviderOnlyTabs();
+            }
+
+            // If the signed-in user is an admin, restrict the UI to admin-only views.
+            if (auth.isAdmin && auth.isAdmin()) {
+                document.querySelectorAll('.nav-item').forEach((item) => {
+                    try {
+                        if (item.getAttribute('data-tab') !== 'verification-review') item.style.display = 'none';
+                    } catch (_e) {
+                        // ignore
+                    }
+                });
+                const modeSwitch = document.getElementById('provider-mode-switch');
+                if (modeSwitch) modeSwitch.style.display = 'none';
+                // Ensure admin sees the verification review immediately
+                showTab('verification-review');
+                // Re-check inline nav visibility after adjustments
+                consolidateInlineNav();
+                return;
+            }
+
+            // Re-check inline nav visibility after provider-only tabs may have been hidden
+            consolidateInlineNav();
+
+            if (state.focusedFormId && auth.isProvider && auth.isProvider()) {
+                requestAnimationFrame(() => focusHighlightedProviderListing());
+            }
+        } finally {
+            if (canUsePageLoader) {
+                window.anytransportHidePageLoader();
+            }
         }
     }
 
