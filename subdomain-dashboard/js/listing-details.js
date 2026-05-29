@@ -5,6 +5,36 @@
     const NOTIFICATIONS_STORAGE_KEY = 'anytransport_notifications';
     const ANYTRANSPORT_MAPBOX_TOKEN = 'pk.eyJ1IjoiZmlsa28iLCJhIjoiY2x6dmdlODUwMDZsMjJqcGcxY2U2b290dCJ9.9DRj6-luEwljI3xea5ATHQ';
 
+    function isSubdomainDashboardPath() {
+        try {
+            return String(window.location.pathname || '').indexOf('subdomain-dashboard') >= 0;
+        } catch (_e) {
+            return false;
+        }
+    }
+
+    function getCreateJobPage() {
+        return isSubdomainDashboardPath() ? '../create-job.html' : 'create-job.html';
+    }
+
+    function rememberAdminListingReturnUrl() {
+        try {
+            const target = isSubdomainDashboardPath()
+                ? 'subdomain-dashboard/dashboard.html#admin-section-forms'
+                : 'dashboard.html#admin-section-forms';
+            sessionStorage.setItem('anytransport_admin_return_url', target);
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
+    function navigateAdminToCreateJob(queryParams) {
+        rememberAdminListingReturnUrl();
+        const base = getCreateJobPage();
+        const q = String(queryParams || '').replace(/^\?/, '');
+        window.location.href = q ? (base + '?' + q) : base;
+    }
+
     document.addEventListener('DOMContentLoaded', initListingDetailsPage);
 
     function initListingDetailsPage() {
@@ -68,8 +98,22 @@
         initNotificationBell();
     }
 
+    function getAdminDashboardPage() {
+        try {
+            const stored = String(sessionStorage.getItem('anytransport_admin_return_url') || '').trim();
+            if (stored) {
+                return stored.split('#')[0];
+            }
+        } catch (_e) {
+            /* ignore */
+        }
+        return isSubdomainDashboardPath() ? 'subdomain-dashboard/dashboard.html' : 'dashboard.html';
+    }
+
     function applyCustomerListingChrome(isAdmin) {
-        var profileHref = isAdmin ? 'dashboard.html#verification-review' : 'customer-dashboard.html';
+        var profileHref = isAdmin
+            ? (getAdminDashboardPage() + '#admin-section-forms')
+            : 'customer-dashboard.html';
         var profileLabel = isAdmin ? 'Back to Admin Panel' : 'Back to Profile';
         document.querySelectorAll('.back-to-listings-btn, .details-hero .back-btn').forEach(function (el) {
             if (!el) return;
@@ -103,10 +147,21 @@
             ownerEmail = '';
         }
         tools.innerHTML = ''
-            + '<a class="btn btn-outline" href="create-job.html?editQuote=' + encodeURIComponent(quoteId) + '&admin=1'
-            + (ownerEmail ? '&ownerEmail=' + encodeURIComponent(ownerEmail) : '') + '">Edit form</a>'
+            + '<a class="btn btn-outline" id="admin-listing-edit-link" href="#">Edit listing</a>'
             + '<button type="button" class="btn btn-outline" id="admin-listing-duplicate-btn">Duplicate listing</button>';
         hero.appendChild(tools);
+
+        var editLink = document.getElementById('admin-listing-edit-link');
+        if (editLink) {
+            editLink.addEventListener('click', function (event) {
+                event.preventDefault();
+                var query = 'editQuote=' + encodeURIComponent(quoteId) + '&admin=1';
+                if (ownerEmail) {
+                    query += '&ownerEmail=' + encodeURIComponent(ownerEmail);
+                }
+                navigateAdminToCreateJob(query);
+            });
+        }
 
         var dupBtn = document.getElementById('admin-listing-duplicate-btn');
         if (dupBtn && !dupBtn.dataset.bound) {
@@ -125,8 +180,11 @@
                         alert((resp && resp.error) || 'Unable to duplicate.');
                         return;
                     }
-                    window.location.href = 'create-job.html?editQuote=' + encodeURIComponent(quote.id) + '&admin=1'
-                        + (email ? '&ownerEmail=' + encodeURIComponent(String(email).trim()) : '');
+                    var dupQuery = 'editQuote=' + encodeURIComponent(quote.id) + '&admin=1';
+                    if (email) {
+                        dupQuery += '&ownerEmail=' + encodeURIComponent(String(email).trim());
+                    }
+                    navigateAdminToCreateJob(dupQuery);
                 } catch (err) {
                     alert(err && err.message ? err.message : 'Unable to duplicate.');
                 }

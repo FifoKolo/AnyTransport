@@ -3848,20 +3848,56 @@ document.addEventListener('DOMContentLoaded', function () {
                 const isAdmin = typeof auth !== 'undefined' && auth && typeof auth.isAdmin === 'function' && auth.isAdmin();
                 if (!isAdmin) return;
                 const p = new URLSearchParams(window.location.search || '');
-                const ownerEmail = String(p.get('ownerEmail') || '').trim();
+                const ownerEmail = String(p.get('ownerEmail') || '').trim().toLowerCase();
                 const isEdit = !!String(p.get('editQuote') || p.get('resumeQuote') || '').trim();
                 const isCreate = String(p.get('adminCreate') || '') === '1';
-                if (!isEdit && !isCreate && !ownerEmail) return;
+                const isAdminAssist = isEdit || isCreate || String(p.get('admin') || '') === '1' || ownerEmail !== '';
+                if (!isAdminAssist) return;
 
                 const banner = document.createElement('div');
+                banner.id = 'admin-listing-assist-banner';
                 banner.setAttribute('role', 'status');
-                banner.style.cssText = 'margin:12px auto 16px; max-width:960px; padding:12px 14px; border-radius:10px; border:1px solid #bfdbfe; background:#eff6ff; color:#1e3a8a; font-size:14px; line-height:1.45;';
-                let text = 'Admin mode: this listing will be saved for the customer';
-                if (ownerEmail) {
-                    text += ' (' + ownerEmail + ')';
-                }
-                text += '. A new listing ID is assigned when you duplicate; editing keeps the same ID unless you duplicate first.';
-                banner.textContent = text;
+                banner.style.cssText = 'margin:12px auto 16px; max-width:960px; padding:14px 16px; border-radius:10px; border:1px solid #bfdbfe; background:#eff6ff; color:#1e3a8a; font-size:14px; line-height:1.45;';
+
+                const title = document.createElement('div');
+                title.style.fontWeight = '700';
+                title.style.marginBottom = '8px';
+                title.textContent = isEdit
+                    ? 'Admin mode: editing a customer listing'
+                    : 'Admin mode: creating a listing for a customer';
+                banner.appendChild(title);
+
+                const intro = document.createElement('p');
+                intro.style.margin = '0 0 10px';
+                intro.textContent = 'Set the customer email below. The listing stays linked to that customer when saved.';
+                banner.appendChild(intro);
+
+                const label = document.createElement('label');
+                label.setAttribute('for', 'admin-listing-owner-email');
+                label.style.display = 'block';
+                label.style.fontWeight = '600';
+                label.style.marginBottom = '6px';
+                label.textContent = 'Customer email';
+                banner.appendChild(label);
+
+                const input = document.createElement('input');
+                input.type = 'email';
+                input.id = 'admin-listing-owner-email';
+                input.className = 'form-input';
+                input.value = ownerEmail;
+                input.placeholder = 'customer@example.com';
+                input.autocomplete = 'email';
+                input.style.cssText = 'width:100%; max-width:420px; box-sizing:border-box; padding:10px 12px; border:1px solid #93c5fd; border-radius:8px; font:inherit;';
+                banner.appendChild(input);
+
+                const hint = document.createElement('p');
+                hint.style.margin = '10px 0 0';
+                hint.style.fontSize = '13px';
+                hint.style.color = '#334155';
+                hint.textContent = isEdit
+                    ? 'Use “Update listing” when you finish. You will return to the admin listings section.'
+                    : 'Submit the form as usual when finished. Duplicating from admin creates a new listing ID.';
+                banner.appendChild(hint);
 
                 const anchor = document.querySelector('.create-job-container') || document.querySelector('main') || document.body;
                 if (anchor && anchor.firstChild) {
@@ -27551,8 +27587,15 @@ document.addEventListener('DOMContentLoaded', function() {
             let adminCreateMode = false;
             try {
                 const adminParams = new URLSearchParams(window.location.search || '');
-                adminCreateMode = String(adminParams.get('adminCreate') || '') === '1' || String(adminParams.get('admin') || '') === '1';
+                adminCreateMode = String(adminParams.get('adminCreate') || '') === '1';
                 adminOwnerEmail = String(adminParams.get('ownerEmail') || '').trim().toLowerCase();
+                const adminOwnerField = document.getElementById('admin-listing-owner-email');
+                if (adminOwnerField) {
+                    const fieldEmail = String(adminOwnerField.value || '').trim().toLowerCase();
+                    if (fieldEmail) {
+                        adminOwnerEmail = fieldEmail;
+                    }
+                }
             } catch (_adminParamErr) {
                 adminOwnerEmail = '';
                 adminCreateMode = false;
@@ -27570,13 +27613,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         return;
                     }
                 } else if (isAdminListingSave) {
-                    const prompted = prompt('Customer email for this listing:', adminOwnerEmail || currentUser.email || '');
-                    if (prompted === null) {
-                        return;
-                    }
-                    selectedQuoteEmail = String(prompted || '').trim().toLowerCase();
+                    selectedQuoteEmail = adminOwnerEmail;
                     if (!selectedQuoteEmail || selectedQuoteEmail.indexOf('@') < 1) {
-                        alert('Please enter a valid customer email.');
+                        alert('Please enter a valid customer email in the admin banner at the top of the form.');
+                        const adminOwnerField = document.getElementById('admin-listing-owner-email');
+                        if (adminOwnerField) {
+                            adminOwnerField.focus();
+                        }
                         return;
                     }
                 }
@@ -27895,11 +27938,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (isUpdateOnlyFlow) {
                 const highlightId = String(quoteData.formId || '').trim();
-                const dashUrl = typeof window.resolveMyListingsDashboardHref === 'function'
-                    ? window.resolveMyListingsDashboardHref(highlightId)
-                    : (highlightId
+                let dashUrl = '';
+                if (isAdminListingSave) {
+                    try {
+                        dashUrl = String(sessionStorage.getItem('anytransport_admin_return_url') || '').trim();
+                    } catch (_adminReturnErr) {
+                        dashUrl = '';
+                    }
+                    if (!dashUrl) {
+                        dashUrl = 'dashboard.html#admin-section-forms';
+                    }
+                    if (highlightId && dashUrl.indexOf('#') < 0) {
+                        dashUrl += '#admin-section-forms';
+                    }
+                } else if (typeof window.resolveMyListingsDashboardHref === 'function') {
+                    dashUrl = window.resolveMyListingsDashboardHref(highlightId);
+                } else {
+                    dashUrl = highlightId
                         ? `customer-dashboard.html?tab=forms&my-requests=1&highlightForm=${encodeURIComponent(highlightId)}`
-                        : 'customer-dashboard.html?tab=forms&my-requests=1');
+                        : 'customer-dashboard.html?tab=forms&my-requests=1';
+                }
                 quoteSubmitKeepLocked = true;
                 window.location.href = dashUrl;
                 return;

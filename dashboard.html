@@ -206,6 +206,20 @@
         </section>
     </main>
 
+    <div id="admin-create-listing-modal" class="customer-budget-modal" role="dialog" aria-modal="true" aria-labelledby="admin-create-listing-modal-title" hidden>
+        <div class="customer-budget-dialog admin-delete-listing-dialog">
+            <button type="button" class="admin-delete-listing-close" data-admin-create-close aria-label="Close">&times;</button>
+            <h2 id="admin-create-listing-modal-title">Create listing for customer</h2>
+            <p class="customer-budget-intro">Enter the customer&apos;s email. The listing will be saved under their account when they sign in with that email.</p>
+            <label for="admin-create-listing-email">Customer email</label>
+            <input type="email" id="admin-create-listing-email" class="form-input admin-delete-listing-reason" placeholder="customer@example.com" autocomplete="email">
+            <div class="customer-budget-dialog-actions admin-delete-listing-actions">
+                <button type="button" class="btn btn-outline" data-admin-create-close>Cancel</button>
+                <button type="button" class="btn btn-primary" id="admin-create-listing-confirm-btn">Continue to form</button>
+            </div>
+        </div>
+    </div>
+
     <div id="admin-delete-listing-modal" class="customer-budget-modal" role="dialog" aria-modal="true" aria-labelledby="admin-delete-listing-modal-title" hidden>
         <div class="customer-budget-dialog admin-delete-listing-dialog">
             <button type="button" class="admin-delete-listing-close" data-admin-delete-close aria-label="Close">&times;</button>
@@ -236,6 +250,6 @@
     </script>
     <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/provider-profile.js?v=20260428-1"></script>
-    <script src="js/dashboard-fixed.js?v=20260529-1"></script>
+    <script src="js/dashboard-fixed.js?v=20260529-2"></script>
 </body>
 </html>
