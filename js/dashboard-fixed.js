@@ -75,6 +75,56 @@
         adminReviewRefreshTimer: null
     };
 
+    let adminReviewQueueRenderTimer = null;
+
+    function captureAdminSearchFocus() {
+        const active = document.activeElement;
+        if (!active || !active.classList) {
+            return null;
+        }
+        if (active.classList.contains('admin-listing-search')) {
+            return { type: 'listing', start: active.selectionStart, end: active.selectionEnd };
+        }
+        if (active.classList.contains('admin-provider-search')) {
+            return { type: 'provider', start: active.selectionStart, end: active.selectionEnd };
+        }
+        return null;
+    }
+
+    function restoreAdminSearchFocus(focusHint) {
+        if (!focusHint) {
+            return;
+        }
+        const container = document.getElementById('provider-review-queue');
+        if (!container) {
+            return;
+        }
+        const selector = focusHint.type === 'listing' ? '.admin-listing-search' : '.admin-provider-search';
+        const input = container.querySelector(selector);
+        if (!input) {
+            return;
+        }
+        input.focus();
+        try {
+            const len = String(input.value || '').length;
+            const start = typeof focusHint.start === 'number' ? focusHint.start : len;
+            const end = typeof focusHint.end === 'number' ? focusHint.end : len;
+            input.setSelectionRange(Math.min(start, len), Math.min(end, len));
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
+    function scheduleAdminReviewQueueRender() {
+        if (adminReviewQueueRenderTimer) {
+            clearTimeout(adminReviewQueueRenderTimer);
+        }
+        adminReviewQueueRenderTimer = setTimeout(() => {
+            adminReviewQueueRenderTimer = null;
+            renderAdminReviewQueue();
+        }, 200);
+    }
+
     function isStorageQuotaError(error) {
         if (!error) return false;
         const name = String(error.name || '').toLowerCase();
@@ -1464,18 +1514,18 @@
         document.addEventListener('input', (event) => {
             const adminListingSearchInput = event.target.closest('.admin-listing-search');
             if (adminListingSearchInput) {
-                state.adminListingQuery = String(adminListingSearchInput.value || '').trim();
+                state.adminListingQuery = String(adminListingSearchInput.value || '');
                 if (state.activeTab === 'verification-review') {
-                    renderAdminReviewQueue();
+                    scheduleAdminReviewQueueRender();
                 }
                 return;
             }
 
             const adminSearchInput = event.target.closest('.admin-provider-search');
             if (adminSearchInput) {
-                state.adminReviewQuery = String(adminSearchInput.value || '').trim();
+                state.adminReviewQuery = String(adminSearchInput.value || '');
                 if (state.activeTab === 'verification-review') {
-                    renderAdminReviewQueue();
+                    scheduleAdminReviewQueueRender();
                 }
                 return;
             }
@@ -1875,8 +1925,11 @@
         const container = document.getElementById('provider-review-queue');
         if (!container) return;
 
+        const searchFocus = captureAdminSearchFocus();
+
         if (!(auth.isAdmin && auth.isAdmin())) {
             container.innerHTML = '<div class="empty-inventory">Admin access required.</div>';
+            restoreAdminSearchFocus(searchFocus);
             return;
         }
 
@@ -2179,6 +2232,8 @@
         } catch (_error) {
             container.innerHTML = '<div class="empty-inventory">Unable to load the review queue.</div>';
         }
+
+        restoreAdminSearchFocus(searchFocus);
     }
 
     function createProviderPreviewListing(user, bids) {
