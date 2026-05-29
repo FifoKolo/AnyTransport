@@ -25,6 +25,74 @@
     }
 })();
 
+// Global page loader for slow refresh/navigation.
+(function initAnyTransportGlobalPageLoader() {
+    const STYLE_ID = 'anytransport-global-loader-style';
+    const ROOT_ID = 'anytransport-global-loader';
+
+    function ensureStyle() {
+        if (document.getElementById(STYLE_ID)) return;
+        const style = document.createElement('style');
+        style.id = STYLE_ID;
+        style.textContent = [
+            '#' + ROOT_ID + '{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.84);backdrop-filter:blur(2px);z-index:99999;opacity:0;visibility:hidden;transition:opacity .18s ease,visibility .18s ease;}',
+            '#' + ROOT_ID + '.is-visible{opacity:1;visibility:visible;}',
+            '#' + ROOT_ID + ' .anytransport-loader-ring{width:58px;height:58px;border-radius:999px;border:5px solid rgba(37,99,235,.22);border-top-color:#2563eb;animation:anytransportLoaderSpin .8s linear infinite;}',
+            '@keyframes anytransportLoaderSpin{to{transform:rotate(360deg);}}'
+        ].join('');
+        document.head.appendChild(style);
+    }
+
+    function ensureRoot() {
+        let root = document.getElementById(ROOT_ID);
+        if (root) return root;
+        root = document.createElement('div');
+        root.id = ROOT_ID;
+        root.setAttribute('aria-hidden', 'true');
+        root.innerHTML = '<div class="anytransport-loader-ring"></div>';
+        document.body.appendChild(root);
+        return root;
+    }
+
+    function setVisible(visible) {
+        if (!document.body) return;
+        ensureStyle();
+        const root = ensureRoot();
+        root.classList.toggle('is-visible', !!visible);
+    }
+
+    function hideWhenReady() {
+        if (document.readyState === 'complete') {
+            setVisible(false);
+            return;
+        }
+        setVisible(true);
+        window.addEventListener('load', function () {
+            setVisible(false);
+        }, { once: true });
+    }
+
+    window.anytransportShowPageLoader = function anytransportShowPageLoader() {
+        setVisible(true);
+    };
+    window.anytransportHidePageLoader = function anytransportHidePageLoader() {
+        setVisible(false);
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', hideWhenReady, { once: true });
+    } else {
+        hideWhenReady();
+    }
+
+    window.addEventListener('beforeunload', function () {
+        setVisible(true);
+    });
+    window.addEventListener('pageshow', function () {
+        setVisible(false);
+    });
+})();
+
 // Authentication Management
 window.anytransportApi = window.anytransportApi || (function () {
     const API_URL = resolveApiUrl();
@@ -137,6 +205,28 @@ window.anytransportApi = window.anytransportApi || (function () {
         const xhr = new XMLHttpRequest();
         const url = buildUrl(action, params);
         const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+        const normalizedMethod = String(method || 'GET').toUpperCase();
+        const heavyGetActions = {
+            'quotes.list': true,
+            'quotes.get': true,
+            'identity.review.queue': true,
+            'providers.search': true,
+            'reports.list': true
+        };
+        const shouldShowLoaderForThisRequest =
+            normalizedMethod !== 'GET' || !!heavyGetActions[String(action || '')];
+        const shouldToggleLoader =
+            action !== 'auth.me' &&
+            action !== 'notifications.list' &&
+            shouldShowLoaderForThisRequest &&
+            typeof window.anytransportShowPageLoader === 'function' &&
+            typeof window.anytransportHidePageLoader === 'function';
+        let loaderDelayTimer = null;
+        if (shouldToggleLoader) {
+            loaderDelayTimer = window.setTimeout(function () {
+                window.anytransportShowPageLoader();
+            }, 200);
+        }
         xhr.open(method, url, false);
         xhr.withCredentials = true;
         xhr.setRequestHeader('Accept', 'application/json');
@@ -188,6 +278,13 @@ window.anytransportApi = window.anytransportApi || (function () {
                 });
             }
             throw err;
+        } finally {
+            if (shouldToggleLoader) {
+                if (loaderDelayTimer !== null) {
+                    window.clearTimeout(loaderDelayTimer);
+                }
+                window.anytransportHidePageLoader();
+            }
         }
     }
 
