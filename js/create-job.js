@@ -27629,11 +27629,23 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('[QUOTE FORM] proceeding to save');
 
             // Add user information to quote data
-            quoteData.customerName = currentUser.name || quoteData.customerName;
             quoteData.customerEmail = selectedQuoteEmail;
-            quoteData.customerPhone = currentUser.phone || '';
             if (isAdminListingSave) {
                 quoteData.ownerEmail = selectedQuoteEmail;
+                // Never copy the signed-in admin profile into customer fields (API resolves from owner email).
+                const adminName = String(currentUser.name || currentUser.username || '').trim();
+                const adminPhone = String(currentUser.phone || '').trim();
+                const savedName = String(quoteData.customerName || '').trim();
+                const savedPhone = String(quoteData.customerPhone || '').trim();
+                if (adminName && savedName === adminName) {
+                    quoteData.customerName = '';
+                }
+                if (adminPhone && savedPhone === adminPhone) {
+                    quoteData.customerPhone = '';
+                }
+            } else {
+                quoteData.customerName = currentUser.name || quoteData.customerName;
+                quoteData.customerPhone = currentUser.phone || '';
             }
 
             if (isUpdateOnlyFlow && editQuoteId) {

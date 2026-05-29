@@ -1901,6 +1901,66 @@ function normalize_quote($quote, $quotes) {
     return $normalized;
 }
 
+function apply_customer_details_from_owner($store, &$normalized, $ownerEmail, $previousQuote = null, $sessionUser = null) {
+    $ownerEmail = strtolower(trim((string) $ownerEmail));
+    if ($ownerEmail === '') {
+        return;
+    }
+
+    $normalized['customerEmail'] = $ownerEmail;
+    $sessionName = is_array($sessionUser)
+        ? trim((string) ($sessionUser['name'] ?? $sessionUser['username'] ?? $sessionUser['nickname'] ?? ''))
+        : '';
+    $sessionPhone = is_array($sessionUser) ? trim((string) ($sessionUser['phone'] ?? '')) : '';
+
+    $owner = find_user_by_email(isset($store['users']) && is_array($store['users']) ? $store['users'] : array(), $ownerEmail);
+    if (is_array($owner)) {
+        $name = trim((string) ($owner['name'] ?? $owner['username'] ?? $owner['nickname'] ?? $owner['businessName'] ?? ''));
+        $phone = trim((string) ($owner['phone'] ?? ''));
+        if ($name !== '') {
+            $normalized['customerName'] = $name;
+        }
+        if ($phone !== '') {
+            $normalized['customerPhone'] = $phone;
+        }
+        return;
+    }
+
+    $currentName = trim((string) ($normalized['customerName'] ?? ''));
+    $currentPhone = trim((string) ($normalized['customerPhone'] ?? ''));
+    if ($sessionName !== '' && strcasecmp($currentName, $sessionName) === 0) {
+        $normalized['customerName'] = '';
+    }
+    if ($sessionPhone !== '' && $currentPhone === $sessionPhone) {
+        $normalized['customerPhone'] = '';
+    }
+
+    if (is_array($previousQuote)) {
+        $prevEmail = strtolower(trim((string) ($previousQuote['customerEmail'] ?? '')));
+        if ($prevEmail === $ownerEmail) {
+            $prevName = trim((string) ($previousQuote['customerName'] ?? ''));
+            $prevPhone = trim((string) ($previousQuote['customerPhone'] ?? ''));
+            if ($prevName !== '' && ($sessionName === '' || strcasecmp($prevName, $sessionName) !== 0)) {
+                $normalized['customerName'] = $prevName;
+            }
+            if ($prevPhone !== '' && ($sessionPhone === '' || $prevPhone !== $sessionPhone)) {
+                $normalized['customerPhone'] = $prevPhone;
+            }
+            if (trim((string) ($normalized['customerName'] ?? '')) !== '') {
+                return;
+            }
+        }
+    }
+
+    if (trim((string) ($normalized['customerName'] ?? '')) === '') {
+        $localPart = explode('@', $ownerEmail);
+        $local = isset($localPart[0]) ? trim((string) $localPart[0]) : '';
+        if ($local !== '') {
+            $normalized['customerName'] = ucwords(str_replace(array('.', '_', '-'), ' ', $local));
+        }
+    }
+}
+
 function apply_quote_ownership_on_save(&$store, $sessionUser, &$normalized, $input, $isQuoteUpdate, $previousQuote) {
     if (!is_array($sessionUser)) {
         return;
@@ -1939,14 +1999,14 @@ function apply_quote_ownership_on_save(&$store, $sessionUser, &$normalized, $inp
                 $normalized['userId'] = $uid;
                 $normalized['createdBy'] = $uid;
             }
-            $normalized['customerEmail'] = $ownerEmail;
+            apply_customer_details_from_owner($store, $normalized, $ownerEmail, $previousQuote, $sessionUser);
         } else {
             if ($prevUserId !== '') {
                 $normalized['userId'] = $prevUserId;
                 $normalized['createdBy'] = trim((string) ($previousQuote['createdBy'] ?? $prevUserId));
             }
             if ($prevEmail !== '') {
-                $normalized['customerEmail'] = $prevEmail;
+                apply_customer_details_from_owner($store, $normalized, $prevEmail, $previousQuote, $sessionUser);
             }
         }
         return;
@@ -1962,7 +2022,7 @@ function apply_quote_ownership_on_save(&$store, $sessionUser, &$normalized, $inp
             $normalized['userId'] = $uid;
             $normalized['createdBy'] = $uid;
         }
-        $normalized['customerEmail'] = $ownerEmail;
+        apply_customer_details_from_owner($store, $normalized, $ownerEmail, $previousQuote, $sessionUser);
     }
 
     if ($adminId !== '') {
@@ -4832,7 +4892,13 @@ switch ($action) {
         if ($customerEmail !== '') {
             $customerName = trim((string) ($normalized['customerName'] ?? ''));
             if ($customerName === '' && is_array($sessionUser)) {
-                $customerName = trim((string) ($sessionUser['name'] ?? $sessionUser['username'] ?? ''));
+                $sessionEmail = strtolower(trim((string) ($sessionUser['email'] ?? '')));
+                $quoteOwnerEmail = strtolower(trim((string) ($normalized['customerEmail'] ?? '')));
+                $sessionOwnsQuote = ($sessionEmail !== '' && $quoteOwnerEmail !== '' && $sessionEmail === $quoteOwnerEmail)
+                    || session_user_owns_quote($sessionUser, $normalized);
+                if (!is_admin_user($sessionUser) || $sessionOwnsQuote) {
+                    $customerName = trim((string) ($sessionUser['name'] ?? $sessionUser['username'] ?? ''));
+                }
             }
             if ($customerName === '') {
                 $customerName = 'there';

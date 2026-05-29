@@ -1814,6 +1814,35 @@
         });
     }
 
+    function resolveQuoteCustomerDisplayName(quote, usersByEmail) {
+        const email = String(quote && quote.customerEmail || '').trim().toLowerCase();
+        const stored = String(firstText(quote && quote.customerName, quote && quote.fullName, quote && quote.name) || '').trim();
+        let adminName = '';
+        try {
+            const me = auth && typeof auth.getUser === 'function' ? auth.getUser() : null;
+            adminName = String(firstText(me && me.name, me && me.username) || '').trim();
+        } catch (_e) {
+            adminName = '';
+        }
+
+        if (email && usersByEmail && usersByEmail[email]) {
+            const profileName = String(firstText(
+                usersByEmail[email].name,
+                usersByEmail[email].username,
+                usersByEmail[email].nickname
+            ) || '').trim();
+            if (profileName) {
+                return profileName;
+            }
+        }
+
+        if (stored && (!adminName || stored.toLowerCase() !== adminName.toLowerCase())) {
+            return stored;
+        }
+
+        return '';
+    }
+
     function matchesAdminListingQuery(quote, query, userNameById) {
         const q = String(query || '').trim().toLowerCase();
         if (!q) {
@@ -1958,6 +1987,14 @@
                     + '</tr>';
             }).join('') : '<tr><td colspan="6" class="customer-empty-cell">No rejected providers found.</td></tr>';
 
+            const usersByEmail = {};
+            allUsers.forEach((entry) => {
+                const em = String(entry && entry.email || '').trim().toLowerCase();
+                if (em) {
+                    usersByEmail[em] = entry;
+                }
+            });
+
             const listingQuery = String(state.adminListingQuery || '').trim();
             const quotesForListings = allQuotes.filter((quote) => matchesAdminListingQuery(quote, listingQuery, userNameById));
             const quoteRows = quotesForListings.length ? quotesForListings.slice().sort((a, b) => {
@@ -1966,7 +2003,8 @@
                 const quoteId = String(quote.id || '').trim();
                 const formId = escapeHtml(firstText(quote.formId, quoteId, '—'));
                 const owner = escapeHtml(firstText(quote.customerEmail, quote.customerName, quote.userId, 'Unknown'));
-                const customerFullName = escapeHtml(firstText(quote.customerName, quote.fullName, quote.name));
+                const customerDisplayName = resolveQuoteCustomerDisplayName(quote, usersByEmail);
+                const customerFullName = customerDisplayName ? escapeHtml(customerDisplayName) : '';
                 const customerPhone = escapeHtml(firstText(quote.customerPhone, quote.phone, quote.customerTel, quote.contactNumber));
                 return [
                     '<article class="provider-listing" style="margin-bottom:12px;">',
