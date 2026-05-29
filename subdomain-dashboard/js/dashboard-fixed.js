@@ -1250,10 +1250,8 @@
                     return;
                 }
                 const quoteId = String(adminDeleteFormBtn.getAttribute('data-quote-id') || '').trim();
-                const row = adminDeleteFormBtn.closest('.provider-listing');
-                const notesField = row ? row.querySelector('.admin-form-note') : null;
-                const reason = notesField ? String(notesField.value || '').trim() : '';
-                adminDeleteQuote(quoteId, user, reason);
+                const listingLabel = String(adminDeleteFormBtn.getAttribute('data-form-id') || quoteId || '').trim();
+                openAdminDeleteListingModal(quoteId, user, listingLabel);
                 return;
             }
 
@@ -1326,6 +1324,8 @@
                 editQuote(quoteEditBtn.getAttribute('data-quote-id'));
             }
         });
+
+        wireAdminDeleteListingModal(user);
 
         document.addEventListener('keydown', (event) => {
             if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -1948,7 +1948,7 @@
                     '<button type="button" class="btn btn-outline admin-edit-form-btn" data-quote-id="' + escapeHtml(quoteId) + '" data-owner-email="' + escapeHtml(firstText(quote.customerEmail, '')) + '">Edit form</button>',
                     '<button type="button" class="btn btn-outline admin-duplicate-form-btn" data-quote-id="' + escapeHtml(quoteId) + '" data-owner-email="' + escapeHtml(firstText(quote.customerEmail, '')) + '">Duplicate</button>',
                     '<button type="button" class="btn btn-secondary admin-email-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">Email listing owner</button>',
-                    '<button type="button" class="btn btn-danger admin-delete-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">Delete listing</button>',
+                    '<button type="button" class="btn btn-danger admin-delete-form-btn" data-quote-id="' + escapeHtml(quoteId) + '" data-form-id="' + escapeHtml(formId) + '">Delete listing</button>',
                     '<span class="admin-email-status" style="display:none; align-items:center; font-weight:700; color:#64748b;"></span>',
                     '</div>',
                     '</div>',
@@ -3569,14 +3569,90 @@
         }
     }
 
-    function adminDeleteQuote(quoteId, user, reason) {
+    let adminDeleteListingPending = null;
+    let adminDeleteListingModalWired = false;
+
+    function closeAdminDeleteListingModal() {
+        const modal = document.getElementById('admin-delete-listing-modal');
+        const reasonField = document.getElementById('admin-delete-listing-reason');
+        if (modal) {
+            modal.hidden = true;
+            modal.classList.remove('is-open');
+        }
+        if (reasonField) {
+            reasonField.value = '';
+        }
+        adminDeleteListingPending = null;
+    }
+
+    function openAdminDeleteListingModal(quoteId, user, listingLabel) {
         const id = String(quoteId || '').trim();
         if (!id) return;
 
-        const message = reason
-            ? 'Delete this listing permanently? The owner will be emailed with your message.'
-            : 'Delete this listing permanently? No email will be sent unless you add a message first.';
-        if (!confirm(message)) return;
+        wireAdminDeleteListingModal(user);
+
+        const modal = document.getElementById('admin-delete-listing-modal');
+        const subEl = document.getElementById('admin-delete-listing-modal-sub');
+        const reasonField = document.getElementById('admin-delete-listing-reason');
+        if (!modal) {
+            if (!window.confirm('Are you sure you want to delete this listing?')) return;
+            adminDeleteQuote(id, user, '');
+            return;
+        }
+
+        adminDeleteListingPending = { quoteId: id, user: user };
+        const label = String(listingLabel || id).trim();
+        if (subEl) {
+            subEl.textContent = label
+                ? 'Are you sure you want to permanently delete listing #' + label + '? This cannot be undone.'
+                : 'Are you sure you want to permanently delete this listing? This cannot be undone.';
+        }
+        if (reasonField) {
+            reasonField.value = '';
+        }
+        modal.hidden = false;
+        modal.classList.add('is-open');
+        if (reasonField) {
+            reasonField.focus();
+        }
+    }
+
+    function wireAdminDeleteListingModal(user) {
+        if (adminDeleteListingModalWired) return;
+        adminDeleteListingModalWired = true;
+
+        const modal = document.getElementById('admin-delete-listing-modal');
+        const confirmBtn = document.getElementById('admin-delete-listing-confirm-btn');
+        if (!modal || !confirmBtn) return;
+
+        modal.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                closeAdminDeleteListingModal();
+            }
+        });
+
+        modal.querySelectorAll('[data-admin-delete-close]').forEach((btn) => {
+            btn.addEventListener('click', () => closeAdminDeleteListingModal());
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape' || modal.hidden) return;
+            closeAdminDeleteListingModal();
+        });
+
+        confirmBtn.addEventListener('click', () => {
+            const pending = adminDeleteListingPending;
+            if (!pending || !pending.quoteId) return;
+            const reasonField = document.getElementById('admin-delete-listing-reason');
+            const reason = reasonField ? String(reasonField.value || '').trim() : '';
+            closeAdminDeleteListingModal();
+            adminDeleteQuote(pending.quoteId, pending.user || user, reason);
+        });
+    }
+
+    function adminDeleteQuote(quoteId, user, reason) {
+        const id = String(quoteId || '').trim();
+        if (!id) return;
 
         try {
             if (window.anytransportApi && typeof window.anytransportApi.deleteQuote === 'function') {

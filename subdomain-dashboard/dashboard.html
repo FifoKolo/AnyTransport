@@ -9,7 +9,7 @@
     <title>My Dashboard - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260322-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260522-1">
-    <link rel="stylesheet" href="css/dashboard.css?v=20260522-1">
+    <link rel="stylesheet" href="css/dashboard.css?v=20260529-1">
     <link rel="stylesheet" href="css/responsive.css?v=20260529-1">
     <link href="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css" rel="stylesheet">
     <script src="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js"></script>
@@ -206,6 +206,20 @@
         </section>
     </main>
 
+    <div id="admin-delete-listing-modal" class="customer-budget-modal" role="dialog" aria-modal="true" aria-labelledby="admin-delete-listing-modal-title" hidden>
+        <div class="customer-budget-dialog admin-delete-listing-dialog">
+            <button type="button" class="admin-delete-listing-close" data-admin-delete-close aria-label="Close">&times;</button>
+            <h2 id="admin-delete-listing-modal-title">Delete listing?</h2>
+            <p id="admin-delete-listing-modal-sub" class="customer-budget-intro">Are you sure you want to permanently delete this listing? This cannot be undone.</p>
+            <label for="admin-delete-listing-reason">Reason (optional)</label>
+            <textarea id="admin-delete-listing-reason" class="form-input admin-delete-listing-reason" rows="4" placeholder="Explain why this listing is being removed. If provided, the customer will receive this in an email."></textarea>
+            <div class="customer-budget-dialog-actions admin-delete-listing-actions">
+                <button type="button" class="btn btn-outline" data-admin-delete-close>Cancel</button>
+                <button type="button" class="btn btn-danger" id="admin-delete-listing-confirm-btn">Delete listing</button>
+            </div>
+        </div>
+    </div>
+
     <script src="js/cache-maintenance.js?v=20260322-2"></script>
     <script src="js/auth.js?v=20260522-8"></script>
     <script>
@@ -221,6 +235,6 @@
         });
     </script>
     <script src="js/notifications.js?v=20260420-4"></script>
-    <script src="js/dashboard-fixed.js?v=20260522-1"></script>
+    <script src="js/dashboard-fixed.js?v=20260529-1"></script>
 </body>
 </html>
