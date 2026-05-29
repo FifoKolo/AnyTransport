@@ -406,7 +406,8 @@
         const reviewStatus = String(u.identityReviewStatus || '').trim();
         const statusBadge = document.createElement('div');
         statusBadge.style.marginBottom = '10px';
-        if (reviewStatus === 'approved') {
+        const stripeComplete = String(u.stripeOnboardingStatus || '').trim().toLowerCase() === 'complete';
+        if (stripeComplete || reviewStatus === 'approved' || u.verified) {
             statusBadge.className = 'provider-verified-badge';
             statusBadge.innerHTML = '<span aria-hidden="true">\u2713</span> Verified by AnyTransport';
         } else if (reviewStatus === 'rejected') {
@@ -414,7 +415,7 @@
             statusBadge.textContent = 'Identity review rejected';
         } else {
             statusBadge.className = 'provider-verified-badge provider-verified-badge--pending';
-            statusBadge.textContent = 'Verification pending — complete onboarding in your dashboard';
+            statusBadge.textContent = 'Verification pending — check your email for the Stripe verification link';
         }
         root.appendChild(statusBadge);
 

@@ -125,19 +125,15 @@
                     <input type="tel" id="signup-contact" name="contact" placeholder="e.g. +353 87 123 4567" autocomplete="tel">
                 </div>
                 <div id="provider-identity-section" style="display:none; margin-top: 8px; padding: 12px; border: 1px solid #dbeafe; border-radius: 10px; background: #f8fbff;">
-                    <div style="font-weight: 700; margin-bottom: 8px; color: #1d4ed8;">Identity review for providers</div>
-                    <p style="margin: 0 0 12px; color: #475569; font-size: 0.92rem;">Upload the documents someone on our team should review before your provider account is approved.</p>
-                    <div class="form-group" style="margin-bottom: 12px;">
-                        <label>Government ID Front</label>
-                        <input type="file" id="signup-id-front" name="identityPhotos" accept="image/*" capture="environment">
-                    </div>
-                    <div class="form-group" style="margin-bottom: 12px;">
-                        <label>Government ID Back</label>
-                        <input type="file" id="signup-id-back" name="identityPhotos" accept="image/*" capture="environment">
+                    <div style="font-weight: 700; margin-bottom: 8px; color: #1d4ed8;">Provider verification</div>
+                    <p style="margin: 0 0 12px; color: #475569; font-size: 0.92rem;">Upload clear photos of your ID (stored securely on Stripe). After signup we email you a Stripe verification link. An admin reviews your Stripe documents before your account is fully activated.</p>
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label for="identity-photo-front">ID photo — front <span style="color:#dc2626;">*</span></label>
+                        <input type="file" id="identity-photo-front" name="identityPhotos" accept="image/*" capture="environment">
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label>Selfie Holding ID</label>
-                        <input type="file" id="signup-id-selfie" name="identityPhotos" accept="image/*" capture="user">
+                        <label for="identity-photo-back">ID photo — back (optional)</label>
+                        <input type="file" id="identity-photo-back" name="identityPhotos" accept="image/*" capture="environment">
                     </div>
                 </div>
                 <div class="form-group">

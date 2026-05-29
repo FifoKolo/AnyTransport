@@ -140,9 +140,26 @@
 
         const statusLabel = String(user && user.identityReviewStatus || 'pending_review').replace(/_/g, ' ');
         const isRejected = String(user && user.identityReviewStatus || '').trim().toLowerCase() === 'rejected';
-        banner.innerHTML = isRejected
-            ? '<strong>Account not approved.</strong> Your provider verification was rejected. Open <strong>Profile</strong> to update your documents, or contact support if you need help.'
-            : '<strong>Verification in progress.</strong> Your account status is <em>' + escapeHtml(statusLabel) + '</em>. You can use <strong>Profile</strong> while we review your account; messages, listings, and bids unlock after admin approval.';
+        const stripePending = auth && typeof auth.providerNeedsStripeVerification === 'function' && auth.providerNeedsStripeVerification(user);
+        const adminPending = auth && typeof auth.providerNeedsAdminApproval === 'function' && auth.providerNeedsAdminApproval(user);
+        if (isRejected) {
+            banner.innerHTML = [
+                '<strong>Verification not approved.</strong> Check your email for a new Stripe verification link, upload clear ID photos, and complete verification again.',
+                ' <button type="button" class="btn btn-secondary btn-sm" id="provider-resend-stripe-email" style="margin-left:8px;">Resend verification email</button>'
+            ].join('');
+            bindProviderResendStripeEmailButton();
+        } else if (stripePending) {
+            banner.innerHTML = [
+                '<strong>Complete Stripe verification.</strong> Check your email for the verification link we sent when you registered.',
+                ' <button type="button" class="btn btn-secondary btn-sm" id="provider-resend-stripe-email" style="margin-left:8px;">Resend verification email</button>',
+                ' Complete Stripe first, then an admin will review your ID photos before bidding unlocks.'
+            ].join('');
+            bindProviderResendStripeEmailButton();
+        } else if (adminPending) {
+            banner.innerHTML = '<strong>Admin review in progress.</strong> Stripe verification is complete. An AnyTransport admin is reviewing your identity documents on Stripe; messaging, listings, and bids unlock after approval.';
+        } else {
+            banner.innerHTML = '<strong>Verification in progress.</strong> Your account status is <em>' + escapeHtml(statusLabel) + '</em>. Upload ID photos at signup, complete Stripe verification from your email, then wait for admin approval.';
+        }
 
         [
             'provider-dashboard-panel',
@@ -162,6 +179,59 @@
             link.style.display = 'none';
             link.setAttribute('aria-hidden', 'true');
         });
+    }
+
+    function bindProviderResendStripeEmailButton() {
+        const resendBtn = document.getElementById('provider-resend-stripe-email');
+        if (!resendBtn || resendBtn.dataset.bound) {
+            return;
+        }
+        resendBtn.dataset.bound = '1';
+        resendBtn.addEventListener('click', function () {
+            if (!window.anytransportApi || typeof window.anytransportApi.sendProviderStripeVerificationEmail !== 'function') {
+                alert('Verification email is not available right now.');
+                return;
+            }
+            resendBtn.disabled = true;
+            try {
+                const resp = window.anytransportApi.sendProviderStripeVerificationEmail('dashboard.html');
+                if (resp && resp.emailed) {
+                    alert('Verification email sent. Please check your inbox.');
+                } else if (resp && resp.complete) {
+                    alert('Stripe step complete. If bidding is still locked, admin approval is pending.');
+                    window.location.reload();
+                } else if (resp && resp.onboardingUrl) {
+                    window.location.href = resp.onboardingUrl;
+                } else {
+                    alert((resp && resp.error) || 'Could not send verification email. Try again later.');
+                }
+            } catch (err) {
+                alert(err && err.message ? err.message : 'Could not send verification email.');
+            } finally {
+                resendBtn.disabled = false;
+            }
+        });
+    }
+
+    function buildIdentityPhotoSrc(photo) {
+        const local = firstText(photo && photo.previewDataUrl, photo && photo.dataUrl, photo && photo.originalUrl, '');
+        if (local) {
+            return local;
+        }
+        const stripeFile = photo && photo.stripeFile ? String(photo.stripeFile).trim() : '';
+        if (!stripeFile) {
+            return '';
+        }
+        let url = 'api/index.php?action=stripe.file.get&fileId=' + encodeURIComponent(stripeFile);
+        try {
+            const token = localStorage.getItem('anytransport_session_token');
+            if (token) {
+                url += '&session=' + encodeURIComponent(token);
+            }
+        } catch (_e) {
+            // ignore storage errors
+        }
+        return url;
     }
 
     function clearProviderPendingApprovalState() {
@@ -1040,14 +1110,21 @@
 
                 // If admin is declining, require a note
                 if (status === 'rejected' && (!notes || String(notes).trim() === '')) {
-                    alert('Please add a review note explaining the reason for declining this provider.');
+                    alert('Please add a review note explaining why identity verification must be redone.');
                     if (notesField) notesField.focus();
+                    return;
+                }
+
+                if (status === 'rejected' && !confirm('Reject this provider and require them to redo Stripe identity verification? A new verification email will be sent.')) {
                     return;
                 }
 
                 try {
                     if (window.anytransportApi && typeof window.anytransportApi.updateIdentityReview === 'function') {
-                        window.anytransportApi.updateIdentityReview(providerId, status, notes);
+                        const reviewResp = window.anytransportApi.updateIdentityReview(providerId, status, notes);
+                        if (status === 'rejected' && reviewResp && reviewResp.stripeVerification && reviewResp.stripeVerification.emailed) {
+                            alert('Provider rejected. A new Stripe verification email was sent.');
+                        }
                     } else {
                         const users = auth && typeof auth.loadUsers === 'function' ? auth.loadUsers() : [];
                         const index = users.findIndex((entry) => String(entry && entry.id || '') === providerId);
@@ -1697,16 +1774,19 @@
                 const name = escapeHtml(firstText(provider.businessName, provider.name, provider.nickname, provider.username, provider.email));
                 const email = escapeHtml(firstText(provider.email, 'Not provided'));
                 const status = escapeHtml(String(provider.identityReviewStatus || 'pending_review').replace(/_/g, ' '));
+                const stripeStatus = escapeHtml(String(provider.stripeOnboardingStatus || 'not_started').replace(/_/g, ' '));
                 const notes = escapeHtml(firstText(provider.identityReviewNotes, ''));
                 const photos = Array.isArray(provider.identityPhotos) ? provider.identityPhotos : [];
                 const photoMarkup = photos.length ? photos.map((photo) => {
-                    const src = escapeHtml(firstText(photo.previewDataUrl, photo.dataUrl, photo.originalUrl, (photo.stripeFile ? ('api/index.php?action=stripe.file.get&fileId=' + encodeURIComponent(photo.stripeFile)) : '')));
+                    const src = escapeHtml(buildIdentityPhotoSrc(photo));
                     const label = escapeHtml(firstText(photo.label, photo.name, 'Identity photo'));
+                    const onStripe = !!(photo && (photo.stripeFile || String(photo.source || '').toLowerCase().indexOf('stripe') >= 0));
+                    const badge = onStripe ? ' <span style="font-size:10px; color:#1d4ed8;">(on Stripe)</span>' : '';
                     return '<figure style="margin:0; width:140px;">' +
                         '<img src="' + src + '" alt="' + label + '" style="width:140px; height:100px; object-fit:cover; border-radius:10px; border:1px solid #dbeafe;">' +
-                        '<figcaption style="font-size:12px; color:#64748b; margin-top:6px;">' + label + '</figcaption>' +
+                        '<figcaption style="font-size:12px; color:#64748b; margin-top:6px;">' + label + badge + '</figcaption>' +
                         '</figure>';
-                }).join('') : '<div class="empty-inventory">No identity photos attached.</div>';
+                }).join('') : '<div class="empty-inventory">No identity photos on file yet. Provider must upload ID photos and complete Stripe verification.</div>';
 
                 return [
                     '<article class="provider-listing" style="margin-bottom:16px;">',
@@ -1714,6 +1794,7 @@
                     '<div class="listing-cell">',
                     '<div class="listing-title">' + name + '</div>',
                     '<div class="listing-sub">' + email + '</div>',
+                    '<div class="listing-sub" style="margin-top:6px;">Stripe: <strong>' + stripeStatus + '</strong></div>',
                     '</div>',
                     '<div class="listing-cell"><span class="profile-value">' + status + '</span></div>',
                     '<div class="listing-cell" style="display:flex; flex-wrap:wrap; gap:10px;">' + photoMarkup + '</div>',
@@ -1723,7 +1804,7 @@
                     '<div class="actions review-actions" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-start;">',
                     '<button type="button" class="btn btn-outline reupload-identity-btn" data-provider-id="' + escapeHtml(provider.id) + '">Upload photos</button>',
                     '<button type="button" class="btn btn-primary review-provider-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="approved">Approve</button>',
-                    '<button type="button" class="btn btn-danger review-provider-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="rejected">Decline</button>',
+                    '<button type="button" class="btn btn-danger review-provider-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="rejected">Reject &amp; redo verification</button>',
                     '</div>',
                     '</div>',
                     '</div>',

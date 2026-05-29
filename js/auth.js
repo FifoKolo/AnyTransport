@@ -243,6 +243,9 @@ window.anytransportApi = window.anytransportApi || (function () {
         startProviderStripeOnboarding: function (returnPath) {
             return request('stripe.provider.onboarding', 'POST', { returnPath: returnPath || 'dashboard.html' });
         },
+        sendProviderStripeVerificationEmail: function (returnPath) {
+            return request('stripe.provider.verification.email', 'POST', { returnPath: returnPath || 'dashboard.html' });
+        },
         logout: function () {
             const response = request('auth.logout', 'POST', {});
             setTabSessionToken('');
@@ -279,12 +282,11 @@ window.anytransportApi = window.anytransportApi || (function () {
             return Array.isArray(response.providers) ? response.providers : [];
         },
         updateIdentityReview: function (providerId, status, notes) {
-            const response = request('identity.review.update', 'POST', {
+            return request('identity.review.update', 'POST', {
                 providerId: providerId,
                 status: status,
                 notes: notes || ''
             });
-            return response.provider || null;
         },
         replaceUsers: function (users) {
             const response = request('users.replaceAll', 'POST', { users: Array.isArray(users) ? users : [] });
@@ -1080,9 +1082,11 @@ class AuthManager {
     // Sign up user
     signup(formData) {
         let user;
+        let stripeVerification = null;
         if (window.anytransportApi) {
             const response = window.anytransportApi.signup(formData || {});
             user = response && response.user ? this.normalizeUserRecord(response.user, this.loadUsers()) : null;
+            stripeVerification = response && response.stripeVerification ? response.stripeVerification : null;
             if (!user) {
                 throw new Error((response && response.error) || 'Unable to create your account.');
             }
@@ -1124,7 +1128,7 @@ class AuthManager {
         this.currentUser = user;
         this.saveUser(user);
         this.initAuth();
-        return user;
+        return { user: user, stripeVerification: stripeVerification };
     }
 
     // Logout user
@@ -1380,10 +1384,25 @@ class AuthManager {
     isProviderApproved(user) {
         const record = user || this.currentUser;
         if (!record) return false;
+        const stripeComplete = String(record.stripeOnboardingStatus || '').trim().toLowerCase() === 'complete';
         const status = String(record.identityReviewStatus || '').trim().toLowerCase();
-        if (status === 'approved') return true;
+        if (status === 'approved' && stripeComplete) return true;
         const verified = record.verified;
-        return verified === true || verified === 1 || verified === '1' || verified === 'true';
+        return stripeComplete && (verified === true || verified === 1 || verified === '1' || verified === 'true');
+    }
+
+    providerNeedsStripeVerification(user) {
+        const record = user || this.currentUser;
+        if (!record || !this.isProvider()) return false;
+        const stripeStatus = String(record.stripeOnboardingStatus || '').trim().toLowerCase();
+        return stripeStatus === '' || stripeStatus === 'not_started' || stripeStatus === 'pending';
+    }
+
+    providerNeedsAdminApproval(user) {
+        const record = user || this.currentUser;
+        if (!record || !this.isProvider()) return false;
+        if (this.providerNeedsStripeVerification(record)) return false;
+        return !this.isProviderApproved(record);
     }
 
     isProviderPendingReview(user) {
@@ -1392,7 +1411,8 @@ class AuthManager {
         if (!this.isProvider()) return false;
         if (this.isProviderApproved(record)) return false;
         const status = String(record.identityReviewStatus || '').trim().toLowerCase();
-        return status === '' || status === 'pending_review' || status === 'pending';
+        if (status === 'rejected') return true;
+        return status === '' || status === 'pending_review' || status === 'pending' || this.providerNeedsAdminApproval(record);
     }
 
     canProviderAccessMessages(user) {
@@ -1591,6 +1611,11 @@ function openSignupModal(role) {
         identitySection.style.display = selectedRole === 'provider' ? 'block' : 'none';
     }
 
+    const identityInputs = identitySection ? identitySection.querySelectorAll('input[name="identityPhotos"]') : [];
+    identityInputs.forEach(function (input, index) {
+        input.required = selectedRole === 'provider' && index === 0;
+    });
+
     modal.setAttribute('data-signup-role', selectedRole);
     modal.classList.add('show');
 }
@@ -1706,10 +1731,8 @@ if (loginForm) {
                 const loginResult = auth.login(email, password);
                 const currentUser = getUserFromAuthResult(loginResult);
 
-                if (currentUser && String(currentUser.role || '') === 'provider' && !shouldDeferProviderStripeOnboarding()) {
-                    if (startProviderStripeOnboarding(currentUser)) {
-                        return;
-                    }
+                if (currentUser && typeof auth.refreshSessionUserFromServer === 'function') {
+                    currentUser = auth.refreshSessionUserFromServer() || currentUser;
                 }
 
                 closeLoginModal();
@@ -1764,8 +1787,8 @@ if (footerDriverLoginButton) {
                 return;
             }
 
-            if (startProviderStripeOnboarding(currentUser)) {
-                return;
+            if (typeof auth.refreshSessionUserFromServer === 'function') {
+                currentUser = auth.refreshSessionUserFromServer() || currentUser;
             }
             window.location.href = 'dashboard.html#provider-board';
         } catch (error) {
@@ -1878,22 +1901,22 @@ if (signupForm) {
             }
 
             if (!identityPhotos.length) {
-                alert('Please upload at least one identity photo before signing up as a provider.');
+                alert('Please upload at least one ID photo (front) before signing up as a provider.');
                 return;
             }
 
             pendingIdentityPhotos = identityPhotos;
-            // Persist photos with signup so admin review has immediate access,
-            // even if the follow-up Stripe upload fails.
-            formData.identityPhotos = identityPhotos.map((entry) => ({
-                label: entry.label || 'identity-photo',
-                name: entry.name || entry.label || 'identity-photo',
-                type: entry.type || 'image/jpeg',
-                size: Number(entry.size || 0),
-                dataUrl: entry.dataUrl || '',
-                previewDataUrl: entry.dataUrl || '',
-                uploadedAt: entry.uploadedAt || new Date().toISOString()
-            }));
+            if (identityPhotos.length) {
+                formData.identityPhotos = identityPhotos.map((entry) => ({
+                    label: entry.label || 'identity-photo',
+                    name: entry.name || entry.label || 'identity-photo',
+                    type: entry.type || 'image/jpeg',
+                    size: Number(entry.size || 0),
+                    dataUrl: entry.dataUrl || '',
+                    previewDataUrl: entry.dataUrl || '',
+                    uploadedAt: entry.uploadedAt || new Date().toISOString()
+                }));
+            }
         }
 
         // Validate emails match
@@ -1915,49 +1938,25 @@ if (signupForm) {
                 currentUser = getUserFromAuthResult(signupResult);
 
                 if (currentUser && String(currentUser.role || '') === 'provider') {
-                    // If the signup included identity photos, upload them to Stripe
+                    const stripeInfo = signupResult && signupResult.stripeVerification ? signupResult.stripeVerification : null;
+                    const emailed = !!(stripeInfo && stripeInfo.emailed);
+                    const stripeComplete = !!(stripeInfo && stripeInfo.complete);
+                    let signupMessage = '';
+                    if (stripeComplete && auth.isProviderApproved(currentUser)) {
+                        signupMessage = 'Your provider account is verified. You can use the dashboard now.';
+                    } else if (stripeComplete) {
+                        signupMessage = 'Stripe verification received. Your ID photos are on file — an admin will review your account shortly.';
+                    } else if (emailed) {
+                        signupMessage = 'Account created. Your ID photos were sent to Stripe. Check your email (' + String(formData.email || '') + ') for the Stripe verification link.';
+                    } else if (stripeInfo && stripeInfo.onboardingUrl) {
+                        signupMessage = 'Account created. Stripe verification could not be emailed — use your dashboard to open the verification link.';
+                    } else {
+                        signupMessage = 'Account created. Stripe verification is not available right now; sign in to your dashboard to try again.';
+                    }
                     try {
-                        if (window.anytransportApi && typeof window.anytransportApi.identityPhotosUpload === 'function' && Array.isArray(pendingIdentityPhotos) && pendingIdentityPhotos.length) {
-                            let uploadedCount = 0;
-                            let failedUploads = 0;
-                            for (const entry of pendingIdentityPhotos) {
-                                const photoData = entry && entry.dataUrl ? String(entry.dataUrl) : '';
-                                if (!photoData) continue;
-                                try {
-                                    const uploadResp = window.anytransportApi.identityPhotosUpload(currentUser.id, [photoData]);
-                                    if (uploadResp && uploadResp.user) {
-                                        currentUser = uploadResp.user;
-                                        auth.currentUser = currentUser;
-                                        auth.setStoredCurrentUser(currentUser);
-                                    }
-                                    if (uploadResp && Array.isArray(uploadResp.uploaded) && uploadResp.uploaded.length) {
-                                        uploadedCount += uploadResp.uploaded.length;
-                                    }
-                                } catch (err) {
-                                    failedUploads += 1;
-                                    if (window.anytransportIsDebug && window.anytransportIsDebug()) {
-                                        console.warn('[AnyTransport] identity photo Stripe upload failed', err);
-                                    }
-                                }
-                            }
-                            if (uploadedCount > 0) {
-                                try {
-                                    AuthManager.showTransientMessage('Identity photos uploaded successfully.');
-                                } catch (_m) {}
-                            }
-                            if (failedUploads > 0) {
-                                const warning = 'Your account was created and your photos were saved for admin review, but ' + failedUploads + ' photo upload' + (failedUploads === 1 ? '' : 's') + ' to Stripe failed. Please open your dashboard and re-upload if needed.';
-                                try {
-                                    AuthManager.showTransientMessage(warning, 'error');
-                                } catch (_m) {
-                                    alert(warning);
-                                }
-                            }
-                        }
-                    } catch (_e) {}
-
-                    if (!shouldDeferProviderStripeOnboarding() && startProviderStripeOnboarding(currentUser)) {
-                        return;
+                        AuthManager.showTransientMessage(signupMessage);
+                    } catch (_m) {
+                        alert(signupMessage);
                     }
                 }
             } catch (error) {

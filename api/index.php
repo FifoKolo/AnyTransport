@@ -551,14 +551,14 @@ function find_user_index_by_id($users, $userId) {
     });
 }
 
-function stripe_request($method, $path, $payload = array()) {
+function stripe_request_internal($method, $path, $payload = array()) {
     $secretKey = get_env_value(array('STRIPE_SECRET_KEY', 'STRIPE_API_KEY'));
     if ($secretKey === '') {
-        send_json(array('ok' => false, 'error' => 'Stripe is not configured. Set STRIPE_SECRET_KEY on the API server.'), 500);
+        return array('ok' => false, 'error' => 'Stripe is not configured. Set STRIPE_SECRET_KEY on the API server.', 'status' => 500);
     }
 
     if (!function_exists('curl_init')) {
-        send_json(array('ok' => false, 'error' => 'Stripe integration requires the PHP cURL extension.'), 500);
+        return array('ok' => false, 'error' => 'Stripe integration requires the PHP cURL extension.', 'status' => 500);
     }
 
     $method = strtoupper((string) $method);
@@ -588,12 +588,12 @@ function stripe_request($method, $path, $payload = array()) {
     curl_close($ch);
 
     if ($responseBody === false || $curlError !== '') {
-        send_json(array('ok' => false, 'error' => 'Stripe request failed: ' . $curlError), 500);
+        return array('ok' => false, 'error' => 'Stripe request failed: ' . $curlError, 'status' => 500);
     }
 
     $decoded = json_decode($responseBody, true);
     if (!is_array($decoded)) {
-        send_json(array('ok' => false, 'error' => 'Unexpected Stripe response.'), 500);
+        return array('ok' => false, 'error' => 'Unexpected Stripe response.', 'status' => 500);
     }
 
     if ($statusCode < 200 || $statusCode >= 300) {
@@ -601,10 +601,18 @@ function stripe_request($method, $path, $payload = array()) {
         if (!empty($decoded['error']['message'])) {
             $errorMessage = (string) $decoded['error']['message'];
         }
-        send_json(array('ok' => false, 'error' => $errorMessage), $statusCode);
+        return array('ok' => false, 'error' => $errorMessage, 'status' => $statusCode);
     }
 
-    return $decoded;
+    return array('ok' => true, 'data' => $decoded);
+}
+
+function stripe_request($method, $path, $payload = array()) {
+    $result = stripe_request_internal($method, $path, $payload);
+    if (empty($result['ok'])) {
+        send_json(array('ok' => false, 'error' => (string) ($result['error'] ?? 'Stripe request failed.')), (int) ($result['status'] ?? 500));
+    }
+    return is_array($result['data'] ?? null) ? $result['data'] : array();
 }
 
 function stripe_file_upload($fileContents, $filename = 'upload.jpg', $purpose = 'identity_document', $accountId = '') {
@@ -671,6 +679,343 @@ function stripe_file_upload($fileContents, $filename = 'upload.jpg', $purpose = 
     return $decoded;
 }
 
+function stripe_file_upload_internal($fileContents, $filename = 'upload.jpg', $purpose = 'identity_document', $accountId = '') {
+    $secretKey = get_env_value(array('STRIPE_SECRET_KEY', 'STRIPE_API_KEY'));
+    if ($secretKey === '') {
+        return array('ok' => false, 'error' => 'Stripe is not configured.');
+    }
+    if (!function_exists('curl_init')) {
+        return array('ok' => false, 'error' => 'Stripe integration requires the PHP cURL extension.');
+    }
+
+    $url = 'https://files.stripe.com/v1/files';
+    $ch = curl_init();
+    $headers = array('Authorization: Bearer ' . $secretKey);
+    if ($accountId !== '') {
+        $headers[] = 'Stripe-Account: ' . $accountId;
+    }
+
+    $tmp = tmpfile();
+    if ($tmp === false) {
+        return array('ok' => false, 'error' => 'Unable to create temp file for upload.');
+    }
+    $meta = stream_get_meta_data($tmp);
+    $tmpName = $meta['uri'];
+    file_put_contents($tmpName, $fileContents);
+    $cfile = new CURLFile($tmpName, mime_content_type($tmpName) ?: 'image/jpeg', $filename);
+    $post = array('purpose' => $purpose, 'file' => $cfile);
+
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+
+    $response = curl_exec($ch);
+    $curlError = curl_error($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    @fclose($tmp);
+
+    if ($response === false || $curlError !== '') {
+        return array('ok' => false, 'error' => 'Stripe file upload failed: ' . $curlError);
+    }
+
+    $decoded = json_decode($response, true);
+    if (!is_array($decoded)) {
+        return array('ok' => false, 'error' => 'Unexpected Stripe response during file upload.');
+    }
+    if ($status < 200 || $status >= 300) {
+        $err = !empty($decoded['error']['message']) ? $decoded['error']['message'] : 'Stripe file upload failed.';
+        return array('ok' => false, 'error' => $err);
+    }
+
+    return array('ok' => true, 'data' => $decoded);
+}
+
+function attach_stripe_identity_file_to_account($stripeAccountId, $fileId, $side = 'front') {
+    $stripeAccountId = trim((string) $stripeAccountId);
+    $fileId = trim((string) $fileId);
+    if ($stripeAccountId === '' || $fileId === '') {
+        return array('ok' => false, 'error' => 'Stripe account and file id are required.');
+    }
+    $side = strtolower(trim((string) $side)) === 'back' ? 'back' : 'front';
+    $field = 'individual[verification][document][' . $side . ']';
+    return stripe_request_internal('POST', '/v1/accounts/' . rawurlencode($stripeAccountId), array(
+        $field => $fileId
+    ));
+}
+
+function identity_photo_entry_exists($photos, $stripeFileId) {
+    $stripeFileId = trim((string) $stripeFileId);
+    if ($stripeFileId === '' || !is_array($photos)) {
+        return false;
+    }
+    foreach ($photos as $photo) {
+        if (!is_array($photo)) {
+            continue;
+        }
+        if (trim((string) ($photo['stripeFile'] ?? '')) === $stripeFileId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function merge_stripe_verification_documents_into_user($user, $account) {
+    if (!is_array($user) || !is_array($account)) {
+        return $user;
+    }
+    $individual = isset($account['individual']) && is_array($account['individual']) ? $account['individual'] : array();
+    $verification = isset($individual['verification']) && is_array($individual['verification']) ? $individual['verification'] : array();
+    $document = isset($verification['document']) && is_array($verification['document']) ? $verification['document'] : array();
+    $additional = isset($verification['additional_document']) && is_array($verification['additional_document']) ? $verification['additional_document'] : array();
+
+    $candidates = array(
+        array('id' => trim((string) ($document['front'] ?? '')), 'label' => 'ID document (front)', 'side' => 'front', 'source' => 'stripe_onboarding'),
+        array('id' => trim((string) ($document['back'] ?? '')), 'label' => 'ID document (back)', 'side' => 'back', 'source' => 'stripe_onboarding'),
+        array('id' => trim((string) ($additional['front'] ?? '')), 'label' => 'Additional document', 'side' => 'additional', 'source' => 'stripe_onboarding')
+    );
+
+    if (!isset($user['identityPhotos']) || !is_array($user['identityPhotos'])) {
+        $user['identityPhotos'] = array();
+    }
+
+    foreach ($candidates as $candidate) {
+        $fileId = trim((string) ($candidate['id'] ?? ''));
+        if ($fileId === '' || identity_photo_entry_exists($user['identityPhotos'], $fileId)) {
+            continue;
+        }
+        $user['identityPhotos'][] = array(
+            'label' => (string) ($candidate['label'] ?? 'Stripe identity document'),
+            'name' => (string) ($candidate['label'] ?? 'Stripe identity document'),
+            'stripeFile' => $fileId,
+            'source' => (string) ($candidate['source'] ?? 'stripe_onboarding'),
+            'stripeSide' => (string) ($candidate['side'] ?? ''),
+            'uploadedAt' => gmdate('c')
+        );
+    }
+
+    return $user;
+}
+
+function decode_identity_photo_binary($payload) {
+    $payload = trim((string) $payload);
+    if ($payload === '') {
+        return null;
+    }
+    if (strpos($payload, 'data:') === 0 && preg_match('/^data:(.*?);base64,(.*)$/', $payload, $matches)) {
+        $mime = (string) ($matches[1] ?? 'image/jpeg');
+        $bin = base64_decode((string) ($matches[2] ?? ''));
+        if ($bin === false) {
+            return null;
+        }
+        $ext = '.jpg';
+        if (strpos($mime, 'png') !== false) {
+            $ext = '.png';
+        }
+        return array('binary' => $bin, 'filename' => 'identity' . $ext, 'previewDataUrl' => $payload);
+    }
+
+    try {
+        $bin = @file_get_contents($payload);
+        if ($bin === false) {
+            return null;
+        }
+        $filename = basename(parse_url($payload, PHP_URL_PATH) ?: 'upload.jpg');
+        return array('binary' => $bin, 'filename' => $filename, 'previewDataUrl' => '');
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+function process_provider_identity_photo_payloads(&$store, $storeFile, $userId, $photos, $labels = array()) {
+    $userId = trim((string) $userId);
+    if ($userId === '' || !is_array($photos) || empty($photos)) {
+        return array('uploaded' => array(), 'user' => null);
+    }
+
+    $userIndex = find_user_index_by_id($store['users'], $userId);
+    if ($userIndex < 0) {
+        return array('uploaded' => array(), 'user' => null, 'error' => 'User not found.');
+    }
+
+    $updated = normalize_user($store['users'][$userIndex]);
+    $accountId = trim((string) ($updated['stripeAccountId'] ?? ''));
+    if ($accountId === '') {
+        $verification = begin_provider_stripe_verification($store, $storeFile, $userId, 'dashboard.html', false);
+        if (!empty($verification['user']) && is_array($verification['user'])) {
+            $updated = $verification['user'];
+            $accountId = trim((string) ($updated['stripeAccountId'] ?? ''));
+        }
+    }
+    if ($accountId === '') {
+        return array('uploaded' => array(), 'user' => $updated, 'error' => 'Stripe account is not ready for photo upload.');
+    }
+
+    if (!isset($updated['identityPhotos']) || !is_array($updated['identityPhotos'])) {
+        $updated['identityPhotos'] = array();
+    }
+
+    $uploaded = array();
+    $attachSides = array('front', 'back');
+    $attachIndex = 0;
+
+    foreach ($photos as $i => $photo) {
+        $binary = null;
+        $filename = 'identity-' . ($i + 1) . '.jpg';
+        $previewDataUrl = '';
+        $label = isset($labels[$i]) ? (string) $labels[$i] : '';
+
+        if (is_array($photo)) {
+            $label = $label !== '' ? $label : trim((string) ($photo['label'] ?? $photo['name'] ?? ''));
+            $payload = trim((string) ($photo['dataUrl'] ?? $photo['previewDataUrl'] ?? ''));
+            if ($payload !== '') {
+                $decoded = decode_identity_photo_binary($payload);
+                if ($decoded !== null) {
+                    $binary = $decoded['binary'];
+                    $filename = (string) ($decoded['filename'] ?? $filename);
+                    $previewDataUrl = (string) ($decoded['previewDataUrl'] ?? $payload);
+                }
+            }
+        } else {
+            $decoded = decode_identity_photo_binary($photo);
+            if ($decoded !== null) {
+                $binary = $decoded['binary'];
+                $filename = (string) ($decoded['filename'] ?? $filename);
+                $previewDataUrl = (string) ($decoded['previewDataUrl'] ?? '');
+            }
+        }
+
+        if ($binary === null || $binary === '') {
+            continue;
+        }
+
+        $uploadResp = stripe_file_upload_internal($binary, $filename, 'identity_document', $accountId);
+        if (empty($uploadResp['ok']) || !is_array($uploadResp['data'] ?? null)) {
+            continue;
+        }
+
+        $file = $uploadResp['data'];
+        $fileId = trim((string) ($file['id'] ?? ''));
+        if ($fileId === '') {
+            continue;
+        }
+
+        $side = isset($attachSides[$attachIndex]) ? $attachSides[$attachIndex] : 'additional';
+        $attachIndex += 1;
+        attach_stripe_identity_file_to_account($accountId, $fileId, $side);
+
+        $entry = array(
+            'uploadedAt' => gmdate('c'),
+            'source' => 'stripe',
+            'stripeFile' => $fileId,
+            'stripeSide' => $side,
+            'label' => $label !== '' ? $label : ('Identity photo ' . ($i + 1)),
+            'name' => $label !== '' ? $label : ('Identity photo ' . ($i + 1))
+        );
+        if ($previewDataUrl !== '') {
+            $entry['previewDataUrl'] = $previewDataUrl;
+        }
+        $updated['identityPhotos'][] = $entry;
+        $uploaded[] = $entry;
+    }
+
+    if (!empty($uploaded)) {
+        $updated['identityReviewStatus'] = 'pending_review';
+        $updated['identityReviewSubmittedAt'] = gmdate('c');
+        $store['users'][$userIndex] = normalize_user($updated);
+        write_store($storeFile, $store);
+        $updated = normalize_user($store['users'][$userIndex]);
+    }
+
+    return array('uploaded' => $uploaded, 'user' => $updated);
+}
+
+function mark_provider_stripe_complete_pending_admin(&$store, $userId) {
+    $userId = trim((string) $userId);
+    $index = find_user_index_by_id($store['users'], $userId);
+    if ($index < 0) {
+        return null;
+    }
+
+    $user = normalize_user($store['users'][$index]);
+    if (strtolower(trim((string) ($user['role'] ?? ''))) !== 'provider') {
+        return $user;
+    }
+    if (!provider_stripe_onboarding_is_complete($user)) {
+        return $user;
+    }
+
+    $status = strtolower(trim((string) ($user['identityReviewStatus'] ?? '')));
+    if ($status === 'approved') {
+        return $user;
+    }
+
+    $store['users'][$index] = normalize_user(array_merge($store['users'][$index], array(
+        'identityReviewStatus' => 'pending_review',
+        'verified' => false,
+        'stripeIdentityVerifiedAt' => gmdate('c')
+    )));
+
+    return normalize_user($store['users'][$index]);
+}
+
+function require_provider_identity_reverification(&$store, $storeFile, $providerId, $notes = '', $adminId = '') {
+    $providerId = trim((string) $providerId);
+    $index = find_user_index_by_id($store['users'], $providerId);
+    if ($index < 0) {
+        return array('ok' => false, 'error' => 'Provider not found.');
+    }
+
+    $provider = normalize_user($store['users'][$index]);
+    $store['users'][$index] = normalize_user(array_merge($store['users'][$index], array(
+        'identityReviewStatus' => 'rejected',
+        'identityReviewedAt' => gmdate('c'),
+        'identityReviewedBy' => trim((string) $adminId),
+        'identityReviewNotes' => trim((string) $notes),
+        'verified' => false,
+        'stripeOnboardingStatus' => 'pending',
+        'stripeOnboardingCompletedAt' => '',
+        'stripeIdentityVerifiedAt' => ''
+    )));
+    write_store($storeFile, $store);
+
+    $verification = array('ok' => false, 'emailed' => false);
+    try {
+        $verification = begin_provider_stripe_verification($store, $storeFile, $providerId, 'dashboard.html', true);
+    } catch (Exception $_e) {
+        $verification = array('ok' => false, 'emailed' => false, 'error' => 'Could not send Stripe verification email.');
+    }
+
+    $updated = normalize_user($store['users'][$index]);
+    return array('ok' => true, 'provider' => $updated, 'stripeVerification' => $verification);
+}
+
+function user_can_access_stripe_file($store, $currentUser, $fileId) {
+    $fileId = trim((string) $fileId);
+    if ($fileId === '') {
+        return false;
+    }
+
+    foreach ($store['users'] as $user) {
+        $photos = isset($user['identityPhotos']) && is_array($user['identityPhotos']) ? $user['identityPhotos'] : array();
+        if (!identity_photo_entry_exists($photos, $fileId)) {
+            continue;
+        }
+        if (is_admin_user($currentUser)) {
+            return true;
+        }
+        $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
+        if ($currentUserId !== '' && trim((string) ($user['id'] ?? '')) === $currentUserId) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function send_email_simple($to, $subject, $body, $replyTo = '') {
     // Prefer SMTP if configured
     $smtpHost = get_env_value(array('SMTP_HOST', 'EMAIL_SMTP_HOST'), '');
@@ -721,10 +1066,9 @@ function send_provider_review_email($provider, $status, $notes = '') {
 
     if ($status === 'pending_review') {
         $subject = 'AnyTransport provider application received';
-        $body .= "Thank you for applying to become a transport provider on AnyTransport.\n";
-        $body .= "Your application is now in our review queue.\n\n";
-        $body .= "We will email you again as soon as the admin team makes a decision.\n\n";
-        $body .= "You can still sign in to your account while your review is pending.\n\n";
+        $body .= "Thank you for registering as a transport provider on AnyTransport.\n";
+        $body .= "If you have not already done so, please complete identity verification using the Stripe link we sent you.\n\n";
+        $body .= "You can sign in to your dashboard while verification is in progress.\n\n";
         $body .= "Regards,\nAnyTransport";
     } elseif ($status === 'approved') {
         $subject = 'Your AnyTransport provider application was approved';
@@ -737,13 +1081,44 @@ function send_provider_review_email($provider, $status, $notes = '') {
         $body .= "We reviewed your provider application and, at this time, it was not approved.\n\n";
         $body .= "Reason from admin:\n" . $notes . "\n\n";
         $body .= "Please do not reply to this email address.\n";
-        $body .= "If you want to reapply, sign in and submit updated account details or identity documents.\n\n";
+        $body .= "We have sent you a new Stripe identity verification link by email. Complete that process and upload clear identity photos if prompted.\n\n";
         $body .= "Regards,\nAnyTransport";
     } else {
         return false;
     }
 
     return send_email_simple($providerEmail, $subject, $body);
+}
+
+function send_provider_stripe_verification_email($provider, $onboardingUrl) {
+    $providerEmail = trim((string) ($provider['email'] ?? ''));
+    $onboardingUrl = trim((string) $onboardingUrl);
+    if ($providerEmail === '' || $onboardingUrl === '') {
+        return false;
+    }
+
+    $providerName = trim((string) ($provider['name'] ?? $provider['username'] ?? 'there'));
+    $subject = 'Complete your AnyTransport provider verification';
+    $body = "Hello " . $providerName . ",\n\n";
+    $body .= "Thank you for registering as a transport provider on AnyTransport.\n\n";
+    $body .= "To verify your identity and connect your account, open this secure Stripe link:\n\n";
+    $body .= $onboardingUrl . "\n\n";
+    $body .= "Stripe handles identity checks on our behalf. After you finish, an AnyTransport admin will review your documents before your account is fully activated.\n\n";
+    $body .= "If the link has expired, sign in to your provider dashboard and request a new verification email.\n\n";
+    $body .= "Regards,\nAnyTransport";
+
+    return send_email_simple($providerEmail, $subject, $body);
+}
+
+function provider_stripe_onboarding_is_complete($user) {
+    if (!is_array($user)) {
+        return false;
+    }
+    return strtolower(trim((string) ($user['stripeOnboardingStatus'] ?? ''))) === 'complete';
+}
+
+function apply_provider_approval_from_stripe(&$store, $userId) {
+    return mark_provider_stripe_complete_pending_admin($store, $userId);
 }
 
 function send_provider_customer_rating_email($provider, $review, $isUpdate = false) {
@@ -1174,6 +1549,17 @@ function sync_stripe_account_status($store, $userId) {
     }
 
     $updatedUser = $updates ? update_user_record($store, $userId, $updates) : $user;
+    if ($updatedUser !== null && is_array($account)) {
+        $index = find_user_index_by_id($store['users'], $userId);
+        if ($index >= 0) {
+            $merged = merge_stripe_verification_documents_into_user(normalize_user($store['users'][$index]), $account);
+            $store['users'][$index] = $merged;
+            $updatedUser = $merged;
+        }
+    }
+    if ($updatedUser !== null && $complete) {
+        $updatedUser = apply_provider_approval_from_stripe($store, $userId) ?: $updatedUser;
+    }
     if ($updatedUser !== null) {
         write_store($GLOBALS['storeFile'], $store);
     }
@@ -1181,25 +1567,28 @@ function sync_stripe_account_status($store, $userId) {
     return array('user' => $updatedUser ?: $user, 'complete' => $complete, 'status' => $status, 'account' => $account);
 }
 
-function ensure_provider_stripe_onboarding(&$store, $storeFile, $userId, $returnPath = 'dashboard.html') {
+function begin_provider_stripe_verification(&$store, $storeFile, $userId, $returnPath = 'dashboard.html', $sendEmail = true) {
+    $userId = trim((string) $userId);
     $index = find_user_index_by_id($store['users'], $userId);
     if ($index < 0) {
-        send_json(array('ok' => false, 'error' => 'User not found.'), 404);
+        return array('ok' => false, 'error' => 'User not found.', 'onboardingUrl' => '', 'emailed' => false, 'complete' => false);
     }
 
     $user = normalize_user($store['users'][$index]);
     if (trim((string) ($user['role'] ?? 'customer')) !== 'provider') {
-        send_json(array('ok' => false, 'error' => 'Stripe onboarding is only available for provider accounts.'), 403);
+        return array('ok' => false, 'error' => 'Stripe verification is only available for provider accounts.', 'onboardingUrl' => '', 'emailed' => false, 'complete' => false);
     }
 
     $syncResult = sync_stripe_account_status($store, $userId);
     if (!empty($syncResult['complete'])) {
         write_store($storeFile, $store);
         return array(
-            'user' => $syncResult['user'],
+            'ok' => true,
             'complete' => true,
             'status' => 'complete',
             'onboardingUrl' => '',
+            'emailed' => false,
+            'user' => $syncResult['user'],
             'accountId' => trim((string) ($syncResult['user']['stripeAccountId'] ?? ''))
         );
     }
@@ -1208,7 +1597,7 @@ function ensure_provider_stripe_onboarding(&$store, $storeFile, $userId, $return
     $stripeAccountId = trim((string) ($updatedUser['stripeAccountId'] ?? ''));
 
     if ($stripeAccountId === '') {
-        $account = stripe_request('POST', '/v1/accounts', array(
+        $accountResp = stripe_request_internal('POST', '/v1/accounts', array(
             'type' => 'express',
             'country' => get_env_value('STRIPE_CONNECT_COUNTRY', 'IE'),
             'email' => trim((string) ($updatedUser['email'] ?? '')),
@@ -1216,10 +1605,20 @@ function ensure_provider_stripe_onboarding(&$store, $storeFile, $userId, $return
             'capabilities[transfers][requested]' => 'true',
             'metadata[anytransport_user_id]' => $userId
         ));
+        if (empty($accountResp['ok'])) {
+            return array(
+                'ok' => false,
+                'error' => (string) ($accountResp['error'] ?? 'Unable to create Stripe account.'),
+                'onboardingUrl' => '',
+                'emailed' => false,
+                'complete' => false
+            );
+        }
 
+        $account = is_array($accountResp['data'] ?? null) ? $accountResp['data'] : array();
         $stripeAccountId = trim((string) ($account['id'] ?? ''));
         if ($stripeAccountId === '') {
-            send_json(array('ok' => false, 'error' => 'Stripe did not return an account ID.'), 500);
+            return array('ok' => false, 'error' => 'Stripe did not return an account ID.', 'onboardingUrl' => '', 'emailed' => false, 'complete' => false);
         }
 
         $updatedUser = update_user_record($store, $userId, array(
@@ -1231,20 +1630,47 @@ function ensure_provider_stripe_onboarding(&$store, $storeFile, $userId, $return
     }
 
     $urls = get_provider_onboarding_urls($returnPath);
-    $accountLink = stripe_request('POST', '/v1/account_links', array(
+    $linkResp = stripe_request_internal('POST', '/v1/account_links', array(
         'account' => $stripeAccountId,
         'refresh_url' => $urls['refreshUrl'],
         'return_url' => $urls['returnUrl'],
         'type' => 'account_onboarding'
     ));
+    if (empty($linkResp['ok'])) {
+        return array(
+            'ok' => false,
+            'error' => (string) ($linkResp['error'] ?? 'Unable to create Stripe verification link.'),
+            'onboardingUrl' => '',
+            'emailed' => false,
+            'complete' => false,
+            'user' => $updatedUser
+        );
+    }
+
+    $accountLink = is_array($linkResp['data'] ?? null) ? $linkResp['data'] : array();
+    $onboardingUrl = trim((string) ($accountLink['url'] ?? ''));
+    $emailed = false;
+    if ($sendEmail && $onboardingUrl !== '') {
+        $emailed = send_provider_stripe_verification_email($updatedUser, $onboardingUrl);
+    }
 
     return array(
-        'user' => $updatedUser,
+        'ok' => true,
         'complete' => false,
         'status' => 'pending',
-        'onboardingUrl' => (string) ($accountLink['url'] ?? ''),
+        'onboardingUrl' => $onboardingUrl,
+        'emailed' => $emailed,
+        'user' => $updatedUser,
         'accountId' => $stripeAccountId
     );
+}
+
+function ensure_provider_stripe_onboarding(&$store, $storeFile, $userId, $returnPath = 'dashboard.html') {
+    $result = begin_provider_stripe_verification($store, $storeFile, $userId, $returnPath, false);
+    if (empty($result['ok'])) {
+        send_json(array('ok' => false, 'error' => (string) ($result['error'] ?? 'Stripe verification failed.')), 500);
+    }
+    return $result;
 }
 
 function normalize_budget_amount($value) {
@@ -3242,6 +3668,10 @@ function get_request_session_token() {
     if ($headerToken !== '') {
         return $headerToken;
     }
+    $queryToken = trim((string) ($_GET['session'] ?? ''));
+    if ($queryToken !== '') {
+        return $queryToken;
+    }
     $cookieNames = array('anytransport_session', 'ANYTRANSPORT_SESSION');
     foreach ($cookieNames as $cookieName) {
         if (!empty($_COOKIE[$cookieName])) {
@@ -3349,6 +3779,15 @@ switch ($action) {
         }
         $user = get_session_user($store);
         if (is_array($user)) {
+            $userId = trim((string) ($user['id'] ?? ''));
+            $role = strtolower(trim((string) ($user['role'] ?? '')));
+            if ($userId !== '' && $role === 'provider') {
+                $syncResult = sync_stripe_account_status($store, $userId);
+                if (is_array($syncResult['user'])) {
+                    $user = $syncResult['user'];
+                }
+                write_store($storeFile, $store);
+            }
             refresh_session_cookie();
         }
         send_json(array('ok' => true, 'user' => is_array($user) ? sanitize_user_for_client($user) : null));
@@ -3513,7 +3952,30 @@ switch ($action) {
                 // swallow email errors
             }
 
-            send_json(array('ok' => true, 'user' => sanitize_user_for_client($reappliedProvider), 'sessionToken' => $token));
+            $stripeVerification = array('ok' => false, 'emailed' => false, 'complete' => false);
+            try {
+                $stripeVerification = begin_provider_stripe_verification($store, $storeFile, trim((string) ($reappliedProvider['id'] ?? '')), 'dashboard.html', true);
+                if (!empty($stripeVerification['user']) && is_array($stripeVerification['user'])) {
+                    $reappliedProvider = $stripeVerification['user'];
+                }
+            } catch (Exception $_e) {
+                $stripeVerification = array('ok' => false, 'error' => 'Stripe verification email could not be sent.', 'emailed' => false);
+            }
+
+            $signupPhotos = is_array($formData['identityPhotos'] ?? null) ? $formData['identityPhotos'] : array();
+            if (!empty($signupPhotos)) {
+                $photoResult = process_provider_identity_photo_payloads($store, $storeFile, trim((string) ($reappliedProvider['id'] ?? '')), $signupPhotos);
+                if (!empty($photoResult['user']) && is_array($photoResult['user'])) {
+                    $reappliedProvider = $photoResult['user'];
+                }
+            }
+
+            send_json(array(
+                'ok' => true,
+                'user' => sanitize_user_for_client($reappliedProvider),
+                'sessionToken' => $token,
+                'stripeVerification' => $stripeVerification
+            ));
         }
 
         $user = normalize_user(array(
@@ -3546,11 +4008,23 @@ switch ($action) {
         write_store($storeFile, $store);
         set_session_cookie($token);
 
+        $stripeVerification = array('ok' => false, 'emailed' => false, 'complete' => false);
         if (strtolower($role) === 'provider') {
             try {
-                send_provider_review_email($user, 'pending_review', '');
+                $stripeVerification = begin_provider_stripe_verification($store, $storeFile, trim((string) ($user['id'] ?? '')), 'dashboard.html', true);
+                if (!empty($stripeVerification['user']) && is_array($stripeVerification['user'])) {
+                    $user = $stripeVerification['user'];
+                }
             } catch (Exception $_e) {
-                // swallow email errors
+                $stripeVerification = array('ok' => false, 'error' => 'Stripe verification email could not be sent.', 'emailed' => false);
+            }
+
+            $signupPhotos = is_array($formData['identityPhotos'] ?? null) ? $formData['identityPhotos'] : array();
+            if (!empty($signupPhotos)) {
+                $photoResult = process_provider_identity_photo_payloads($store, $storeFile, trim((string) ($user['id'] ?? '')), $signupPhotos);
+                if (!empty($photoResult['user']) && is_array($photoResult['user'])) {
+                    $user = $photoResult['user'];
+                }
             }
         } else {
             try {
@@ -3560,7 +4034,12 @@ switch ($action) {
             }
         }
 
-        send_json(array('ok' => true, 'user' => sanitize_user_for_client($user), 'sessionToken' => $token));
+        send_json(array(
+            'ok' => true,
+            'user' => sanitize_user_for_client($user),
+            'sessionToken' => $token,
+            'stripeVerification' => $stripeVerification
+        ));
 
     case 'users.get':
         $targetId = trim((string) ($_GET['id'] ?? ''));
@@ -3775,8 +4254,14 @@ switch ($action) {
 
         $queue = array_values(array_filter($store['users'], function ($user) {
             $role = strtolower(trim((string) ($user['role'] ?? '')));
-            $status = trim((string) ($user['identityReviewStatus'] ?? ''));
-            return $role === 'provider' && in_array($status, array('pending_review'), true);
+            if ($role !== 'provider') {
+                return false;
+            }
+            $status = strtolower(trim((string) ($user['identityReviewStatus'] ?? '')));
+            if ($status === 'approved') {
+                return false;
+            }
+            return in_array($status, array('pending_review', 'pending', ''), true);
         }));
 
         send_json(array('ok' => true, 'providers' => sanitize_users_for_client($queue)));
@@ -3815,6 +4300,9 @@ switch ($action) {
         ));
 
         if ($status === 'approved') {
+            if (!provider_stripe_onboarding_is_complete($provider)) {
+                send_json(array('ok' => false, 'error' => 'Provider must complete Stripe identity verification before admin approval.'), 400);
+            }
             $store['users'][$index]['verified'] = true;
             $store['users'][$index]['verifiedAt'] = gmdate('c');
         } elseif ($status === 'rejected') {
@@ -3825,7 +4313,20 @@ switch ($action) {
         $store['users'][$index] = $updatedProvider;
         write_store($storeFile, $store);
 
-        send_json_and_continue(array('ok' => true, 'provider' => sanitize_user_for_client($updatedProvider)));
+        $stripeVerification = null;
+        if ($status === 'rejected') {
+            $reverify = require_provider_identity_reverification($store, $storeFile, $providerId, $notes, trim((string) ($currentUser['id'] ?? '')));
+            if (!empty($reverify['provider']) && is_array($reverify['provider'])) {
+                $updatedProvider = $reverify['provider'];
+            }
+            $stripeVerification = isset($reverify['stripeVerification']) ? $reverify['stripeVerification'] : null;
+        }
+
+        send_json_and_continue(array(
+            'ok' => true,
+            'provider' => sanitize_user_for_client($updatedProvider),
+            'stripeVerification' => $stripeVerification
+        ));
 
         if (in_array($status, array('approved', 'rejected', 'pending_review'), true)) {
             try {
@@ -3838,7 +4339,6 @@ switch ($action) {
         exit;
 
     case 'identity.photos.upload':
-        // Upload one or more identity photos to Stripe and attach metadata in the user record.
         $userId = trim((string) ($input['userId'] ?? ''));
         $photos = is_array($input['photos'] ?? null) ? $input['photos'] : array();
         if ($userId === '' || empty($photos)) {
@@ -3850,75 +4350,21 @@ switch ($action) {
             send_json(array('ok' => false, 'error' => 'User not found.'), 404);
         }
 
-        $updated = normalize_user($store['users'][$userIndex]);
         $currentUser = get_current_user_record($store);
         $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
         $canEditIdentity = is_admin_user($currentUser) || ($currentUserId !== '' && $currentUserId === $userId);
         if (!$canEditIdentity) {
             send_json(array('ok' => false, 'error' => 'You can only upload identity photos for your own account.'), 403);
         }
-        $accountId = trim((string) ($updated['stripeAccountId'] ?? ''));
 
-        $uploaded = array();
-        foreach ($photos as $i => $p) {
-            $p = trim((string) $p);
-            if ($p === '') continue;
-            // If data URL, decode and upload; if remote URL, attempt to fetch and upload
-            if (strpos($p, 'data:') === 0) {
-                // data:[<mediatype>][;base64],<data>
-                if (preg_match('/^data:(.*?);base64,(.*)$/', $p, $m)) {
-                    $mime = $m[1];
-                    $b64 = $m[2];
-                    $bin = base64_decode($b64);
-                    if ($bin === false) continue;
-                    $ext = '';
-                    if (strpos($mime, 'jpeg') !== false || strpos($mime, 'jpg') !== false) $ext = '.jpg';
-                    elseif (strpos($mime, 'png') !== false) $ext = '.png';
-                    else $ext = '.bin';
-                    $filename = 'identity-' . ($i+1) . $ext;
-                    $resp = stripe_file_upload($bin, $filename, 'identity_document', $accountId);
-                    $uploaded[] = array('source' => 'stripe', 'file' => $resp, 'previewDataUrl' => $p);
-                }
-            } else {
-                // Try to fetch remote URL
-                try {
-                    $bin = @file_get_contents($p);
-                    if ($bin === false) continue;
-                    $filename = basename(parse_url($p, PHP_URL_PATH) ?: 'upload');
-                    $resp = stripe_file_upload($bin, $filename, 'identity_document', $accountId);
-                    $uploaded[] = array('source' => 'stripe', 'file' => $resp, 'originalUrl' => $p);
-                } catch (Exception $e) {
-                    continue;
-                }
-            }
+        $result = process_provider_identity_photo_payloads($store, $storeFile, $userId, $photos);
+        $updated = isset($result['user']) && is_array($result['user']) ? $result['user'] : null;
+        if ($updated === null) {
+            send_json(array('ok' => false, 'error' => (string) ($result['error'] ?? 'Unable to upload identity photos.')), 500);
         }
 
-        // Merge into user's identityPhotos array
-        if (!isset($updated['identityPhotos']) || !is_array($updated['identityPhotos'])) {
-            $updated['identityPhotos'] = array();
-        }
-
-        foreach ($uploaded as $u) {
-            $entry = array(
-                'uploadedAt' => gmdate('c'),
-                'source' => $u['source'] ?? 'stripe',
-                'stripeFile' => isset($u['file']['id']) ? $u['file']['id'] : '',
-                'stripeResponse' => $u['file'] ?? $u,
-            );
-            if (!empty($u['originalUrl'])) $entry['originalUrl'] = $u['originalUrl'];
-            if (!empty($u['previewDataUrl'])) $entry['previewDataUrl'] = $u['previewDataUrl'];
-            $updated['identityPhotos'][] = $entry;
-        }
-
-        $isProvider = strtolower(trim((string) ($updated['role'] ?? ''))) === 'provider';
-        $wasRejected = strtolower(trim((string) ($updated['identityReviewStatus'] ?? ''))) === 'rejected';
-        if ($isProvider && $wasRejected && !empty($uploaded)) {
-            $updated['identityReviewStatus'] = 'pending_review';
-            $updated['identityReviewSubmittedAt'] = gmdate('c');
-            $updated['identityReviewedAt'] = '';
-            $updated['identityReviewedBy'] = '';
-            $updated['identityReviewNotes'] = '';
-            $updated['verified'] = false;
+        $wasRejected = strtolower(trim((string) ($store['users'][$userIndex]['identityReviewStatus'] ?? ''))) === 'rejected';
+        if ($wasRejected && !empty($result['uploaded'])) {
             try {
                 send_provider_review_email($updated, 'pending_review', '');
             } catch (Exception $_e) {
@@ -3926,9 +4372,7 @@ switch ($action) {
             }
         }
 
-        $store['users'][$userIndex] = $updated;
-        write_store($storeFile, $store);
-        send_json(array('ok' => true, 'uploaded' => $uploaded, 'user' => sanitize_user_for_client($updated)));
+        send_json(array('ok' => true, 'uploaded' => $result['uploaded'], 'user' => sanitize_user_for_client($updated)));
 
     case 'quotes.list':
         $currentUser = get_current_user_record($store);
@@ -4852,11 +5296,44 @@ switch ($action) {
             'accountId' => $result['accountId']
         ));
 
+    case 'stripe.provider.verification.email':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $user = get_session_user($store);
+        if (!is_array($user)) {
+            send_json(array('ok' => false, 'error' => 'You must be logged in to continue.'), 401);
+        }
+        if (trim((string) ($user['role'] ?? 'customer')) !== 'provider') {
+            send_json(array('ok' => false, 'error' => 'Stripe verification is only available for provider accounts.'), 403);
+        }
+
+        $returnPath = trim((string) ($input['returnPath'] ?? 'dashboard.html')) ?: 'dashboard.html';
+        if (strpos($returnPath, '..') !== false || strpos($returnPath, '://') !== false) {
+            $returnPath = 'dashboard.html';
+        }
+
+        $result = begin_provider_stripe_verification($store, $storeFile, trim((string) ($user['id'] ?? '')), $returnPath, true);
+        write_store($storeFile, $store);
+        send_json(array(
+            'ok' => !empty($result['ok']),
+            'user' => isset($result['user']) ? sanitize_user_for_client($result['user']) : sanitize_user_for_client($user),
+            'complete' => !empty($result['complete']),
+            'status' => (string) ($result['status'] ?? ''),
+            'onboardingUrl' => (string) ($result['onboardingUrl'] ?? ''),
+            'emailed' => !empty($result['emailed']),
+            'error' => (string) ($result['error'] ?? '')
+        ));
+
     case 'stripe.file.get':
-        // Proxy Stripe file content for client-side image loads.
         $fileId = trim((string) ($_GET['fileId'] ?? ''));
         if ($fileId === '') {
             send_json(array('ok' => false, 'error' => 'fileId is required.'), 400);
+        }
+
+        $currentUser = get_current_user_record($store);
+        if (!user_can_access_stripe_file($store, $currentUser, $fileId)) {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 403);
         }
 
         $secretKey = get_env_value(array('STRIPE_SECRET_KEY', 'STRIPE_API_KEY'));
