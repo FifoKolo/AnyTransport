@@ -1111,9 +1111,7 @@
                 const notesField = row ? row.querySelector('.admin-form-note') : null;
                 const statusBadge = row ? row.querySelector('.admin-email-status') : null;
                 const reason = notesField ? String(notesField.value || '').trim() : '';
-                if (!quoteId || !reason) {
-                    alert('Please write a reason before sending the email.');
-                    if (notesField) notesField.focus();
+                if (!quoteId) {
                     return;
                 }
                 try {
@@ -1145,6 +1143,20 @@
                     }
                     alert(error && error.message ? error.message : 'Unable to send email.');
                 }
+                return;
+            }
+
+            const adminDeleteFormBtn = event.target.closest('.admin-delete-form-btn');
+            if (adminDeleteFormBtn) {
+                if (!(auth.isAdmin && auth.isAdmin())) {
+                    alert('Admin access required.');
+                    return;
+                }
+                const quoteId = String(adminDeleteFormBtn.getAttribute('data-quote-id') || '').trim();
+                const row = adminDeleteFormBtn.closest('.provider-listing');
+                const notesField = row ? row.querySelector('.admin-form-note') : null;
+                const reason = notesField ? String(notesField.value || '').trim() : '';
+                adminDeleteQuote(quoteId, user, reason);
                 return;
             }
 
@@ -1763,16 +1775,17 @@
                     '<div class="listing-sub">' + escapeHtml(formatDateTime(quote.submittedAt || quote.createdAt || '')) + '</div>',
                     '</div>',
                     '<div class="listing-cell">',
-                    '<div class="listing-sub">Owner: ' + owner + '</div>',
+                    '<div class="listing-sub">Customer email: ' + owner + '</div>',
                     (customerFullName ? '<div class="listing-sub">Full name: ' + customerFullName + '</div>' : ''),
                     (customerPhone ? '<div class="listing-sub">Phone: ' + customerPhone + '</div>' : ''),
                     '<div class="listing-sub">' + escapeHtml(firstText(quote.itemDescription, quote.itemType, 'Transport request')) + '</div>',
                     '</div>',
                     '<div class="listing-cell review-actions-cell">',
-                    '<textarea class="form-input admin-form-note" rows="3" placeholder="Reason to email the user"></textarea>',
+                    '<textarea class="form-input admin-form-note" rows="3" placeholder="Optional message to include in an email"></textarea>',
                     '<div class="actions review-actions" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">',
                     '<button type="button" class="btn btn-primary admin-view-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">View listing</button>',
                     '<button type="button" class="btn btn-secondary admin-email-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">Email listing owner</button>',
+                    '<button type="button" class="btn btn-danger admin-delete-form-btn" data-quote-id="' + escapeHtml(quoteId) + '">Delete listing</button>',
                     '<span class="admin-email-status" style="display:none; align-items:center; font-weight:700; color:#64748b;"></span>',
                     '</div>',
                     '</div>',
@@ -3301,8 +3314,9 @@
         const target = quotes.find((quote) => quote.id === quoteId);
         if (!target) return;
 
+        const isAdmin = !!(auth.isAdmin && auth.isAdmin());
         const ownerId = target.userId || target.createdBy;
-        if (ownerId && ownerId !== user.id) {
+        if (!isAdmin && ownerId && ownerId !== user.id) {
             alert('You can only delete your own requests.');
             return;
         }
@@ -3323,6 +3337,35 @@
         saveAllBids(filteredBids);
 
         renderAll(user);
+    }
+
+    function adminDeleteQuote(quoteId, user, reason) {
+        const id = String(quoteId || '').trim();
+        if (!id) return;
+
+        const message = reason
+            ? 'Delete this listing permanently? The owner will be emailed with your message.'
+            : 'Delete this listing permanently? No email will be sent unless you add a message first.';
+        if (!confirm(message)) return;
+
+        try {
+            if (window.anytransportApi && typeof window.anytransportApi.deleteQuote === 'function') {
+                window.anytransportApi.deleteQuote(id, reason ? { reason: reason } : undefined);
+            } else {
+                const quotes = getAllQuotes().filter((quote) => quote.id !== id);
+                saveQuotesToStorage(quotes);
+                const bids = getAllBids().filter((bid) => bid.quoteId !== id);
+                saveAllBids(bids);
+            }
+        } catch (error) {
+            alert(error && error.message ? error.message : 'Unable to delete this listing.');
+            return;
+        }
+
+        renderAll(user);
+        if (auth.isAdmin && auth.isAdmin()) {
+            renderAdminReviewQueue();
+        }
     }
 
     function loadProfileForm(user) {

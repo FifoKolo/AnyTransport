@@ -537,15 +537,6 @@
             (isEditable ? '          <button type="button" id="profile-custom-transport-add" class="btn btn-outline">Add vehicle</button>' : ''),
             '        </div>',
             '      </div>',
-            '      <h3 class="profile-section-title" style="margin-top:20px;">Auto-bid settings</h3>',
-            '      <div class="profile-muted">When enabled on a listing, auto-bid lowers your quote when another provider undercuts you. Cooldown applies between each automatic bid.</div>',
-            '      <div class="profile-form-row" style="margin-top:12px;">',
-            '        <div class="profile-form-label">Cooldown (seconds)</div>',
-            '        <div>',
-            '          <input id="profile-autobid-cooldown" class="form-input" type="number" min="5" step="1" value="' + escapeAttribute(String(u.autoBidCooldownSeconds != null ? u.autoBidCooldownSeconds : 20)) + '"' + disabledAttr + '>',
-            '          <div class="profile-help">Default is 20 seconds between automatic bids. Minimum 5.</div>',
-            '        </div>',
-            '      </div>',
             '      <h3 class="profile-section-title" style="margin-top:20px;">Don\'t want any more invitations to bid?</h3>',
             '      <div class="profile-muted">Please tick here to prevent customers inviting you to quote.</div>',
             '      <div class="profile-check-grid" style="margin-top:14px;">',
@@ -668,7 +659,6 @@
                 cash: !!paymentMethods.cash,
                 blockInvites: !!document.getElementById('blockInvites')?.checked,
                 muteInviteEmails: !!document.getElementById('muteEmails')?.checked,
-                autoBidCooldownSeconds: Math.max(5, Number(document.getElementById('profile-autobid-cooldown')?.value || 20) || 20),
                 avatar: firstText(u.avatar, ''),
                 photos: existingPhotos.concat(pendingPhotos).filter(Boolean)
             };

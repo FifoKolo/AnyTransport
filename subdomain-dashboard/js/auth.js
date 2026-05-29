@@ -398,8 +398,12 @@ window.anytransportApi = window.anytransportApi || (function () {
             const response = request('quotes.create', 'POST', { quote: quote || {} });
             return response.quote || quote || null;
         },
-        deleteQuote: function (quoteId) {
-            return request('quotes.delete', 'POST', { quoteId: quoteId ? String(quoteId) : '' });
+        deleteQuote: function (quoteId, options) {
+            const payload = { quoteId: quoteId ? String(quoteId) : '' };
+            if (options && typeof options === 'object' && options.reason) {
+                payload.reason = String(options.reason);
+            }
+            return request('quotes.delete', 'POST', payload);
         },
         notifyQuoteOwner: function (quoteId, reason) {
             return request('quotes.admin.notify', 'POST', { quoteId: quoteId ? String(quoteId) : '', reason: reason || '' });
