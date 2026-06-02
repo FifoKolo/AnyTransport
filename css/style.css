@@ -114,8 +114,8 @@ body {
 }
 
 .hero-transport-card.is-selected {
-    border-color: #f50057;
-    box-shadow: 0 14px 44px rgba(245, 0, 87, 0.15);
+    border-color: #16a34a;
+    box-shadow: 0 14px 44px rgba(22, 163, 74, 0.15);
 }
 
 .hero-transport-card-title {
