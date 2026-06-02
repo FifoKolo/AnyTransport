@@ -101,24 +101,21 @@ body {
     align-items: stretch;
     text-align: left;
     width: 100%;
-    background: #16a34a;
-    border: 2px solid #15803d;
+    border: 2px solid transparent;
     cursor: pointer;
     transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
     font: inherit;
-    color: #ffffff;
+    color: inherit;
 }
 
 .hero-transport-card:hover {
     transform: translateY(-2px);
-    background: #15803d;
-    box-shadow: 0 14px 44px rgba(21, 128, 61, 0.24);
+    box-shadow: 0 14px 44px rgba(0, 0, 0, 0.12);
 }
 
 .hero-transport-card.is-selected {
-    background: #166534;
-    border-color: #14532d;
-    box-shadow: 0 14px 44px rgba(20, 83, 45, 0.28);
+    border-color: #16a34a;
+    box-shadow: 0 14px 44px rgba(22, 163, 74, 0.15);
 }
 
 .hero-transport-card-title {
@@ -126,7 +123,7 @@ body {
     font-weight: 700;
     margin: 0 0 12px;
     line-height: 1.25;
-    color: #ffffff;
+    color: #1e293b;
 }
 
 .hero-transport-card-desc {
@@ -134,12 +131,17 @@ body {
     margin-bottom: 24px;
     font-size: 1rem;
     line-height: 1.55;
-    color: #dcfce7;
 }
 
 .hero-transport-card .hero-transport-card-cta {
     pointer-events: none;
     margin-top: auto;
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+}
+
+.hero-transport-card:hover .hero-transport-card-cta,
+.hero-transport-card.is-selected .hero-transport-card-cta {
+    background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
 }
 
 .hero-transport-hint {
