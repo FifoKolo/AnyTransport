@@ -101,21 +101,24 @@ body {
     align-items: stretch;
     text-align: left;
     width: 100%;
-    border: 2px solid transparent;
+    background: #16a34a;
+    border: 2px solid #15803d;
     cursor: pointer;
     transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
     font: inherit;
-    color: inherit;
+    color: #ffffff;
 }
 
 .hero-transport-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 14px 44px rgba(0, 0, 0, 0.12);
+    background: #15803d;
+    box-shadow: 0 14px 44px rgba(21, 128, 61, 0.24);
 }
 
 .hero-transport-card.is-selected {
-    border-color: #16a34a;
-    box-shadow: 0 14px 44px rgba(22, 163, 74, 0.15);
+    background: #166534;
+    border-color: #14532d;
+    box-shadow: 0 14px 44px rgba(20, 83, 45, 0.28);
 }
 
 .hero-transport-card-title {
@@ -123,7 +126,7 @@ body {
     font-weight: 700;
     margin: 0 0 12px;
     line-height: 1.25;
-    color: #1e293b;
+    color: #ffffff;
 }
 
 .hero-transport-card-desc {
@@ -131,6 +134,7 @@ body {
     margin-bottom: 24px;
     font-size: 1rem;
     line-height: 1.55;
+    color: #dcfce7;
 }
 
 .hero-transport-card .hero-transport-card-cta {
