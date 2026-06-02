@@ -1863,7 +1863,7 @@ if (footerDriverLoginButton) {
 
         try {
             const loginResult = auth.login(email, password);
-            const currentUser = getUserFromAuthResult(loginResult);
+            let currentUser = getUserFromAuthResult(loginResult);
             if (!currentUser) {
                 alert('Unable to log in. Please try again.');
                 return;
