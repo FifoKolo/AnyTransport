@@ -3,6 +3,7 @@
 return array(
     'STRIPE_SECRET_KEY' => 'sk_test_your_secret_key_here',
     'STRIPE_CONNECT_COUNTRY' => 'IE',
+    'STRIPE_IDENTITY_WEBHOOK_SECRET' => 'whsec_your_identity_webhook_secret_here',
 
     // Outbound email (optional). If SMTP_HOST is set, PHP mail() is not used.
     //

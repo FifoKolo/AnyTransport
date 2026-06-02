@@ -608,6 +608,13 @@
         return value === 'shared' ? 'Shared Space' : 'Dedicated Transport Space';
     }
 
+    function scrollToServicesSection() {
+        var servicesSection = document.getElementById('services');
+        if (servicesSection) {
+            servicesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
     function setTransportSpace(value) {
         if (value !== 'dedicated' && value !== 'shared') {
             return;
@@ -659,6 +666,7 @@
     document.querySelectorAll('.hero-transport-card').forEach(function (card) {
         card.addEventListener('click', function () {
             setTransportSpace(card.getAttribute('data-transport-space'));
+            scrollToServicesSection();
         });
     });
 

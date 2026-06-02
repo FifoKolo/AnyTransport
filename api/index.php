@@ -325,6 +325,22 @@ function normalize_user($user) {
         $normalized['stripeOnboardingUpdatedAt'] = '';
     }
 
+    if (!isset($normalized['stripeIdentitySessionId'])) {
+        $normalized['stripeIdentitySessionId'] = '';
+    }
+
+    if (!isset($normalized['stripeIdentityStatus'])) {
+        $normalized['stripeIdentityStatus'] = trim((string) ($normalized['stripeOnboardingStatus'] ?? '')) === 'complete' ? 'verified' : 'not_started';
+    }
+
+    if (!isset($normalized['stripeIdentityVerifiedAt'])) {
+        $normalized['stripeIdentityVerifiedAt'] = '';
+    }
+
+    if (!isset($normalized['stripeIdentityLastError'])) {
+        $normalized['stripeIdentityLastError'] = '';
+    }
+
     if (!isset($normalized['identityReviewStatus']) || trim((string) $normalized['identityReviewStatus']) === '') {
         $normalized['identityReviewStatus'] = strtolower(trim((string) ($normalized['role'] ?? 'customer'))) === 'provider' ? 'pending_review' : 'not_required';
     }
@@ -1516,6 +1532,20 @@ function get_provider_onboarding_urls($returnPath = 'dashboard.html') {
     );
 }
 
+function map_identity_status_to_local($status) {
+    $normalized = strtolower(trim((string) $status));
+    if ($normalized === 'verified') {
+        return array('status' => 'complete', 'complete' => true);
+    }
+    if ($normalized === 'requires_input' || $normalized === 'canceled') {
+        return array('status' => 'requires_input', 'complete' => false);
+    }
+    if ($normalized === 'processing' || $normalized === 'unverified') {
+        return array('status' => 'pending', 'complete' => false);
+    }
+    return array('status' => 'not_started', 'complete' => false);
+}
+
 function sync_stripe_account_status($store, $userId) {
     $index = find_user_index_by_id($store['users'], $userId);
     if ($index < 0) {
@@ -1523,40 +1553,29 @@ function sync_stripe_account_status($store, $userId) {
     }
 
     $user = normalize_user($store['users'][$index]);
-    $stripeAccountId = trim((string) ($user['stripeAccountId'] ?? ''));
-    if ($stripeAccountId === '') {
+    $identitySessionId = trim((string) ($user['stripeIdentitySessionId'] ?? ''));
+    if ($identitySessionId === '') {
         return array('user' => $user, 'complete' => false, 'status' => 'not_started');
     }
 
-    $account = stripe_request('GET', '/v1/accounts/' . rawurlencode($stripeAccountId));
-    $requirements = isset($account['requirements']) && is_array($account['requirements']) ? $account['requirements'] : array();
-    $currentlyDue = isset($requirements['currently_due']) && is_array($requirements['currently_due']) ? $requirements['currently_due'] : array();
-    $eventuallyDue = isset($requirements['eventually_due']) && is_array($requirements['eventually_due']) ? $requirements['eventually_due'] : array();
-    $disabledReason = trim((string) ($requirements['disabled_reason'] ?? ''));
-    $detailsSubmitted = !empty($account['details_submitted']);
-    $payoutsEnabled = !empty($account['payouts_enabled']);
-    $chargesEnabled = !empty($account['charges_enabled']);
-    $complete = $detailsSubmitted && ($payoutsEnabled || $chargesEnabled) && empty($currentlyDue) && empty($eventuallyDue) && $disabledReason === '';
-    $status = $complete ? 'complete' : 'pending';
+    $session = stripe_request('GET', '/v1/identity/verification_sessions/' . rawurlencode($identitySessionId));
+    $mapped = map_identity_status_to_local((string) ($session['status'] ?? ''));
+    $complete = !empty($mapped['complete']);
+    $status = (string) ($mapped['status'] ?? 'not_started');
 
     $updates = array(
         'stripeOnboardingStatus' => $status,
-        'stripeOnboardingUpdatedAt' => gmdate('c')
+        'stripeOnboardingUpdatedAt' => gmdate('c'),
+        'stripeIdentityStatus' => strtolower(trim((string) ($session['status'] ?? ''))),
+        'stripeIdentityLastError' => trim((string) ($session['last_error']['code'] ?? $session['last_error']['reason'] ?? ''))
     );
 
     if ($complete) {
         $updates['stripeOnboardingCompletedAt'] = gmdate('c');
+        $updates['stripeIdentityVerifiedAt'] = gmdate('c');
     }
 
     $updatedUser = $updates ? update_user_record($store, $userId, $updates) : $user;
-    if ($updatedUser !== null && is_array($account)) {
-        $index = find_user_index_by_id($store['users'], $userId);
-        if ($index >= 0) {
-            $merged = merge_stripe_verification_documents_into_user(normalize_user($store['users'][$index]), $account);
-            $store['users'][$index] = $merged;
-            $updatedUser = $merged;
-        }
-    }
     if ($updatedUser !== null && $complete) {
         $updatedUser = apply_provider_approval_from_stripe($store, $userId) ?: $updatedUser;
     }
@@ -1564,7 +1583,7 @@ function sync_stripe_account_status($store, $userId) {
         write_store($GLOBALS['storeFile'], $store);
     }
 
-    return array('user' => $updatedUser ?: $user, 'complete' => $complete, 'status' => $status, 'account' => $account);
+    return array('user' => $updatedUser ?: $user, 'complete' => $complete, 'status' => $status, 'session' => $session);
 }
 
 function begin_provider_stripe_verification(&$store, $storeFile, $userId, $returnPath = 'dashboard.html', $sendEmail = true) {
@@ -1589,57 +1608,24 @@ function begin_provider_stripe_verification(&$store, $storeFile, $userId, $retur
             'onboardingUrl' => '',
             'emailed' => false,
             'user' => $syncResult['user'],
-            'accountId' => trim((string) ($syncResult['user']['stripeAccountId'] ?? ''))
+            'accountId' => '',
+            'verificationSessionId' => trim((string) ($syncResult['user']['stripeIdentitySessionId'] ?? ''))
         );
     }
 
     $updatedUser = $syncResult['user'];
-    $stripeAccountId = trim((string) ($updatedUser['stripeAccountId'] ?? ''));
-
-    if ($stripeAccountId === '') {
-        $accountResp = stripe_request_internal('POST', '/v1/accounts', array(
-            'type' => 'express',
-            'country' => get_env_value('STRIPE_CONNECT_COUNTRY', 'IE'),
-            'email' => trim((string) ($updatedUser['email'] ?? '')),
-            'business_type' => 'individual',
-            'capabilities[transfers][requested]' => 'true',
-            'metadata[anytransport_user_id]' => $userId
-        ));
-        if (empty($accountResp['ok'])) {
-            return array(
-                'ok' => false,
-                'error' => (string) ($accountResp['error'] ?? 'Unable to create Stripe account.'),
-                'onboardingUrl' => '',
-                'emailed' => false,
-                'complete' => false
-            );
-        }
-
-        $account = is_array($accountResp['data'] ?? null) ? $accountResp['data'] : array();
-        $stripeAccountId = trim((string) ($account['id'] ?? ''));
-        if ($stripeAccountId === '') {
-            return array('ok' => false, 'error' => 'Stripe did not return an account ID.', 'onboardingUrl' => '', 'emailed' => false, 'complete' => false);
-        }
-
-        $updatedUser = update_user_record($store, $userId, array(
-            'stripeAccountId' => $stripeAccountId,
-            'stripeOnboardingStatus' => 'pending',
-            'stripeOnboardingUpdatedAt' => gmdate('c')
-        ));
-        write_store($storeFile, $store);
-    }
-
     $urls = get_provider_onboarding_urls($returnPath);
-    $linkResp = stripe_request_internal('POST', '/v1/account_links', array(
-        'account' => $stripeAccountId,
-        'refresh_url' => $urls['refreshUrl'],
+    $sessionResp = stripe_request_internal('POST', '/v1/identity/verification_sessions', array(
+        'type' => 'document',
+        'metadata[anytransport_user_id]' => $userId,
+        'metadata[anytransport_provider_email]' => trim((string) ($updatedUser['email'] ?? '')),
         'return_url' => $urls['returnUrl'],
-        'type' => 'account_onboarding'
+        'options[document][require_matching_selfie]' => 'true'
     ));
-    if (empty($linkResp['ok'])) {
+    if (empty($sessionResp['ok'])) {
         return array(
             'ok' => false,
-            'error' => (string) ($linkResp['error'] ?? 'Unable to create Stripe verification link.'),
+            'error' => (string) ($sessionResp['error'] ?? 'Unable to create Stripe Identity verification session.'),
             'onboardingUrl' => '',
             'emailed' => false,
             'complete' => false,
@@ -1647,8 +1633,32 @@ function begin_provider_stripe_verification(&$store, $storeFile, $userId, $retur
         );
     }
 
-    $accountLink = is_array($linkResp['data'] ?? null) ? $linkResp['data'] : array();
-    $onboardingUrl = trim((string) ($accountLink['url'] ?? ''));
+    $session = is_array($sessionResp['data'] ?? null) ? $sessionResp['data'] : array();
+    $sessionId = trim((string) ($session['id'] ?? ''));
+    $sessionStatus = strtolower(trim((string) ($session['status'] ?? 'unverified')));
+    $onboardingUrl = trim((string) ($session['url'] ?? ''));
+    if ($sessionId === '' || $onboardingUrl === '') {
+        return array(
+            'ok' => false,
+            'error' => 'Stripe Identity did not return a valid verification link.',
+            'onboardingUrl' => '',
+            'emailed' => false,
+            'complete' => false,
+            'user' => $updatedUser
+        );
+    }
+
+    $updatedUser = update_user_record($store, $userId, array(
+        'stripeIdentitySessionId' => $sessionId,
+        'stripeIdentityStatus' => $sessionStatus,
+        'stripeIdentityLastError' => '',
+        'stripeOnboardingStatus' => 'pending',
+        'stripeOnboardingUpdatedAt' => gmdate('c')
+    ));
+    if ($updatedUser !== null) {
+        write_store($storeFile, $store);
+    }
+
     $emailed = false;
     if ($sendEmail && $onboardingUrl !== '') {
         $emailed = send_provider_stripe_verification_email($updatedUser, $onboardingUrl);
@@ -1661,7 +1671,8 @@ function begin_provider_stripe_verification(&$store, $storeFile, $userId, $retur
         'onboardingUrl' => $onboardingUrl,
         'emailed' => $emailed,
         'user' => $updatedUser,
-        'accountId' => $stripeAccountId
+        'accountId' => '',
+        'verificationSessionId' => $sessionId
     );
 }
 
