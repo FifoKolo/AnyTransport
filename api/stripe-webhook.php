@@ -143,6 +143,7 @@ if (!isset($store['users']) || !is_array($store['users'])) {
 }
 
 $updated = false;
+$updatedUserIndex = -1;
 foreach ($store['users'] as $idx => $u) {
     if (!is_array($u)) {
         continue;
@@ -166,11 +167,17 @@ foreach ($store['users'] as $idx => $u) {
         }
     }
     $updated = true;
+    $updatedUserIndex = $idx;
     break;
 }
 
 if ($updated) {
     @file_put_contents($storeFile, json_encode($store, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    if ($updatedUserIndex >= 0 && !empty($mapped['complete'])) {
+        $localStripeConfig = $localConfig;
+        require_once __DIR__ . '/webhook-mail-bootstrap.php';
+        maybe_send_provider_stripe_verification_submitted_email($store, $storeFile, $updatedUserIndex);
+    }
 }
 
 send(array('ok' => true, 'updated' => $updated));

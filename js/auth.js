@@ -1501,9 +1501,12 @@ class AuthManager {
         if (!record) return false;
         const stripeComplete = String(record.stripeOnboardingStatus || '').trim().toLowerCase() === 'complete';
         const status = String(record.identityReviewStatus || '').trim().toLowerCase();
-        if (status === 'approved' && stripeComplete) return true;
-        const verified = record.verified;
-        return stripeComplete && (verified === true || verified === 1 || verified === '1' || verified === 'true');
+        return stripeComplete && status === 'approved';
+    }
+
+    canProviderAccessListings(user) {
+        if (!this.isProvider()) return true;
+        return this.isProviderApproved(user || this.currentUser);
     }
 
     providerNeedsStripeVerification(user) {

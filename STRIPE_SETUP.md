@@ -79,7 +79,7 @@ your user record still has a **test** `stripeIdentitySessionId` while the server
 2. API creates a Stripe Identity `verification_session` and stores `stripeIdentitySessionId` on the user.
 3. API emails the session URL to the provider (`send_provider_stripe_verification_email`).
 4. Provider completes verification on Stripe’s hosted page.
-5. Stripe sends webhooks → `api/stripe-webhook.php` updates user status.
+5. Stripe sends webhooks → `api/stripe-webhook.php` updates user status and emails the provider that verification was submitted for admin review.
 6. Admin may still review ID photos in the dashboard before full approval (depending on `identityReviewStatus`).
 
 Providers can use **Resend verification email** on the dashboard (`stripe.provider.verification.email`).

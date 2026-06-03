@@ -188,20 +188,22 @@
     }
 
     function isProviderPendingReview(user) {
+        if (auth && typeof auth.isProviderPendingReview === 'function') {
+            return auth.isProviderPendingReview(user);
+        }
         const role = String(user && user.role || '').toLowerCase().trim();
         if (role !== 'provider' && !(auth && auth.isProvider && auth.isProvider())) return false;
-        if (auth && typeof auth.isProviderApproved === 'function' && auth.isProviderApproved(user)) {
-            return false;
-        }
         const status = String(user && user.identityReviewStatus || '').trim().toLowerCase();
         if (status === 'approved') return false;
-        if (user && (user.verified === true || user.verified === 1 || user.verified === 'true')) return false;
-        return status === '' || status === 'pending_review' || status === 'pending';
+        return status === '' || status === 'pending_review' || status === 'pending' || status === 'rejected';
     }
 
     function canProviderAccessListings(user) {
+        if (auth && typeof auth.canProviderAccessListings === 'function') {
+            return auth.canProviderAccessListings(user);
+        }
         const role = String(user && user.role || '').toLowerCase().trim();
-        if (role !== 'provider') return true;
+        if (role !== 'provider' && !(auth && auth.isProvider && auth.isProvider())) return true;
         return !isProviderPendingReview(user);
     }
 
@@ -260,7 +262,15 @@
             btn.style.display = 'none';
             btn.setAttribute('aria-hidden', 'true');
         });
+        document.querySelectorAll('.provider-mode-btn[data-mode="dashboard"], .provider-mode-btn[data-mode="search"]').forEach(function (btn) {
+            btn.style.display = 'none';
+            btn.setAttribute('aria-hidden', 'true');
+        });
         document.querySelectorAll('.provider-mode-switch a[href*="messages"]').forEach(function (link) {
+            link.style.display = 'none';
+            link.setAttribute('aria-hidden', 'true');
+        });
+        document.querySelectorAll('.provider-mode-switch a[href*="provider-search"]').forEach(function (link) {
             link.style.display = 'none';
             link.setAttribute('aria-hidden', 'true');
         });
@@ -336,7 +346,15 @@
             btn.style.display = '';
             btn.removeAttribute('aria-hidden');
         });
+        document.querySelectorAll('.provider-mode-btn[data-mode="dashboard"], .provider-mode-btn[data-mode="search"]').forEach(function (btn) {
+            btn.style.display = '';
+            btn.removeAttribute('aria-hidden');
+        });
         document.querySelectorAll('.provider-mode-switch a[href*="messages"]').forEach(function (link) {
+            link.style.display = '';
+            link.removeAttribute('aria-hidden');
+        });
+        document.querySelectorAll('.provider-mode-switch a[href*="provider-search"]').forEach(function (link) {
             link.style.display = '';
             link.removeAttribute('aria-hidden');
         });
@@ -461,6 +479,7 @@
 
             if (isProvider && !canBeProvider) {
                 showProviderPendingApprovalState(me);
+                activateProviderMode('profile', me);
             } else {
                 clearProviderPendingApprovalState();
             }
@@ -922,6 +941,12 @@
             return;
         }
 
+        if ((mode === 'search' || mode === 'dashboard') && !canProviderAccessListings(record)) {
+            alert('Your account is still pending verification. Listings unlock after Stripe verification and admin approval — use Profile for now.');
+            activateProviderMode('profile', record, activeButton);
+            return;
+        }
+
         if (mode === 'messages' && !canProviderAccessListings(record)) {
             alert('Your account is still pending review. Messages unlock after admin approval — use Profile for now.');
             activateProviderMode('profile', record, activeButton);
@@ -939,7 +964,7 @@
         if (dashboardPanel) dashboardPanel.classList.toggle('active', mode === 'dashboard');
         if (searchPanel) searchPanel.classList.toggle('active', mode === 'search');
         if (messagesPanel) messagesPanel.classList.toggle('active', mode === 'messages');
-        if (listingsContainer) listingsContainer.style.display = mode === 'messages' ? 'none' : '';
+        if (listingsContainer) listingsContainer.style.display = (mode === 'messages' || !canProviderAccessListings(record)) ? 'none' : '';
 
         if (mode === 'messages') {
             renderProviderMessages(record);
@@ -959,7 +984,11 @@
             return;
         }
         if (hash === 'provider-search-panel' || hash === 'search' || hash === 'provider-search') {
-            activateProviderMode('search', user);
+            if (canProviderAccessListings(user)) {
+                activateProviderMode('search', user);
+            } else {
+                activateProviderMode('profile', user);
+            }
             return;
         }
         if (hash === 'messages' || hash === 'provider-messages' || hash === 'provider-messages-panel') {
@@ -1689,7 +1718,7 @@
         const container = document.getElementById('provider-listings');
         if (!container) return;
         if (!canProviderAccessListings(user)) {
-            container.innerHTML = '<div class="empty-inventory">Your account is pending admin review. Listings and bidding will appear after approval.</div>';
+            container.innerHTML = '<div class="empty-inventory">Complete Stripe verification and wait for admin approval. Listings and bidding will unlock once your account is approved.</div>';
             return;
         }
 
