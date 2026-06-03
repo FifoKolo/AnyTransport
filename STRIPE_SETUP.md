@@ -106,6 +106,8 @@ Open in the browser (should return JSON, not 404):
 
 `https://your-domain.com/api/index.php?action=auth.me`
 
+Even when logged in as a provider with a stale test/live Stripe session, this must return `{"ok":true,...}` (HTTP 200), not HTTP 500. Older builds called Stripe during `auth.me` and could break the whole API client when sessions were mismatched.
+
 If the dashboard says **Verification email is not available**, the browser cannot reach the API. Fix nginx/PHP routing first (see `deploy/nginx-php-snippet.conf.example`).
 
 ## Nginx note

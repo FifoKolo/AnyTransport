@@ -1549,7 +1549,7 @@ function map_identity_status_to_local($status) {
 function sync_stripe_account_status($store, $userId) {
     $index = find_user_index_by_id($store['users'], $userId);
     if ($index < 0) {
-        send_json(array('ok' => false, 'error' => 'User not found.'), 404);
+        return array('user' => null, 'complete' => false, 'status' => 'not_started');
     }
 
     $user = normalize_user($store['users'][$index]);
@@ -1558,7 +1558,26 @@ function sync_stripe_account_status($store, $userId) {
         return array('user' => $user, 'complete' => false, 'status' => 'not_started');
     }
 
-    $session = stripe_request('GET', '/v1/identity/verification_sessions/' . rawurlencode($identitySessionId));
+    $sessionResp = stripe_request_internal('GET', '/v1/identity/verification_sessions/' . rawurlencode($identitySessionId));
+    if (empty($sessionResp['ok'])) {
+        $errorMessage = trim((string) ($sessionResp['error'] ?? 'Unable to sync Stripe Identity session.'));
+        $updatedUser = update_user_record($store, $userId, array(
+            'stripeIdentitySessionId' => '',
+            'stripeIdentityStatus' => 'not_started',
+            'stripeIdentityLastError' => $errorMessage,
+            'stripeOnboardingStatus' => 'not_started',
+            'stripeOnboardingUpdatedAt' => gmdate('c')
+        ));
+        return array(
+            'user' => $updatedUser ?: $user,
+            'complete' => false,
+            'status' => 'not_started',
+            'session' => null,
+            'syncError' => $errorMessage
+        );
+    }
+
+    $session = is_array($sessionResp['data'] ?? null) ? $sessionResp['data'] : array();
     $mapped = map_identity_status_to_local((string) ($session['status'] ?? ''));
     $complete = !empty($mapped['complete']);
     $status = (string) ($mapped['status'] ?? 'not_started');

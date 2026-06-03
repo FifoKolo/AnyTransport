@@ -162,9 +162,7 @@ window.anytransportApi = window.anytransportApi || (function () {
                 return candidates[i];
             }
         }
-        if (window.anytransportIsDebug && window.anytransportIsDebug()) {
-            console.warn('[AnyTransport API] No candidate reached. Tried:', candidates);
-        }
+        console.warn('[AnyTransport API] No candidate reached. Tried:', candidates);
         return '';
     }
 
