@@ -887,11 +887,7 @@ class AuthManager {
         if (String(this.currentUser && this.currentUser.role || '').trim().toLowerCase() === 'customer') {
             return true;
         }
-        // Providers can also post and manage their own transport requests.
-        if (this.isProvider()) {
-            return true;
-        }
-        return false;
+        return !this.isProvider();
     }
 
     resolveHubNavHref(relativePath) {
@@ -954,14 +950,13 @@ class AuthManager {
             return;
         }
 
-        const profileMenuVersion = '4';
+        const profileMenuVersion = '5';
         const hasLegacyMenu = !!menu.querySelector(
-            '.at-nav-provider-dashboard, #navbar-profile-link, .at-nav-my-requests, a[href="customer-dashboard.html"]:not([href*="?"])'
+            '.at-nav-provider-dashboard, #navbar-profile-link, .at-nav-my-requests, .at-nav-hub-forms, a[href="customer-dashboard.html"]:not([href*="?"])'
         ) || !menu.querySelector('.at-nav-hub-listings');
         if (menu.dataset.profileMenuVersion !== profileMenuVersion || hasLegacyMenu) {
             menu.innerHTML = [
                 '<a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>',
-                '<a href="customer-dashboard.html?tab=forms&my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Active listings</a>',
                 '<a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-listings" id="navbar-hub-listings-link" role="menuitem">My Listings</a>',
                 '<a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',
                 '<a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>',
@@ -992,7 +987,6 @@ class AuthManager {
         const uid = this.currentUser.id ? String(this.currentUser.id) : '';
 
         const dashboardHref = this.resolveHubNavHref('dashboard.html');
-        const requestFormsHref = this.resolveHubNavHref('customer-dashboard.html?tab=forms&my-requests=1');
         const listingsHref = this.resolveHubNavHref('customer-dashboard.html?tab=forms');
         const settingsHref = allowProviderDash
             ? this.resolveHubNavHref('provider-profile.html?userId=' + encodeURIComponent(uid))
@@ -1003,10 +997,6 @@ class AuthManager {
         document.querySelectorAll('.at-nav-hub-dashboard, #navbar-hub-dashboard-link').forEach((el) => {
             el.href = dashboardHref;
             el.style.display = allowProviderDash ? '' : 'none';
-        });
-        document.querySelectorAll('.at-nav-hub-forms, #navbar-hub-forms-link').forEach((el) => {
-            el.href = requestFormsHref;
-            el.style.display = allowCustomerHub ? '' : 'none';
         });
         document.querySelectorAll('.at-nav-hub-listings, #navbar-hub-listings-link').forEach((el) => {
             el.href = listingsHref;
@@ -1041,7 +1031,6 @@ class AuthManager {
         }
 
         const path = String(window.location.pathname || '').toLowerCase();
-        const search = String(window.location.search || '').toLowerCase();
         const tab = (() => {
             try {
                 return String(new URLSearchParams(window.location.search || '').get('tab') || '').trim().toLowerCase();
@@ -1061,8 +1050,6 @@ class AuthManager {
                 document.querySelectorAll('.at-nav-hub-settings').forEach((el) => el.classList.add('is-active'));
             } else if (tab === 'inbox' || tab === 'messages') {
                 document.querySelectorAll('.at-nav-hub-messages').forEach((el) => el.classList.add('is-active'));
-            } else if (search.indexOf('my-requests=1') >= 0) {
-                document.querySelectorAll('.at-nav-hub-forms').forEach((el) => el.classList.add('is-active'));
             } else {
                 document.querySelectorAll('.at-nav-hub-listings').forEach((el) => el.classList.add('is-active'));
             }
@@ -1092,7 +1079,6 @@ class AuthManager {
             '</button>',
             '<div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-ready="1">',
             '  <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>',
-            '  <a href="customer-dashboard.html?tab=forms&my-requests=1" class="nav-item navbar-hub-link at-nav-hub-forms" id="navbar-hub-forms-link" role="menuitem">Active listings</a>',
             '  <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-listings" id="navbar-hub-listings-link" role="menuitem">My Listings</a>',
             '  <a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',
             '  <a href="messages.html" class="nav-item navbar-hub-link at-nav-hub-messages" id="navbar-hub-messages-link" role="menuitem">Messages</a>',
@@ -1468,15 +1454,18 @@ class AuthManager {
     }
 
     shouldRedirectProviderFromCustomerDashboard() {
-        if (!this.isProvider() || this.isAdmin()) {
-            return false;
+        return this.isProvider() && !this.isAdmin();
+    }
+
+    guardCustomerListingPage() {
+        if (!this.isLoggedIn()) {
+            return;
         }
-        try {
-            const params = new URLSearchParams(window.location.search || '');
-            return params.get('my-requests') !== '1';
-        } catch (_e) {
-            return true;
+        this.refreshSessionUserFromServer();
+        if (this.isAdmin() || !this.isProvider()) {
+            return;
         }
+        window.location.replace(this.resolveDefaultHomeHref());
     }
 
     guardProviderDashboardPage() {
@@ -1628,6 +1617,24 @@ function resumeAuthAfterLogin(currentUser) {
     const pendingQuote = sessionStorage.getItem('pending_quote_submission') || localStorage.getItem('pending_quote_submission');
     const returnUrl = getStoredAuthReturnUrl();
     const inCustomerQuoteFlow = isCustomerQuoteAuthContext() || !!pendingQuote;
+
+    if (inCustomerQuoteFlow && currentUser && typeof auth.isProvider === 'function' && auth.isProvider() && !isAdmin) {
+        clearCustomerQuoteAuthContext();
+        sessionStorage.removeItem('pending_quote_submission');
+        localStorage.removeItem('pending_quote_submission');
+        const message = 'This form is for customer transport requests. Please sign in with a customer account, or use Sign Up to create one.';
+        const notice = document.getElementById('login-modal-notice');
+        if (notice) {
+            notice.textContent = message;
+            notice.style.display = 'block';
+        } else {
+            alert(message);
+        }
+        if (returnUrl && /create-job\.html/i.test(returnUrl)) {
+            window.location.href = returnUrl;
+        }
+        return true;
+    }
 
     if (pendingQuote) {
         sessionStorage.removeItem('pending_quote_submission');
@@ -2206,7 +2213,6 @@ if (document.body.classList.contains('protected')) {
 function resolveMyListingsDashboardHref(formId) {
     const params = new URLSearchParams();
     params.set('tab', 'forms');
-    params.set('my-requests', '1');
     const fid = String(formId || '').trim();
     if (fid) {
         params.set('highlightForm', fid);
@@ -2219,6 +2225,23 @@ function resolveMyListingsDashboardHref(formId) {
 }
 
 window.resolveMyListingsDashboardHref = resolveMyListingsDashboardHref;
+
+(function guardCustomerOnlyPages() {
+    const run = () => {
+        if (typeof auth === 'undefined' || typeof auth.guardCustomerListingPage !== 'function') {
+            return;
+        }
+        const path = String(window.location.pathname || '').toLowerCase();
+        if (/create-job\.html$/i.test(path)) {
+            auth.guardCustomerListingPage();
+        }
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', run, { once: true });
+    } else {
+        run();
+    }
+})();
 
 // Confirmation Modal Functions
 function showConfirmationModal() {

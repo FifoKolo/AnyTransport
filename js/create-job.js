@@ -26989,6 +26989,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
+            const blockProviderCustomerQuoteSubmit = () => {
+                if (typeof auth.isAdmin === 'function' && auth.isAdmin()) {
+                    return false;
+                }
+                if (typeof auth.isProvider === 'function' && auth.isProvider()) {
+                    alert('This listing form is for customers only. Please sign in with a customer account, or create one using Sign Up.');
+                    return true;
+                }
+                return false;
+            };
+
+            if (blockProviderCustomerQuoteSubmit()) {
+                console.log('[QUOTE FORM] Submit blocked: provider account on customer form');
+                return;
+            }
+
             const currentUser = auth.getUser();
             if (!currentUser || !currentUser.email) {
                 console.log('[QUOTE FORM] Submit blocked: user has no email');
@@ -27967,8 +27983,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     dashUrl = window.resolveMyListingsDashboardHref(highlightId);
                 } else {
                     dashUrl = highlightId
-                        ? `customer-dashboard.html?tab=forms&my-requests=1&highlightForm=${encodeURIComponent(highlightId)}`
-                        : 'customer-dashboard.html?tab=forms&my-requests=1';
+                        ? `customer-dashboard.html?tab=forms&highlightForm=${encodeURIComponent(highlightId)}`
+                        : 'customer-dashboard.html?tab=forms';
                 }
                 quoteSubmitKeepLocked = true;
                 window.location.href = dashUrl;

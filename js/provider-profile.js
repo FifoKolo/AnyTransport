@@ -56,7 +56,7 @@
         }
         if (introEl) {
             introEl.textContent = isOwn
-                ? 'Keep your provider profile current with business details, services, payment options, and photos. The editor below saves as you work so your public profile stays polished.'
+                ? 'Keep your provider profile current with business details, services, payment options, and photos. Update the fields below, then click Save profile when you are ready.'
                 : 'View this transport provider\'s public profile, customer reviews, and job history before you hire.';
         }
         document.body.classList.toggle('provider-profile-public-view', !isOwn);
@@ -678,14 +678,9 @@
             '  <div class="profile-editor-header">',
             '    <div>',
             '      <div class="profile-editor-kicker">Profile settings</div>',
-            '      <h3 class="profile-editor-title">Edit your public profile</h3>',
-            '      <p class="profile-editor-subtitle">Keep your business details, services, payment options, and photos polished. Changes save automatically so your profile stays up to date.</p>',
+            '      <h3 class="profile-editor-title">Edit your profile</h3>',
+            '      <p class="profile-editor-subtitle">Update your business details, services, payment options, and photos below. Click Save profile when you are ready to publish your changes.</p>',
             readOnlyNote,
-            '    </div>',
-            '    <div class="profile-editor-badges">',
-            '      <span class="profile-pill">Auto-save enabled</span>',
-            '      <span class="profile-pill">Public profile</span>',
-            '      <span class="profile-pill">Photos supported</span>',
             '    </div>',
             '  </div>',
             '<div class="profile-workspace">',
@@ -742,6 +737,7 @@
             '          <div><input id="profile-contact" class="form-input" type="text" value="' + escapeAttribute(firstText(u.phone, u.contact, u.email, '')) + '"' + disabledAttr + '></div>',
             '        </div>',
             '        <div class="profile-footer-actions">',
+            '          <button type="button" id="profile-save-btn" class="btn btn-primary" disabled>Save profile</button>',
             '          <span id="profile-save-status" class="profile-save-status" aria-live="polite"></span>',
             '        </div>',
             '    </div>',
@@ -790,6 +786,19 @@
             '    </div>',
             '  </div>',
             '  </form>',
+            '  <div id="profile-save-popup" class="profile-save-popup" hidden>',
+            '    <div class="profile-save-popup-card" role="status" aria-live="polite">',
+            '      <p class="profile-save-popup-text">You have unsaved profile changes.</p>',
+            '      <button type="button" id="profile-save-popup-btn" class="btn btn-primary">Save profile</button>',
+            '    </div>',
+            '  </div>',
+            '  <div id="profile-save-success-modal" class="profile-save-success-modal" hidden role="dialog" aria-modal="true" aria-labelledby="profile-save-success-title">',
+            '    <div class="profile-save-success-card">',
+            '      <h4 id="profile-save-success-title">Profile saved</h4>',
+            '      <p>Your changes have been saved successfully.</p>',
+            '      <button type="button" id="profile-save-success-dismiss" class="btn btn-primary">OK</button>',
+            '    </div>',
+            '  </div>',
             '</div>',
             '</div>'
         ].join('');
@@ -798,6 +807,11 @@
         const photoInput = document.getElementById('profile-photo-input');
         const previewRoot = document.getElementById('profile-photo-previews');
         const saveStatusEl = document.getElementById('profile-save-status');
+        const saveBtn = document.getElementById('profile-save-btn');
+        const savePopup = document.getElementById('profile-save-popup');
+        const savePopupBtn = document.getElementById('profile-save-popup-btn');
+        const saveSuccessModal = document.getElementById('profile-save-success-modal');
+        const saveSuccessDismiss = document.getElementById('profile-save-success-dismiss');
         const aboutField = document.getElementById('profile-about');
         const aboutWordCountEl = document.getElementById('profile-about-wordcount');
         let lastSavedSignature = '';
@@ -917,6 +931,43 @@
             return payloadSignature(buildPayload()) !== lastSavedSignature;
         }
 
+        function updateSaveUi() {
+            const dirty = hasPendingChanges();
+            if (saveBtn) {
+                saveBtn.disabled = !dirty;
+            }
+            if (savePopup) {
+                savePopup.hidden = !dirty;
+            }
+            if (dirty && saveStatusEl && !saveStatusEl.classList.contains('is-saving')) {
+                setSaveBadge('You have unsaved changes', '');
+            } else if (!dirty && saveStatusEl && !saveStatusEl.classList.contains('is-error')) {
+                setSaveBadge('All changes saved', 'saved');
+            }
+        }
+
+        function markProfileDirty() {
+            updateSaveUi();
+        }
+
+        function showSaveSuccessModal() {
+            if (!saveSuccessModal) return;
+            saveSuccessModal.hidden = false;
+        }
+
+        function hideSaveSuccessModal() {
+            if (!saveSuccessModal) return;
+            saveSuccessModal.hidden = true;
+        }
+
+        function triggerManualSave() {
+            saveProfile({ silent: false }).then(function () {
+                showSaveSuccessModal();
+            }).catch(function (error) {
+                alert(error && error.message ? error.message : 'Unable to save profile.');
+            });
+        }
+
         function setSaveBadge(text, state) {
             if (!saveStatusEl) return;
             saveStatusEl.textContent = text || '';
@@ -946,6 +997,7 @@
 
             if (signature === lastSavedSignature) {
                 setSaveBadge('All changes saved', 'saved');
+                updateSaveUi();
                 return Promise.resolve();
             }
 
@@ -965,7 +1017,7 @@
         function persistProfile(payload, options) {
             const locationStatus = document.getElementById('profile-location-status');
             try {
-                console.info('[Provider Profile] autosave payload', {
+                console.info('[Provider Profile] save payload', {
                     userId: payload.id,
                     services: payload.services,
                     transportModes: payload.transportModes,
@@ -978,6 +1030,7 @@
             return Promise.resolve(window.anytransportApi.saveUser(payload)).then(function (serverUser) {
                 lastSavedSignature = payloadSignature(payload);
                 setSaveBadge('All changes saved', 'saved');
+                updateSaveUi();
                 if (locationStatus) {
                     if (payload.serviceAreaLat && payload.serviceAreaLng) {
                         locationStatus.textContent = 'Map location saved — customers can find you when they search near your area.';
@@ -1016,22 +1069,26 @@
                 }
             }).catch(function (error) {
                 setSaveBadge(error && error.message ? error.message : 'Save failed — try again', 'error');
+                updateSaveUi();
                 throw error;
             });
         }
 
-        function queueAutosave() {
-            if (!hasPendingChanges()) {
-                return;
-            }
-            if (renderEditor._autosaveTimer) {
-                clearTimeout(renderEditor._autosaveTimer);
-            }
-            renderEditor._autosaveTimer = setTimeout(function () {
-                saveProfile({ silent: true }).catch(function (error) {
-                    console.error(error);
-                });
-            }, 150);
+        if (saveBtn && isEditable) {
+            saveBtn.addEventListener('click', triggerManualSave);
+        }
+        if (savePopupBtn && isEditable) {
+            savePopupBtn.addEventListener('click', triggerManualSave);
+        }
+        if (saveSuccessDismiss) {
+            saveSuccessDismiss.addEventListener('click', hideSaveSuccessModal);
+        }
+        if (saveSuccessModal) {
+            saveSuccessModal.addEventListener('click', function (event) {
+                if (event.target === saveSuccessModal) {
+                    hideSaveSuccessModal();
+                }
+            });
         }
 
         if (photoInput && isEditable) {
@@ -1045,7 +1102,7 @@
                     pendingPhotos = pendingPhotos.concat(urls.filter(Boolean));
                     renderPhotoPreviews();
                     photoInput.value = '';
-                    queueAutosave();
+                    markProfileDirty();
                 }).catch(function () {
                     alert('One or more images could not be read.');
                 });
@@ -1063,7 +1120,7 @@
                 existingPhotos.splice(0, existingPhotos.length, ...updated);
                 pendingPhotos = [];
                 renderPhotoPreviews();
-                queueAutosave();
+                markProfileDirty();
             });
         }
 
@@ -1124,7 +1181,7 @@
             customPaymentMethods.push(name);
             if (input) input.value = '';
             renderPaymentMethodsGrid(checkedKeys);
-            queueAutosave();
+            markProfileDirty();
         }
 
         const customPaymentAddBtn = document.getElementById('profile-custom-payment-add');
@@ -1154,7 +1211,7 @@
                 if (!Number.isFinite(index) || index < 0) return;
                 customPaymentMethods.splice(index, 1);
                 renderPaymentMethodsGrid();
-                queueAutosave();
+                markProfileDirty();
             });
         }
 
@@ -1217,7 +1274,7 @@
                     }).join('');
                 editorCustomTransportModes = customTransportModes.slice();
             }
-            queueAutosave();
+            markProfileDirty();
         }
 
         const customTransportAddBtn = document.getElementById('profile-custom-transport-add');
@@ -1247,24 +1304,17 @@
                 if (!Number.isFinite(index) || index < 0) return;
                 customTransportModes.splice(index, 1);
                 renderTransportModesGrid();
-                queueAutosave();
+                markProfileDirty();
             });
         }
         renderPhotoPreviews();
         lastSavedSignature = payloadSignature(buildPayload());
         updateAboutWordCount();
+        updateSaveUi();
 
         if (form && isEditable) {
-            form.addEventListener('change', function (event) {
-                const target = event.target;
-                if (!target) return;
-                if (target.matches && target.matches('input[type="checkbox"]')) {
-                    saveProfile({ silent: true }).catch(function (error) {
-                        console.error(error);
-                    });
-                    return;
-                }
-                queueAutosave();
+            form.addEventListener('change', function () {
+                markProfileDirty();
             });
             form.addEventListener('input', function (event) {
                 const target = event.target;
@@ -1272,15 +1322,16 @@
                 if (target.id === 'profile-about') {
                     updateAboutWordCount();
                 }
-                if (target.matches && target.matches('#profile-business-name, #profile-about, #profile-company-type, #profile-city, #profile-service-address, #profile-contact, #profile-vehicle-count')) {
-                    queueAutosave();
-                }
+                markProfileDirty();
             });
             form.addEventListener('submit', function (event) {
                 event.preventDefault();
-                saveProfile({ silent: false }).catch(function (error) {
-                    alert(error && error.message ? error.message : 'Unable to save profile.');
-                });
+                triggerManualSave();
+            });
+            window.addEventListener('beforeunload', function (event) {
+                if (!hasPendingChanges()) return;
+                event.preventDefault();
+                event.returnValue = '';
             });
         }
     }

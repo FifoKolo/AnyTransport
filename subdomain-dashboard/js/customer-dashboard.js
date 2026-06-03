@@ -1181,18 +1181,6 @@
             nameEl.textContent = user.username || user.name || user.email || 'Customer';
         }
 
-        var pdLink = document.getElementById('provider-dashboard-link');
-        var showProviderDashNav = false;
-        try {
-            showProviderDashNav = typeof authRef.isProvider === 'function' && authRef.isProvider();
-            if (!showProviderDashNav && typeof authRef.isAdmin === 'function') {
-                showProviderDashNav = authRef.isAdmin();
-            }
-        } catch (_e) {}
-        if (pdLink && !showProviderDashNav) {
-            pdLink.style.display = 'none';
-        }
-
         let highlightFormId = '';
         try {
             highlightFormId = String(new URLSearchParams(window.location.search || '').get('highlightForm') || '').trim();

@@ -4629,14 +4629,12 @@ switch ($action) {
         $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
         $isAdmin = is_admin_user($currentUser);
         $isProvider = strtolower(trim((string) ($currentUser['role'] ?? ''))) === 'provider';
-        $scope = strtolower(trim((string) ($_GET['scope'] ?? '')));
-        $mineOnly = in_array($scope, array('mine', 'own', 'my'), true);
         if (!$isAdmin) {
             if ($currentUserId === '') {
                 send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
             }
-            // Default: providers see marketplace listings. scope=mine returns only their own requests.
-            $userId = ($isProvider && !$mineOnly) ? '' : $currentUserId;
+            // Providers need visibility of open marketplace forms, not only self-owned forms.
+            $userId = $isProvider ? '' : $currentUserId;
         } else {
             $userId = trim((string) ($_GET['userId'] ?? ''));
         }
