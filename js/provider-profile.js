@@ -683,6 +683,10 @@
             readOnlyNote,
             '    </div>',
             '  </div>',
+            '  <div id="profile-changes-panel" class="profile-changes-panel" hidden>',
+            '    <h4 class="profile-changes-panel-title">Unsaved changes</h4>',
+            '    <ul id="profile-changes-list" class="profile-changes-list" aria-live="polite"></ul>',
+            '  </div>',
             '<div class="profile-workspace">',
             '  <form id="provider-profile-form" class="profile-editor-form profile-workspace-form" novalidate>',
             '  <div class="profile-workspace-grid">',
@@ -788,7 +792,8 @@
             '  </form>',
             '  <div id="profile-save-popup" class="profile-save-popup" hidden>',
             '    <div class="profile-save-popup-card" role="status" aria-live="polite">',
-            '      <p class="profile-save-popup-text">You have unsaved profile changes.</p>',
+            '      <p class="profile-save-popup-text">Unsaved changes</p>',
+            '      <ul id="profile-save-popup-changes" class="profile-changes-list"></ul>',
             '      <button type="button" id="profile-save-popup-btn" class="btn btn-primary">Save profile</button>',
             '    </div>',
             '  </div>',
@@ -812,9 +817,145 @@
         const savePopupBtn = document.getElementById('profile-save-popup-btn');
         const saveSuccessModal = document.getElementById('profile-save-success-modal');
         const saveSuccessDismiss = document.getElementById('profile-save-success-dismiss');
+        const changesPanel = document.getElementById('profile-changes-panel');
+        const changesList = document.getElementById('profile-changes-list');
+        const popupChangesList = document.getElementById('profile-save-popup-changes');
         const aboutField = document.getElementById('profile-about');
         const aboutWordCountEl = document.getElementById('profile-about-wordcount');
+        let lastSavedPayload = null;
         let lastSavedSignature = '';
+
+        function snapshotPayload(payload) {
+            return JSON.parse(JSON.stringify(payload || {}));
+        }
+
+        function syncSavedSnapshot(payload) {
+            lastSavedPayload = snapshotPayload(payload);
+            lastSavedSignature = payloadSignature(payload);
+        }
+
+        function formatArrayChange(label, before, after) {
+            const prev = Array.isArray(before) ? before.slice() : [];
+            const next = Array.isArray(after) ? after.slice() : [];
+            if (JSON.stringify(prev) === JSON.stringify(next)) {
+                return null;
+            }
+            const added = next.filter(function (item) { return prev.indexOf(item) === -1; });
+            const removed = prev.filter(function (item) { return next.indexOf(item) === -1; });
+            const parts = [];
+            if (added.length) parts.push('added ' + added.join(', '));
+            if (removed.length) parts.push('removed ' + removed.join(', '));
+            return parts.length ? label + ': ' + parts.join('; ') : label + ' updated';
+        }
+
+        function formatTextChange(label, before, after) {
+            const prev = String(before || '').trim();
+            const next = String(after || '').trim();
+            if (prev === next) return null;
+            if (!prev) return label + ': set to "' + next + '"';
+            if (!next) return label + ': cleared (was "' + prev + '")';
+            return label + ': "' + prev + '" → "' + next + '"';
+        }
+
+        function formatBooleanChange(label, before, after) {
+            if (!!before === !!after) return null;
+            return label + ': ' + (after ? 'enabled' : 'disabled');
+        }
+
+        function formatPaymentMethodsChange(before, after) {
+            const labels = {
+                cash: 'Cash',
+                cheque: 'Cheque',
+                visa: 'Visa card',
+                mastercard: 'Mastercard',
+                paypal: 'Paypal',
+                americanExpress: 'American Express',
+                bankTransfer: 'Bank Transfer',
+                revolut: 'Revolut'
+            };
+            const prevKeys = Object.keys(labels).filter(function (key) {
+                return !!(before && before.paymentMethods && before.paymentMethods[key]);
+            });
+            const nextKeys = Object.keys(labels).filter(function (key) {
+                return !!(after && after.paymentMethods && after.paymentMethods[key]);
+            });
+            const lines = [];
+            const standardChange = formatArrayChange(
+                'Payment methods',
+                prevKeys.map(function (key) { return labels[key]; }),
+                nextKeys.map(function (key) { return labels[key]; })
+            );
+            if (standardChange) lines.push(standardChange);
+            const customChange = formatArrayChange(
+                'Custom payment methods',
+                before && before.paymentMethodsCustom,
+                after && after.paymentMethodsCustom
+            );
+            if (customChange) lines.push(customChange);
+            return lines;
+        }
+
+        function collectProfileChanges() {
+            if (!lastSavedPayload) return [];
+            const current = buildPayload();
+            const saved = lastSavedPayload;
+            const changes = [];
+
+            [
+                ['Business name', saved.businessName, current.businessName],
+                ['Business description', saved.description, current.description],
+                ['Type of company', saved.companyType, current.companyType],
+                ['Town / city area', saved.serviceAreaCity || saved.city, current.serviceAreaCity || current.city],
+                ['Full address', saved.serviceAreaAddress, current.serviceAreaAddress],
+                ['Contact', saved.phone || saved.contact, current.phone || current.contact]
+            ].forEach(function (entry) {
+                const line = formatTextChange(entry[0], entry[1], entry[2]);
+                if (line) changes.push(line);
+            });
+
+            const servicesChange = formatArrayChange('Jobs you specialise in', saved.services, current.services);
+            if (servicesChange) changes.push(servicesChange);
+
+            const transportChange = formatArrayChange('Modes of transport', saved.transportModes, current.transportModes);
+            if (transportChange) changes.push(transportChange);
+
+            formatPaymentMethodsChange(saved, current).forEach(function (line) {
+                changes.push(line);
+            });
+
+            const vehicleChange = formatTextChange(
+                'Number of vehicles',
+                saved.vehicleCount != null && saved.vehicleCount !== '' ? String(saved.vehicleCount) : '',
+                current.vehicleCount != null && current.vehicleCount !== '' ? String(current.vehicleCount) : ''
+            );
+            if (vehicleChange) changes.push(vehicleChange);
+
+            const inviteChange = formatBooleanChange('Stop job invitations', saved.blockInvites, current.blockInvites);
+            if (inviteChange) changes.push(inviteChange);
+
+            const emailChange = formatBooleanChange('Mute invitation emails', saved.muteInviteEmails, current.muteInviteEmails);
+            if (emailChange) changes.push(emailChange);
+
+            const savedPhotos = Array.isArray(saved.photos) ? saved.photos.length : 0;
+            const currentPhotos = Array.isArray(current.photos) ? current.photos.length : 0;
+            if (savedPhotos !== currentPhotos) {
+                changes.push('Photos: ' + savedPhotos + ' → ' + currentPhotos);
+            } else if (JSON.stringify(saved.photos || []) !== JSON.stringify(current.photos || [])) {
+                changes.push('Photos updated');
+            }
+
+            return changes;
+        }
+
+        function renderChangeSummaries() {
+            const changes = collectProfileChanges();
+            const html = changes.map(function (line) {
+                return '<li>' + escapeHtml(line) + '</li>';
+            }).join('');
+            if (changesList) changesList.innerHTML = html;
+            if (popupChangesList) popupChangesList.innerHTML = html;
+            if (changesPanel) changesPanel.hidden = !changes.length;
+        }
 
         function renderPhotoPreviews() {
             if (!previewRoot) return;
@@ -939,8 +1080,10 @@
             if (savePopup) {
                 savePopup.hidden = !dirty;
             }
+            renderChangeSummaries();
             if (dirty && saveStatusEl && !saveStatusEl.classList.contains('is-saving')) {
-                setSaveBadge('You have unsaved changes', '');
+                const count = collectProfileChanges().length;
+                setSaveBadge(count ? ('You have ' + count + ' unsaved change' + (count === 1 ? '' : 's')) : 'You have unsaved changes', '');
             } else if (!dirty && saveStatusEl && !saveStatusEl.classList.contains('is-error')) {
                 setSaveBadge('All changes saved', 'saved');
             }
@@ -1028,7 +1171,7 @@
             } catch (_err) {}
 
             return Promise.resolve(window.anytransportApi.saveUser(payload)).then(function (serverUser) {
-                lastSavedSignature = payloadSignature(payload);
+                syncSavedSnapshot(payload);
                 setSaveBadge('All changes saved', 'saved');
                 updateSaveUi();
                 if (locationStatus) {
@@ -1308,7 +1451,7 @@
             });
         }
         renderPhotoPreviews();
-        lastSavedSignature = payloadSignature(buildPayload());
+        syncSavedSnapshot(buildPayload());
         updateAboutWordCount();
         updateSaveUi();
 
@@ -1332,6 +1475,11 @@
                 if (!hasPendingChanges()) return;
                 event.preventDefault();
                 event.returnValue = '';
+                if (typeof window.anytransportHidePageLoader === 'function') {
+                    window.setTimeout(function () {
+                        window.anytransportHidePageLoader();
+                    }, 0);
+                }
             });
         }
     }

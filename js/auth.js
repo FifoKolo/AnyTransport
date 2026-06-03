@@ -87,9 +87,24 @@
 
     window.addEventListener('beforeunload', function () {
         setVisible(true);
+        window.setTimeout(function () {
+            if (document.visibilityState === 'visible') {
+                setVisible(false);
+            }
+        }, 300);
     });
     window.addEventListener('pageshow', function () {
         setVisible(false);
+    });
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') {
+            setVisible(false);
+        }
+    });
+    window.addEventListener('focus', function () {
+        if (document.visibilityState === 'visible') {
+            setVisible(false);
+        }
     });
 })();
 
