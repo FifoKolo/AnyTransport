@@ -363,6 +363,15 @@ window.anytransportApi = window.anytransportApi || (function () {
             setTabSessionToken('');
             return response;
         },
+        requestPasswordReset: function (email) {
+            return request('auth.password.forgot', 'POST', { email: email });
+        },
+        validatePasswordResetToken: function (token) {
+            return request('auth.password.reset.validate', 'GET', {}, { token: token });
+        },
+        resetPassword: function (token, password) {
+            return request('auth.password.reset', 'POST', { token: token, password: password });
+        },
         getUsers: function () {
             try {
                 const response = request('users.list', 'GET');
@@ -1697,6 +1706,24 @@ function closeLoginModal() {
         if (notice) {
             notice.style.display = 'none';
         }
+    }
+}
+
+function openForgotPasswordModal() {
+    try {
+        sessionStorage.setItem('anytransport_auth_return_url', window.location.href);
+    } catch (_e) {}
+    window.location.href = '../index.html#forgot-password';
+}
+
+function closeForgotPasswordModal() {
+    const modal = document.getElementById('forgot-password-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+    const notice = document.getElementById('forgot-password-notice');
+    if (notice) {
+        notice.style.display = 'none';
     }
 }
 

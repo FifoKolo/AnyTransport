@@ -365,6 +365,14 @@ function normalize_user($user) {
         $normalized['identityReviewNotes'] = '';
     }
 
+    if (!isset($normalized['passwordResetToken'])) {
+        $normalized['passwordResetToken'] = '';
+    }
+
+    if (!isset($normalized['passwordResetExpiresAt'])) {
+        $normalized['passwordResetExpiresAt'] = '';
+    }
+
     if (!isset($normalized['paymentMethods']) || !is_array($normalized['paymentMethods'])) {
         $normalized['paymentMethods'] = array();
     }
@@ -1212,6 +1220,110 @@ function send_customer_welcome_email($customer) {
     $body .= "Regards,\nAnyTransport";
 
     return send_email_simple($customerEmail, $subject, $body);
+}
+
+function send_password_reset_email($user, $resetUrl) {
+    $email = trim((string) ($user['email'] ?? ''));
+    $resetUrl = trim((string) $resetUrl);
+    if ($email === '' || $resetUrl === '') {
+        return false;
+    }
+
+    $name = trim((string) ($user['name'] ?? $user['username'] ?? 'there'));
+    if ($name === '') {
+        $name = 'there';
+    }
+
+    $subject = 'Reset your AnyTransport password';
+    $body = "Hello " . $name . ",\n\n";
+    $body .= "We received a request to reset the password for your AnyTransport account.\n\n";
+    $body .= "Open this link to choose a new password (the link expires in 1 hour):\n\n";
+    $body .= $resetUrl . "\n\n";
+    $body .= "If you did not request this, you can ignore this email. Your password will not change.\n\n";
+    $body .= "Please do not reply to this email address.\n\n";
+    $body .= "Regards,\nAnyTransport";
+
+    return send_email_simple($email, $subject, $body);
+}
+
+function find_user_index_by_email($users, $email) {
+    $norm = strtolower(trim((string) $email));
+    if ($norm === '') {
+        return -1;
+    }
+    foreach ($users as $index => $user) {
+        if (!is_array($user)) {
+            continue;
+        }
+        if (strtolower(trim((string) ($user['email'] ?? ''))) === $norm) {
+            return (int) $index;
+        }
+    }
+    return -1;
+}
+
+function password_reset_token_is_valid($user) {
+    if (!is_array($user)) {
+        return false;
+    }
+    $token = trim((string) ($user['passwordResetToken'] ?? ''));
+    $expiresAt = trim((string) ($user['passwordResetExpiresAt'] ?? ''));
+    if ($token === '' || $expiresAt === '') {
+        return false;
+    }
+    $expiresTs = strtotime($expiresAt);
+    if ($expiresTs === false || $expiresTs <= time()) {
+        return false;
+    }
+    return true;
+}
+
+function issue_password_reset_for_user(&$store, $userIndex) {
+    if ($userIndex < 0 || !isset($store['users'][$userIndex]) || !is_array($store['users'][$userIndex])) {
+        return '';
+    }
+    try {
+        $token = bin2hex(random_bytes(32));
+    } catch (Exception $e) {
+        $token = make_id('pwreset');
+    }
+    $store['users'][$userIndex]['passwordResetToken'] = $token;
+    $store['users'][$userIndex]['passwordResetExpiresAt'] = gmdate('c', time() + 3600);
+    return $token;
+}
+
+function clear_password_reset_for_user(&$store, $userIndex) {
+    if ($userIndex < 0 || !isset($store['users'][$userIndex])) {
+        return;
+    }
+    $store['users'][$userIndex]['passwordResetToken'] = '';
+    $store['users'][$userIndex]['passwordResetExpiresAt'] = '';
+}
+
+function find_user_index_by_password_reset_token($users, $token) {
+    $token = trim((string) $token);
+    if ($token === '') {
+        return -1;
+    }
+    foreach ($users as $index => $user) {
+        if (!is_array($user)) {
+            continue;
+        }
+        if (trim((string) ($user['passwordResetToken'] ?? '')) === $token) {
+            return (int) $index;
+        }
+    }
+    return -1;
+}
+
+function revoke_sessions_for_user(&$store, $userId) {
+    $userId = trim((string) $userId);
+    if ($userId === '' || !isset($store['sessions']) || !is_array($store['sessions'])) {
+        return;
+    }
+    $store['sessions'] = array_values(array_filter($store['sessions'], function ($session) use ($userId) {
+        return trim((string) ($session['userId'] ?? '')) !== $userId;
+    }));
 }
 
 function generate_reply_token() {
@@ -3816,6 +3928,75 @@ switch ($action) {
             clear_session_cookie();
         }
         send_json(array('ok' => true));
+
+    case 'auth.password.forgot':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $email = trim((string) ($input['email'] ?? ''));
+        $generic = array(
+            'ok' => true,
+            'message' => 'If that email is registered, we sent a password reset link.'
+        );
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            send_json($generic);
+        }
+        $userIndex = find_user_index_by_email($store['users'], $email);
+        if ($userIndex < 0) {
+            send_json($generic);
+        }
+        $token = issue_password_reset_for_user($store, $userIndex);
+        if ($token === '') {
+            send_json($generic);
+        }
+        $store['users'][$userIndex] = normalize_user($store['users'][$userIndex]);
+        write_store($storeFile, $store);
+        $resetUrl = get_app_url('reset-password.html?token=' . rawurlencode($token));
+        send_password_reset_email($store['users'][$userIndex], $resetUrl);
+        send_json($generic);
+
+    case 'auth.password.reset.validate':
+        $token = trim((string) ($_GET['token'] ?? ''));
+        if ($token === '') {
+            send_json(array('ok' => false, 'valid' => false, 'error' => 'Reset link is missing or invalid.'), 400);
+        }
+        $userIndex = find_user_index_by_password_reset_token($store['users'], $token);
+        if ($userIndex < 0) {
+            send_json(array('ok' => false, 'valid' => false, 'error' => 'This reset link is invalid or has already been used.'), 404);
+        }
+        $user = normalize_user($store['users'][$userIndex]);
+        if (!password_reset_token_is_valid($user)) {
+            send_json(array('ok' => false, 'valid' => false, 'error' => 'This reset link has expired. Request a new one from the login page.'), 410);
+        }
+        send_json(array('ok' => true, 'valid' => true));
+
+    case 'auth.password.reset':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $token = trim((string) ($input['token'] ?? ''));
+        $password = (string) ($input['password'] ?? '');
+        if ($token === '') {
+            send_json(array('ok' => false, 'error' => 'Reset link is missing or invalid.'), 400);
+        }
+        if (strlen($password) < 6) {
+            send_json(array('ok' => false, 'error' => 'Password must be at least 6 characters.'), 400);
+        }
+        $userIndex = find_user_index_by_password_reset_token($store['users'], $token);
+        if ($userIndex < 0) {
+            send_json(array('ok' => false, 'error' => 'This reset link is invalid or has already been used.'), 404);
+        }
+        $user = normalize_user($store['users'][$userIndex]);
+        if (!password_reset_token_is_valid($user)) {
+            send_json(array('ok' => false, 'error' => 'This reset link has expired. Request a new one from the login page.'), 410);
+        }
+        $userId = trim((string) ($user['id'] ?? ''));
+        $store['users'][$userIndex]['password'] = $password;
+        clear_password_reset_for_user($store, $userIndex);
+        $store['users'][$userIndex] = normalize_user($store['users'][$userIndex]);
+        revoke_sessions_for_user($store, $userId);
+        write_store($storeFile, $store);
+        send_json(array('ok' => true, 'message' => 'Your password has been updated. You can log in now.'));
 
     case 'auth.login':
         $email = trim((string) ($input['email'] ?? ''));

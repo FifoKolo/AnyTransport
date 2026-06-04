@@ -534,13 +534,6 @@
             '            <div class="profile-help">Shown to customers searching near you. Required for map discovery.</div>',
             '          </div>',
             '        </div>',
-            '        <div class="profile-form-row">',
-            '          <div class="profile-form-label">Full address <span style="font-weight:400;color:#64748b;">(optional)</span></div>',
-            '          <div>',
-            '            <input id="profile-service-address" class="form-input" type="text" placeholder="Street address for more accurate placement" value="' + escapeAttribute(firstText(u.serviceAreaAddress, '')) + '"' + disabledAttr + '>',
-            '            <div class="profile-help">Optional. Used for a more precise map pin.</div>',
-            '          </div>',
-            '        </div>',
             '        <div id="profile-location-status" class="profile-help" style="margin-top:8px;" aria-live="polite"></div>',
             '        <div class="profile-form-row">',
             '          <div class="profile-form-label">Contact</div>',
@@ -712,7 +705,6 @@
                 ['Business description', saved.description, current.description],
                 ['Type of company', saved.companyType, current.companyType],
                 ['Town / city area', saved.serviceAreaCity || saved.city, current.serviceAreaCity || current.city],
-                ['Full address', saved.serviceAreaAddress, current.serviceAreaAddress],
                 ['Contact', saved.phone || saved.contact, current.phone || current.contact]
             ].forEach(function (entry) {
                 const line = formatTextChange(entry[0], entry[1], entry[2]);
@@ -808,9 +800,8 @@
         }
 
         async function resolveServiceAreaCoords() {
-            const address = String(document.getElementById('profile-service-address')?.value || '').trim();
             const city = String(document.getElementById('profile-city')?.value || '').trim();
-            const query = address || city;
+            const query = city;
             if (!query) return null;
             const coords = await geocodeServiceAreaQuery(query);
             if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lng)) {
@@ -825,7 +816,6 @@
             const paymentMethods = collectPaymentMethods();
             const paymentMethodsCustom = collectCheckedCustomPaymentMethods();
             const city = String(document.getElementById('profile-city')?.value || '').trim();
-            const serviceAddress = String(document.getElementById('profile-service-address')?.value || '').trim();
             const businessName = String(document.getElementById('profile-business-name')?.value || '').trim();
             return {
                 id: u.id,
@@ -838,7 +828,7 @@
                 city: city,
                 location: city,
                 serviceAreaCity: city,
-                serviceAreaAddress: serviceAddress,
+                serviceAreaAddress: '',
                 serviceAreaLat: cachedCoords.lat || 0,
                 serviceAreaLng: cachedCoords.lng || 0,
                 showExactAddressOnMap: false,
@@ -984,7 +974,7 @@
                     if (payload.serviceAreaLat && payload.serviceAreaLng) {
                         locationStatus.textContent = 'Map location saved — customers can find you when they search near your area.';
                     } else if (payload.serviceAreaCity) {
-                        locationStatus.textContent = 'Town saved, but map coordinates could not be resolved. Check spelling or add an address.';
+                        locationStatus.textContent = 'Town saved, but map coordinates could not be resolved. Check the spelling and try again.';
                     } else {
                         locationStatus.textContent = 'Add a town/city so customers can find you on the map.';
                     }

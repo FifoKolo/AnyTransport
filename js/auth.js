@@ -361,6 +361,15 @@ window.anytransportApi = window.anytransportApi || (function () {
             setTabSessionToken('');
             return response;
         },
+        requestPasswordReset: function (email) {
+            return request('auth.password.forgot', 'POST', { email: email });
+        },
+        validatePasswordResetToken: function (token) {
+            return request('auth.password.reset.validate', 'GET', {}, { token: token });
+        },
+        resetPassword: function (token, password) {
+            return request('auth.password.reset', 'POST', { token: token, password: password });
+        },
         getUsers: function () {
             try {
                 const response = request('users.list', 'GET');
@@ -1717,6 +1726,38 @@ function closeLoginModal() {
     }
 }
 
+function openForgotPasswordModal() {
+    closeLoginModal();
+    closeSignupModal();
+    const modal = document.getElementById('forgot-password-modal');
+    const notice = document.getElementById('forgot-password-notice');
+    const emailInput = document.getElementById('forgot-password-email');
+    if (notice) {
+        notice.style.display = 'none';
+        notice.textContent = '';
+    }
+    if (emailInput) {
+        const loginEmail = document.querySelector('#login-form input[type="email"]');
+        if (loginEmail && loginEmail.value) {
+            emailInput.value = loginEmail.value;
+        }
+    }
+    if (modal) {
+        modal.classList.add('show');
+    }
+}
+
+function closeForgotPasswordModal() {
+    const modal = document.getElementById('forgot-password-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+    const notice = document.getElementById('forgot-password-notice');
+    if (notice) {
+        notice.style.display = 'none';
+    }
+}
+
 function openSignupModal(role) {
     const modal = document.getElementById('signup-modal');
     if (!modal) {
@@ -1851,6 +1892,55 @@ function getUserFromAuthResult(result) {
     if (!result || typeof result !== 'object') return null;
     if (result.user && typeof result.user === 'object') return result.user;
     return result;
+}
+
+const forgotPasswordForm = document.getElementById('forgot-password-form');
+if (forgotPasswordForm) {
+    forgotPasswordForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        const email = String(document.getElementById('forgot-password-email')?.value || '').trim();
+        const notice = document.getElementById('forgot-password-notice');
+        const submitBtn = forgotPasswordForm.querySelector('button[type="submit"]');
+
+        if (!email) {
+            if (notice) {
+                notice.style.display = 'block';
+                notice.style.color = '#b45309';
+                notice.textContent = 'Please enter your email address.';
+            }
+            return;
+        }
+
+        if (!window.anytransportApi || typeof window.anytransportApi.requestPasswordReset !== 'function') {
+            if (notice) {
+                notice.style.display = 'block';
+                notice.style.color = '#b45309';
+                notice.textContent = 'Password reset is not available right now.';
+            }
+            return;
+        }
+
+        if (submitBtn) submitBtn.disabled = true;
+        try {
+            const resp = window.anytransportApi.requestPasswordReset(email);
+            if (notice) {
+                notice.style.display = 'block';
+                notice.style.color = '#047857';
+                notice.textContent = (resp && resp.message)
+                    ? resp.message
+                    : 'If that email is registered, we sent a password reset link.';
+            }
+            forgotPasswordForm.reset();
+        } catch (error) {
+            if (notice) {
+                notice.style.display = 'block';
+                notice.style.color = '#b45309';
+                notice.textContent = error && error.message ? error.message : 'Unable to send reset email.';
+            }
+        } finally {
+            if (submitBtn) submitBtn.disabled = false;
+        }
+    });
 }
 
 // Handle Login Form Submission
@@ -2197,6 +2287,7 @@ window.addEventListener('click', function(event) {
 
     const loginModal = document.getElementById('login-modal');
     const signupModal = document.getElementById('signup-modal');
+    const forgotModal = document.getElementById('forgot-password-modal');
     const confirmationModal = document.getElementById('confirmation-modal');
     const jobDetailsModal = document.getElementById('job-details-modal');
 
@@ -2206,6 +2297,9 @@ window.addEventListener('click', function(event) {
     }
     if (signupModal && event.target === signupModal) {
         closeSignupModal();
+    }
+    if (forgotModal && event.target === forgotModal) {
+        closeForgotPasswordModal();
     }
     if (confirmationModal && event.target === confirmationModal) {
         closeConfirmationModal();
