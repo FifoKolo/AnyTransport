@@ -546,6 +546,11 @@ function get_env_value($names, $default = '') {
 }
 
 function get_app_origin() {
+    $configured = get_env_value(array('APP_BASE_URL', 'APP_URL', 'SITE_URL'), '');
+    if ($configured !== '') {
+        return rtrim($configured, '/');
+    }
+
     if (!empty($_SERVER['HTTP_ORIGIN'])) {
         return rtrim((string) $_SERVER['HTTP_ORIGIN'], '/');
     }
@@ -1243,7 +1248,21 @@ function send_password_reset_email($user, $resetUrl) {
     $body .= "Please do not reply to this email address.\n\n";
     $body .= "Regards,\nAnyTransport";
 
-    return send_email_simple($email, $subject, $body);
+    $sent = send_email_simple($email, $subject, $body);
+    file_put_contents(
+        __DIR__ . '/email.log',
+        gmdate('c') . ' | password_reset to=' . $email . ' ok=' . ($sent ? '1' : '0') . "\n",
+        FILE_APPEND | LOCK_EX
+    );
+    return $sent;
+}
+
+function get_password_reset_url($token) {
+    $token = trim((string) $token);
+    if ($token === '') {
+        return '';
+    }
+    return get_app_url('reset-password.html?token=' . rawurlencode($token));
 }
 
 function find_user_index_by_email($users, $email) {
@@ -3943,16 +3962,23 @@ switch ($action) {
         }
         $userIndex = find_user_index_by_email($store['users'], $email);
         if ($userIndex < 0) {
+            file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' found=0' . "\n", FILE_APPEND | LOCK_EX);
             send_json($generic);
         }
         $token = issue_password_reset_for_user($store, $userIndex);
         if ($token === '') {
+            file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' found=1 token=0' . "\n", FILE_APPEND | LOCK_EX);
             send_json($generic);
         }
         $store['users'][$userIndex] = normalize_user($store['users'][$userIndex]);
         write_store($storeFile, $store);
-        $resetUrl = get_app_url('reset-password.html?token=' . rawurlencode($token));
-        send_password_reset_email($store['users'][$userIndex], $resetUrl);
+        $resetUrl = get_password_reset_url($token);
+        $emailed = send_password_reset_email($store['users'][$userIndex], $resetUrl);
+        file_put_contents(
+            __DIR__ . '/email.log',
+            gmdate('c') . ' | password_reset_request email=' . $email . ' found=1 emailed=' . ($emailed ? '1' : '0') . "\n",
+            FILE_APPEND | LOCK_EX
+        );
         send_json($generic);
 
     case 'auth.password.reset.validate':

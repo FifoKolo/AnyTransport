@@ -5,7 +5,10 @@ return array(
     'STRIPE_CONNECT_COUNTRY' => 'IE',
     'STRIPE_IDENTITY_WEBHOOK_SECRET' => 'whsec_your_identity_webhook_secret_here',
 
-    // Outbound email (optional). If SMTP_HOST is set, PHP mail() is not used.
+    // Public site URL for links in emails (password reset, etc.). No trailing slash.
+    // 'APP_BASE_URL' => 'https://anytransport.ie',
+
+    // Outbound email (required for password reset and provider emails). If SMTP_HOST is set, PHP mail() is not used.
     //
     // Namecheap Private Email: create the mailbox in Namecheap → Private Email, then use:
     // SMTP_USER = full email address; SMTP_PASS = that mailbox’s password.
