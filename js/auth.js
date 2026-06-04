@@ -1950,7 +1950,8 @@ if (loginForm) {
         e.preventDefault();
 
         const email = this.querySelector('input[type="email"]').value;
-        const password = this.querySelector('input[type="password"]').value;
+        const passwordInput = this.querySelector('#login-password');
+        const password = passwordInput ? passwordInput.value : '';
 
         if (email && password) {
             try {
