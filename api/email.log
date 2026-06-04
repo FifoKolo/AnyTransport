@@ -1,3 +1,5 @@
 2026-04-28T08:59:26+00:00 | mail() to=you@example.com ok=0
 2026-04-28T09:03:18+00:00 | mail() to=you@yourdomain.com ok=0
 2026-04-28T09:06:00+00:00 | smtp_send to=your@address.com host=smtp.sendgrid.net port=587 user=apikey
+2026-06-04T15:04:17+00:00 | smtp_tcp_ok host=mail.privateemail.com port=587 via_ip=198.54.122.135
+2026-06-04T15:04:20+00:00 | smtp_fail stage=auth host=mail.privateemail.com port=587 resp=535 5.7.8 Error: authentication failed: (reason unavailable)

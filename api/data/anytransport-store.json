@@ -112,7 +112,9 @@
             "stripeIdentityStatus": "not_started",
             "stripeIdentityLastError": "",
             "stripeIdentityVerifiedAt": "",
-            "stripeOnboardingCompletedAt": ""
+            "stripeOnboardingCompletedAt": "",
+            "passwordResetToken": "0c856bbd7f850f32a93e8a7ea52e491c78c776f975311033ab7bea21801caad1",
+            "passwordResetExpiresAt": "2026-06-04T16:04:16+00:00"
         },
         {
             "id": "user-35266bba1b0f8c8d",
