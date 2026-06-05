@@ -2013,66 +2013,187 @@
         return '';
     }
 
-    function buildPendingProfilePhotosMarkup(pending) {
-        const photos = pending && Array.isArray(pending.photos) ? pending.photos : [];
+    function normalizeProfilePhotoList(photos) {
+        if (!Array.isArray(photos)) {
+            return [];
+        }
+        return photos.map(function (photo) {
+            return buildProviderProfilePhotoSrc(photo);
+        }).filter(Boolean);
+    }
+
+    function normalizeProfileStringList(value) {
+        if (!Array.isArray(value)) {
+            return [];
+        }
+        return value.map(function (entry) {
+            return String(entry || '').trim();
+        }).filter(Boolean);
+    }
+
+    function profileFieldText(profile, keys) {
+        const source = profile && typeof profile === 'object' ? profile : {};
+        for (let i = 0; i < keys.length; i += 1) {
+            const text = String(source[keys[i]] || '').trim();
+            if (text) {
+                return text;
+            }
+        }
+        return '';
+    }
+
+    function profileServicesList(profile) {
+        const source = profile && typeof profile === 'object' ? profile : {};
+        return normalizeProfileStringList(source.services || source.categories || source.skills);
+    }
+
+    function formatAdminProfileTextChange(label, before, after) {
+        const prev = String(before || '').trim();
+        const next = String(after || '').trim();
+        if (prev === next) {
+            return '';
+        }
+        if (!prev) {
+            return label + ': set to "' + next + '"';
+        }
+        if (!next) {
+            return label + ': cleared (was "' + prev + '")';
+        }
+        return label + ': "' + prev + '" → "' + next + '"';
+    }
+
+    function formatAdminProfileArrayChange(label, before, after) {
+        const prev = normalizeProfileStringList(before);
+        const next = normalizeProfileStringList(after);
+        if (JSON.stringify(prev) === JSON.stringify(next)) {
+            return '';
+        }
+        const added = next.filter(function (item) { return prev.indexOf(item) === -1; });
+        const removed = prev.filter(function (item) { return next.indexOf(item) === -1; });
+        const parts = [];
+        if (added.length) {
+            parts.push('added ' + added.join(', '));
+        }
+        if (removed.length) {
+            parts.push('removed ' + removed.join(', '));
+        }
+        return parts.length ? label + ': ' + parts.join('; ') : label + ' updated';
+    }
+
+    function formatAdminProfileBooleanChange(label, before, after) {
+        if (!!before === !!after) {
+            return '';
+        }
+        return label + ': ' + (after ? 'enabled' : 'disabled');
+    }
+
+    function getProviderProfilePendingDiff(provider) {
+        const pending = provider && provider.profileChangePending;
+        if (!pending || typeof pending !== 'object') {
+            return { lines: [], photoSources: [] };
+        }
+
+        const live = provider && typeof provider === 'object' ? provider : {};
+        const lines = [];
+
+        [
+            ['Business name', ['businessName', 'name'], ['businessName', 'name']],
+            ['Town / city', ['serviceAreaCity', 'city', 'location', 'town'], ['serviceAreaCity', 'city', 'location', 'town']],
+            ['Contact', ['phone', 'contact'], ['phone', 'contact']],
+            ['Company type', ['companyType'], ['companyType']],
+            ['Business description', ['description', 'about', 'businessDescription', 'bio', 'summary'], ['description', 'about', 'businessDescription', 'bio', 'summary']]
+        ].forEach(function (entry) {
+            const line = formatAdminProfileTextChange(
+                entry[0],
+                profileFieldText(live, entry[1]),
+                profileFieldText(pending, entry[2])
+            );
+            if (line) {
+                lines.push(line);
+            }
+        });
+
+        const servicesChange = formatAdminProfileArrayChange(
+            'Jobs you specialise in',
+            profileServicesList(live),
+            profileServicesList(pending)
+        );
+        if (servicesChange) {
+            lines.push(servicesChange);
+        }
+
+        const transportChange = formatAdminProfileArrayChange(
+            'Modes of transport',
+            live.transportModes,
+            pending.transportModes
+        );
+        if (transportChange) {
+            lines.push(transportChange);
+        }
+
+        const liveVehicle = live.vehicleCount != null && live.vehicleCount !== '' ? String(live.vehicleCount) : '';
+        const pendingVehicle = pending.vehicleCount != null && pending.vehicleCount !== '' ? String(pending.vehicleCount) : '';
+        const vehicleChange = formatAdminProfileTextChange('Number of vehicles', liveVehicle, pendingVehicle);
+        if (vehicleChange) {
+            lines.push(vehicleChange);
+        }
+
+        const inviteChange = formatAdminProfileBooleanChange('Stop job invitations', live.blockInvites, pending.blockInvites);
+        if (inviteChange) {
+            lines.push(inviteChange);
+        }
+
+        const muteChange = formatAdminProfileBooleanChange('Mute invitation emails', live.muteInviteEmails, pending.muteInviteEmails);
+        if (muteChange) {
+            lines.push(muteChange);
+        }
+
+        const livePhotos = normalizeProfilePhotoList(live.photos);
+        const pendingPhotos = normalizeProfilePhotoList(pending.photos);
+        let photoSources = [];
+        if (JSON.stringify(livePhotos) !== JSON.stringify(pendingPhotos)) {
+            const addedPhotos = pendingPhotos.filter(function (src) {
+                return livePhotos.indexOf(src) === -1;
+            });
+            if (livePhotos.length !== pendingPhotos.length) {
+                lines.push('Photos: ' + livePhotos.length + ' → ' + pendingPhotos.length);
+            } else {
+                lines.push('Photos updated');
+            }
+            photoSources = addedPhotos.length ? addedPhotos : pendingPhotos;
+        }
+
+        return { lines: lines.slice(0, 20), photoSources: photoSources };
+    }
+
+    function buildPendingProfilePhotosMarkup(photoSources) {
+        const photos = Array.isArray(photoSources) ? photoSources : [];
         if (!photos.length) {
             return '';
         }
 
-        const items = photos.map(function (photo, index) {
-            const src = buildProviderProfilePhotoSrc(photo);
+        const items = photos.map(function (src, index) {
             if (!src) {
                 return '';
             }
             return [
                 '<figure style="margin:0; width:120px;">',
-                '<img src="' + escapeHtml(src) + '" alt="Profile photo ' + (index + 1) + '" loading="lazy" style="width:120px; height:90px; object-fit:cover; border-radius:10px; border:1px solid #dbeafe; background:#f8fafc;">',
-                '<figcaption style="font-size:11px; color:#64748b; margin-top:4px;">Photo ' + (index + 1) + '</figcaption>',
+                '<img src="' + escapeHtml(src) + '" alt="Changed profile photo ' + (index + 1) + '" loading="lazy" style="width:120px; height:90px; object-fit:cover; border-radius:10px; border:1px solid #dbeafe; background:#f8fafc;">',
+                '<figcaption style="font-size:11px; color:#64748b; margin-top:4px;">Changed photo ' + (index + 1) + '</figcaption>',
                 '</figure>'
             ].join('');
         }).filter(Boolean).join('');
 
         if (!items) {
-            return '<div class="listing-sub" style="margin-top:10px;"><strong>Photos:</strong> ' + photos.length + ' image(s) could not be previewed here. Open the provider profile to view them.</div>';
+            return '';
         }
 
         return [
             '<div style="margin-top:10px;">',
-            '<div class="listing-sub" style="margin-bottom:6px;"><strong>Photos</strong> (' + photos.length + ')</div>',
+            '<div class="listing-sub" style="margin-bottom:6px;"><strong>Changed photos</strong></div>',
             '<div style="display:flex; flex-wrap:wrap; gap:10px;">' + items + '</div>',
             '</div>'
         ].join('');
-    }
-
-    function summarizeProviderProfilePendingChanges(provider) {
-        const pending = provider && provider.profileChangePending;
-        if (!pending || typeof pending !== 'object') {
-            return [];
-        }
-        const lines = [];
-        function pushText(label, value) {
-            const text = String(value || '').trim();
-            if (text) {
-                lines.push(label + ': ' + text);
-            }
-        }
-        function pushArray(label, value) {
-            const arr = Array.isArray(value) ? value.map(function (entry) { return String(entry || '').trim(); }).filter(Boolean) : [];
-            if (arr.length) {
-                lines.push(label + ': ' + arr.join(', '));
-            }
-        }
-        pushText('Business name', pending.businessName);
-        pushText('Town / city', pending.serviceAreaCity || pending.city || pending.location);
-        pushText('Contact', pending.phone || pending.contact);
-        pushText('Company type', pending.companyType);
-        pushText('Description', pending.description || pending.about || pending.businessDescription);
-        pushArray('Services', pending.services || pending.categories || pending.skills);
-        pushArray('Transport modes', pending.transportModes);
-        if (pending.vehicleCount != null && pending.vehicleCount !== '') {
-            lines.push('Vehicle count: ' + pending.vehicleCount);
-        }
-        return lines.slice(0, 14);
     }
 
     function renderAdminReviewQueue() {
@@ -2183,9 +2304,9 @@
                 const name = escapeHtml(firstText(provider.businessName, provider.name, provider.nickname, provider.username, provider.email));
                 const email = escapeHtml(firstText(provider.email, 'Not provided'));
                 const submittedAt = escapeHtml(formatDateTime(provider.profileChangeSubmittedAt || ''));
-                const pending = provider && provider.profileChangePending;
-                const changeLines = summarizeProviderProfilePendingChanges(provider);
-                const photosMarkup = buildPendingProfilePhotosMarkup(pending);
+                const profileDiff = getProviderProfilePendingDiff(provider);
+                const changeLines = profileDiff.lines;
+                const photosMarkup = buildPendingProfilePhotosMarkup(profileDiff.photoSources);
                 const changesMarkup = (changeLines.length || photosMarkup)
                     ? [
                         changeLines.length
@@ -2193,7 +2314,7 @@
                             : '',
                         photosMarkup
                     ].join('')
-                    : '<div class="empty-inventory" style="margin-top:8px;">Open the provider profile to inspect the full requested changes.</div>';
+                    : '<div class="empty-inventory" style="margin-top:8px;">No field changes detected. Open the provider profile if you need to inspect the submission.</div>';
                 return [
                     '<article class="provider-listing" style="margin-bottom:16px;">',
                     '<div class="listing-row body" style="grid-template-columns: 220px 1fr 1fr;">',
