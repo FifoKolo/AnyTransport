@@ -54,57 +54,49 @@
         return root;
     }
 
-    function setVisible(visible) {
-        if (!document.body) return;
-        ensureStyle();
-        const root = ensureRoot();
-        root.classList.toggle('is-visible', !!visible);
-    }
+    let loaderDepth = 0;
 
-    function hideWhenReady() {
-        if (document.readyState === 'complete') {
-            setVisible(false);
+    function syncLoaderVisible() {
+        if (!document.body) {
             return;
         }
-        setVisible(true);
-        window.addEventListener('load', function () {
-            setVisible(false);
-        }, { once: true });
+        ensureStyle();
+        const root = ensureRoot();
+        const visible = loaderDepth > 0;
+        root.classList.toggle('is-visible', visible);
+        root.setAttribute('aria-busy', visible ? 'true' : 'false');
+    }
+
+    function bootPageLoader() {
+        loaderDepth += 1;
+        syncLoaderVisible();
     }
 
     window.anytransportShowPageLoader = function anytransportShowPageLoader() {
-        setVisible(true);
+        loaderDepth += 1;
+        syncLoaderVisible();
     };
     window.anytransportHidePageLoader = function anytransportHidePageLoader() {
-        setVisible(false);
+        loaderDepth = Math.max(0, loaderDepth - 1);
+        syncLoaderVisible();
     };
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', hideWhenReady, { once: true });
+    if (document.body) {
+        bootPageLoader();
     } else {
-        hideWhenReady();
+        document.addEventListener('DOMContentLoaded', bootPageLoader, { once: true });
     }
 
+    window.addEventListener('load', function () {
+        if (loaderDepth > 0) {
+            loaderDepth -= 1;
+        }
+        syncLoaderVisible();
+    }, { once: true });
+
     window.addEventListener('beforeunload', function () {
-        setVisible(true);
-        window.setTimeout(function () {
-            if (document.visibilityState === 'visible') {
-                setVisible(false);
-            }
-        }, 300);
-    });
-    window.addEventListener('pageshow', function () {
-        setVisible(false);
-    });
-    document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'visible') {
-            setVisible(false);
-        }
-    });
-    window.addEventListener('focus', function () {
-        if (document.visibilityState === 'visible') {
-            setVisible(false);
-        }
+        loaderDepth += 1;
+        syncLoaderVisible();
     });
 })();
 
@@ -237,11 +229,8 @@ window.anytransportApi = window.anytransportApi || (function () {
             shouldShowLoaderForThisRequest &&
             typeof window.anytransportShowPageLoader === 'function' &&
             typeof window.anytransportHidePageLoader === 'function';
-        let loaderDelayTimer = null;
         if (shouldToggleLoader) {
-            loaderDelayTimer = window.setTimeout(function () {
-                window.anytransportShowPageLoader();
-            }, 200);
+            window.anytransportShowPageLoader();
         }
         xhr.open(method, url, false);
         xhr.withCredentials = true;
@@ -296,9 +285,6 @@ window.anytransportApi = window.anytransportApi || (function () {
             throw err;
         } finally {
             if (shouldToggleLoader) {
-                if (loaderDelayTimer !== null) {
-                    window.clearTimeout(loaderDelayTimer);
-                }
                 window.anytransportHidePageLoader();
             }
         }

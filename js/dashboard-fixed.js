@@ -454,6 +454,15 @@
         if (canUsePageLoader) {
             window.anytransportShowPageLoader();
         }
+        requestAnimationFrame(function () {
+            requestAnimationFrame(runDashboardInit);
+        });
+    }
+
+    function runDashboardInit() {
+        const canUsePageLoader =
+            typeof window.anytransportShowPageLoader === 'function' &&
+            typeof window.anytransportHidePageLoader === 'function';
         try {
             if (!auth || !auth.isLoggedIn || !auth.isLoggedIn()) {
                 alert('You need to sign in to access your dashboard');
