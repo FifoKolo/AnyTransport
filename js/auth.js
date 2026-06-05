@@ -2052,7 +2052,7 @@ if (providerForgotPasswordForm) {
                 notice.style.color = '#047857';
                 notice.textContent = (resp && resp.message)
                     ? resp.message
-                    : 'We sent a password reset link to your registered provider email.';
+                    : 'We sent a password reset link to your verified provider email.';
             }
             providerForgotPasswordForm.reset();
         } catch (error) {

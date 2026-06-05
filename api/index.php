@@ -1139,6 +1139,17 @@ function is_provider_account($user) {
     return false;
 }
 
+function is_verified_provider_account($user) {
+    if (!is_provider_account($user)) {
+        return false;
+    }
+    $status = strtolower(trim((string) ($user['identityReviewStatus'] ?? '')));
+    if ($status === 'approved') {
+        return true;
+    }
+    return !empty($user['verified']);
+}
+
 function extract_provider_profile_slice($user) {
     if (!is_array($user)) {
         return array();
@@ -4354,8 +4365,9 @@ switch ($action) {
             'ok' => true,
             'message' => 'If that email is registered, we sent a password reset link.'
         );
-        $providerNotRegisteredError = 'No registered transport provider account was found with this email. Password reset is only available for registered providers.';
+        $providerNotRegisteredError = 'No verified transport provider account was found with this email. Password reset is only available for verified, registered providers.';
         $providerWrongRoleError = 'This email is not registered as a transport provider. Use the main forgot password for customer accounts.';
+        $providerNotVerifiedError = 'This provider account is not verified yet. Complete admin verification before you can reset your password.';
 
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             if ($isProviderReset) {
@@ -4378,6 +4390,10 @@ switch ($action) {
             if (!$resetUserIsProvider) {
                 file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' context=provider found=1 role_mismatch=1' . "\n", FILE_APPEND | LOCK_EX);
                 send_json(array('ok' => false, 'error' => $providerWrongRoleError), 403);
+            }
+            if (!is_verified_provider_account($resetUser)) {
+                file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' context=provider found=1 verified=0' . "\n", FILE_APPEND | LOCK_EX);
+                send_json(array('ok' => false, 'error' => $providerNotVerifiedError), 403);
             }
         } elseif ($resetUserIsProvider && !$resetUserIsAdmin) {
             file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' context=customer found=1 provider_only=1' . "\n", FILE_APPEND | LOCK_EX);
@@ -4406,7 +4422,7 @@ switch ($action) {
             }
             send_json(array(
                 'ok' => true,
-                'message' => 'We sent a password reset link to your registered provider email.'
+                'message' => 'We sent a password reset link to your verified provider email.'
             ));
         }
         send_json($customerGeneric);
