@@ -8,9 +8,9 @@ return array(
     // Public site URL for links in emails (password reset, etc.). No trailing slash.
     // 'APP_BASE_URL' => 'https://anytransport.ie',
 
-    // Admin notification email(s) for provider profile change reviews (comma-separated).
-    // Falls back to any user with role admin in the store if omitted.
-    // 'ADMIN_EMAIL' => 'info@anytransport.ie',
+    // All admin-panel notifications go here (verification queue, profile changes, listing reports, etc.).
+    // If omitted, defaults to admin@anytransport.ie
+    // 'ADMIN_EMAIL' => 'admin@anytransport.ie',
 
     // Outbound email (required for password reset and provider emails). If SMTP_HOST is set, PHP mail() is not used.
     //

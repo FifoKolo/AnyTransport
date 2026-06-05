@@ -1996,6 +1996,54 @@
         return haystack.indexOf(q) >= 0;
     }
 
+    function buildProviderProfilePhotoSrc(photo) {
+        if (typeof photo === 'string') {
+            return String(photo || '').trim();
+        }
+        if (photo && typeof photo === 'object') {
+            return firstText(
+                photo.previewDataUrl,
+                photo.dataUrl,
+                photo.url,
+                photo.src,
+                photo.originalUrl,
+                ''
+            );
+        }
+        return '';
+    }
+
+    function buildPendingProfilePhotosMarkup(pending) {
+        const photos = pending && Array.isArray(pending.photos) ? pending.photos : [];
+        if (!photos.length) {
+            return '';
+        }
+
+        const items = photos.map(function (photo, index) {
+            const src = buildProviderProfilePhotoSrc(photo);
+            if (!src) {
+                return '';
+            }
+            return [
+                '<figure style="margin:0; width:120px;">',
+                '<img src="' + escapeHtml(src) + '" alt="Profile photo ' + (index + 1) + '" loading="lazy" style="width:120px; height:90px; object-fit:cover; border-radius:10px; border:1px solid #dbeafe; background:#f8fafc;">',
+                '<figcaption style="font-size:11px; color:#64748b; margin-top:4px;">Photo ' + (index + 1) + '</figcaption>',
+                '</figure>'
+            ].join('');
+        }).filter(Boolean).join('');
+
+        if (!items) {
+            return '<div class="listing-sub" style="margin-top:10px;"><strong>Photos:</strong> ' + photos.length + ' image(s) could not be previewed here. Open the provider profile to view them.</div>';
+        }
+
+        return [
+            '<div style="margin-top:10px;">',
+            '<div class="listing-sub" style="margin-bottom:6px;"><strong>Photos</strong> (' + photos.length + ')</div>',
+            '<div style="display:flex; flex-wrap:wrap; gap:10px;">' + items + '</div>',
+            '</div>'
+        ].join('');
+    }
+
     function summarizeProviderProfilePendingChanges(provider) {
         const pending = provider && provider.profileChangePending;
         if (!pending || typeof pending !== 'object') {
@@ -2023,9 +2071,6 @@
         pushArray('Transport modes', pending.transportModes);
         if (pending.vehicleCount != null && pending.vehicleCount !== '') {
             lines.push('Vehicle count: ' + pending.vehicleCount);
-        }
-        if (Array.isArray(pending.photos) && pending.photos.length) {
-            lines.push('Photos: ' + pending.photos.length + ' image(s)');
         }
         return lines.slice(0, 14);
     }
@@ -2138,9 +2183,16 @@
                 const name = escapeHtml(firstText(provider.businessName, provider.name, provider.nickname, provider.username, provider.email));
                 const email = escapeHtml(firstText(provider.email, 'Not provided'));
                 const submittedAt = escapeHtml(formatDateTime(provider.profileChangeSubmittedAt || ''));
+                const pending = provider && provider.profileChangePending;
                 const changeLines = summarizeProviderProfilePendingChanges(provider);
-                const changesMarkup = changeLines.length
-                    ? '<ul style="margin:8px 0 0; padding-left:18px;">' + changeLines.map((line) => '<li>' + escapeHtml(line) + '</li>').join('') + '</ul>'
+                const photosMarkup = buildPendingProfilePhotosMarkup(pending);
+                const changesMarkup = (changeLines.length || photosMarkup)
+                    ? [
+                        changeLines.length
+                            ? '<ul style="margin:8px 0 0; padding-left:18px;">' + changeLines.map((line) => '<li>' + escapeHtml(line) + '</li>').join('') + '</ul>'
+                            : '',
+                        photosMarkup
+                    ].join('')
                     : '<div class="empty-inventory" style="margin-top:8px;">Open the provider profile to inspect the full requested changes.</div>';
                 return [
                     '<article class="provider-listing" style="margin-bottom:16px;">',

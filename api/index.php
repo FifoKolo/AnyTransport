@@ -981,6 +981,16 @@ function process_provider_identity_photo_payloads(&$store, $storeFile, $userId, 
         $store['users'][$userIndex] = normalize_user($updated);
         write_store($storeFile, $store);
         $updated = normalize_user($store['users'][$userIndex]);
+        try {
+            send_admin_provider_verification_queue_email(
+                $store,
+                $updated,
+                'Provider uploaded identity photos',
+                array('Photos uploaded: ' . count($uploaded))
+            );
+        } catch (Exception $_e) {
+            // swallow email errors
+        }
     }
 
     return array('uploaded' => $uploaded, 'user' => $updated);
@@ -1006,6 +1016,8 @@ function mark_provider_stripe_complete_pending_admin(&$store, $userId, $storeFil
         return $user;
     }
 
+    $alreadyNotifiedProvider = trim((string) ($user['stripeVerificationSubmittedNotifiedAt'] ?? '')) !== '';
+
     $store['users'][$index] = normalize_user(array_merge($store['users'][$index], array(
         'identityReviewStatus' => 'pending_review',
         'verified' => false,
@@ -1016,7 +1028,24 @@ function mark_provider_stripe_complete_pending_admin(&$store, $userId, $storeFil
         maybe_send_provider_stripe_verification_submitted_email($store, $storeFile, $index);
     }
 
-    return normalize_user($store['users'][$index]);
+    $updatedUser = normalize_user($store['users'][$index]);
+    if (
+        !$alreadyNotifiedProvider
+        && trim((string) ($updatedUser['stripeVerificationSubmittedNotifiedAt'] ?? '')) !== ''
+    ) {
+        try {
+            send_admin_provider_verification_queue_email(
+                $store,
+                $updatedUser,
+                'Provider completed Stripe identity verification',
+                array('The provider is ready for admin identity review in the dashboard.')
+            );
+        } catch (Exception $_e) {
+            // swallow email errors
+        }
+    }
+
+    return $updatedUser;
 }
 
 function require_provider_identity_reverification(&$store, $storeFile, $providerId, $notes = '', $adminId = '') {
@@ -1228,30 +1257,91 @@ function get_admin_notification_emails($store) {
             }
         }
     }
-    if (isset($store['users']) && is_array($store['users'])) {
-        foreach ($store['users'] as $user) {
-            if (!is_array($user) || !is_admin_user($user)) {
-                continue;
-            }
-            $candidate = trim((string) ($user['email'] ?? ''));
-            if ($candidate !== '' && filter_var($candidate, FILTER_VALIDATE_EMAIL)) {
-                $emails[strtolower($candidate)] = $candidate;
-            }
-        }
+    if (!$emails) {
+        $emails['admin@anytransport.ie'] = 'admin@anytransport.ie';
     }
     return array_values($emails);
 }
 
-function send_admin_provider_profile_change_email($store, $provider, $summaryLines) {
+function get_admin_dashboard_review_url($section = 'verification-review') {
+    $section = trim((string) $section, '#/');
+    if ($section === '') {
+        $section = 'verification-review';
+    }
+    return get_app_url('dashboard.html#' . $section);
+}
+
+function send_admin_panel_notification_email($store, $subject, $body, $logTag = 'admin_panel') {
     $recipients = get_admin_notification_emails($store);
     if (!$recipients) {
-        file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | provider_profile_change_admin_skip provider=' . trim((string) ($provider['id'] ?? '')) . " reason=no_admin_email\n", FILE_APPEND | LOCK_EX);
+        file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | ' . $logTag . '_skip reason=no_admin_email' . "\n", FILE_APPEND | LOCK_EX);
         return false;
     }
 
+    $sentAny = false;
+    foreach ($recipients as $to) {
+        if (send_email_simple($to, $subject, $body)) {
+            $sentAny = true;
+        }
+    }
+    file_put_contents(
+        __DIR__ . '/email.log',
+        gmdate('c') . ' | ' . $logTag . ' ok=' . ($sentAny ? '1' : '0') . ' recipients=' . count($recipients) . "\n",
+        FILE_APPEND | LOCK_EX
+    );
+    return $sentAny;
+}
+
+function format_provider_admin_summary_line($provider) {
+    if (!is_array($provider)) {
+        return '';
+    }
+    $name = trim((string) ($provider['businessName'] ?? $provider['name'] ?? $provider['username'] ?? 'Provider'));
+    $email = trim((string) ($provider['email'] ?? ''));
+    $line = $name;
+    if ($email !== '') {
+        $line .= ' <' . $email . '>';
+    }
+    return $line;
+}
+
+function send_admin_provider_verification_queue_email($store, $provider, $eventLabel, $extraLines = array()) {
+    if (!is_array($provider) || !is_provider_account($provider)) {
+        return false;
+    }
+
+    $summary = format_provider_admin_summary_line($provider);
+    $stripeStatus = strtolower(trim((string) ($provider['stripeOnboardingStatus'] ?? 'not_started')));
+    $reviewStatus = strtolower(trim((string) ($provider['identityReviewStatus'] ?? 'pending_review')));
+    $dashboardUrl = get_admin_dashboard_review_url('verification-review');
+
+    $subject = 'Admin review needed — ' . trim((string) $eventLabel);
+    $body = "An AnyTransport admin action is required.\n\n";
+    $body .= "Event: " . trim((string) $eventLabel) . "\n";
+    if ($summary !== '') {
+        $body .= "Provider: " . $summary . "\n";
+    }
+    $body .= "Identity review status: " . str_replace('_', ' ', $reviewStatus) . "\n";
+    $body .= "Stripe status: " . str_replace('_', ' ', $stripeStatus) . "\n";
+    $body .= "Time: " . gmdate('c') . "\n";
+    if (is_array($extraLines)) {
+        foreach ($extraLines as $line) {
+            $line = trim((string) $line);
+            if ($line !== '') {
+                $body .= $line . "\n";
+            }
+        }
+    }
+    $body .= "\nOpen the admin dashboard to review:\n" . $dashboardUrl . "\n\n";
+    $body .= "Regards,\nAnyTransport";
+
+    return send_admin_panel_notification_email($store, $subject, $body, 'admin_provider_verification');
+}
+
+function send_admin_provider_profile_change_email($store, $provider, $summaryLines) {
     $name = trim((string) ($provider['businessName'] ?? $provider['name'] ?? $provider['username'] ?? 'Provider'));
     $providerEmail = trim((string) ($provider['email'] ?? ''));
-    $dashboardUrl = get_app_url('dashboard.html#verification-review');
+    $dashboardUrl = get_admin_dashboard_review_url('verification-review');
     $subject = 'Provider profile changes awaiting review — ' . $name;
     $body = "A transport provider submitted profile changes for admin review.\n\n";
     $body .= "Provider: " . $name . "\n";
@@ -1270,18 +1360,46 @@ function send_admin_provider_profile_change_email($store, $provider, $summaryLin
     $body .= "\nReview and approve or decline in the admin dashboard:\n" . $dashboardUrl . "\n\n";
     $body .= "Regards,\nAnyTransport";
 
-    $sentAny = false;
-    foreach ($recipients as $to) {
-        if (send_email_simple($to, $subject, $body)) {
-            $sentAny = true;
-        }
-    }
-    file_put_contents(
-        __DIR__ . '/email.log',
-        gmdate('c') . ' | provider_profile_change_admin provider=' . trim((string) ($provider['id'] ?? '')) . ' ok=' . ($sentAny ? '1' : '0') . ' recipients=' . count($recipients) . "\n",
-        FILE_APPEND | LOCK_EX
+    return send_admin_panel_notification_email(
+        $store,
+        $subject,
+        $body,
+        'provider_profile_change_admin provider=' . trim((string) ($provider['id'] ?? ''))
     );
-    return $sentAny;
+}
+
+function send_admin_listing_report_email($store, $report, $quote, $reporter) {
+    if (!is_array($report)) {
+        return false;
+    }
+
+    $formId = trim((string) ($report['formId'] ?? ($quote['formId'] ?? '')));
+    $quoteId = trim((string) ($report['quoteId'] ?? ''));
+    $reason = trim((string) ($report['reason'] ?? ''));
+    $details = trim((string) ($report['details'] ?? ''));
+    $reporterLine = format_provider_admin_summary_line(is_array($reporter) ? $reporter : array());
+    $dashboardUrl = get_admin_dashboard_review_url('verification-review');
+
+    $subject = 'Provider reported a listing' . ($formId !== '' ? ' #' . $formId : '');
+    $body = "A provider submitted a listing report that needs admin attention.\n\n";
+    if ($reporterLine !== '') {
+        $body .= "Reported by: " . $reporterLine . "\n";
+    }
+    if ($formId !== '') {
+        $body .= "Listing ID: " . $formId . "\n";
+    }
+    if ($quoteId !== '') {
+        $body .= "Quote ID: " . $quoteId . "\n";
+    }
+    $body .= "Reason: " . ($reason !== '' ? str_replace('_', ' ', $reason) : '(not provided)') . "\n";
+    if ($details !== '') {
+        $body .= "Details:\n" . $details . "\n";
+    }
+    $body .= "Submitted: " . gmdate('c') . "\n\n";
+    $body .= "Review provider reports in the admin dashboard:\n" . $dashboardUrl . "\n\n";
+    $body .= "Regards,\nAnyTransport";
+
+    return send_admin_panel_notification_email($store, $subject, $body, 'admin_listing_report report=' . trim((string) ($report['id'] ?? '')));
 }
 
 function send_provider_profile_change_decision_email($provider, $status, $notes = '') {
@@ -4440,6 +4558,16 @@ switch ($action) {
             } catch (Exception $_e) {
                 // swallow email errors
             }
+            try {
+                send_admin_provider_verification_queue_email(
+                    $store,
+                    $reappliedProvider,
+                    'Provider re-applied after rejection',
+                    array('A previously rejected provider signed up again and needs verification review.')
+                );
+            } catch (Exception $_e) {
+                // swallow email errors
+            }
 
             $stripeVerification = array('ok' => false, 'emailed' => false, 'complete' => false);
             try {
@@ -4513,6 +4641,19 @@ switch ($action) {
                 $photoResult = process_provider_identity_photo_payloads($store, $storeFile, trim((string) ($user['id'] ?? '')), $signupPhotos);
                 if (!empty($photoResult['user']) && is_array($photoResult['user'])) {
                     $user = $photoResult['user'];
+                }
+            }
+
+            if (empty($signupPhotos)) {
+                try {
+                    send_admin_provider_verification_queue_email(
+                        $store,
+                        $user,
+                        'New provider registered',
+                        array('A new transport provider account was created and may need identity verification review.')
+                    );
+                } catch (Exception $_e) {
+                    // swallow email errors
                 }
             }
         } else {
@@ -5432,6 +5573,11 @@ switch ($action) {
         array_unshift($store['formReports'], $report);
         $store['formReports'] = array_slice($store['formReports'], 0, 500);
         write_store($storeFile, $store);
+        try {
+            send_admin_listing_report_email($store, $report, $quote, $sessionUser);
+        } catch (Exception $_e) {
+            // swallow email errors
+        }
         send_json(array('ok' => true, 'report' => $report));
 
     case 'reports.list':
