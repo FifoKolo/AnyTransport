@@ -102,12 +102,32 @@
         </div>
     </div>
 
+    <!-- Provider Forgot Password Modal -->
+    <div id="provider-forgot-password-modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeProviderForgotPasswordModal()">&times;</span>
+            <h2>Provider forgot password</h2>
+            <p class="signup-mode-note" style="margin-bottom:16px;">Enter your transport provider account email and we will send you a reset link.</p>
+            <div id="provider-forgot-password-notice" class="signup-mode-note" style="display:none; margin-bottom:12px; color:#047857;"></div>
+            <form id="provider-forgot-password-form">
+                <div class="form-group">
+                    <label>Provider email</label>
+                    <input type="email" id="provider-forgot-password-email" required placeholder="provider@email.com" autocomplete="email">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Send reset link</button>
+            </form>
+            <p style="text-align: center; margin-top: 20px;">
+                <a href="#" onclick="closeProviderForgotPasswordModal(); return false;" style="color: #4A90E2;">Back to Driver Login</a>
+            </p>
+        </div>
+    </div>
+
     <!-- Forgot Password Modal -->
     <div id="forgot-password-modal" class="modal">
         <div class="modal-content">
             <span class="modal-close" onclick="closeForgotPasswordModal()">&times;</span>
             <h2>Forgot password</h2>
-            <p class="signup-mode-note" style="margin-bottom:16px;">Enter your account email and we will send you a link to reset your password.</p>
+            <p class="signup-mode-note" style="margin-bottom:16px;">Enter your customer account email and we will send you a link to reset your password.</p>
             <div id="forgot-password-notice" class="signup-mode-note" style="display:none; margin-bottom:12px; color:#047857;"></div>
             <form id="forgot-password-form">
                 <div class="form-group">
@@ -596,9 +616,12 @@
                 </div>
                 
                 <div class="footer-newsletter">
-                    <input type="email" placeholder="Username" class="newsletter-input">
-                    <input type="password" placeholder="Password" class="newsletter-input">
-                    <button class="btn btn-newsletter">Driver Login</button>
+                    <input type="email" placeholder="Provider email" class="newsletter-input" autocomplete="username">
+                    <input type="password" placeholder="Password" class="newsletter-input" autocomplete="current-password">
+                    <button type="button" class="btn btn-newsletter">Driver Login</button>
+                    <p style="margin:8px 0 0; text-align:right; width:100%;">
+                        <a href="#" onclick="openProviderForgotPasswordModal(); return false;" style="color:#93c5fd; font-size:0.88rem;">Forgot password?</a>
+                    </p>
                 </div>
                 
                 <div class="footer-bottom">
@@ -824,6 +847,9 @@
         history.replaceState(null, null, ' ');
     } else if (window.location.hash === '#forgot-password') {
         openForgotPasswordModal();
+        history.replaceState(null, null, ' ');
+    } else if (window.location.hash === '#provider-forgot-password') {
+        openProviderForgotPasswordModal();
         history.replaceState(null, null, ' ');
     }
 

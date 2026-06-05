@@ -533,17 +533,11 @@ window.syncCombinedAreaFieldsFromLegacy = syncCombinedAreaFieldsFromLegacy;
 
 // === END CRITICAL FUNCTIONS ===
 
-function getPreferredTimeFlexibilityValue(radioName, hiddenFieldId) {
-    const selectedRadio = document.querySelector(`input[name="${radioName}"]:checked`);
-    if (selectedRadio && selectedRadio.value) {
-        return selectedRadio.value.trim().toLowerCase();
-    }
-
+function getPreferredTimeFlexibilityValue(_radioName, hiddenFieldId) {
     const hiddenField = document.getElementById(hiddenFieldId);
-    if (hiddenField && hiddenField.value) {
-        return hiddenField.value.trim().toLowerCase();
+    if (hiddenField) {
+        hiddenField.value = 'mandatory';
     }
-
     return 'mandatory';
 }
 
@@ -633,15 +627,12 @@ function initTransportDatePicker() {
     const pickupExactWrap = document.getElementById('pickup-time-exact-wrap');
     const pickupRangeWrap = document.getElementById('pickup-time-range-wrap');
     const pickupModeRadios = Array.from(document.querySelectorAll('input[name="pickup-time-mode"]'));
-    const pickupFlexibilityWrap = document.getElementById('pickup-time-flexibility-wrap');
     const deliveryExactInput = document.getElementById('delivery-time-exact');
     const deliveryStartInput = document.getElementById('delivery-time-start');
     const deliveryEndInput = document.getElementById('delivery-time-end');
     const deliveryExactWrap = document.getElementById('delivery-time-exact-wrap');
     const deliveryRangeWrap = document.getElementById('delivery-time-range-wrap');
     const deliveryModeRadios = Array.from(document.querySelectorAll('input[name="delivery-time-mode"]'));
-    const deliveryFlexibilityWrap = document.getElementById('delivery-time-flexibility-wrap');
-
     if (!hiddenInput || !trigger || !panel || !display) return;
     if (hiddenInput.dataset.customDatePickerInit === '1') return;
     hiddenInput.dataset.customDatePickerInit = '1';
@@ -1118,55 +1109,6 @@ function initTransportDatePicker() {
         rangeWrap: deliveryRangeWrap,
         modeRadios: deliveryModeRadios
     });
-
-    // Setup flexibility toggle listeners for pickup time
-    const pickupFlexibilityRadios = Array.from(document.querySelectorAll('input[name="pickup-time-flexibility-mode"]'));
-    const pickupFlexibilityInput = document.getElementById('pickup-time-flexibility');
-    pickupFlexibilityRadios.forEach((radio) => {
-        radio.addEventListener('change', () => {
-            if (pickupFlexibilityInput) {
-                pickupFlexibilityInput.value = radio.value;
-                pickupFlexibilityInput.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-            if (typeof window.updateNextButtonState === 'function') {
-                window.updateNextButtonState();
-            }
-        });
-    });
-
-    // Setup flexibility toggle listeners for delivery time
-    const deliveryFlexibilityRadios = Array.from(document.querySelectorAll('input[name="delivery-time-flexibility-mode"]'));
-    const deliveryFlexibilityInput = document.getElementById('delivery-time-flexibility');
-    deliveryFlexibilityRadios.forEach((radio) => {
-        radio.addEventListener('change', () => {
-            if (deliveryFlexibilityInput) {
-                deliveryFlexibilityInput.value = radio.value;
-                deliveryFlexibilityInput.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-            if (typeof window.updateNextButtonState === 'function') {
-                window.updateNextButtonState();
-            }
-        });
-    });
-
-    function syncTimeFlexibilityVisibility() {
-        if (pickupFlexibilityWrap) {
-            const hasPickupMode = pickupModeRadios.some((radio) => radio.checked);
-            pickupFlexibilityWrap.style.display = hasPickupMode ? 'flex' : 'none';
-        }
-        if (deliveryFlexibilityWrap) {
-            const hasDeliveryMode = deliveryModeRadios.some((radio) => radio.checked);
-            deliveryFlexibilityWrap.style.display = hasDeliveryMode ? 'flex' : 'none';
-        }
-    }
-
-    pickupModeRadios.forEach((radio) => {
-        radio.addEventListener('change', syncTimeFlexibilityVisibility);
-    });
-    deliveryModeRadios.forEach((radio) => {
-        radio.addEventListener('change', syncTimeFlexibilityVisibility);
-    });
-    syncTimeFlexibilityVisibility();
 
     function syncPreferredTimeState() {
         const selectedDateText = (hiddenInput.value || '').trim().toLowerCase();

@@ -4352,9 +4352,25 @@ switch ($action) {
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             send_json($generic);
         }
+        $resetContext = strtolower(trim((string) ($input['resetContext'] ?? 'customer')));
+        if (!in_array($resetContext, array('customer', 'provider'), true)) {
+            $resetContext = 'customer';
+        }
         $userIndex = find_user_index_by_email($store['users'], $email);
         if ($userIndex < 0) {
-            file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' found=0' . "\n", FILE_APPEND | LOCK_EX);
+            file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' context=' . $resetContext . ' found=0' . "\n", FILE_APPEND | LOCK_EX);
+            send_json($generic);
+        }
+        $resetUser = normalize_user($store['users'][$userIndex]);
+        $resetUserIsProvider = is_provider_account($resetUser);
+        $resetUserIsAdmin = is_admin_user($resetUser);
+        if ($resetContext === 'provider') {
+            if (!$resetUserIsProvider) {
+                file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' context=provider found=1 role_mismatch=1' . "\n", FILE_APPEND | LOCK_EX);
+                send_json($generic);
+            }
+        } elseif ($resetUserIsProvider && !$resetUserIsAdmin) {
+            file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' context=customer found=1 provider_only=1' . "\n", FILE_APPEND | LOCK_EX);
             send_json($generic);
         }
         $token = issue_password_reset_for_user($store, $userIndex);
@@ -4465,6 +4481,20 @@ switch ($action) {
             } else {
                 send_json(array('ok' => false, 'error' => 'Invalid email or password.'), 401);
             }
+        }
+
+        $loginContext = strtolower(trim((string) ($input['loginContext'] ?? 'customer')));
+        if (!in_array($loginContext, array('customer', 'provider'), true)) {
+            $loginContext = 'customer';
+        }
+        $userIsProvider = is_provider_account($user);
+        $userIsAdmin = is_admin_user($user);
+        if ($loginContext === 'provider') {
+            if (!$userIsProvider) {
+                send_json(array('ok' => false, 'error' => 'This login is for transport providers only. Use the main login for customer accounts.'), 403);
+            }
+        } elseif ($userIsProvider && !$userIsAdmin) {
+            send_json(array('ok' => false, 'error' => 'Transport providers must log in using Driver Login at the bottom of the page.'), 403);
         }
 
         $token = make_id('sess');

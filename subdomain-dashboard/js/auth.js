@@ -322,8 +322,12 @@ window.anytransportApi = window.anytransportApi || (function () {
                 return null;
             }
         },
-        login: function (email, password) {
-            const response = request('auth.login', 'POST', { email: email, password: password });
+        login: function (email, password, loginContext) {
+            const response = request('auth.login', 'POST', {
+                email: email,
+                password: password,
+                loginContext: loginContext || 'customer'
+            });
             if (response && response.sessionToken) {
                 setTabSessionToken(response.sessionToken);
             }
@@ -350,8 +354,11 @@ window.anytransportApi = window.anytransportApi || (function () {
             setTabSessionToken('');
             return response;
         },
-        requestPasswordReset: function (email) {
-            return request('auth.password.forgot', 'POST', { email: email });
+        requestPasswordReset: function (email, resetContext) {
+            return request('auth.password.forgot', 'POST', {
+                email: email,
+                resetContext: resetContext || 'customer'
+            });
         },
         validatePasswordResetToken: function (token) {
             return request('auth.password.reset.validate', 'GET', {}, { token: token });
@@ -1175,10 +1182,11 @@ class AuthManager {
     }
 
     // Login user
-    login(email, password) {
+    login(email, password, loginContext) {
+        const context = String(loginContext || 'customer').trim().toLowerCase() === 'provider' ? 'provider' : 'customer';
         let user;
         if (window.anytransportApi) {
-            const response = window.anytransportApi.login(email, password);
+            const response = window.anytransportApi.login(email, password, context);
             user = response && response.user ? this.normalizeUserRecord(response.user, this.loadUsers()) : null;
             if (!user) {
                 throw new Error((response && response.error) || 'Unable to log in.');
@@ -1193,6 +1201,15 @@ class AuthManager {
 
             if (existingUser) {
                 user = this.normalizeUserRecord(existingUser, users);
+                const role = String(user.role || '').trim().toLowerCase();
+                const isProvider = role === 'provider' || (Array.isArray(user.roles) && user.roles.includes('provider'));
+                const isAdmin = role === 'admin' || (Array.isArray(user.roles) && user.roles.includes('admin'));
+                if (context === 'provider' && !isProvider) {
+                    throw new Error('This login is for transport providers only. Use the main login for customer accounts.');
+                }
+                if (context === 'customer' && isProvider && !isAdmin) {
+                    throw new Error('Transport providers must log in using Driver Login at the bottom of the page.');
+                }
             } else {
                 const derivedUsername = this.makeUniqueUsername(String(email || '').split('@')[0] || 'User', users);
                 user = {
@@ -1740,6 +1757,21 @@ function openForgotPasswordModal() {
     window.location.href = '../index.html#forgot-password';
 }
 
+function openProviderForgotPasswordModal() {
+    window.location.href = '../index.html#provider-forgot-password';
+}
+
+function closeProviderForgotPasswordModal() {
+    const modal = document.getElementById('provider-forgot-password-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+    const notice = document.getElementById('provider-forgot-password-notice');
+    if (notice) {
+        notice.style.display = 'none';
+    }
+}
+
 function closeForgotPasswordModal() {
     const modal = document.getElementById('forgot-password-modal');
     if (modal) {
@@ -1894,7 +1926,7 @@ if (loginForm) {
 
         if (email && password) {
             try {
-                const loginResult = auth.login(email, password);
+                const loginResult = auth.login(email, password, 'customer');
                 let currentUser = getUserFromAuthResult(loginResult);
 
                 if (currentUser && typeof auth.refreshSessionUserFromServer === 'function') {
@@ -1904,11 +1936,6 @@ if (loginForm) {
                 closeLoginModal();
 
                 if (resumeAuthAfterLogin(currentUser)) {
-                    return;
-                }
-
-                if (currentUser && typeof auth.isProvider === 'function' && auth.isProvider() && !shouldDeferProviderStripeOnboarding()) {
-                    window.location.href = auth.resolveDefaultHomeHref();
                     return;
                 }
             } catch (error) {
@@ -1941,15 +1968,10 @@ if (footerDriverLoginButton) {
         }
 
         try {
-            const loginResult = auth.login(email, password);
+            const loginResult = auth.login(email, password, 'provider');
             let currentUser = getUserFromAuthResult(loginResult);
             if (!currentUser) {
                 alert('Unable to log in. Please try again.');
-                return;
-            }
-
-            if (String(currentUser.role || '').toLowerCase() !== 'provider') {
-                alert('This login is for transport providers. Please use the main login for customer accounts.');
                 return;
             }
 
