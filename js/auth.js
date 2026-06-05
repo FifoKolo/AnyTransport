@@ -364,6 +364,15 @@ window.anytransportApi = window.anytransportApi || (function () {
         resetPassword: function (token, password) {
             return request('auth.password.reset', 'POST', { token: token, password: password });
         },
+        getSiteContent: function () {
+            return request('site.content.get', 'GET');
+        },
+        updateSiteContent: function (siteContent) {
+            return request('site.content.update', 'POST', { siteContent: siteContent || {} });
+        },
+        uploadSiteMedia: function (dataUrl) {
+            return request('site.media.upload', 'POST', { dataUrl: dataUrl });
+        },
         getUsers: function () {
             try {
                 const response = request('users.list', 'GET');

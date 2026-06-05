@@ -20,6 +20,8 @@ if (file_exists($localStripeConfigFile)) {
     }
 }
 
+require_once __DIR__ . '/site-content.php';
+
 function resolve_store_dir($preferredDir) {
     $candidates = array();
     $envDir = trim((string) getenv('ANYTRANSPORT_STORE_DIR'));
@@ -6591,6 +6593,118 @@ switch ($action) {
                 'reviews' => $stats
             )
         ));
+
+    case 'site.content.get':
+        $siteContent = get_site_content_from_store($store);
+        send_json(array('ok' => true, 'siteContent' => $siteContent));
+
+    case 'site.content.update':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $currentUser = get_current_user_record($store);
+        if (!is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin access required.'), 403);
+        }
+        $incoming = $input['siteContent'] ?? null;
+        if (!is_array($incoming)) {
+            send_json(array('ok' => false, 'error' => 'Missing site content payload.'), 400);
+        }
+        $normalized = normalize_site_content($incoming);
+        if (is_array($normalized['pages'] ?? null)) {
+            foreach ($normalized['pages'] as $pageId => $page) {
+                if (!is_array($page) || !isset($page['blocks']) || !is_array($page['blocks'])) {
+                    continue;
+                }
+                foreach ($page['blocks'] as $bidx => $block) {
+                    if (!is_array($block) || ($block['type'] ?? '') !== 'html') {
+                        continue;
+                    }
+                    $normalized['pages'][$pageId]['blocks'][$bidx]['content'] = sanitize_site_content_html($block['content'] ?? '');
+                }
+            }
+        }
+        $normalized['updatedAt'] = gmdate('c');
+        $store['siteContent'] = $normalized;
+        write_store($storeFile, $store);
+        send_json(array('ok' => true, 'siteContent' => $normalized));
+
+    case 'site.media.upload':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $currentUser = get_current_user_record($store);
+        if (!is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin access required.'), 403);
+        }
+        $dataUrl = (string) ($input['dataUrl'] ?? '');
+        $decoded = decode_data_url_binary($dataUrl);
+        if ($decoded === null) {
+            send_json(array('ok' => false, 'error' => 'Invalid media data. Expected a data URL.'), 400);
+        }
+        $maxBytes = 8 * 1024 * 1024;
+        if (strlen($decoded['binary']) > $maxBytes) {
+            send_json(array('ok' => false, 'error' => 'File too large (max 8 MB).'), 413);
+        }
+        $ext = extension_from_mime($decoded['mime']);
+        $mediaId = make_id('smedia');
+        $relative = 'site-media/' . $mediaId . '.' . $ext;
+        $fullPath = $storeDir . '/' . $relative;
+        $dir = dirname($fullPath);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        if (@file_put_contents($fullPath, $decoded['binary'], LOCK_EX) === false) {
+            send_json(array('ok' => false, 'error' => 'Unable to save file.'), 500);
+        }
+        if (!isset($store['siteMedia']) || !is_array($store['siteMedia'])) {
+            $store['siteMedia'] = array();
+        }
+        $store['siteMedia'][] = array(
+            'id' => $mediaId,
+            'relativePath' => $relative,
+            'mimeType' => $decoded['mime'],
+            'createdAt' => gmdate('c'),
+            'uploadedBy' => trim((string) ($currentUser['id'] ?? ''))
+        );
+        write_store($storeFile, $store);
+        send_json(array(
+            'ok' => true,
+            'mediaId' => $mediaId,
+            'url' => build_site_media_url($mediaId)
+        ));
+
+    case 'site.media':
+        $mediaId = trim((string) ($_GET['id'] ?? ''));
+        if ($mediaId === '') {
+            send_json(array('ok' => false, 'error' => 'Missing media id.'), 400);
+        }
+        $record = null;
+        foreach ($store['siteMedia'] ?? array() as $m) {
+            if (!is_array($m)) {
+                continue;
+            }
+            if (trim((string) ($m['id'] ?? '')) === $mediaId) {
+                $record = $m;
+                break;
+            }
+        }
+        if ($record === null) {
+            send_json(array('ok' => false, 'error' => 'Not found.'), 404);
+        }
+        $rel = trim((string) ($record['relativePath'] ?? ''));
+        $fullPath = $rel !== '' ? ($storeDir . '/' . $rel) : '';
+        if ($fullPath === '' || !is_file($fullPath)) {
+            send_json(array('ok' => false, 'error' => 'File missing.'), 404);
+        }
+        $mime = trim((string) ($record['mimeType'] ?? ''));
+        if ($mime === '') {
+            $mime = 'application/octet-stream';
+        }
+        header('Content-Type: ' . $mime);
+        header('Cache-Control: public, max-age=86400');
+        readfile($fullPath);
+        exit;
 
     default:
         send_json(array('ok' => false, 'error' => 'Unknown action.'), 404);

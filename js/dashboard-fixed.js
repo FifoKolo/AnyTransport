@@ -2517,9 +2517,15 @@
                 '<a href="#admin-section-rejected" class="admin-side-nav-link">Rejected providers</a>',
                 '<a href="#admin-section-reports" class="admin-side-nav-link">Provider reports</a>',
                 '<a href="#admin-section-forms" class="admin-side-nav-link">Submitted listings</a>',
+                '<a href="#admin-section-site-content" class="admin-side-nav-link">Site content editor</a>',
                 '</nav>',
                 '</aside>',
                 '<div>',
+                '<section id="admin-section-site-content" style="margin-bottom:24px;">',
+                '<h3 style="margin:0 0 10px;">Site content editor</h3>',
+                '<p class="muted-text" style="margin:0 0 12px;">Manage navbar links, footer links, and landing page content (text, images, fonts).</p>',
+                '<div id="admin-site-content-editor"></div>',
+                '</section>',
                 '<section id="admin-section-profile-changes" style="margin-bottom:24px;">',
                 '<h3 style="margin:0 0 10px;">Provider profile changes (' + profileChangeProviders.length + ')</h3>',
                 '<p class="muted-text" style="margin:0 0 12px;">Providers submit profile updates here for approval before they go live. Declining requires a reason — the provider is emailed.</p>',
@@ -2573,6 +2579,10 @@
         }
 
         restoreAdminSearchFocus(searchFocus);
+
+        if (typeof window.initSiteContentAdmin === 'function') {
+            window.initSiteContentAdmin(document.getElementById('admin-site-content-editor'));
+        }
     }
 
     function createProviderPreviewListing(user, bids) {
