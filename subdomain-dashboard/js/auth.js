@@ -225,6 +225,7 @@ window.anytransportApi = window.anytransportApi || (function () {
             'quotes.list': true,
             'quotes.get': true,
             'identity.review.queue': true,
+            'provider.profile.review.queue': true,
             'providers.search': true,
             'reports.list': true
         };
@@ -409,13 +410,31 @@ window.anytransportApi = window.anytransportApi || (function () {
                 notes: notes || ''
             });
         },
+        getProviderProfileReviewQueue: function () {
+            const response = request('provider.profile.review.queue', 'GET');
+            return Array.isArray(response.providers) ? response.providers : [];
+        },
+        updateProviderProfileReview: function (providerId, status, notes) {
+            return request('provider.profile.review.update', 'POST', {
+                providerId: providerId,
+                status: status,
+                notes: notes || ''
+            });
+        },
         replaceUsers: function (users) {
             const response = request('users.replaceAll', 'POST', { users: Array.isArray(users) ? users : [] });
             return Array.isArray(response.users) ? response.users : [];
         },
         saveUser: function (user) {
             const response = request('users.upsert', 'POST', { user: user || {} });
-            return response.user || user || null;
+            const saved = response.user || user || null;
+            if (saved && typeof saved === 'object') {
+                saved._pendingReview = !!response.pendingReview;
+                if (response.message) {
+                    saved._profileSaveMessage = response.message;
+                }
+            }
+            return saved;
         },
         updateAccountSettings: function (payload) {
             const response = request('users.account.update', 'POST', payload || {});
@@ -774,6 +793,25 @@ class AuthManager {
 
         if (!normalized.identityReviewedBy) {
             normalized.identityReviewedBy = '';
+        }
+
+        if (!normalized.profileChangeStatus) {
+            normalized.profileChangeStatus = 'none';
+        }
+        if (!normalized.profileChangePending || typeof normalized.profileChangePending !== 'object') {
+            normalized.profileChangePending = {};
+        }
+        if (!normalized.profileChangeSubmittedAt) {
+            normalized.profileChangeSubmittedAt = '';
+        }
+        if (!normalized.profileChangeReviewedAt) {
+            normalized.profileChangeReviewedAt = '';
+        }
+        if (!normalized.profileChangeReviewedBy) {
+            normalized.profileChangeReviewedBy = '';
+        }
+        if (!normalized.profileChangeReviewNotes) {
+            normalized.profileChangeReviewNotes = '';
         }
 
         const roleKey = String(normalized.role || 'customer').trim().toLowerCase();

@@ -56,7 +56,7 @@
         }
         if (introEl) {
             introEl.textContent = isOwn
-                ? 'Keep your provider profile current with business details, services, payment options, and photos. Update the fields below, then click Save profile when you are ready.'
+                ? 'Keep your provider profile current with business details, services, payment options, and photos. When you save, changes are sent to an admin for review before they go live.'
                 : 'View this transport provider\'s public profile, customer reviews, and job history before you hire.';
         }
         document.body.classList.toggle('provider-profile-public-view', !isOwn);
@@ -214,7 +214,7 @@
         syncPendingProviderNav(u, ownProfile);
         renderAvatar(u);
         if (ownProfile) {
-            renderEditor(u);
+            renderEditor(u, getProfileEditorUser(u));
         } else {
             const editRoot = document.getElementById('provider-edit');
             if (editRoot) editRoot.innerHTML = '';
@@ -565,6 +565,48 @@
         } catch (e) {}
     }
 
+    function getProfileEditorUser(u) {
+        if (!u || typeof u !== 'object') {
+            return u;
+        }
+        const status = String(u.profileChangeStatus || '').trim().toLowerCase();
+        const pending = u.profileChangePending;
+        if (status === 'pending_review' && pending && typeof pending === 'object' && Object.keys(pending).length) {
+            return Object.assign({}, u, pending);
+        }
+        return u;
+    }
+
+    function buildProfileChangeStatusBanner(u) {
+        const status = String(u && u.profileChangeStatus || '').trim().toLowerCase();
+        if (status === 'pending_review') {
+            const submitted = u.profileChangeSubmittedAt ? formatDateTime(u.profileChangeSubmittedAt) : '';
+            return '<div class="signup-mode-note" style="margin:0 0 14px; padding:12px 14px; border-radius:10px; background:#fffbeb; border:1px solid #fde68a; color:#92400e;">' +
+                '<strong>Changes awaiting admin review.</strong> Your public profile still shows the previous approved details' +
+                (submitted ? (' (submitted ' + escapeHtml(submitted) + ').') : '.') +
+                ' You will receive an email when an admin approves or declines them.</div>';
+        }
+        if (status === 'rejected') {
+            const notes = String(u.profileChangeReviewNotes || '').trim();
+            return '<div class="signup-mode-note" style="margin:0 0 14px; padding:12px 14px; border-radius:10px; background:#fef2f2; border:1px solid #fecaca; color:#991b1b;">' +
+                '<strong>Your last profile changes were declined.</strong>' +
+                (notes ? (' Reason: ' + escapeHtml(notes) + '.') : '') +
+                ' Update your profile and save again to submit for another review.</div>';
+        }
+        return '';
+    }
+
+    function formatDateTime(value) {
+        if (!value) return '';
+        try {
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '';
+            return date.toLocaleString();
+        } catch (_e) {
+            return '';
+        }
+    }
+
     function syncPendingProviderNav(u, ownProfile) {
         if (!ownProfile) return;
         const pending = window.auth
@@ -637,14 +679,16 @@
         return String(viewer.id) === String(u.id) || String(viewer.role || '').toLowerCase() === 'admin';
     }
 
-    function renderEditor(u) {
+    function renderEditor(liveUser, editorUser) {
+        const u = editorUser || liveUser;
         const root = document.getElementById('provider-edit');
         if (!root) return;
         root.innerHTML = '';
 
-        const isEditable = canEditProfile(u);
+        const isEditable = canEditProfile(liveUser);
         const disabledAttr = isEditable ? '' : ' disabled aria-disabled="true"';
         const readOnlyNote = isEditable ? '' : '<div class="profile-section-note"><strong>Read only view.</strong> This profile is public. Sign in as the owner or an admin to edit the details below.</div>';
+        const reviewBanner = isEditable ? buildProfileChangeStatusBanner(liveUser) : '';
 
         const existingPhotos = normalizePhotos(u.photos || u.images || u.media || []);
         const currentAvatar = firstText(u.avatar, existingPhotos[0] || '');
@@ -679,7 +723,8 @@
             '    <div>',
             '      <div class="profile-editor-kicker">Profile settings</div>',
             '      <h3 class="profile-editor-title">Edit your profile</h3>',
-            '      <p class="profile-editor-subtitle">Update your business details, services, payment options, and photos below. Click Save profile when you are ready to publish your changes.</p>',
+            '      <p class="profile-editor-subtitle">Update your business details, services, payment options, and photos below. Click Save profile to submit changes for admin review before they appear on your public profile.</p>',
+            reviewBanner,
             readOnlyNote,
             '    </div>',
             '  </div>',
@@ -792,8 +837,8 @@
             '  </div>',
             '  <div id="profile-save-success-modal" class="profile-save-success-modal" hidden role="dialog" aria-modal="true" aria-labelledby="profile-save-success-title">',
             '    <div class="profile-save-success-card">',
-            '      <h4 id="profile-save-success-title">Profile saved</h4>',
-            '      <p>Your changes have been saved successfully.</p>',
+            '      <h4 id="profile-save-success-title">Changes submitted</h4>',
+            '      <p id="profile-save-success-text">Your profile changes were submitted for admin review. You will receive an email once they are approved or declined.</p>',
             '      <button type="button" id="profile-save-success-dismiss" class="btn btn-primary">OK</button>',
             '    </div>',
             '  </div>',
@@ -1161,8 +1206,9 @@
             } catch (_err) {}
 
             return Promise.resolve(window.anytransportApi.saveUser(payload)).then(function (serverUser) {
+                const pendingReview = !!(serverUser && (serverUser._pendingReview || String(serverUser.profileChangeStatus || '').toLowerCase() === 'pending_review'));
                 syncSavedSnapshot(payload);
-                setSaveBadge('All changes saved', 'saved');
+                setSaveBadge(pendingReview ? 'Submitted for admin review' : 'All changes saved', pendingReview ? '' : 'saved');
                 updateSaveUi();
                 if (locationStatus) {
                     if (payload.serviceAreaLat && payload.serviceAreaLng) {
@@ -1174,13 +1220,39 @@
                     }
                 }
                 if (serverUser && typeof serverUser === 'object' && serverUser.id) {
-                    Object.assign(u, serverUser);
+                    Object.assign(liveUser, serverUser);
+                    delete liveUser._pendingReview;
+                    delete liveUser._profileSaveMessage;
+                    Object.assign(u, getProfileEditorUser(liveUser));
                     try {
-                        renderPayments(u);
-                        renderServices(u);
-                        renderTransportModes(u);
-                        renderVehicleCount(u);
+                        renderPayments(liveUser);
+                        renderServices(liveUser);
+                        renderTransportModes(liveUser);
+                        renderVehicleCount(liveUser);
                     } catch (_e) {}
+                    const successText = document.getElementById('profile-save-success-text');
+                    const successTitle = document.getElementById('profile-save-success-title');
+                    if (successText) {
+                        successText.textContent = serverUser._profileSaveMessage
+                            || (pendingReview
+                                ? 'Your profile changes were submitted for admin review. You will receive an email once they are approved or declined.'
+                                : 'Your changes have been saved successfully.');
+                    }
+                    if (successTitle) {
+                        successTitle.textContent = pendingReview ? 'Changes submitted' : 'Profile saved';
+                    }
+                    const bannerHost = root.querySelector('.profile-editor-header > div');
+                    if (bannerHost && isEditable) {
+                        const existingBanner = bannerHost.querySelector('[data-profile-review-banner]');
+                        if (existingBanner) existingBanner.remove();
+                        const bannerHtml = buildProfileChangeStatusBanner(liveUser);
+                        if (bannerHtml) {
+                            const wrap = document.createElement('div');
+                            wrap.setAttribute('data-profile-review-banner', '1');
+                            wrap.innerHTML = bannerHtml;
+                            bannerHost.insertBefore(wrap.firstChild, bannerHost.querySelector('.profile-editor-subtitle')?.nextSibling || null);
+                        }
+                    }
                     const viewer = getViewer();
                     if (viewer && String(viewer.id) === String(serverUser.id) && window.auth) {
                         const merged = typeof window.auth.mergeUserIntoLocalCache === 'function'

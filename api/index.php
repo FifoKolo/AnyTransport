@@ -373,6 +373,30 @@ function normalize_user($user) {
         $normalized['passwordResetExpiresAt'] = '';
     }
 
+    if (!isset($normalized['profileChangeStatus']) || trim((string) $normalized['profileChangeStatus']) === '') {
+        $normalized['profileChangeStatus'] = 'none';
+    }
+
+    if (!isset($normalized['profileChangePending']) || !is_array($normalized['profileChangePending'])) {
+        $normalized['profileChangePending'] = array();
+    }
+
+    if (!isset($normalized['profileChangeSubmittedAt'])) {
+        $normalized['profileChangeSubmittedAt'] = '';
+    }
+
+    if (!isset($normalized['profileChangeReviewedAt'])) {
+        $normalized['profileChangeReviewedAt'] = '';
+    }
+
+    if (!isset($normalized['profileChangeReviewedBy'])) {
+        $normalized['profileChangeReviewedBy'] = '';
+    }
+
+    if (!isset($normalized['profileChangeReviewNotes'])) {
+        $normalized['profileChangeReviewNotes'] = '';
+    }
+
     if (!isset($normalized['paymentMethods']) || !is_array($normalized['paymentMethods'])) {
         $normalized['paymentMethods'] = array();
     }
@@ -1052,6 +1076,256 @@ function user_can_access_stripe_file($store, $currentUser, $fileId) {
 
 require_once __DIR__ . '/email-smtp.php';
 require_once __DIR__ . '/provider-stripe-submitted-email.php';
+
+function provider_profile_review_field_names() {
+    return array(
+        'businessName', 'name', 'nickname', 'username',
+        'city', 'town', 'location', 'phone', 'contact',
+        'description', 'businessDescription', 'about', 'bio', 'summary',
+        'services', 'categories', 'skills', 'photos', 'avatar', 'coverImage',
+        'transportModes', 'vehicleCount',
+        'website', 'companyType', 'paymentMethods', 'paymentMethodsCustom', 'acceptsCash', 'paypal', 'visa', 'mastercard', 'bankTransfer', 'americanExpress', 'cheque', 'cash',
+        'blockInvites', 'muteInviteEmails',
+        'serviceAreaCity', 'serviceAreaAddress', 'serviceAreaLat', 'serviceAreaLng',
+        'showExactAddressOnMap',
+        'autoBidSubscriptionEnabled',
+        'instagram', 'facebook', 'x', 'twitter', 'tiktok', 'linkedin'
+    );
+}
+
+function is_provider_account($user) {
+    if (!is_array($user)) {
+        return false;
+    }
+    $role = strtolower(trim((string) ($user['role'] ?? '')));
+    if ($role === 'provider') {
+        return true;
+    }
+    $roles = isset($user['roles']) && is_array($user['roles']) ? $user['roles'] : array();
+    foreach ($roles as $entry) {
+        if (strtolower(trim((string) $entry)) === 'provider') {
+            return true;
+        }
+    }
+    return false;
+}
+
+function extract_provider_profile_slice($user) {
+    if (!is_array($user)) {
+        return array();
+    }
+    $slice = array();
+    foreach (provider_profile_review_field_names() as $field) {
+        if (array_key_exists($field, $user)) {
+            $slice[$field] = $user[$field];
+        }
+    }
+    return $slice;
+}
+
+function provider_profile_slices_equal($left, $right) {
+    return json_encode(extract_provider_profile_slice($left)) === json_encode(extract_provider_profile_slice($right));
+}
+
+function provider_profile_field_labels() {
+    return array(
+        'businessName' => 'Business name',
+        'name' => 'Display name',
+        'nickname' => 'Nickname',
+        'username' => 'Username',
+        'city' => 'City',
+        'town' => 'Town',
+        'location' => 'Location',
+        'phone' => 'Phone',
+        'contact' => 'Contact',
+        'description' => 'Description',
+        'businessDescription' => 'Business description',
+        'about' => 'About',
+        'bio' => 'Bio',
+        'summary' => 'Summary',
+        'services' => 'Services',
+        'categories' => 'Categories',
+        'skills' => 'Skills',
+        'photos' => 'Photos',
+        'avatar' => 'Avatar',
+        'coverImage' => 'Cover image',
+        'transportModes' => 'Transport modes',
+        'vehicleCount' => 'Vehicle count',
+        'website' => 'Website',
+        'companyType' => 'Company type',
+        'paymentMethods' => 'Payment methods',
+        'paymentMethodsCustom' => 'Custom payment methods',
+        'blockInvites' => 'Block invites',
+        'muteInviteEmails' => 'Mute invite emails',
+        'serviceAreaCity' => 'Service area city',
+        'serviceAreaAddress' => 'Service area address',
+        'serviceAreaLat' => 'Service area latitude',
+        'serviceAreaLng' => 'Service area longitude',
+        'showExactAddressOnMap' => 'Show exact address on map',
+        'autoBidSubscriptionEnabled' => 'Auto-bid subscription',
+        'instagram' => 'Instagram',
+        'facebook' => 'Facebook',
+        'x' => 'X',
+        'twitter' => 'Twitter',
+        'tiktok' => 'TikTok',
+        'linkedin' => 'LinkedIn'
+    );
+}
+
+function format_provider_profile_value_for_email($value) {
+    if (is_array($value)) {
+        $parts = array();
+        foreach ($value as $entry) {
+            if (is_scalar($entry) && trim((string) $entry) !== '') {
+                $parts[] = trim((string) $entry);
+            }
+        }
+        if (!$parts) {
+            return '(empty)';
+        }
+        $text = implode(', ', $parts);
+        if (strlen($text) > 180) {
+            return substr($text, 0, 177) . '...';
+        }
+        return $text;
+    }
+    if (is_bool($value)) {
+        return $value ? 'yes' : 'no';
+    }
+    $text = trim((string) $value);
+    if ($text === '') {
+        return '(empty)';
+    }
+    if (strlen($text) > 180) {
+        return substr($text, 0, 177) . '...';
+    }
+    return $text;
+}
+
+function build_provider_profile_change_summary($before, $after) {
+    $labels = provider_profile_field_labels();
+    $lines = array();
+    foreach (provider_profile_review_field_names() as $field) {
+        $old = array_key_exists($field, $before) ? $before[$field] : null;
+        $new = array_key_exists($field, $after) ? $after[$field] : null;
+        if (json_encode($old) === json_encode($new)) {
+            continue;
+        }
+        $label = isset($labels[$field]) ? $labels[$field] : $field;
+        $lines[] = $label . ': ' . format_provider_profile_value_for_email($new);
+    }
+    return $lines;
+}
+
+function get_admin_notification_emails($store) {
+    $emails = array();
+    $configured = get_env_value(array('ADMIN_EMAIL', 'ADMIN_NOTIFY_EMAIL'), '');
+    if ($configured !== '') {
+        foreach (preg_split('/[,;]+/', $configured) as $part) {
+            $candidate = trim((string) $part);
+            if ($candidate !== '' && filter_var($candidate, FILTER_VALIDATE_EMAIL)) {
+                $emails[strtolower($candidate)] = $candidate;
+            }
+        }
+    }
+    if (isset($store['users']) && is_array($store['users'])) {
+        foreach ($store['users'] as $user) {
+            if (!is_array($user) || !is_admin_user($user)) {
+                continue;
+            }
+            $candidate = trim((string) ($user['email'] ?? ''));
+            if ($candidate !== '' && filter_var($candidate, FILTER_VALIDATE_EMAIL)) {
+                $emails[strtolower($candidate)] = $candidate;
+            }
+        }
+    }
+    return array_values($emails);
+}
+
+function send_admin_provider_profile_change_email($store, $provider, $summaryLines) {
+    $recipients = get_admin_notification_emails($store);
+    if (!$recipients) {
+        file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | provider_profile_change_admin_skip provider=' . trim((string) ($provider['id'] ?? '')) . " reason=no_admin_email\n", FILE_APPEND | LOCK_EX);
+        return false;
+    }
+
+    $name = trim((string) ($provider['businessName'] ?? $provider['name'] ?? $provider['username'] ?? 'Provider'));
+    $providerEmail = trim((string) ($provider['email'] ?? ''));
+    $dashboardUrl = get_app_url('dashboard.html#verification-review');
+    $subject = 'Provider profile changes awaiting review — ' . $name;
+    $body = "A transport provider submitted profile changes for admin review.\n\n";
+    $body .= "Provider: " . $name . "\n";
+    if ($providerEmail !== '') {
+        $body .= "Email: " . $providerEmail . "\n";
+    }
+    $body .= "Submitted: " . gmdate('c') . "\n\n";
+    $body .= "Summary of requested changes:\n";
+    if ($summaryLines) {
+        foreach ($summaryLines as $line) {
+            $body .= '- ' . $line . "\n";
+        }
+    } else {
+        $body .= "(Open the dashboard to review the full details.)\n";
+    }
+    $body .= "\nReview and approve or decline in the admin dashboard:\n" . $dashboardUrl . "\n\n";
+    $body .= "Regards,\nAnyTransport";
+
+    $sentAny = false;
+    foreach ($recipients as $to) {
+        if (send_email_simple($to, $subject, $body)) {
+            $sentAny = true;
+        }
+    }
+    file_put_contents(
+        __DIR__ . '/email.log',
+        gmdate('c') . ' | provider_profile_change_admin provider=' . trim((string) ($provider['id'] ?? '')) . ' ok=' . ($sentAny ? '1' : '0') . ' recipients=' . count($recipients) . "\n",
+        FILE_APPEND | LOCK_EX
+    );
+    return $sentAny;
+}
+
+function send_provider_profile_change_decision_email($provider, $status, $notes = '') {
+    $providerEmail = trim((string) ($provider['email'] ?? ''));
+    if ($providerEmail === '') {
+        return false;
+    }
+
+    $providerName = trim((string) ($provider['businessName'] ?? $provider['name'] ?? $provider['username'] ?? 'there'));
+    $status = strtolower(trim((string) $status));
+    $notes = trim((string) $notes);
+    $profileUrl = get_app_url('provider-profile.html?userId=' . rawurlencode(trim((string) ($provider['id'] ?? ''))));
+
+    if ($status === 'approved') {
+        $subject = 'Your AnyTransport profile changes were approved';
+        $body = "Hello " . $providerName . ",\n\n";
+        $body .= "Your recent profile changes have been approved and are now live on AnyTransport.\n\n";
+        if ($profileUrl !== '' && $profileUrl !== '/') {
+            $body .= "View your profile:\n" . $profileUrl . "\n\n";
+        }
+        $body .= "Regards,\nAnyTransport";
+    } elseif ($status === 'rejected') {
+        $subject = 'Your AnyTransport profile changes were not approved';
+        $body = "Hello " . $providerName . ",\n\n";
+        $body .= "An admin reviewed your recent profile changes and did not approve them.\n\n";
+        $body .= "Reason from admin:\n" . $notes . "\n\n";
+        $body .= "Your public profile still shows your previous approved details. You can update your profile and submit again for review.\n\n";
+        if ($profileUrl !== '' && $profileUrl !== '/') {
+            $body .= "Open your profile:\n" . $profileUrl . "\n\n";
+        }
+        $body .= "Please do not reply to this email address.\n\n";
+        $body .= "Regards,\nAnyTransport";
+    } else {
+        return false;
+    }
+
+    $sent = send_email_simple($providerEmail, $subject, $body);
+    file_put_contents(
+        __DIR__ . '/email.log',
+        gmdate('c') . ' | provider_profile_change_provider provider=' . trim((string) ($provider['id'] ?? '')) . ' status=' . $status . ' ok=' . ($sent ? '1' : '0') . "\n",
+        FILE_APPEND | LOCK_EX
+    );
+    return $sent;
+}
 
 function send_provider_review_email($provider, $status, $notes = '') {
     $providerEmail = trim((string) ($provider['email'] ?? ''));
@@ -4274,7 +4548,15 @@ switch ($action) {
         if ($found === null) {
             send_json(array('ok' => false, 'error' => 'User not found.'), 404);
         }
-        send_json(array('ok' => true, 'user' => sanitize_user_for_client(normalize_user($found))));
+        $currentUser = get_current_user_record($store);
+        $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
+        $canViewProfileDraft = $currentUserId !== '' && ($currentUserId === $targetId || is_admin_user($currentUser));
+        $userOut = sanitize_user_for_client(normalize_user($found));
+        if (!$canViewProfileDraft) {
+            unset($userOut['profileChangePending']);
+            unset($userOut['profileChangeReviewNotes']);
+        }
+        send_json(array('ok' => true, 'user' => $userOut));
 
     case 'users.list':
         $currentUser = get_current_user_record($store);
@@ -4366,6 +4648,49 @@ switch ($action) {
         } else {
             $normalized = normalize_user(array_merge($existingUser, $user));
         }
+
+        if (
+            !$isAdmin
+            && $currentUserId !== ''
+            && $targetIndex >= 0
+            && $targetId === $currentUserId
+            && is_provider_account($existingUser)
+        ) {
+            $proposedSlice = extract_provider_profile_slice($normalized);
+            $liveSlice = extract_provider_profile_slice($existingUser);
+            if (provider_profile_slices_equal($existingUser, $normalized)) {
+                $queuedUser = normalize_user($store['users'][$targetIndex]);
+                send_json(array(
+                    'ok' => true,
+                    'user' => sanitize_user_for_client($queuedUser),
+                    'pendingReview' => strtolower(trim((string) ($queuedUser['profileChangeStatus'] ?? ''))) === 'pending_review',
+                    'message' => strtolower(trim((string) ($queuedUser['profileChangeStatus'] ?? ''))) === 'pending_review'
+                        ? 'Your changes are already awaiting admin review.'
+                        : 'No profile changes to submit.'
+                ));
+            }
+
+            $store['users'][$targetIndex]['profileChangePending'] = $proposedSlice;
+            $store['users'][$targetIndex]['profileChangeStatus'] = 'pending_review';
+            $store['users'][$targetIndex]['profileChangeSubmittedAt'] = gmdate('c');
+            $store['users'][$targetIndex]['profileChangeReviewedAt'] = '';
+            $store['users'][$targetIndex]['profileChangeReviewedBy'] = '';
+            $store['users'][$targetIndex]['profileChangeReviewNotes'] = '';
+            $queuedUser = normalize_user($store['users'][$targetIndex]);
+            $store['users'][$targetIndex] = $queuedUser;
+            write_store($storeFile, $store);
+
+            $summaryLines = build_provider_profile_change_summary($liveSlice, $proposedSlice);
+            send_admin_provider_profile_change_email($store, $queuedUser, $summaryLines);
+
+            send_json(array(
+                'ok' => true,
+                'user' => sanitize_user_for_client($queuedUser),
+                'pendingReview' => true,
+                'message' => 'Your changes were submitted for admin review. You will receive an email once they are approved or declined.'
+            ));
+        }
+
         $targetId = trim((string) ($normalized['id'] ?? ''));
         $targetEmail = strtolower(trim((string) ($normalized['email'] ?? '')));
         $targetUsername = strtolower(trim((string) ($normalized['username'] ?? '')));
@@ -4549,6 +4874,85 @@ switch ($action) {
             } catch (Exception $_e) {
                 // swallow email errors
             }
+        }
+
+        exit;
+
+    case 'provider.profile.review.queue':
+        $currentUser = get_current_user_record($store);
+        if (!is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin access required.'), 403);
+        }
+
+        $queue = array_values(array_filter($store['users'], function ($user) {
+            if (!is_array($user) || !is_provider_account($user)) {
+                return false;
+            }
+            return strtolower(trim((string) ($user['profileChangeStatus'] ?? ''))) === 'pending_review';
+        }));
+
+        send_json(array('ok' => true, 'providers' => sanitize_users_for_client($queue)));
+
+    case 'provider.profile.review.update':
+        $currentUser = get_current_user_record($store);
+        if (!is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin access required.'), 403);
+        }
+
+        $providerId = trim((string) ($input['providerId'] ?? ''));
+        $status = strtolower(trim((string) ($input['status'] ?? '')));
+        $notes = trim((string) ($input['notes'] ?? ''));
+        if ($providerId === '' || !in_array($status, array('approved', 'rejected'), true)) {
+            send_json(array('ok' => false, 'error' => 'Provider ID and a valid review status are required.'), 400);
+        }
+        if ($status === 'rejected' && $notes === '') {
+            send_json(array('ok' => false, 'error' => 'A reason is required when declining profile changes.'), 400);
+        }
+
+        $index = find_user_index_by_id($store['users'], $providerId);
+        if ($index < 0) {
+            send_json(array('ok' => false, 'error' => 'Provider not found.'), 404);
+        }
+
+        $provider = normalize_user($store['users'][$index]);
+        if (!is_provider_account($provider)) {
+            send_json(array('ok' => false, 'error' => 'This user is not a provider.'), 400);
+        }
+        if (strtolower(trim((string) ($provider['profileChangeStatus'] ?? ''))) !== 'pending_review') {
+            send_json(array('ok' => false, 'error' => 'This provider has no profile changes awaiting review.'), 400);
+        }
+
+        $pending = isset($provider['profileChangePending']) && is_array($provider['profileChangePending'])
+            ? $provider['profileChangePending']
+            : array();
+        if ($status === 'approved') {
+            if (!$pending) {
+                send_json(array('ok' => false, 'error' => 'No pending profile changes were found for this provider.'), 400);
+            }
+            $store['users'][$index] = array_merge($store['users'][$index], $pending);
+            $store['users'][$index]['profileChangePending'] = array();
+            $store['users'][$index]['profileChangeStatus'] = 'none';
+        } else {
+            $store['users'][$index]['profileChangePending'] = array();
+            $store['users'][$index]['profileChangeStatus'] = 'rejected';
+        }
+
+        $store['users'][$index]['profileChangeReviewedAt'] = gmdate('c');
+        $store['users'][$index]['profileChangeReviewedBy'] = trim((string) ($currentUser['id'] ?? ''));
+        $store['users'][$index]['profileChangeReviewNotes'] = $notes;
+        $updatedProvider = normalize_user($store['users'][$index]);
+        $store['users'][$index] = $updatedProvider;
+        write_store($storeFile, $store);
+
+        send_json_and_continue(array(
+            'ok' => true,
+            'provider' => sanitize_user_for_client($updatedProvider)
+        ));
+
+        try {
+            send_provider_profile_change_decision_email($updatedProvider, $status, $notes);
+        } catch (Exception $_e) {
+            // swallow email errors
         }
 
         exit;

@@ -1221,6 +1221,52 @@
                 return;
             }
 
+            const profileChangeReviewBtn = event.target.closest('.profile-change-review-btn');
+            if (profileChangeReviewBtn) {
+                if (!(auth.isAdmin && auth.isAdmin())) {
+                    alert('Admin access required.');
+                    return;
+                }
+
+                const providerId = String(profileChangeReviewBtn.getAttribute('data-provider-id') || '').trim();
+                const status = String(profileChangeReviewBtn.getAttribute('data-status') || '').trim();
+                const reviewCard = profileChangeReviewBtn.closest('.provider-listing');
+                const notesField = reviewCard ? reviewCard.querySelector('.profile-change-review-notes') : null;
+                const notes = notesField ? String(notesField.value || '').trim() : '';
+
+                if (status === 'rejected' && !notes) {
+                    alert('Please add a reason explaining why these profile changes are being declined.');
+                    if (notesField) notesField.focus();
+                    return;
+                }
+
+                if (status === 'rejected' && !confirm('Decline these profile changes? The provider will be emailed your reason and their public profile will stay unchanged.')) {
+                    return;
+                }
+
+                if (status === 'approved' && !confirm('Approve these profile changes and publish them on the provider\'s public profile?')) {
+                    return;
+                }
+
+                try {
+                    if (window.anytransportApi && typeof window.anytransportApi.updateProviderProfileReview === 'function') {
+                        window.anytransportApi.updateProviderProfileReview(providerId, status, notes);
+                        if (status === 'approved') {
+                            alert('Profile changes approved. The provider has been emailed.');
+                        } else {
+                            alert('Profile changes declined. The provider has been emailed with your reason.');
+                        }
+                    } else {
+                        alert('Profile review is not available right now.');
+                        return;
+                    }
+                    renderAdminReviewQueue();
+                } catch (error) {
+                    alert(error && error.message ? error.message : 'Unable to update the profile review status.');
+                }
+                return;
+            }
+
             const reviewBtn = event.target.closest('.review-provider-btn');
             if (reviewBtn) {
                 if (!(auth.isAdmin && auth.isAdmin())) {
@@ -1946,6 +1992,40 @@
         return haystack.indexOf(q) >= 0;
     }
 
+    function summarizeProviderProfilePendingChanges(provider) {
+        const pending = provider && provider.profileChangePending;
+        if (!pending || typeof pending !== 'object') {
+            return [];
+        }
+        const lines = [];
+        function pushText(label, value) {
+            const text = String(value || '').trim();
+            if (text) {
+                lines.push(label + ': ' + text);
+            }
+        }
+        function pushArray(label, value) {
+            const arr = Array.isArray(value) ? value.map(function (entry) { return String(entry || '').trim(); }).filter(Boolean) : [];
+            if (arr.length) {
+                lines.push(label + ': ' + arr.join(', '));
+            }
+        }
+        pushText('Business name', pending.businessName);
+        pushText('Town / city', pending.serviceAreaCity || pending.city || pending.location);
+        pushText('Contact', pending.phone || pending.contact);
+        pushText('Company type', pending.companyType);
+        pushText('Description', pending.description || pending.about || pending.businessDescription);
+        pushArray('Services', pending.services || pending.categories || pending.skills);
+        pushArray('Transport modes', pending.transportModes);
+        if (pending.vehicleCount != null && pending.vehicleCount !== '') {
+            lines.push('Vehicle count: ' + pending.vehicleCount);
+        }
+        if (Array.isArray(pending.photos) && pending.photos.length) {
+            lines.push('Photos: ' + pending.photos.length + ' image(s)');
+        }
+        return lines.slice(0, 14);
+    }
+
     function renderAdminReviewQueue() {
         const container = document.getElementById('provider-review-queue');
         if (!container) return;
@@ -1959,6 +2039,15 @@
         }
 
         try {
+            let profileChangeProviders = [];
+            try {
+                if (window.anytransportApi && typeof window.anytransportApi.getProviderProfileReviewQueue === 'function') {
+                    profileChangeProviders = window.anytransportApi.getProviderProfileReviewQueue();
+                }
+            } catch (_profileQueueError) {
+                profileChangeProviders = [];
+            }
+
             const providers = getPendingProvidersForReview();
             const allUsers = getAllUsersForAdmin();
             const allProviders = getAllProvidersForAdmin();
@@ -2040,6 +2129,39 @@
                     '</article>'
                 ].join('');
             }).join('') : '<div class="empty-inventory">No providers are waiting for review.</div>';
+
+            const profileChangeMarkup = profileChangeProviders.length ? profileChangeProviders.map((provider) => {
+                const name = escapeHtml(firstText(provider.businessName, provider.name, provider.nickname, provider.username, provider.email));
+                const email = escapeHtml(firstText(provider.email, 'Not provided'));
+                const submittedAt = escapeHtml(formatDateTime(provider.profileChangeSubmittedAt || ''));
+                const changeLines = summarizeProviderProfilePendingChanges(provider);
+                const changesMarkup = changeLines.length
+                    ? '<ul style="margin:8px 0 0; padding-left:18px;">' + changeLines.map((line) => '<li>' + escapeHtml(line) + '</li>').join('') + '</ul>'
+                    : '<div class="empty-inventory" style="margin-top:8px;">Open the provider profile to inspect the full requested changes.</div>';
+                return [
+                    '<article class="provider-listing" style="margin-bottom:16px;">',
+                    '<div class="listing-row body" style="grid-template-columns: 220px 1fr 1fr;">',
+                    '<div class="listing-cell">',
+                    '<div class="listing-title">' + name + '</div>',
+                    '<div class="listing-sub">' + email + '</div>',
+                    '<div class="listing-sub" style="margin-top:6px;">Submitted: <strong>' + (submittedAt || '—') + '</strong></div>',
+                    '</div>',
+                    '<div class="listing-cell">',
+                    '<div class="listing-sub"><strong>Requested profile changes</strong></div>',
+                    changesMarkup,
+                    '</div>',
+                    '<div class="listing-cell review-actions-cell">',
+                    '<textarea class="form-input profile-change-review-notes" rows="4" data-provider-id="' + escapeHtml(provider.id) + '" placeholder="Reason if declining (required)" style="width:100%; box-sizing:border-box;"></textarea>',
+                    '<div class="actions review-actions" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-start;">',
+                    '<a class="btn btn-outline" href="../provider-profile.html?userId=' + encodeURIComponent(String(provider.id || '')) + '" target="_blank" rel="noopener">View profile</a>',
+                    '<button type="button" class="btn btn-primary profile-change-review-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="approved">Approve changes</button>',
+                    '<button type="button" class="btn btn-danger profile-change-review-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="rejected">Decline changes</button>',
+                    '</div>',
+                    '</div>',
+                    '</div>',
+                    '</article>'
+                ].join('');
+            }).join('') : '<div class="empty-inventory">No provider profile changes are awaiting review.</div>';
 
             const providerRows = approvedFiltered.length ? approvedFiltered.map((provider) => {
                 const status = escapeHtml(String(provider.identityReviewStatus || 'pending_review').replace(/_/g, ' '));
@@ -2203,6 +2325,7 @@
                 '<aside class="admin-side-nav">',
                 '<h4 class="admin-side-nav-title">Admin sections</h4>',
                 '<nav class="admin-side-nav-links" aria-label="Admin sections">',
+                '<a href="#admin-section-profile-changes" class="admin-side-nav-link">Profile changes (' + profileChangeProviders.length + ')</a>',
                 '<a href="#admin-section-pending" class="admin-side-nav-link">Pending reviews</a>',
                 '<a href="#admin-section-approved" class="admin-side-nav-link">Approved providers</a>',
                 '<a href="#admin-section-rejected" class="admin-side-nav-link">Rejected providers</a>',
@@ -2211,6 +2334,11 @@
                 '</nav>',
                 '</aside>',
                 '<div>',
+                '<section id="admin-section-profile-changes" style="margin-bottom:24px;">',
+                '<h3 style="margin:0 0 10px;">Provider profile changes (' + profileChangeProviders.length + ')</h3>',
+                '<p class="muted-text" style="margin:0 0 12px;">Providers submit profile updates here for approval before they go live. Declining requires a reason — the provider is emailed.</p>',
+                profileChangeMarkup,
+                '</section>',
                 '<section id="admin-section-pending" style="margin-bottom:24px;">',
                 '<h3 style="margin:0 0 10px;">Pending provider reviews (' + providers.length + ')</h3>',
                 pendingMarkup,
