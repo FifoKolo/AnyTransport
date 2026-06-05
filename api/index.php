@@ -4345,38 +4345,51 @@ switch ($action) {
             send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
         }
         $email = trim((string) ($input['email'] ?? ''));
-        $generic = array(
-            'ok' => true,
-            'message' => 'If that email is registered, we sent a password reset link.'
-        );
-        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            send_json($generic);
-        }
         $resetContext = strtolower(trim((string) ($input['resetContext'] ?? 'customer')));
         if (!in_array($resetContext, array('customer', 'provider'), true)) {
             $resetContext = 'customer';
         }
+        $isProviderReset = $resetContext === 'provider';
+        $customerGeneric = array(
+            'ok' => true,
+            'message' => 'If that email is registered, we sent a password reset link.'
+        );
+        $providerNotRegisteredError = 'No registered transport provider account was found with this email. Password reset is only available for registered providers.';
+        $providerWrongRoleError = 'This email is not registered as a transport provider. Use the main forgot password for customer accounts.';
+
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            if ($isProviderReset) {
+                send_json(array('ok' => false, 'error' => $providerNotRegisteredError), 400);
+            }
+            send_json($customerGeneric);
+        }
         $userIndex = find_user_index_by_email($store['users'], $email);
         if ($userIndex < 0) {
             file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' context=' . $resetContext . ' found=0' . "\n", FILE_APPEND | LOCK_EX);
-            send_json($generic);
+            if ($isProviderReset) {
+                send_json(array('ok' => false, 'error' => $providerNotRegisteredError), 404);
+            }
+            send_json($customerGeneric);
         }
         $resetUser = normalize_user($store['users'][$userIndex]);
         $resetUserIsProvider = is_provider_account($resetUser);
         $resetUserIsAdmin = is_admin_user($resetUser);
-        if ($resetContext === 'provider') {
+        if ($isProviderReset) {
             if (!$resetUserIsProvider) {
                 file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' context=provider found=1 role_mismatch=1' . "\n", FILE_APPEND | LOCK_EX);
-                send_json($generic);
+                send_json(array('ok' => false, 'error' => $providerWrongRoleError), 403);
             }
         } elseif ($resetUserIsProvider && !$resetUserIsAdmin) {
             file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' context=customer found=1 provider_only=1' . "\n", FILE_APPEND | LOCK_EX);
-            send_json($generic);
+            send_json($customerGeneric);
         }
         $token = issue_password_reset_for_user($store, $userIndex);
         if ($token === '') {
             file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' found=1 token=0' . "\n", FILE_APPEND | LOCK_EX);
-            send_json($generic);
+            if ($isProviderReset) {
+                send_json(array('ok' => false, 'error' => 'Unable to start a password reset right now. Please try again shortly.'), 500);
+            }
+            send_json($customerGeneric);
         }
         $store['users'][$userIndex] = normalize_user($store['users'][$userIndex]);
         write_store($storeFile, $store);
@@ -4384,10 +4397,19 @@ switch ($action) {
         $emailed = send_password_reset_email($store['users'][$userIndex], $resetUrl);
         file_put_contents(
             __DIR__ . '/email.log',
-            gmdate('c') . ' | password_reset_request email=' . $email . ' found=1 emailed=' . ($emailed ? '1' : '0') . "\n",
+            gmdate('c') . ' | password_reset_request email=' . $email . ' context=' . $resetContext . ' found=1 emailed=' . ($emailed ? '1' : '0') . "\n",
             FILE_APPEND | LOCK_EX
         );
-        send_json($generic);
+        if ($isProviderReset) {
+            if (!$emailed) {
+                send_json(array('ok' => false, 'error' => 'We could not send the reset email. Please try again shortly.'), 500);
+            }
+            send_json(array(
+                'ok' => true,
+                'message' => 'We sent a password reset link to your registered provider email.'
+            ));
+        }
+        send_json($customerGeneric);
 
     case 'auth.password.reset.validate':
         $token = trim((string) ($_GET['token'] ?? ''));
