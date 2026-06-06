@@ -11,15 +11,19 @@ function site_content_make_link($id, $label, $href, $order, $pageId = '') {
     );
 }
 
+function site_content_page_href($slug) {
+    return 'page.html#' . trim((string) $slug);
+}
+
 function get_default_site_content() {
     $navbarLinks = array(
-        site_content_make_link('about', 'About Us', '#about', 1, 'about'),
+        site_content_make_link('about', 'About Us', site_content_page_href('about'), 1, 'about'),
         site_content_make_link('services', 'Our Services', '#services', 2, 'services'),
         site_content_make_link('how-it-works', 'How it Works', '#how-it-works', 3, 'how-it-works'),
-        site_content_make_link('pricing', 'Pricing', '#pricing', 4, 'pricing'),
-        site_content_make_link('faq', 'FAQ', '#faq', 5, 'faq'),
+        site_content_make_link('pricing', 'Pricing', site_content_page_href('pricing'), 4, 'pricing'),
+        site_content_make_link('faq', 'FAQ', site_content_page_href('faq'), 5, 'faq'),
         site_content_make_link('find-providers', 'Find providers', 'find-providers.html', 6, ''),
-        site_content_make_link('contact', 'Contact Us', '#contact', 7, 'contact')
+        site_content_make_link('contact', 'Contact Us', site_content_page_href('contact'), 7, 'contact')
     );
 
     $footerColumns = array(
@@ -27,29 +31,29 @@ function get_default_site_content() {
             'id' => 'company',
             'title' => 'Company',
             'links' => array(
-                array('id' => 'fc-about', 'label' => 'About Us', 'href' => '#about', 'visible' => true),
-                array('id' => 'fc-contact', 'label' => 'Contact Us', 'href' => '#contact', 'visible' => true),
-                array('id' => 'fc-careers', 'label' => 'Careers', 'href' => '#careers', 'visible' => true),
-                array('id' => 'fc-partners', 'label' => 'Partners', 'href' => '#partners', 'visible' => true)
+                array('id' => 'fc-about', 'label' => 'About Us', 'href' => site_content_page_href('about'), 'visible' => true),
+                array('id' => 'fc-contact', 'label' => 'Contact Us', 'href' => site_content_page_href('contact'), 'visible' => true),
+                array('id' => 'fc-careers', 'label' => 'Careers', 'href' => site_content_page_href('careers'), 'visible' => true),
+                array('id' => 'fc-partners', 'label' => 'Partners', 'href' => site_content_page_href('partners'), 'visible' => true)
             )
         ),
         array(
             'id' => 'services',
             'title' => 'Services',
             'links' => array(
-                array('id' => 'fc-man-van', 'label' => 'Man With Van', 'href' => '#man-van', 'visible' => true),
-                array('id' => 'fc-removals', 'label' => 'Removals', 'href' => '#removals', 'visible' => true),
-                array('id' => 'fc-vehicle', 'label' => 'Vehicle Transport', 'href' => '#vehicle', 'visible' => true),
-                array('id' => 'fc-international', 'label' => 'International Movers', 'href' => '#international', 'visible' => true)
+                array('id' => 'fc-man-van', 'label' => 'Man With Van', 'href' => site_content_page_href('man-van'), 'visible' => true),
+                array('id' => 'fc-removals', 'label' => 'Removals', 'href' => site_content_page_href('removals'), 'visible' => true),
+                array('id' => 'fc-vehicle', 'label' => 'Vehicle Transport', 'href' => site_content_page_href('vehicle'), 'visible' => true),
+                array('id' => 'fc-international', 'label' => 'International Movers', 'href' => site_content_page_href('international'), 'visible' => true)
             )
         ),
         array(
             'id' => 'resources',
             'title' => 'Resources',
             'links' => array(
-                array('id' => 'fc-faq', 'label' => 'FAQs', 'href' => '#faq', 'visible' => true),
-                array('id' => 'fc-help', 'label' => 'Help Centre', 'href' => '#help', 'visible' => true),
-                array('id' => 'fc-blog', 'label' => 'Blogs', 'href' => '#blog', 'visible' => true)
+                array('id' => 'fc-faq', 'label' => 'FAQs', 'href' => site_content_page_href('faq'), 'visible' => true),
+                array('id' => 'fc-help', 'label' => 'Help Centre', 'href' => site_content_page_href('help'), 'visible' => true),
+                array('id' => 'fc-blog', 'label' => 'Blogs', 'href' => site_content_page_href('blog'), 'visible' => true)
             )
         )
     );
@@ -100,6 +104,9 @@ function get_default_site_content() {
         'navbar' => array(
             'logoText' => 'AnyTransport',
             'logoSrc' => 'assets/logo.jpeg',
+            'logoHref' => 'index.html',
+            'backgroundColor' => '',
+            'linkColor' => '',
             'links' => $navbarLinks
         ),
         'footer' => array(
@@ -116,10 +123,10 @@ function get_default_site_content() {
             'columns' => $footerColumns,
             'copyright' => '© 2005-2026 AnyTransport Ltd. All rights reserved',
             'bottomLinks' => array(
-                array('id' => 'bl-privacy', 'label' => 'Privacy', 'href' => '#privacy', 'visible' => true),
-                array('id' => 'bl-terms', 'label' => 'Terms of Use', 'href' => '#terms', 'visible' => true),
+                array('id' => 'bl-privacy', 'label' => 'Privacy', 'href' => site_content_page_href('privacy'), 'visible' => true),
+                array('id' => 'bl-terms', 'label' => 'Terms of Use', 'href' => site_content_page_href('terms'), 'visible' => true),
                 array('id' => 'bl-provider', 'label' => 'Transport Provider Sign Up', 'href' => '#provider-signup', 'visible' => true, 'action' => 'provider-signup'),
-                array('id' => 'bl-sitemap', 'label' => 'Sitemap', 'href' => '#sitemap', 'visible' => true)
+                array('id' => 'bl-sitemap', 'label' => 'Sitemap', 'href' => site_content_page_href('sitemap'), 'visible' => true)
             )
         ),
         'pages' => array(
@@ -481,6 +488,9 @@ function normalize_site_content($content) {
         'navbar' => array(
             'logoText' => trim((string) ($navbarIn['logoText'] ?? $defaults['navbar']['logoText'])),
             'logoSrc' => trim((string) ($navbarIn['logoSrc'] ?? $defaults['navbar']['logoSrc'])),
+            'logoHref' => trim((string) ($navbarIn['logoHref'] ?? $defaults['navbar']['logoHref'] ?? 'index.html')) ?: 'index.html',
+            'backgroundColor' => trim((string) ($navbarIn['backgroundColor'] ?? '')),
+            'linkColor' => trim((string) ($navbarIn['linkColor'] ?? '')),
             'links' => $navbarLinks
         ),
         'footer' => array(

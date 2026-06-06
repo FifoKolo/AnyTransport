@@ -12,6 +12,8 @@
         'georgia': 'Georgia, serif'
     };
 
+    var HOMEPAGE_SECTION_SLUGS = ['services', 'how-it-works'];
+
     var cachedContent = null;
     var loadPromise = null;
 
@@ -28,11 +30,60 @@
         return path === '' || path === '/' || /index\.html?$/.test(path);
     }
 
+    function isStandaloneCmsPageView() {
+        return /page\.html$/i.test(String(window.location.pathname || ''));
+    }
+
+    function getRequestedPageSlug() {
+        var hash = String(window.location.hash || '').replace(/^#/, '').trim();
+        if (hash) {
+            return hash.split('?')[0];
+        }
+        var params = new URLSearchParams(window.location.search || '');
+        return String(params.get('page') || '').trim();
+    }
+
+    function findCmsPage(content, slug) {
+        if (!content || !content.pages || !slug) {
+            return null;
+        }
+        if (content.pages[slug]) {
+            return content.pages[slug];
+        }
+        return Object.keys(content.pages).map(function (key) {
+            return content.pages[key];
+        }).find(function (page) {
+            return page && (page.slug === slug || page.id === slug);
+        }) || null;
+    }
+
+    function isCmsPageSlug(content, slug) {
+        return !!findCmsPage(content, slug);
+    }
+
+    function cmsPageHref(slug) {
+        return 'page.html#' + slug;
+    }
+
     function resolveHref(href) {
         var value = String(href || '').trim();
-        if (!value || value === '#') return '#';
-        if (/^https?:\/\//i.test(value) || value.indexOf('.html') >= 0) return value;
+        if (!value || value === '#') {
+            return '#';
+        }
+        if (/^https?:\/\//i.test(value) || value.indexOf('.html') >= 0) {
+            return value;
+        }
         if (value.charAt(0) === '#') {
+            var slug = value.slice(1).split('?')[0];
+            if (HOMEPAGE_SECTION_SLUGS.indexOf(slug) >= 0) {
+                return isLandingPage() ? value : ('index.html' + value);
+            }
+            if (isCmsPageSlug(cachedContent, slug)) {
+                if (isStandaloneCmsPageView()) {
+                    return '#' + slug;
+                }
+                return cmsPageHref(slug);
+            }
             return isLandingPage() ? value : ('index.html' + value);
         }
         return value;
@@ -94,20 +145,36 @@
 
     function applyNavbar(content) {
         var menu = document.getElementById('site-navbar-menu');
-        if (!menu || !content || !content.navbar) return;
+        if (!content || !content.navbar) return;
 
         var navbar = content.navbar;
         var logoText = document.querySelector('.navbar-logo .logo-text');
         var logoImg = document.querySelector('.navbar-logo .logo-img');
+        var logoLink = document.querySelector('.navbar-logo');
         if (logoText && navbar.logoText) logoText.textContent = navbar.logoText;
         if (logoImg && navbar.logoSrc) logoImg.src = navbar.logoSrc;
+        if (logoLink && navbar.logoHref) {
+            logoLink.href = resolveHref(navbar.logoHref);
+        }
 
-        var links = (navbar.links || []).filter(function (l) { return l && l.visible !== false; });
-        links.sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
-        menu.innerHTML = links.map(function (link) {
-            var href = resolveHref(link.href);
-            return '<a href="' + escapeHtml(href) + '" class="nav-link">' + escapeHtml(link.label) + '</a>';
-        }).join('');
+        var navEl = document.querySelector('nav.navbar');
+        if (navEl) {
+            if (navbar.backgroundColor) {
+                navEl.style.background = navbar.backgroundColor;
+            } else {
+                navEl.style.background = '';
+            }
+        }
+
+        if (menu) {
+            var links = (navbar.links || []).filter(function (l) { return l && l.visible !== false; });
+            links.sort(function (a, l) { return (a.order || 0) - (l.order || 0); });
+            menu.innerHTML = links.map(function (link) {
+                var href = resolveHref(link.href);
+                var style = navbar.linkColor ? (' style="color:' + navbar.linkColor + ';"') : '';
+                return '<a href="' + escapeHtml(href) + '" class="nav-link"' + style + '>' + escapeHtml(link.label) + '</a>';
+            }).join('');
+        }
     }
 
     function applyFooter(content) {
@@ -196,31 +263,63 @@
         return '<div class="site-cms-el site-cms-el-text" style="' + style + '">' + String(el.content || '') + '</div>';
     }
 
+    function renderSinglePageSection(page) {
+        var canvasHeight = page.canvasHeight || 520;
+        var bg = page.backgroundColor || '#ffffff';
+        var bgImage = page.backgroundImage ? ('background-image:url(' + page.backgroundImage + ');background-size:cover;background-position:center;') : '';
+        var elements = (page.elements || []).slice().sort(function (a, b) {
+            return (a.zIndex || 1) - (b.zIndex || 1);
+        });
+        return [
+            '<section class="site-cms-section site-cms-canvas-section" id="' + escapeHtml(page.slug) + '">',
+            '<div class="site-cms-canvas" style="min-height:' + canvasHeight + 'px;background-color:' + escapeHtml(bg) + ';' + bgImage + '">',
+            elements.map(function (el) { return renderPageElement(el, page); }).join(''),
+            '</div>',
+            '</section>'
+        ].join('');
+    }
+
     function renderPages(content) {
         var mount = document.getElementById('site-pages-mount');
         if (!mount || !content || !content.pages) return;
 
+        if (!isStandaloneCmsPageView()) {
+            mount.innerHTML = '';
+            return;
+        }
+
+        var slug = getRequestedPageSlug();
         var pages = Object.keys(content.pages).map(function (key) {
             return content.pages[key];
         }).filter(function (page) {
             return page && page.visible !== false && page.slug;
         });
 
-        mount.innerHTML = pages.map(function (page) {
-            var canvasHeight = page.canvasHeight || 520;
-            var bg = page.backgroundColor || '#ffffff';
-            var bgImage = page.backgroundImage ? ('background-image:url(' + page.backgroundImage + ');background-size:cover;background-position:center;') : '';
-            var elements = (page.elements || []).slice().sort(function (a, b) {
-                return (a.zIndex || 1) - (b.zIndex || 1);
+        if (slug) {
+            pages = pages.filter(function (page) {
+                return page.slug === slug || page.id === slug;
             });
-            return [
-                '<section class="site-cms-section site-cms-canvas-section" id="' + escapeHtml(page.slug) + '">',
-                '<div class="site-cms-canvas" style="min-height:' + canvasHeight + 'px;background-color:' + escapeHtml(bg) + ';' + bgImage + '">',
-                elements.map(function (el) { return renderPageElement(el, page); }).join(''),
+        }
+
+        if (!pages.length) {
+            mount.innerHTML = [
+                '<section class="site-cms-section site-cms-page-missing">',
+                '<div class="site-cms-page-missing-inner">',
+                '<h1>Page not found</h1>',
+                '<p>The page you requested is unavailable. Return to the <a href="index.html">homepage</a>.</p>',
                 '</div>',
                 '</section>'
             ].join('');
-        }).join('');
+            document.title = 'Page not found - AnyTransport';
+            return;
+        }
+
+        mount.innerHTML = pages.map(renderSinglePageSection).join('');
+
+        var activePage = pages[0];
+        if (activePage && activePage.title) {
+            document.title = String(activePage.title) + ' - AnyTransport';
+        }
     }
 
     function applySiteContent(content) {
@@ -246,6 +345,7 @@
             cachedContent = null;
             loadPromise = null;
         },
+        cmsPageHref: cmsPageHref,
         FONT_OPTIONS: Object.keys(FONT_MAP).filter(function (k) { return true; }).map(function (key) {
             return { id: key, label: key ? (FONT_MAP[key] || key) : 'Default (site font)' };
         })
@@ -253,5 +353,14 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         initSiteContent();
+    });
+
+    window.addEventListener('hashchange', function () {
+        if (!isStandaloneCmsPageView()) {
+            return;
+        }
+        loadSiteContent(false).then(function (content) {
+            renderPages(content);
+        });
     });
 })();

@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="css/navbar.css?v=20260522-1">
     <link rel="stylesheet" href="css/house-removal.css?v=20260322-1">
     <link rel="stylesheet" href="css/responsive.css?v=20260529-1">
-    <link rel="stylesheet" href="css/site-content.css?v=20260605-1">
+    <link rel="stylesheet" href="css/site-content.css?v=20260605-5">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js'></script>
 </head>
@@ -60,7 +60,8 @@
                         <button type="button" class="nav-toggle" aria-haspopup="true" aria-expanded="false">
                             <div class="navbar-avatar" id="navbar-user-avatar">U</div>
                         </button>
-                        <div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-version="3">
+                        <div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-version="6">
+                            <a href="dashboard.html#verification-review" class="nav-item navbar-hub-link at-nav-hub-admin" id="navbar-hub-admin-link" role="menuitem" style="display:none;">Admin panel</a>
                             <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>
                             <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-listings" id="navbar-hub-listings-link" role="menuitem">My Listings</a>
                             <a href="provider-profile.html" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>
@@ -547,9 +548,6 @@
             </div>
         </div>
 
-        <!-- CMS page sections (About, Pricing, FAQ, Contact, etc.) -->
-        <div id="site-pages-mount" class="site-pages-mount"></div>
-
         <!-- Footer -->
         <footer class="footer">
             <div class="footer-container">
@@ -576,10 +574,10 @@
                 <div class="footer-bottom">
                     <p id="site-footer-copyright">&copy; 2005-2026 AnyTransport Ltd. All rights reserved</p>
                     <div class="footer-links" id="site-footer-bottom-links">
-                        <a href="#privacy">Privacy</a>
-                        <a href="#terms">Terms of Use</a>
+                        <a href="page.html#privacy">Privacy</a>
+                        <a href="page.html#terms">Terms of Use</a>
                         <a href="#" class="footer-provider-link" onclick="switchToSignup('provider'); return false;">Transport Provider Sign Up</a>
-                        <a href="#sitemap">Sitemap</a>
+                        <a href="page.html#sitemap">Sitemap</a>
                     </div>
                 </div>
             </div>
@@ -770,8 +768,8 @@
 </script>
 <script src="js/cache-maintenance.js?v=20260322-2"></script>
 <script src="js/house-removal.js?v=20260322-1"></script>
-    <script src="js/auth.js?v=20260605-2"></script>
-    <script src="js/site-content.js?v=20260605-2"></script>
+    <script src="js/auth.js?v=20260605-6"></script>
+    <script src="js/site-content.js?v=20260605-5"></script>
 <script src="js/notifications.js?v=20260420-4"></script>
 <script>
     // Hide navbar on scroll down, show on scroll up

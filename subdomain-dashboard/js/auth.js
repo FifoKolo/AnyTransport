@@ -1008,12 +1008,13 @@ class AuthManager {
             return;
         }
 
-        const profileMenuVersion = '5';
+        const profileMenuVersion = '6';
         const hasLegacyMenu = !!menu.querySelector(
             '.at-nav-provider-dashboard, #navbar-profile-link, .at-nav-my-requests, .at-nav-hub-forms, a[href="customer-dashboard.html"]:not([href*="?"])'
-        ) || !menu.querySelector('.at-nav-hub-listings');
+        ) || !menu.querySelector('.at-nav-hub-listings') || !menu.querySelector('.at-nav-hub-admin');
         if (menu.dataset.profileMenuVersion !== profileMenuVersion || hasLegacyMenu) {
             menu.innerHTML = [
+                '<a href="dashboard.html#verification-review" class="nav-item navbar-hub-link at-nav-hub-admin" id="navbar-hub-admin-link" role="menuitem" style="display:none;">Admin panel</a>',
                 '<a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>',
                 '<a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-listings" id="navbar-hub-listings-link" role="menuitem">My Listings</a>',
                 '<a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',
@@ -1051,7 +1052,18 @@ class AuthManager {
             : this.resolveHubNavHref('customer-dashboard.html?tab=settings');
         const messagesHref = this.resolveHubNavHref('messages.html');
         const findProvidersHref = this.resolveHubNavHref('find-providers.html');
+        const adminHref = this.resolveHubNavHref('dashboard.html#verification-review');
+        const isAdminUser = this.isAdmin();
 
+        document.querySelectorAll('.at-nav-hub-admin, #navbar-hub-admin-link').forEach((el) => {
+            el.href = adminHref;
+            el.style.display = isAdminUser ? '' : 'none';
+            if (isAdminUser) {
+                el.removeAttribute('aria-hidden');
+            } else {
+                el.setAttribute('aria-hidden', 'true');
+            }
+        });
         document.querySelectorAll('.at-nav-hub-dashboard, #navbar-hub-dashboard-link').forEach((el) => {
             el.href = dashboardHref;
             el.style.display = allowProviderDash ? '' : 'none';
@@ -1102,7 +1114,12 @@ class AuthManager {
         });
 
         if (/dashboard\.html$/i.test(path)) {
-            document.querySelectorAll('.at-nav-hub-dashboard').forEach((el) => el.classList.add('is-active'));
+            const hash = String(window.location.hash || '').toLowerCase();
+            if (hash === '#verification-review' || hash.indexOf('#admin-section-') === 0) {
+                document.querySelectorAll('.at-nav-hub-admin').forEach((el) => el.classList.add('is-active'));
+            } else {
+                document.querySelectorAll('.at-nav-hub-dashboard').forEach((el) => el.classList.add('is-active'));
+            }
         } else if (/customer-dashboard\.html$/i.test(path)) {
             if (tab === 'settings') {
                 document.querySelectorAll('.at-nav-hub-settings').forEach((el) => el.classList.add('is-active'));
@@ -1136,6 +1153,7 @@ class AuthManager {
             '  <div class="navbar-avatar" id="navbar-user-avatar">U</div>',
             '</button>',
             '<div class="dropdown-menu" role="menu" aria-label="User menu" data-profile-menu-ready="1">',
+            '  <a href="dashboard.html#verification-review" class="nav-item navbar-hub-link at-nav-hub-admin" id="navbar-hub-admin-link" role="menuitem" style="display:none;">Admin panel</a>',
             '  <a href="dashboard.html" class="nav-item navbar-hub-link at-nav-hub-dashboard" id="navbar-hub-dashboard-link" role="menuitem">Provider dashboard</a>',
             '  <a href="customer-dashboard.html?tab=forms" class="nav-item navbar-hub-link at-nav-hub-listings" id="navbar-hub-listings-link" role="menuitem">My Listings</a>',
             '  <a href="customer-dashboard.html?tab=settings" class="nav-item navbar-hub-link at-nav-hub-settings" id="navbar-hub-settings-link" role="menuitem">Profile settings</a>',

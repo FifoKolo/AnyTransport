@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>AnyTransport</title>
+    <link rel="stylesheet" href="css/style.css?v=20260602-1">
+    <link rel="stylesheet" href="css/navbar.css?v=20260522-1">
+    <link rel="stylesheet" href="css/responsive.css?v=20260529-1">
+    <link rel="stylesheet" href="css/site-content.css?v=20260605-5">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a class="navbar-logo" href="index.html" aria-label="Go to landing page">
+                <img src="assets/logo.jpeg" alt="AnyTransport Logo" class="logo-img">
+                <span class="logo-text">AnyTransport</span>
+            </a>
+            <div class="navbar-menu" id="site-navbar-menu">
+                <a href="page.html#about" class="nav-link">About Us</a>
+                <a href="index.html#services" class="nav-link">Our Services</a>
+                <a href="index.html#how-it-works" class="nav-link">How it Works</a>
+                <a href="page.html#pricing" class="nav-link">Pricing</a>
+                <a href="page.html#faq" class="nav-link">FAQ</a>
+                <a href="find-providers.html" class="nav-link">Find providers</a>
+                <a href="page.html#contact" class="nav-link">Contact Us</a>
+            </div>
+            <div class="navbar-right">
+                <div id="auth-menu" style="display: flex;">
+                    <button class="btn btn-outline" type="button" onclick="openLoginModal()">Login</button>
+                </div>
+                <div id="user-menu" style="display: none;">
+                    <a href="customer-dashboard.html" class="btn btn-outline" style="margin-right:8px;">My listings</a>
+                    <button class="btn btn-primary" type="button" onclick="logout()">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="site-page-main">
+        <div id="site-pages-mount" class="site-pages-mount"></div>
+
+        <footer class="footer">
+            <div class="footer-container">
+                <div class="footer-content" id="site-footer-dynamic">
+                    <div class="footer-brand">
+                        <div class="footer-logo-container">
+                            <img src="assets/logo.jpeg" alt="AnyTransport Logo" class="footer-logo">
+                            <span class="footer-logo-text">AnyTransport</span>
+                        </div>
+                        <p>We're here to make moving anything easier, more affordable, and greener for everyone.</p>
+                        <div class="social-icons"></div>
+                    </div>
+                </div>
+
+                <div class="footer-bottom">
+                    <p id="site-footer-copyright">&copy; 2005-2026 AnyTransport Ltd. All rights reserved</p>
+                    <div class="footer-links" id="site-footer-bottom-links">
+                        <a href="page.html#privacy">Privacy</a>
+                        <a href="page.html#terms">Terms of Use</a>
+                        <a href="#" class="footer-provider-link" onclick="switchToSignup('provider'); return false;">Transport Provider Sign Up</a>
+                        <a href="page.html#sitemap">Sitemap</a>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </main>
+
+    <script src="js/cache-maintenance.js?v=20260322-2"></script>
+    <script src="js/auth.js?v=20260605-6"></script>
+    <script src="js/site-content.js?v=20260605-5"></script>
+    <script src="js/notifications.js?v=20260420-4"></script>
+</body>
+</html>
