@@ -254,12 +254,26 @@
         return style.join(';');
     }
 
+    function getCmsImagesApi() {
+        return window.anytransportCmsImages || null;
+    }
+
     function renderPageElement(el, page) {
         if (!el || !el.type) return '';
-        var style = elementStyle(el);
         if (el.type === 'image') {
-            return '<img class="site-cms-el site-cms-el-image" style="' + style + '" src="' + escapeHtml(el.url || '') + '" alt="' + escapeHtml(el.alt || page.title || '') + '">';
+            var imgApi = getCmsImagesApi();
+            var imageEl = imgApi ? imgApi.normalizeImageFields(el) : el;
+            var frameStyle = imgApi ? imgApi.buildImageFrameStyle(imageEl) : elementStyle(el);
+            var imgStyle = imgApi ? imgApi.buildImageTagStyle(imageEl) : 'width:100%;height:auto;display:block;';
+            var hasUrl = !!(imageEl.url && String(imageEl.url).trim());
+            if (!hasUrl) return '';
+            return [
+                '<div class="site-cms-el site-cms-el-image-wrap" style="' + frameStyle + '">',
+                '<img class="site-cms-el site-cms-el-image" style="' + imgStyle + '" src="' + escapeHtml(imageEl.url) + '" alt="' + escapeHtml(imageEl.alt || page.title || '') + '">',
+                '</div>'
+            ].join('');
         }
+        var style = elementStyle(el);
         if (el.type === 'title') {
             return '<h2 class="site-cms-el site-cms-el-title" style="' + style + '">' + escapeHtml(el.content || '') + '</h2>';
         }

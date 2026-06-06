@@ -273,7 +273,9 @@ function normalize_site_page_element($element, $fallbackId = '') {
         'type' => $type,
         'x' => max(0, min(95, (float) ($element['x'] ?? 5))),
         'y' => max(0, min(95, (float) ($element['y'] ?? 5))),
-        'width' => max(10, min(100, (float) ($element['width'] ?? 50))),
+        'width' => $type === 'image'
+            ? max(5, min(100, (float) ($element['width'] ?? 40)))
+            : max(10, min(100, (float) ($element['width'] ?? 50))),
         'zIndex' => max(1, (int) ($element['zIndex'] ?? 1)),
         'font' => trim((string) ($element['font'] ?? '')),
         'fontSize' => max(10, min(96, (int) ($element['fontSize'] ?? ($type === 'title' ? 32 : 16)))),
@@ -283,12 +285,26 @@ function normalize_site_page_element($element, $fallbackId = '') {
             : 'left'
     );
     if ($type === 'image') {
-        $url = trim((string) ($element['url'] ?? ''));
-        if ($url === '') {
-            return null;
+        $shape = strtolower(trim((string) ($element['shape'] ?? 'rounded')));
+        if (!in_array($shape, array('rectangle', 'rounded', 'circle', 'pill'), true)) {
+            $shape = 'rounded';
         }
-        $normalized['url'] = $url;
+        $objectFit = strtolower(trim((string) ($element['objectFit'] ?? 'cover')));
+        if (!in_array($objectFit, array('cover', 'contain', 'fill'), true)) {
+            $objectFit = 'cover';
+        }
+        $height = (float) ($element['height'] ?? 28);
+        if ($height <= 0 && $shape === 'circle') {
+            $height = 0;
+        } elseif ($height <= 0) {
+            $height = 28;
+        }
+        $normalized['url'] = trim((string) ($element['url'] ?? ''));
         $normalized['alt'] = trim((string) ($element['alt'] ?? ''));
+        $normalized['height'] = max(0, min(95, $height));
+        $normalized['shape'] = $shape;
+        $normalized['borderRadius'] = max(0, min(999, (int) ($element['borderRadius'] ?? 12)));
+        $normalized['objectFit'] = $objectFit;
         return $normalized;
     }
     $content = trim((string) ($element['content'] ?? ''));
@@ -338,6 +354,10 @@ function migrate_site_page_blocks_to_elements($page) {
                     'x' => 5,
                     'y' => $y,
                     'width' => 40,
+                    'height' => 28,
+                    'shape' => 'rounded',
+                    'borderRadius' => 12,
+                    'objectFit' => 'cover',
                     'zIndex' => 1,
                     'font' => '',
                     'fontSize' => 16,

@@ -155,7 +155,11 @@
         return options;
     }
 
-    var EDITOR_BUILD = '20260605-14';
+    var EDITOR_BUILD = '20260605-16';
+
+    function getCmsImagesApi() {
+        return window.anytransportCmsImages || null;
+    }
 
     function getSocialIconsApi() {
         return window.anytransportSocialIcons || null;
@@ -1681,16 +1685,51 @@
         page.elements = Array.isArray(page.elements) ? page.elements : [];
         if (!page.canvasHeight) page.canvasHeight = 520;
         if (!page.backgroundColor) page.backgroundColor = '#ffffff';
+        var imgApi = getCmsImagesApi();
+        if (imgApi) {
+            page.elements = page.elements.map(function (el) {
+                if (el && el.type === 'image') {
+                    return imgApi.normalizeImageFields(el);
+                }
+                return el;
+            });
+        }
         return page;
     }
 
     function makeElement(type, x, y) {
+        var id = 'el-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+        if (type === 'image') {
+            var imgApi = getCmsImagesApi();
+            if (imgApi) {
+                return imgApi.defaultImageElement({ id: id, x: x != null ? x : 12, y: y != null ? y : 12 });
+            }
+            return {
+                id: id,
+                type: 'image',
+                x: x != null ? x : 12,
+                y: y != null ? y : 12,
+                width: 40,
+                height: 28,
+                zIndex: 1,
+                url: '',
+                alt: '',
+                shape: 'rounded',
+                borderRadius: 12,
+                objectFit: 'cover',
+                font: '',
+                fontSize: 16,
+                color: '#0f172a',
+                align: 'left',
+                content: ''
+            };
+        }
         return {
-            id: 'el-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            id: id,
             type: type,
             x: x != null ? x : 10,
             y: y != null ? y : 10,
-            width: type === 'image' ? 35 : (type === 'title' ? 80 : 55),
+            width: type === 'title' ? 80 : 55,
             zIndex: 1,
             content: type === 'title' ? 'New title' : (type === 'text' ? '<p>New paragraph — double-click to edit.</p>' : ''),
             url: '',
@@ -1770,6 +1809,7 @@
         var inspector = root.querySelector('[data-visual-inspector]');
         var iframe = root.querySelector('[data-page-preview]');
         var dragState = null;
+        var resizeState = null;
 
         inspector.addEventListener('mousedown', function (e) {
             e.stopPropagation();
@@ -1786,6 +1826,44 @@
             editorState.content.pages = pages;
         }
 
+        function renderCanvasImageElement(el, selectedClass) {
+            var imgApi = getCmsImagesApi();
+            var imageEl = imgApi ? imgApi.normalizeImageFields(el) : el;
+            if (imgApi) {
+                Object.assign(el, {
+                    width: imageEl.width,
+                    height: imageEl.height,
+                    shape: imageEl.shape,
+                    borderRadius: imageEl.borderRadius,
+                    objectFit: imageEl.objectFit
+                });
+            } else if (!el.height || el.height < 5) {
+                el.height = 28;
+                if (!el.width || el.width < 5) el.width = 40;
+            }
+            var frameStyle = imgApi ? imgApi.buildImageFrameStyle(imageEl) : ('left:' + el.x + '%;top:' + el.y + '%;width:' + (el.width || 40) + '%;height:' + (el.height || 28) + '%;overflow:hidden;border-radius:12px;');
+            var hasUrl = !!(imageEl.url && String(imageEl.url).trim());
+            var inner = hasUrl
+                ? '<img class="visual-canvas-image" src="' + escapeHtml(imageEl.url) + '" alt="' + escapeHtml(imageEl.alt || '') + '" style="' + (imgApi ? imgApi.buildImageTagStyle(imageEl) : 'width:100%;height:100%;object-fit:cover;display:block;') + '">'
+                : [
+                    '<div class="visual-image-placeholder">',
+                    '<strong>No image yet</strong>',
+                    '<span>Upload or paste a URL in the panel →</span>',
+                    '</div>'
+                ].join('');
+            var isSelected = selectedClass.indexOf('is-selected') >= 0;
+            var resizeHandle = isSelected
+                ? '<span class="visual-image-resize-handle" data-image-resize-handle data-el-id="' + escapeHtml(el.id) + '" title="Drag to resize"></span>'
+                : '';
+            return [
+                '<div class="visual-canvas-element is-image' + (hasUrl ? '' : ' is-image-empty') + selectedClass + '"',
+                ' data-el-id="' + escapeHtml(el.id) + '" style="' + frameStyle + '">',
+                inner,
+                resizeHandle,
+                '</div>'
+            ].join('');
+        }
+
         function paintCanvas(options) {
             options = options || {};
             canvas.style.minHeight = (page.canvasHeight || 520) + 'px';
@@ -1798,7 +1876,7 @@
                 if (el.align) style += 'text-align:' + el.align + ';';
                 var selected = el.id === editorState.selectedElementId ? ' is-selected' : '';
                 if (el.type === 'image') {
-                    return '<div class="visual-canvas-element is-image' + selected + '" data-el-id="' + escapeHtml(el.id) + '" style="' + style + '"><img src="' + escapeHtml(el.url || '') + '" alt=""></div>';
+                    return renderCanvasImageElement(el, selected);
                 }
                 if (el.type === 'title') {
                     return '<div class="visual-canvas-element is-title' + selected + '" data-el-id="' + escapeHtml(el.id) + '" style="' + style + '">' + escapeHtml(el.content || '') + '</div>';
@@ -1828,11 +1906,37 @@
                 return;
             }
             inspector.dataset.pageSelection = el.id;
+
+            if (el.type === 'image') {
+                var imgApi = getCmsImagesApi();
+                if (imgApi) {
+                    var normalized = imgApi.normalizeImageFields(el);
+                    Object.assign(el, normalized);
+                }
+                var shape = el.shape || 'rounded';
+                inspector.innerHTML = [
+                    '<h4>Edit image</h4>',
+                    imgApi ? imgApi.inspectorPreviewHtml(el) : '',
+                    '<input type="file" accept="image/*" data-el-upload style="display:none;">',
+                    '<button type="button" class="btn btn-outline" data-el-upload-btn style="margin-bottom:8px;">Upload image</button>',
+                    '<label>Image URL<input type="text" data-el-url value="' + escapeHtml(el.url || '') + '" placeholder="https://… or upload above"></label>',
+                    '<label>Alt text<input type="text" data-el-alt value="' + escapeHtml(el.alt || '') + '" placeholder="Describe the image"></label>',
+                    '<label>Width %<input type="number" min="5" max="100" step="1" data-el-width value="' + el.width + '"></label>',
+                    '<label data-el-height-field style="' + (shape === 'circle' ? 'display:none;' : '') + '">Height %<input type="number" min="5" max="95" step="1" data-el-height value="' + (el.height || 28) + '"></label>',
+                    '<label>Shape<div class="cms-image-shape-picker">' + (imgApi ? imgApi.shapePickerHtml(shape) : '') + '</div></label>',
+                    '<label data-el-radius-field style="' + (shape === 'rounded' ? '' : 'display:none;') + '">Corner radius (px)<input type="number" min="0" max="999" step="1" data-el-radius value="' + (el.borderRadius == null ? 12 : el.borderRadius) + '"></label>',
+                    '<label>Image fit<select data-el-fit>' + (imgApi ? imgApi.fitOptionsHtml(el.objectFit || 'cover') : '') + '</select></label>',
+                    '<p class="visual-inspector-empty" style="margin:8px 0 0;">Tip: drag the corner handle on the canvas to resize. Circle uses width as diameter.</p>',
+                    '<label>Layer<input type="number" min="1" max="20" data-el-z value="' + (el.zIndex || 1) + '"></label>',
+                    '<button type="button" class="btn btn-outline" data-el-delete style="margin-top:6px;color:#b91c1c;border-color:#fecaca;">Delete image</button>'
+                ].join('');
+                bindImageInspector(el);
+                return;
+            }
+
             inspector.innerHTML = [
                 '<h4>Edit ' + escapeHtml(el.type) + '</h4>',
-                el.type !== 'image'
-                    ? '<label>Content<textarea data-el-content>' + escapeHtml(el.content || '') + '</textarea></label>'
-                    : '<label>Image URL<input type="text" data-el-url value="' + escapeHtml(el.url || '') + '"></label><label>Alt text<input type="text" data-el-alt value="' + escapeHtml(el.alt || '') + '"></label><input type="file" accept="image/*" data-el-upload style="display:none;"><button type="button" class="btn btn-outline" data-el-upload-btn style="margin-bottom:8px;">Upload image</button>',
+                '<label>Content<textarea data-el-content>' + escapeHtml(el.content || '') + '</textarea></label>',
                 '<label>Width %<input type="number" min="10" max="100" data-el-width value="' + el.width + '"></label>',
                 '<label>Font<select data-el-font>' + fontOptionsHtml(el.font || '') + '</select></label>',
                 '<label>Size (px)<input type="number" min="10" max="96" data-el-size value="' + el.fontSize + '"></label>',
@@ -1849,16 +1953,6 @@
                     paintCanvas({ skipInspector: true });
                 });
             }
-            var urlInput = inspector.querySelector('[data-el-url]');
-            if (urlInput) {
-                urlInput.addEventListener('input', function (e) {
-                    el.url = e.target.value;
-                    paintCanvas({ skipInspector: true });
-                });
-            }
-            inspector.querySelector('[data-el-alt]')?.addEventListener('input', function (e) {
-                el.alt = e.target.value;
-            });
             inspector.querySelector('[data-el-width]')?.addEventListener('input', function (e) {
                 el.width = parseFloat(e.target.value) || el.width;
                 paintCanvas({ skipInspector: true });
@@ -1888,6 +1982,92 @@
                 editorState.selectedElementId = '';
                 paintCanvas();
             });
+        }
+
+        function bindImageInspector(el) {
+            var imgApi = getCmsImagesApi();
+
+            function applyImageShape(shape) {
+                el.shape = shape;
+                if (shape === 'rectangle') el.borderRadius = 0;
+                if (shape === 'rounded' && (!el.borderRadius || el.borderRadius < 1)) el.borderRadius = 12;
+                if (shape === 'pill') el.borderRadius = 9999;
+                if (shape === 'circle' && imgApi) {
+                    var n = imgApi.normalizeImageFields(el);
+                    el.height = n.width;
+                }
+            }
+
+            function toggleImageFields() {
+                var shape = el.shape || 'rounded';
+                var heightField = inspector.querySelector('[data-el-height-field]');
+                var radiusField = inspector.querySelector('[data-el-radius-field]');
+                if (heightField) heightField.style.display = shape === 'circle' ? 'none' : '';
+                if (radiusField) radiusField.style.display = shape === 'rounded' ? '' : 'none';
+            }
+
+            function syncImagePreview() {
+                var preview = inspector.querySelector('.cms-image-inspector-preview');
+                if (!preview || !imgApi) return;
+                preview.outerHTML = imgApi.inspectorPreviewHtml(el);
+            }
+
+            var urlInput = inspector.querySelector('[data-el-url]');
+            if (urlInput) {
+                urlInput.addEventListener('input', function (e) {
+                    el.url = e.target.value;
+                    syncImagePreview();
+                    paintCanvas({ skipInspector: true });
+                });
+            }
+            inspector.querySelector('[data-el-alt]')?.addEventListener('input', function (e) {
+                el.alt = e.target.value;
+            });
+            inspector.querySelector('[data-el-width]')?.addEventListener('input', function (e) {
+                el.width = parseFloat(e.target.value) || el.width;
+                if (el.shape === 'circle') el.height = el.width;
+                syncImagePreview();
+                paintCanvas({ skipInspector: true });
+            });
+            inspector.querySelector('[data-el-height]')?.addEventListener('input', function (e) {
+                el.height = parseFloat(e.target.value) || el.height;
+                syncImagePreview();
+                paintCanvas({ skipInspector: true });
+            });
+            inspector.querySelectorAll('[data-el-shape-pick]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    applyImageShape(btn.getAttribute('data-el-shape-pick') || 'rounded');
+                    inspector.querySelectorAll('[data-el-shape-pick]').forEach(function (pick) {
+                        pick.classList.toggle('is-selected', pick === btn);
+                    });
+                    toggleImageFields();
+                    syncImagePreview();
+                    paintCanvas({ skipInspector: true });
+                });
+            });
+            inspector.querySelector('[data-el-radius]')?.addEventListener('input', function (e) {
+                el.borderRadius = parseInt(e.target.value, 10) || 0;
+                el.shape = 'rounded';
+                inspector.querySelectorAll('[data-el-shape-pick]').forEach(function (pick) {
+                    pick.classList.toggle('is-selected', pick.getAttribute('data-el-shape-pick') === 'rounded');
+                });
+                syncImagePreview();
+                paintCanvas({ skipInspector: true });
+            });
+            inspector.querySelector('[data-el-fit]')?.addEventListener('change', function (e) {
+                el.objectFit = e.target.value;
+                syncImagePreview();
+                paintCanvas({ skipInspector: true });
+            });
+            inspector.querySelector('[data-el-z]')?.addEventListener('input', function (e) {
+                el.zIndex = parseInt(e.target.value, 10) || 1;
+                paintCanvas({ skipInspector: true });
+            });
+            inspector.querySelector('[data-el-delete]')?.addEventListener('click', function () {
+                page.elements = (page.elements || []).filter(function (item) { return item.id !== el.id; });
+                editorState.selectedElementId = '';
+                paintCanvas();
+            });
             var uploadBtn = inspector.querySelector('[data-el-upload-btn]');
             var uploadInput = inspector.querySelector('[data-el-upload]');
             if (uploadBtn && uploadInput) {
@@ -1897,10 +2077,15 @@
                     if (!file) return;
                     uploadImage(file).then(function (url) {
                         el.url = url;
-                        paintCanvas();
+                        if (urlInput) urlInput.value = url;
+                        syncImagePreview();
+                        paintCanvas({ skipInspector: true });
+                    }).catch(function (err) {
+                        window.alert(err && err.message ? err.message : 'Image upload failed.');
                     });
                 });
             }
+            toggleImageFields();
         }
 
         function addElement(type) {
@@ -1917,7 +2102,9 @@
                     if (!file) return;
                     uploadImage(file).then(function (url) {
                         el.url = url;
-                        paintCanvas();
+                        paintCanvas({ skipInspector: true });
+                    }).catch(function (err) {
+                        window.alert(err && err.message ? err.message : 'Image upload failed.');
                     });
                 };
                 input.click();
@@ -1983,6 +2170,28 @@
         }
 
         canvas.addEventListener('mousedown', function (e) {
+            if (e.target.closest('[data-image-resize-handle]')) {
+                e.preventDefault();
+                e.stopPropagation();
+                var handle = e.target.closest('[data-image-resize-handle]');
+                var elId = handle.getAttribute('data-el-id');
+                var el = (page.elements || []).find(function (item) { return item.id === elId; });
+                if (!el || el.type !== 'image') return;
+                editorState.selectedElementId = el.id;
+                var rect = canvas.getBoundingClientRect();
+                resizeState = {
+                    el: el,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    origW: el.width || 40,
+                    origH: el.height || 28,
+                    canvasW: rect.width,
+                    canvasH: rect.height
+                };
+                canvas.classList.add('is-resizing-image');
+                return;
+            }
+
             var node = e.target.closest('[data-el-id]');
             if (!node) {
                 editorState.selectedElementId = '';
@@ -2027,6 +2236,19 @@
         });
 
         function onCanvasMove(e) {
+            if (resizeState) {
+                var dw = ((e.clientX - resizeState.startX) / resizeState.canvasW) * 100;
+                var dh = ((e.clientY - resizeState.startY) / resizeState.canvasH) * 100;
+                var el = resizeState.el;
+                el.width = Math.max(5, Math.min(100, resizeState.origW + dw));
+                if (el.shape === 'circle') {
+                    el.height = el.width;
+                } else {
+                    el.height = Math.max(5, Math.min(95, resizeState.origH + dh));
+                }
+                paintCanvas({ skipInspector: true });
+                return;
+            }
             if (!dragState) return;
             var dx = ((e.clientX - dragState.startX) / dragState.width) * 100;
             var dy = ((e.clientY - dragState.startY) / dragState.height) * 100;
@@ -2039,6 +2261,12 @@
         }
 
         function onCanvasUp() {
+            if (resizeState) {
+                resizeState = null;
+                canvas.classList.remove('is-resizing-image');
+                syncPageMeta();
+                return;
+            }
             if (!dragState) return;
             dragState = null;
             canvas.classList.remove('is-dragging');
