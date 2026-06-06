@@ -155,7 +155,7 @@
         return options;
     }
 
-    var EDITOR_BUILD = '20260605-16';
+    var EDITOR_BUILD = '20260605-17';
 
     function getCmsImagesApi() {
         return window.anytransportCmsImages || null;
@@ -2169,73 +2169,60 @@
             });
         }
 
-        canvas.addEventListener('mousedown', function (e) {
-            if (e.target.closest('[data-image-resize-handle]')) {
-                e.preventDefault();
-                e.stopPropagation();
-                var handle = e.target.closest('[data-image-resize-handle]');
-                var elId = handle.getAttribute('data-el-id');
-                var el = (page.elements || []).find(function (item) { return item.id === elId; });
-                if (!el || el.type !== 'image') return;
-                editorState.selectedElementId = el.id;
-                var rect = canvas.getBoundingClientRect();
-                resizeState = {
-                    el: el,
-                    startX: e.clientX,
-                    startY: e.clientY,
-                    origW: el.width || 40,
-                    origH: el.height || 28,
-                    canvasW: rect.width,
-                    canvasH: rect.height
-                };
-                canvas.classList.add('is-resizing-image');
+        function updateCanvasSelectionClasses(selectedId) {
+            canvas.querySelectorAll('[data-el-id]').forEach(function (node) {
+                node.classList.toggle('is-selected', node.getAttribute('data-el-id') === selectedId);
+            });
+        }
+
+        var canvasPointerId = null;
+        var suppressCanvasClick = false;
+
+        function clearCanvasPointerHandlers() {
+            window.removeEventListener('pointermove', onCanvasPointerMove);
+            window.removeEventListener('pointerup', finishCanvasPointer);
+            window.removeEventListener('pointercancel', finishCanvasPointer);
+        }
+
+        function armCanvasPointerHandlers() {
+            clearCanvasPointerHandlers();
+            window.addEventListener('pointermove', onCanvasPointerMove, { passive: false });
+            window.addEventListener('pointerup', finishCanvasPointer);
+            window.addEventListener('pointercancel', finishCanvasPointer);
+        }
+
+        function finishCanvasPointer(e) {
+            if (canvasPointerId != null && e && e.pointerId != null && e.pointerId !== canvasPointerId) {
                 return;
             }
-
-            var node = e.target.closest('[data-el-id]');
-            if (!node) {
-                editorState.selectedElementId = '';
+            clearCanvasPointerHandlers();
+            if (resizeState) {
+                resizeState = null;
+                canvas.classList.remove('is-resizing-image');
+                canvasPointerId = null;
+                syncPageMeta();
+                paintCanvas({ skipInspector: true });
+                return;
+            }
+            if (!dragState) {
+                canvasPointerId = null;
+                return;
+            }
+            var didMove = !!dragState.moved;
+            suppressCanvasClick = didMove;
+            dragState = null;
+            canvasPointerId = null;
+            canvas.classList.remove('is-dragging');
+            syncPageMeta();
+            if (didMove) {
+                paintCanvas({ skipInspector: true });
+            } else {
                 paintCanvas();
-                return;
             }
-            e.preventDefault();
-            var elId = node.getAttribute('data-el-id');
-            var el = (page.elements || []).find(function (item) { return item.id === elId; });
-            if (!el) return;
-            editorState.selectedElementId = el.id;
-            paintCanvas();
-            var rect = canvas.getBoundingClientRect();
-            dragState = {
-                el: el,
-                startX: e.clientX,
-                startY: e.clientY,
-                origX: el.x,
-                origY: el.y,
-                width: rect.width,
-                height: rect.height,
-                moved: false
-            };
-            canvas.classList.add('is-dragging');
-        });
+        }
 
-        canvas.addEventListener('click', function (e) {
-            if (dragState && dragState.moved) {
-                return;
-            }
-            var node = e.target.closest('[data-el-id]');
-            if (node) {
-                return;
-            }
-            if (e.target !== canvas && e.target.closest('[data-visual-canvas]') !== canvas) {
-                return;
-            }
-            var rect = canvas.getBoundingClientRect();
-            var percentX = Math.max(0, Math.min(92, ((e.clientX - rect.left) / rect.width) * 100));
-            var percentY = Math.max(0, Math.min(92, ((e.clientY - rect.top) / rect.height) * 100));
-            showPlacementMenu(e.clientX, e.clientY, percentX, percentY);
-        });
-
-        function onCanvasMove(e) {
+        function onCanvasPointerMove(e) {
+            if (canvasPointerId != null && e.pointerId !== canvasPointerId) return;
             if (resizeState) {
                 var dw = ((e.clientX - resizeState.startX) / resizeState.canvasW) * 100;
                 var dh = ((e.clientY - resizeState.startY) / resizeState.canvasH) * 100;
@@ -2260,25 +2247,91 @@
             paintCanvas({ skipInspector: true });
         }
 
-        function onCanvasUp() {
-            if (resizeState) {
-                resizeState = null;
-                canvas.classList.remove('is-resizing-image');
-                syncPageMeta();
+        canvas.addEventListener('pointerdown', function (e) {
+            if (e.target.closest('[data-image-resize-handle]')) {
+                e.preventDefault();
+                e.stopPropagation();
+                var handle = e.target.closest('[data-image-resize-handle]');
+                var elId = handle.getAttribute('data-el-id');
+                var el = (page.elements || []).find(function (item) { return item.id === elId; });
+                if (!el || el.type !== 'image') return;
+                editorState.selectedElementId = el.id;
+                updateCanvasSelectionClasses(el.id);
+                var rect = canvas.getBoundingClientRect();
+                canvasPointerId = e.pointerId;
+                try {
+                    handle.setPointerCapture(e.pointerId);
+                } catch (_captureErr) {}
+                resizeState = {
+                    el: el,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    origW: el.width || 40,
+                    origH: el.height || 28,
+                    canvasW: rect.width,
+                    canvasH: rect.height
+                };
+                canvas.classList.add('is-resizing-image');
+                armCanvasPointerHandlers();
                 return;
             }
-            if (!dragState) return;
-            dragState = null;
-            canvas.classList.remove('is-dragging');
-            syncPageMeta();
-        }
 
-        window.addEventListener('mousemove', onCanvasMove);
-        window.addEventListener('mouseup', onCanvasUp);
-        canvasDragCleanup = function () {
-            window.removeEventListener('mousemove', onCanvasMove);
-            window.removeEventListener('mouseup', onCanvasUp);
-        };
+            var node = e.target.closest('[data-el-id]');
+            if (!node) {
+                if (editorState.selectedElementId) {
+                    editorState.selectedElementId = '';
+                    paintCanvas();
+                }
+                return;
+            }
+            e.preventDefault();
+            var elId = node.getAttribute('data-el-id');
+            var el = (page.elements || []).find(function (item) { return item.id === elId; });
+            if (!el) return;
+            editorState.selectedElementId = el.id;
+            updateCanvasSelectionClasses(el.id);
+            var rect = canvas.getBoundingClientRect();
+            canvasPointerId = e.pointerId;
+            try {
+                node.setPointerCapture(e.pointerId);
+            } catch (_captureErr2) {}
+            dragState = {
+                el: el,
+                startX: e.clientX,
+                startY: e.clientY,
+                origX: el.x,
+                origY: el.y,
+                width: rect.width,
+                height: rect.height,
+                moved: false
+            };
+            canvas.classList.add('is-dragging');
+            paintInspector();
+            armCanvasPointerHandlers();
+        });
+
+        canvas.addEventListener('click', function (e) {
+            if (suppressCanvasClick) {
+                suppressCanvasClick = false;
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            if (dragState && dragState.moved) {
+                return;
+            }
+            var node = e.target.closest('[data-el-id]');
+            if (node) {
+                return;
+            }
+            if (e.target !== canvas && e.target.closest('[data-visual-canvas]') !== canvas) {
+                return;
+            }
+            var rect = canvas.getBoundingClientRect();
+            var percentX = Math.max(0, Math.min(92, ((e.clientX - rect.left) / rect.width) * 100));
+            var percentY = Math.max(0, Math.min(92, ((e.clientY - rect.top) / rect.height) * 100));
+            showPlacementMenu(e.clientX, e.clientY, percentX, percentY);
+        });
 
         canvas.addEventListener('dblclick', function (e) {
             var node = e.target.closest('[data-el-id]');
@@ -2292,6 +2345,14 @@
                 paintCanvas();
             }
         });
+
+        canvasDragCleanup = function () {
+            clearCanvasPointerHandlers();
+            dragState = null;
+            resizeState = null;
+            canvasPointerId = null;
+            suppressCanvasClick = false;
+        };
 
         root.querySelector('[data-page-select]').addEventListener('change', function (e) {
             syncPageMeta();

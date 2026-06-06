@@ -118,8 +118,7 @@
             'height:100%',
             'display:block',
             'object-fit:' + item.objectFit,
-            'border-radius:inherit',
-            'pointer-events:none'
+            'border-radius:inherit'
         ].join(';') + ';';
     }
 

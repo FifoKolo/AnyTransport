@@ -182,6 +182,8 @@
 
 .visual-canvas.is-dragging {
     cursor: grabbing;
+    touch-action: none;
+    user-select: none;
 }
 
 .visual-placement-menu {
@@ -234,6 +236,7 @@
     padding: 4px;
     cursor: grab;
     user-select: none;
+    touch-action: none;
 }
 
 .visual-canvas-element.is-selected {
@@ -274,7 +277,6 @@
     display: block;
     object-fit: cover;
     border-radius: inherit;
-    pointer-events: none;
 }
 
 .visual-image-placeholder {
