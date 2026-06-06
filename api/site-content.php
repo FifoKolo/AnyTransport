@@ -213,7 +213,7 @@ function normalize_site_page_element($element, $fallbackId = '') {
         'fontSize' => max(10, min(96, (int) ($element['fontSize'] ?? ($type === 'title' ? 32 : 16)))),
         'color' => trim((string) ($element['color'] ?? '#0f172a')),
         'align' => in_array(strtolower(trim((string) ($element['align'] ?? 'left'))), array('left', 'center', 'right'), true)
-            ? strtolower(trim((string) ($element['align']))
+            ? strtolower(trim((string) ($element['align'] ?? 'left')))
             : 'left'
     );
     if ($type === 'image') {

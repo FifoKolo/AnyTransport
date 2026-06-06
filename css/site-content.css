@@ -114,6 +114,7 @@
     overflow: auto;
     background: #e2e8f0;
     padding: 12px;
+    overscroll-behavior: contain;
 }
 
 .visual-canvas-label {

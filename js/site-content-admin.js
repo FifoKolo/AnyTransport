@@ -29,6 +29,8 @@
         selectedElementId: ''
     };
 
+    var canvasDragCleanup = null;
+
     function escapeHtml(value) {
         return String(value == null ? '' : value)
             .replace(/&/g, '&amp;')
@@ -356,6 +358,11 @@
     }
 
     function renderVisualPagesPanel(root) {
+        if (canvasDragCleanup) {
+            canvasDragCleanup();
+            canvasDragCleanup = null;
+        }
+
         var pages = editorState.content.pages || {};
         var pageIds = Object.keys(pages);
         var page = ensurePageElements(getSelectedPage());
@@ -591,12 +598,6 @@
         canvas.addEventListener('mousedown', function (e) {
             var node = e.target.closest('[data-el-id]');
             if (!node) {
-                if (e.target === canvas || e.target.closest('[data-visual-canvas]') === canvas) {
-                    var rect = canvas.getBoundingClientRect();
-                    var percentX = Math.max(0, Math.min(92, ((e.clientX - rect.left) / rect.width) * 100));
-                    var percentY = Math.max(0, Math.min(92, ((e.clientY - rect.top) / rect.height) * 100));
-                    showPlacementMenu(e.clientX, e.clientY, percentX, percentY);
-                }
                 editorState.selectedElementId = '';
                 paintCanvas();
                 return;
@@ -615,26 +616,54 @@
                 origX: el.x,
                 origY: el.y,
                 width: rect.width,
-                height: rect.height
+                height: rect.height,
+                moved: false
             };
             canvas.classList.add('is-dragging');
         });
 
-        window.addEventListener('mousemove', function onMove(e) {
+        canvas.addEventListener('click', function (e) {
+            if (dragState && dragState.moved) {
+                return;
+            }
+            var node = e.target.closest('[data-el-id]');
+            if (node) {
+                return;
+            }
+            if (e.target !== canvas && e.target.closest('[data-visual-canvas]') !== canvas) {
+                return;
+            }
+            var rect = canvas.getBoundingClientRect();
+            var percentX = Math.max(0, Math.min(92, ((e.clientX - rect.left) / rect.width) * 100));
+            var percentY = Math.max(0, Math.min(92, ((e.clientY - rect.top) / rect.height) * 100));
+            showPlacementMenu(e.clientX, e.clientY, percentX, percentY);
+        });
+
+        function onCanvasMove(e) {
             if (!dragState) return;
             var dx = ((e.clientX - dragState.startX) / dragState.width) * 100;
             var dy = ((e.clientY - dragState.startY) / dragState.height) * 100;
+            if (Math.abs(e.clientX - dragState.startX) > 4 || Math.abs(e.clientY - dragState.startY) > 4) {
+                dragState.moved = true;
+            }
             dragState.el.x = Math.max(0, Math.min(95, dragState.origX + dx));
             dragState.el.y = Math.max(0, Math.min(95, dragState.origY + dy));
             paintCanvas();
-        });
+        }
 
-        window.addEventListener('mouseup', function onUp() {
+        function onCanvasUp() {
             if (!dragState) return;
             dragState = null;
             canvas.classList.remove('is-dragging');
             syncPageMeta();
-        });
+        }
+
+        window.addEventListener('mousemove', onCanvasMove);
+        window.addEventListener('mouseup', onCanvasUp);
+        canvasDragCleanup = function () {
+            window.removeEventListener('mousemove', onCanvasMove);
+            window.removeEventListener('mouseup', onCanvasUp);
+        };
 
         canvas.addEventListener('dblclick', function (e) {
             var node = e.target.closest('[data-el-id]');
@@ -653,6 +682,7 @@
             syncPageMeta();
             editorState.selectedPageId = e.target.value;
             editorState.selectedElementId = '';
+            editorState.activeTab = 'pages';
             renderVisualPagesPanel(root);
         });
         root.querySelector('[data-page-slug]').addEventListener('input', syncPageMeta);
@@ -678,17 +708,19 @@
     }
 
     function renderEditor(mount) {
+        var activeTab = editorState.activeTab || 'navbar';
+
         mount.innerHTML = [
             '<div class="site-admin-editor">',
             '<p class="muted-text" style="margin:0 0 12px;">Edit navbar and footer links, then use the visual page builder to place titles, text, and images anywhere on each page section.</p>',
             '<div class="site-admin-tabs">',
-            '<button type="button" class="site-admin-tab is-active" data-tab="navbar">Navbar</button>',
-            '<button type="button" class="site-admin-tab" data-tab="footer">Footer</button>',
-            '<button type="button" class="site-admin-tab" data-tab="pages">Visual page builder</button>',
+            '<button type="button" class="site-admin-tab' + (activeTab === 'navbar' ? ' is-active' : '') + '" data-tab="navbar">Navbar</button>',
+            '<button type="button" class="site-admin-tab' + (activeTab === 'footer' ? ' is-active' : '') + '" data-tab="footer">Footer</button>',
+            '<button type="button" class="site-admin-tab' + (activeTab === 'pages' ? ' is-active' : '') + '" data-tab="pages">Visual page builder</button>',
             '</div>',
-            '<div class="site-admin-panel is-active" data-panel="navbar"></div>',
-            '<div class="site-admin-panel" data-panel="footer"></div>',
-            '<div class="site-admin-panel" data-panel="pages"></div>',
+            '<div class="site-admin-panel' + (activeTab === 'navbar' ? ' is-active' : '') + '" data-panel="navbar"></div>',
+            '<div class="site-admin-panel' + (activeTab === 'footer' ? ' is-active' : '') + '" data-panel="footer"></div>',
+            '<div class="site-admin-panel' + (activeTab === 'pages' ? ' is-active' : '') + '" data-panel="pages"></div>',
             '<div class="site-admin-actions">',
             '<button type="button" class="btn btn-primary" data-site-save>Save site content</button>',
             '<a href="index.html" target="_blank" rel="noopener" class="btn btn-outline">Preview homepage</a>',
