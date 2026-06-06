@@ -188,7 +188,10 @@
         var bottomLinks = (footer.bottomLinks || []).filter(function (l) { return l && l.visible !== false; });
 
         var socialHtml = social.map(function (item) {
-            return '<a href="' + escapeHtml(resolveHref(item.href)) + '" class="social-icon" aria-label="' + escapeHtml(item.label) + '"><span>' + escapeHtml(item.label.charAt(0)) + '</span></a>';
+            var socialApi = window.anytransportSocialIcons;
+            var className = socialApi ? socialApi.socialIconClassName(item) : 'social-icon';
+            var inner = socialApi ? socialApi.renderSocialIconInner(item) : ('<span>' + escapeHtml(item.label.charAt(0)) + '</span>');
+            return '<a href="' + escapeHtml(resolveHref(item.href)) + '" class="' + className + '" aria-label="' + escapeHtml(item.label) + '" target="_blank" rel="noopener noreferrer">' + inner + '</a>';
         }).join('');
 
         var columnsHtml = columns.map(function (col) {

@@ -116,9 +116,9 @@ function get_default_site_content() {
                 'description' => "We're here to make moving anything easier, more affordable, and greener for everyone. And we're pretty good at it too - just ask the furniture."
             ),
             'social' => array(
-                array('id' => 'social-fb', 'label' => 'Facebook', 'href' => '#', 'visible' => true),
-                array('id' => 'social-ig', 'label' => 'Instagram', 'href' => '#', 'visible' => true),
-                array('id' => 'social-tw', 'label' => 'Twitter', 'href' => '#', 'visible' => true)
+                array('id' => 'social-fb', 'label' => 'Facebook', 'href' => '#', 'visible' => true, 'icon' => 'facebook', 'shape' => 'circle', 'iconText' => 'F', 'iconUrl' => ''),
+                array('id' => 'social-ig', 'label' => 'Instagram', 'href' => '#', 'visible' => true, 'icon' => 'instagram', 'shape' => 'circle', 'iconText' => 'I', 'iconUrl' => ''),
+                array('id' => 'social-tw', 'label' => 'Twitter', 'href' => '#', 'visible' => true, 'icon' => 'twitter', 'shape' => 'circle', 'iconText' => 'T', 'iconUrl' => '')
             ),
             'columns' => $footerColumns,
             'copyright' => '© 2005-2026 AnyTransport Ltd. All rights reserved',
@@ -173,6 +173,65 @@ function normalize_site_nav_link($link, $fallbackId = '') {
         'order' => (int) ($link['order'] ?? 0),
         'pageId' => trim((string) ($link['pageId'] ?? '')),
         'action' => trim((string) ($link['action'] ?? ''))
+    );
+}
+
+function normalize_site_social_link($item, $fallbackId = '') {
+    if (!is_array($item)) {
+        return null;
+    }
+    $id = trim((string) ($item['id'] ?? $fallbackId));
+    if ($id === '') {
+        $id = make_id('social');
+    }
+    $label = trim((string) ($item['label'] ?? ''));
+    if ($label === '') {
+        return null;
+    }
+    $allowedIcons = array('facebook', 'instagram', 'twitter', 'x', 'linkedin', 'youtube', 'tiktok', 'pinterest', 'letter', 'custom');
+    $allowedShapes = array('circle', 'rounded', 'square');
+    $icon = strtolower(trim((string) ($item['icon'] ?? '')));
+    if ($icon === 'x') {
+        $icon = 'twitter';
+    }
+    if (!in_array($icon, $allowedIcons, true)) {
+        $lowerLabel = strtolower($label);
+        $lowerId = strtolower($id);
+        if (strpos($lowerLabel, 'face') !== false || strpos($lowerId, 'fb') !== false) {
+            $icon = 'facebook';
+        } elseif (strpos($lowerLabel, 'insta') !== false || strpos($lowerId, 'ig') !== false) {
+            $icon = 'instagram';
+        } elseif (strpos($lowerLabel, 'twit') !== false || strpos($lowerId, 'tw') !== false) {
+            $icon = 'twitter';
+        } elseif (strpos($lowerLabel, 'linked') !== false) {
+            $icon = 'linkedin';
+        } elseif (strpos($lowerLabel, 'you') !== false || strpos($lowerLabel, 'tube') !== false) {
+            $icon = 'youtube';
+        } elseif (strpos($lowerLabel, 'tik') !== false) {
+            $icon = 'tiktok';
+        } elseif (strpos($lowerLabel, 'pin') !== false) {
+            $icon = 'pinterest';
+        } else {
+            $icon = 'letter';
+        }
+    }
+    $shape = strtolower(trim((string) ($item['shape'] ?? 'circle')));
+    if (!in_array($shape, $allowedShapes, true)) {
+        $shape = 'circle';
+    }
+    $iconText = trim((string) ($item['iconText'] ?? ''));
+    if ($iconText === '') {
+        $iconText = strtoupper(substr($label, 0, 1));
+    }
+    return array(
+        'id' => $id,
+        'label' => $label,
+        'href' => trim((string) ($item['href'] ?? '#')),
+        'visible' => !array_key_exists('visible', $item) || !empty($item['visible']),
+        'icon' => $icon,
+        'shape' => $shape,
+        'iconText' => substr($iconText, 0, 2),
+        'iconUrl' => trim((string) ($item['iconUrl'] ?? ''))
     );
 }
 
@@ -414,20 +473,10 @@ function normalize_site_content($content) {
     $brandIn = is_array($footerIn['brand'] ?? null) ? $footerIn['brand'] : array();
     $social = array();
     foreach ((array) ($footerIn['social'] ?? array()) as $idx => $item) {
-        if (!is_array($item)) {
-            continue;
+        $normalizedSocial = normalize_site_social_link($item, 'social-' . $idx);
+        if ($normalizedSocial) {
+            $social[] = $normalizedSocial;
         }
-        $id = trim((string) ($item['id'] ?? 'social-' . $idx));
-        $label = trim((string) ($item['label'] ?? ''));
-        if ($label === '') {
-            continue;
-        }
-        $social[] = array(
-            'id' => $id,
-            'label' => $label,
-            'href' => trim((string) ($item['href'] ?? '#')),
-            'visible' => !array_key_exists('visible', $item) || !empty($item['visible'])
-        );
     }
     if (!$social) {
         $social = $defaults['footer']['social'];

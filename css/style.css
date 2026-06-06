@@ -788,11 +788,44 @@ textarea {
     height: 40px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.1);
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     color: white;
     transition: background 0.3s;
+    text-decoration: none;
+    flex-shrink: 0;
+}
+
+.social-icon.is-shape-circle {
+    border-radius: 50%;
+}
+
+.social-icon.is-shape-rounded {
+    border-radius: 10px;
+}
+
+.social-icon.is-shape-square {
+    border-radius: 0;
+}
+
+.social-icon svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+
+.social-icon-letter {
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.social-icon-img {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    display: block;
 }
 
 .social-icon:hover {

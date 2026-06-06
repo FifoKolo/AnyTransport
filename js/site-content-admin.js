@@ -155,7 +155,36 @@
         return options;
     }
 
-    var EDITOR_BUILD = '20260605-13';
+    var EDITOR_BUILD = '20260605-14';
+
+    function getSocialIconsApi() {
+        return window.anytransportSocialIcons || null;
+    }
+
+    function normalizeFooterSocialList(list) {
+        var api = getSocialIconsApi();
+        if (!api) return Array.isArray(list) ? list : [];
+        return (list || []).map(function (item) {
+            return api.normalizeSocialItem(item);
+        }).filter(Boolean);
+    }
+
+    function renderSocialChipMarkup(item, selectedKey) {
+        var api = getSocialIconsApi();
+        var normalized = api ? api.normalizeSocialItem(item) : item;
+        if (!normalized || !normalized.id) return '';
+        var hidden = normalized.visible === false;
+        var selected = selectedKey === ('social:' + normalized.id);
+        var extra = 'visual-footer-social-chip' + (hidden ? ' is-hidden-link' : '') + (selected ? ' is-target-selected' : '');
+        var className = api ? api.socialIconClassName(normalized, extra) : ('social-icon ' + extra);
+        var inner = api ? api.renderSocialIconInner(normalized) : ('<span class="social-icon-letter">' + escapeHtml((normalized.label || 'S').charAt(0)) + '</span>');
+        return [
+            '<span class="' + className + '" data-footer-social-id="' + escapeHtml(normalized.id) + '" role="button" tabindex="-1">',
+            inner,
+            hidden ? ' <em class="visual-nav-hidden-badge">hidden</em>' : '',
+            '</span>'
+        ].join('');
+    }
 
     function switchEditorTab(mount, tabKey) {
         if (!mount) return;
@@ -781,7 +810,7 @@
 
         var footer = editorState.content.footer || {};
         footer.brand = footer.brand || {};
-        footer.social = Array.isArray(footer.social) ? footer.social : [];
+        footer.social = normalizeFooterSocialList(footer.social);
         footer.columns = Array.isArray(footer.columns) ? footer.columns : [];
         footer.bottomLinks = Array.isArray(footer.bottomLinks) ? footer.bottomLinks : [];
         editorState.content.footer = footer;
@@ -796,13 +825,14 @@
         root.innerHTML = [
             '<div class="visual-page-editor visual-footer-editor">',
             '<div class="visual-page-toolbar">',
+            '<button type="button" class="btn btn-outline" data-add-footer-social>+ Add social icon</button>',
             '<button type="button" class="btn btn-outline" data-add-footer-column>+ Add column</button>',
             '<button type="button" class="btn btn-outline" data-add-footer-link>+ Add column link</button>',
             '<button type="button" class="btn btn-outline" data-add-footer-bottom-link>+ Add bottom link</button>',
             '</div>',
             '<div class="visual-page-layout">',
             '<div>',
-            '<p class="visual-canvas-label">Click the <strong>logo/brand</strong>, <strong>column titles</strong>, <strong>links</strong>, <strong>copyright</strong>, or <strong>bottom links</strong> to edit them in the panel on the right. Drag links within a column to reorder. Use the toolbar buttons to add columns or links.</p>',
+            '<p class="visual-canvas-label">Click the <strong>logo/brand</strong>, <strong>social icons</strong>, <strong>column titles</strong>, <strong>links</strong>, <strong>copyright</strong>, or <strong>bottom links</strong> to edit them in the panel on the right. Drag links within a column to reorder.</p>',
             '<div class="site-admin-footer-preview-wrap" data-footer-preview-wrap>',
             '<div class="site-admin-footer-preview-label">Desktop preview (1200px) · click to select · drag links to move · build ' + EDITOR_BUILD + '</div>',
             '<div class="site-admin-footer-preview-viewport" data-footer-preview-viewport>',
@@ -913,16 +943,7 @@
 
             if (!linkDragState && socialCanvas) {
                 socialCanvas.innerHTML = footer.social.map(function (item) {
-                    if (!item || !item.id) return '';
-                    var hidden = item.visible === false;
-                    var selected = editorState.selectedFooterItem === ('social:' + item.id);
-                    return [
-                        '<span class="social-icon visual-footer-social-chip' + (hidden ? ' is-hidden-link' : '') + (selected ? ' is-target-selected' : '') + '"',
-                        ' data-footer-social-id="' + escapeHtml(item.id) + '" role="button" tabindex="-1">',
-                        '<span>' + escapeHtml((item.label || 'S').charAt(0)) + '</span>',
-                        hidden ? ' <em class="visual-nav-hidden-badge">hidden</em>' : '',
-                        '</span>'
-                    ].join('');
+                    return renderSocialChipMarkup(item, editorState.selectedFooterItem || '');
                 }).join('');
             }
 
@@ -1022,13 +1043,30 @@
 
             if (selection.indexOf('social:') === 0) {
                 var social = findSocialById(selection.slice(7));
+                var socialApi = getSocialIconsApi();
                 if (social) {
+                    var socialIcon = social.icon || 'letter';
+                    var socialShape = social.shape || 'circle';
                     inspector.innerHTML = [
-                        '<h4>Social link</h4>',
-                        '<label>Label<input type="text" data-footer-social-label value="' + escapeHtml(social.label || '') + '"></label>',
-                        '<label>URL<input type="text" data-footer-social-href value="' + escapeHtml(social.href || '') + '"></label>',
+                        '<h4>Social icon</h4>',
+                        '<label>Shape<select data-footer-social-shape>' + (socialApi ? socialApi.shapeOptionsHtml(socialShape) : '') + '</select></label>',
+                        '<label>Icon preset<div class="social-icon-picker" data-footer-social-icon-picker>' + (socialApi ? socialApi.iconPickerHtml(socialIcon) : '') + '</div></label>',
+                        '<div data-footer-social-letter-field style="' + (socialIcon === 'letter' ? '' : 'display:none;') + '">',
+                        '<label>Letter / initials<input type="text" maxlength="2" data-footer-social-letter value="' + escapeHtml(social.iconText || '') + '"></label>',
+                        '</div>',
+                        '<div data-footer-social-custom-field style="' + (socialIcon === 'custom' ? '' : 'display:none;') + '">',
+                        '<label>Icon image URL<input type="text" data-footer-social-icon-url value="' + escapeHtml(social.iconUrl || '') + '"></label>',
+                        '<input type="file" accept="image/*" data-footer-social-icon-upload style="display:none;">',
+                        '<button type="button" class="btn btn-outline" data-footer-social-icon-upload-btn style="margin:8px 0;">Upload icon image</button>',
+                        '</div>',
+                        '<label>Accessibility label<input type="text" data-footer-social-label value="' + escapeHtml(social.label || '') + '"></label>',
+                        '<label>Link URL<input type="text" data-footer-social-href value="' + escapeHtml(social.href || '') + '"></label>',
                         '<label style="flex-direction:row;align-items:center;gap:8px;"><input type="checkbox" data-footer-social-visible ' + (social.visible !== false ? 'checked' : '') + '> Visible on site</label>',
-                        '<button type="button" class="btn btn-outline" data-footer-social-delete style="margin-top:8px;color:#b91c1c;border-color:#fecaca;">Delete social link</button>'
+                        '<div style="display:flex;gap:6px;margin-top:4px;">',
+                        '<button type="button" class="btn btn-outline" data-footer-social-move-left>← Move left</button>',
+                        '<button type="button" class="btn btn-outline" data-footer-social-move-right>Move right →</button>',
+                        '</div>',
+                        '<button type="button" class="btn btn-outline" data-footer-social-delete style="margin-top:8px;color:#b91c1c;border-color:#fecaca;">Delete social icon</button>'
                     ].join('');
                     bindFooterSocialInspector(social);
                 }
@@ -1099,8 +1137,8 @@
 
             inspector.innerHTML = [
                 '<h4>Footer editor</h4>',
-                '<p class="visual-inspector-empty">Click the <strong>brand</strong>, a <strong>column title</strong>, any <strong>link</strong>, <strong>copyright</strong>, or <strong>bottom links</strong> to edit them here.</p>',
-                '<p class="visual-inspector-empty">Drag links within a column to reorder them, or use the move buttons in the link panel.</p>'
+                '<p class="visual-inspector-empty">Click the <strong>brand</strong>, <strong>social icons</strong>, a <strong>column title</strong>, any <strong>link</strong>, <strong>copyright</strong>, or <strong>bottom links</strong> to edit them here.</p>',
+                '<p class="visual-inspector-empty">Use <strong>+ Add social icon</strong> for new shapes. Drag column links to reorder them.</p>'
             ].join('');
         }
 
@@ -1144,6 +1182,60 @@
         }
 
         function bindFooterSocialInspector(social) {
+            function toggleSocialExtraFields() {
+                var letterField = inspector.querySelector('[data-footer-social-letter-field]');
+                var customField = inspector.querySelector('[data-footer-social-custom-field]');
+                if (letterField) letterField.style.display = social.icon === 'letter' ? '' : 'none';
+                if (customField) customField.style.display = social.icon === 'custom' ? '' : 'none';
+            }
+
+            inspector.querySelector('[data-footer-social-shape]')?.addEventListener('change', function (e) {
+                social.shape = e.target.value;
+                syncFooterPreview();
+            });
+
+            inspector.querySelectorAll('[data-social-icon-pick]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    social.icon = btn.getAttribute('data-social-icon-pick') || 'letter';
+                    inspector.querySelectorAll('[data-social-icon-pick]').forEach(function (pick) {
+                        pick.classList.toggle('is-selected', pick === btn);
+                    });
+                    toggleSocialExtraFields();
+                    syncFooterPreview();
+                });
+            });
+
+            inspector.querySelector('[data-footer-social-letter]')?.addEventListener('input', function (e) {
+                social.iconText = e.target.value;
+                syncFooterPreview();
+            });
+
+            var iconUrlInput = inspector.querySelector('[data-footer-social-icon-url]');
+            if (iconUrlInput) {
+                iconUrlInput.addEventListener('input', function (e) {
+                    social.iconUrl = e.target.value;
+                    syncFooterPreview();
+                });
+            }
+            var iconUploadBtn = inspector.querySelector('[data-footer-social-icon-upload-btn]');
+            var iconUploadInput = inspector.querySelector('[data-footer-social-icon-upload]');
+            if (iconUploadBtn && iconUploadInput) {
+                iconUploadBtn.addEventListener('click', function () { iconUploadInput.click(); });
+                iconUploadInput.addEventListener('change', function (e) {
+                    var file = e.target.files && e.target.files[0];
+                    if (!file) return;
+                    uploadImage(file).then(function (url) {
+                        social.icon = 'custom';
+                        social.iconUrl = url;
+                        if (iconUrlInput) iconUrlInput.value = url;
+                        paintFooterInspector(true);
+                        syncFooterPreview();
+                    }).catch(function (err) {
+                        window.alert(err && err.message ? err.message : 'Icon upload failed.');
+                    });
+                });
+            }
+
             inspector.querySelector('[data-footer-social-label]')?.addEventListener('input', function (e) {
                 social.label = e.target.value;
                 syncFooterPreview();
@@ -1155,6 +1247,22 @@
             inspector.querySelector('[data-footer-social-visible]')?.addEventListener('change', function (e) {
                 social.visible = e.target.checked;
                 syncFooterPreview();
+            });
+            inspector.querySelector('[data-footer-social-move-left]')?.addEventListener('click', function () {
+                var idx = footer.social.findIndex(function (item) { return item.id === social.id; });
+                if (idx <= 0) return;
+                var tmp = footer.social[idx - 1];
+                footer.social[idx - 1] = footer.social[idx];
+                footer.social[idx] = tmp;
+                syncFooterMeta();
+            });
+            inspector.querySelector('[data-footer-social-move-right]')?.addEventListener('click', function () {
+                var idx = footer.social.findIndex(function (item) { return item.id === social.id; });
+                if (idx < 0 || idx >= footer.social.length - 1) return;
+                var tmp = footer.social[idx + 1];
+                footer.social[idx + 1] = footer.social[idx];
+                footer.social[idx] = tmp;
+                syncFooterMeta();
             });
             inspector.querySelector('[data-footer-social-delete]')?.addEventListener('click', function () {
                 footer.social = footer.social.filter(function (item) { return item.id !== social.id; });
@@ -1290,6 +1398,24 @@
                 syncFooterMeta();
             });
         }
+
+        root.querySelector('[data-add-footer-social]').addEventListener('click', function (e) {
+            e.preventDefault();
+            var api = getSocialIconsApi();
+            var newSocial = {
+                id: 'social-' + Date.now(),
+                label: 'Facebook',
+                href: '#',
+                visible: true,
+                icon: 'facebook',
+                shape: 'circle',
+                iconText: 'F',
+                iconUrl: ''
+            };
+            footer.social.push(api ? api.normalizeSocialItem(newSocial) : newSocial);
+            editorState.selectedFooterItem = 'social:' + newSocial.id;
+            syncFooterMeta();
+        });
 
         root.querySelector('[data-add-footer-column]').addEventListener('click', function (e) {
             e.preventDefault();
