@@ -155,7 +155,7 @@
         return options;
     }
 
-    var EDITOR_BUILD = '20260605-17';
+    var EDITOR_BUILD = '20260605-18';
 
     function getCmsImagesApi() {
         return window.anytransportCmsImages || null;
@@ -639,63 +639,89 @@
             return true;
         }
 
-        function findNavDropTargetChip(clientX, dragChip) {
-            if (!linksCanvas) return null;
+        function syncNavLinksDomOrder() {
+            if (!linksCanvas) return;
+            links.forEach(function (link) {
+                if (!link || !link.id) return;
+                var chip = linksCanvas.querySelector('[data-nav-link-id="' + link.id + '"]');
+                if (chip) linksCanvas.appendChild(chip);
+            });
+        }
+
+        function computeNavDropIndex(clientX) {
+            if (!linksCanvas) return 0;
             var chips = Array.prototype.slice.call(linksCanvas.querySelectorAll('[data-nav-link-id]'));
-            var over = null;
-            chips.forEach(function (chip) {
-                if (chip === dragChip) return;
-                var rect = chip.getBoundingClientRect();
-                if (clientX >= rect.left && clientX <= rect.right) {
-                    over = chip;
-                }
-            });
-            if (over) return over;
-            var best = null;
-            var bestDist = Infinity;
-            chips.forEach(function (chip) {
-                if (chip === dragChip) return;
-                var rect = chip.getBoundingClientRect();
-                var center = rect.left + rect.width / 2;
-                var dist = Math.abs(clientX - center);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    best = chip;
-                }
-            });
-            return best;
+            for (var i = 0; i < chips.length; i += 1) {
+                var rect = chips[i].getBoundingClientRect();
+                var mid = rect.left + rect.width / 2;
+                if (clientX < mid) return i;
+            }
+            return Math.max(0, chips.length - 1);
+        }
+
+        function moveNavLinkToIndex(linkId, toIndex) {
+            var fromIdx = links.findIndex(function (l) { return l.id === linkId; });
+            if (fromIdx < 0 || toIndex < 0) return false;
+            toIndex = Math.max(0, Math.min(links.length - 1, toIndex));
+            if (fromIdx === toIndex) return false;
+            var item = links.splice(fromIdx, 1)[0];
+            var insertAt = toIndex;
+            if (fromIdx < toIndex) insertAt = toIndex - 1;
+            links.splice(insertAt, 0, item);
+            syncNavLinksDomOrder();
+            return true;
         }
 
         var navPointerMoveHandler = null;
         var navPointerUpHandler = null;
+        var navMouseMoveHandler = null;
+        var navMouseUpHandler = null;
 
         function clearNavPointerHandlers() {
             if (navPointerMoveHandler) {
                 window.removeEventListener('pointermove', navPointerMoveHandler);
-                navPointerMoveHandler = null;
             }
             if (navPointerUpHandler) {
                 window.removeEventListener('pointerup', navPointerUpHandler);
                 window.removeEventListener('pointercancel', navPointerUpHandler);
-                navPointerUpHandler = null;
+            }
+            if (navMouseMoveHandler) {
+                window.removeEventListener('mousemove', navMouseMoveHandler);
+            }
+            if (navMouseUpHandler) {
+                window.removeEventListener('mouseup', navMouseUpHandler);
             }
         }
 
-        navPointerMoveHandler = function (e) {
-            if (!linkDragState || e.pointerId !== linkDragState.pointerId) return;
-            if (Math.abs(e.clientX - linkDragState.startX) > 5) {
+        function onNavDragMove(e, pointerId) {
+            if (!linkDragState || linkDragState.pointerId !== pointerId) return;
+            if (Math.abs(e.clientX - linkDragState.startX) > 4 || Math.abs(e.clientY - linkDragState.startY) > 4) {
                 linkDragState.moved = true;
             }
             if (!linkDragState.moved) return;
             e.preventDefault();
-            var targetChip = findNavDropTargetChip(e.clientX, linkDragState.chip);
-            if (!targetChip || targetChip === linkDragState.chip) return;
-            var targetId = targetChip.getAttribute('data-nav-link-id');
-            if (!targetId || targetId === linkDragState.lastTargetId) return;
-            linkDragState.lastTargetId = targetId;
-            if (swapNavLinksInData(linkDragState.linkId, targetId)) {
-                swapNavLinksInDom(linkDragState.chip, targetChip);
+            if (linkDragState.chip) {
+                linkDragState.chip.style.transform = 'translateX(' + (e.clientX - linkDragState.startX) + 'px)';
             }
+            var dropIdx = computeNavDropIndex(e.clientX);
+            if (dropIdx !== linkDragState.lastTargetIndex) {
+                linkDragState.lastTargetIndex = dropIdx;
+                if (moveNavLinkToIndex(linkDragState.linkId, dropIdx)) {
+                    linkDragState.chip = linksCanvas.querySelector('[data-nav-link-id="' + linkDragState.linkId + '"]');
+                    if (linkDragState.chip) {
+                        linkDragState.chip.classList.add('is-dragging-chip');
+                        linkDragState.chip.style.transform = 'translateX(' + (e.clientX - linkDragState.startX) + 'px)';
+                    }
+                }
+            }
+        }
+
+        navPointerMoveHandler = function (e) {
+            onNavDragMove(e, e.pointerId);
+        };
+
+        navMouseMoveHandler = function (e) {
+            onNavDragMove(e, 'mouse');
         };
 
         navPointerUpHandler = function (e) {
@@ -704,43 +730,27 @@
             finishNavLinkDrag(e);
         };
 
-        linksCanvas.addEventListener('pointerdown', function (e) {
-            var chip = e.target.closest('[data-nav-link-id]');
-            if (!chip) return;
-            e.preventDefault();
-            e.stopPropagation();
-            var linkId = chip.getAttribute('data-nav-link-id');
-            try {
-                chip.setPointerCapture(e.pointerId);
-            } catch (_captureErr) {}
-            if (navCanvas) navCanvas.classList.add('is-dragging-links');
-            chip.classList.add('is-dragging-chip');
-            linkDragState = {
-                linkId: linkId,
-                chip: chip,
-                pointerId: e.pointerId,
-                startX: e.clientX,
-                moved: false,
-                lastTargetId: ''
-            };
+        navMouseUpHandler = function (e) {
+            if (!linkDragState || linkDragState.pointerId !== 'mouse') return;
             clearNavPointerHandlers();
-            window.addEventListener('pointermove', navPointerMoveHandler, { passive: false });
-            window.addEventListener('pointerup', navPointerUpHandler);
-            window.addEventListener('pointercancel', navPointerUpHandler);
-        });
+            finishNavLinkDrag(e);
+        };
 
         function finishNavLinkDrag(e) {
             if (!linkDragState) return;
-            if (e && e.pointerId != null && linkDragState.pointerId != null && e.pointerId !== linkDragState.pointerId) {
+            if (e && linkDragState.pointerId !== 'mouse' && e.pointerId != null && linkDragState.pointerId != null && e.pointerId !== linkDragState.pointerId) {
                 return;
             }
             var savedLinkId = linkDragState.linkId;
             var wasMoved = !!linkDragState.moved;
             if (linkDragState.chip) {
-                try {
-                    linkDragState.chip.releasePointerCapture(linkDragState.pointerId);
-                } catch (_e) {}
+                if (linkDragState.pointerId !== 'mouse') {
+                    try {
+                        linkDragState.chip.releasePointerCapture(linkDragState.pointerId);
+                    } catch (_e) {}
+                }
                 linkDragState.chip.classList.remove('is-dragging-chip');
+                linkDragState.chip.style.transform = '';
             }
             linkDragState = null;
             if (navCanvas) navCanvas.classList.remove('is-dragging-links');
@@ -753,6 +763,49 @@
                 selectNavbarItem('link:' + savedLinkId);
             }
         }
+
+        function beginNavLinkDrag(e, chip, pointerId) {
+            e.preventDefault();
+            e.stopPropagation();
+            var linkId = chip.getAttribute('data-nav-link-id');
+            if (navCanvas) navCanvas.classList.add('is-dragging-links');
+            chip.classList.add('is-dragging-chip');
+            linkDragState = {
+                linkId: linkId,
+                chip: chip,
+                pointerId: pointerId,
+                startX: e.clientX,
+                startY: e.clientY,
+                moved: false,
+                lastTargetIndex: links.findIndex(function (l) { return l.id === linkId; })
+            };
+            clearNavPointerHandlers();
+            if (pointerId === 'mouse') {
+                window.addEventListener('mousemove', navMouseMoveHandler);
+                window.addEventListener('mouseup', navMouseUpHandler);
+            } else {
+                try {
+                    chip.setPointerCapture(pointerId);
+                } catch (_captureErr) {}
+                window.addEventListener('pointermove', navPointerMoveHandler, { passive: false });
+                window.addEventListener('pointerup', navPointerUpHandler);
+                window.addEventListener('pointercancel', navPointerUpHandler);
+            }
+        }
+
+        navCanvas.addEventListener('pointerdown', function (e) {
+            var chip = e.target.closest('[data-nav-link-id]');
+            if (!chip) return;
+            beginNavLinkDrag(e, chip, e.pointerId);
+        });
+
+        navCanvas.addEventListener('mousedown', function (e) {
+            if (e.button !== 0 || linkDragState) return;
+            var chip = e.target.closest('[data-nav-link-id]');
+            if (!chip) return;
+            if (window.PointerEvent) return;
+            beginNavLinkDrag(e, chip, 'mouse');
+        });
 
         navCanvas.addEventListener('click', function (e) {
             if (suppressNavClick) {
@@ -1864,6 +1917,16 @@
             ].join('');
         }
 
+        function syncCanvasElementDom(el) {
+            if (!el || !canvas) return;
+            var node = canvas.querySelector('[data-el-id="' + el.id + '"]');
+            if (!node) return;
+            node.style.left = el.x + '%';
+            node.style.top = el.y + '%';
+            if (el.width != null) node.style.width = el.width + '%';
+            if (el.type === 'image' && el.height != null) node.style.height = el.height + '%';
+        }
+
         function paintCanvas(options) {
             options = options || {};
             canvas.style.minHeight = (page.canvasHeight || 520) + 'px';
@@ -2233,7 +2296,7 @@
                 } else {
                     el.height = Math.max(5, Math.min(95, resizeState.origH + dh));
                 }
-                paintCanvas({ skipInspector: true });
+                syncCanvasElementDom(el);
                 return;
             }
             if (!dragState) return;
@@ -2244,7 +2307,7 @@
             }
             dragState.el.x = Math.max(0, Math.min(95, dragState.origX + dx));
             dragState.el.y = Math.max(0, Math.min(95, dragState.origY + dy));
-            paintCanvas({ skipInspector: true });
+            syncCanvasElementDom(dragState.el);
         }
 
         canvas.addEventListener('pointerdown', function (e) {
