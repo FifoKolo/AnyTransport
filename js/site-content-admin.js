@@ -155,6 +155,8 @@
         return options;
     }
 
+    var EDITOR_BUILD = '20260605-13';
+
     function switchEditorTab(mount, tabKey) {
         if (!mount) return;
         editorState.activeTab = tabKey;
@@ -164,6 +166,13 @@
         mount.querySelectorAll('[data-panel]').forEach(function (panel) {
             panel.classList.toggle('is-active', panel.getAttribute('data-panel') === tabKey);
         });
+        if (tabKey === 'navbar') {
+            var navbarPanel = mount.querySelector('[data-panel="navbar"]');
+            if (navbarPanel) renderNavbarPanel(navbarPanel);
+        } else if (tabKey === 'footer') {
+            var footerPanel = mount.querySelector('[data-panel="footer"]');
+            if (footerPanel) renderFooterPanel(footerPanel);
+        }
     }
 
     function presetOptionsHtml(hrefPresets, selectedHref) {
@@ -198,7 +207,7 @@
             '<div>',
             '<p class="visual-canvas-label">Click the logo, a menu link, or the navbar background to edit it in the panel on the right. Drag links to reorder them. Use <strong>+ Add menu link</strong> to add items.</p>',
             '<div class="site-admin-navbar-preview-wrap" data-nav-preview-wrap>',
-            '<div class="site-admin-navbar-preview-label">Desktop preview (1400px) · click to select · drag links to move</div>',
+            '<div class="site-admin-navbar-preview-label">Desktop preview (1400px) · click to select · drag links to move · build ' + EDITOR_BUILD + '</div>',
             '<div class="site-admin-navbar-preview-viewport" data-nav-preview-viewport>',
             '<div class="site-admin-navbar-preview-scaler" data-nav-preview-scaler>',
             '<nav class="navbar site-admin-navbar-preview is-editable" data-nav-canvas>',
@@ -793,9 +802,9 @@
             '</div>',
             '<div class="visual-page-layout">',
             '<div>',
-            '<p class="visual-canvas-label">Click the brand, column titles, links, copyright, or bottom links to edit them. Drag links within a column to reorder.</p>',
+            '<p class="visual-canvas-label">Click the <strong>logo/brand</strong>, <strong>column titles</strong>, <strong>links</strong>, <strong>copyright</strong>, or <strong>bottom links</strong> to edit them in the panel on the right. Drag links within a column to reorder. Use the toolbar buttons to add columns or links.</p>',
             '<div class="site-admin-footer-preview-wrap" data-footer-preview-wrap>',
-            '<div class="site-admin-footer-preview-label">Desktop preview (1200px) · click to select · drag links to move</div>',
+            '<div class="site-admin-footer-preview-label">Desktop preview (1200px) · click to select · drag links to move · build ' + EDITOR_BUILD + '</div>',
             '<div class="site-admin-footer-preview-viewport" data-footer-preview-viewport>',
             '<div class="site-admin-footer-preview-scaler" data-footer-preview-scaler>',
             '<footer class="footer site-admin-footer-preview is-editable" data-footer-canvas>',
@@ -1973,7 +1982,7 @@
         var activeTab = editorState.activeTab || 'navbar';
 
         mount.innerHTML = [
-            '<div class="site-admin-editor">',
+            '<div class="site-admin-editor" data-site-content-build="' + EDITOR_BUILD + '">',
             '<p class="muted-text" style="margin:0 0 12px;">Click elements to edit them — navbar, footer, and page content work like a visual site builder. Save when you&apos;re done.</p>',
             '<div class="site-admin-tabs">',
             '<button type="button" class="site-admin-tab' + (activeTab === 'navbar' ? ' is-active' : '') + '" data-tab="navbar">Navbar</button>',
