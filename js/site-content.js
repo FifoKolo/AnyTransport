@@ -170,20 +170,30 @@
         }
     }
 
-    function renderPageBlocks(page) {
-        return (page.blocks || []).map(function (block) {
-            if (!block || block.type === 'image') {
-                var url = block && block.url ? block.url : '';
-                if (!url) return '';
-                return [
-                    '<figure class="site-cms-image-block">',
-                    '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(block.alt || page.title || '') + '">',
-                    block.caption ? ('<figcaption class="site-cms-image-caption">' + escapeHtml(block.caption) + '</figcaption>') : '',
-                    '</figure>'
-                ].join('');
-            }
-            return '<div class="site-cms-body">' + String(block.content || '') + '</div>';
-        }).join('');
+    function elementStyle(el) {
+        var style = [
+            'left:' + (el.x || 0) + '%',
+            'top:' + (el.y || 0) + '%',
+            'width:' + (el.width || 50) + '%',
+            'z-index:' + (el.zIndex || 1)
+        ];
+        if (el.font) style.push('font-family:' + fontFamily(el.font));
+        if (el.fontSize) style.push('font-size:' + el.fontSize + 'px');
+        if (el.color) style.push('color:' + el.color);
+        if (el.align) style.push('text-align:' + el.align);
+        return style.join(';');
+    }
+
+    function renderPageElement(el, page) {
+        if (!el || !el.type) return '';
+        var style = elementStyle(el);
+        if (el.type === 'image') {
+            return '<img class="site-cms-el site-cms-el-image" style="' + style + '" src="' + escapeHtml(el.url || '') + '" alt="' + escapeHtml(el.alt || page.title || '') + '">';
+        }
+        if (el.type === 'title') {
+            return '<h2 class="site-cms-el site-cms-el-title" style="' + style + '">' + escapeHtml(el.content || '') + '</h2>';
+        }
+        return '<div class="site-cms-el site-cms-el-text" style="' + style + '">' + String(el.content || '') + '</div>';
     }
 
     function renderPages(content) {
@@ -197,18 +207,16 @@
         });
 
         mount.innerHTML = pages.map(function (page) {
-            var headingStyle = page.headingFont ? ('font-family:' + fontFamily(page.headingFont) + ';') : '';
-            var bodyStyle = page.bodyFont ? ('font-family:' + fontFamily(page.bodyFont) + ';') : '';
-            var hero = page.heroImage
-                ? ('<img class="site-cms-hero" src="' + escapeHtml(page.heroImage) + '" alt="' + escapeHtml(page.title) + '">')
-                : '';
+            var canvasHeight = page.canvasHeight || 520;
+            var bg = page.backgroundColor || '#ffffff';
+            var bgImage = page.backgroundImage ? ('background-image:url(' + page.backgroundImage + ');background-size:cover;background-position:center;') : '';
+            var elements = (page.elements || []).slice().sort(function (a, b) {
+                return (a.zIndex || 1) - (b.zIndex || 1);
+            });
             return [
-                '<section class="site-cms-section" id="' + escapeHtml(page.slug) + '">',
-                '<div class="site-cms-inner">',
-                hero,
-                '<h2 class="site-cms-title" style="' + headingStyle + '">' + escapeHtml(page.title) + '</h2>',
-                page.subtitle ? ('<p class="site-cms-subtitle" style="' + bodyStyle + '">' + escapeHtml(page.subtitle) + '</p>') : '',
-                '<div style="' + bodyStyle + '">' + renderPageBlocks(page) + '</div>',
+                '<section class="site-cms-section site-cms-canvas-section" id="' + escapeHtml(page.slug) + '">',
+                '<div class="site-cms-canvas" style="min-height:' + canvasHeight + 'px;background-color:' + escapeHtml(bg) + ';' + bgImage + '">',
+                elements.map(function (el) { return renderPageElement(el, page); }).join(''),
                 '</div>',
                 '</section>'
             ].join('');

@@ -1,6 +1,16 @@
 (function () {
     'use strict';
 
+    var FONT_FAMILY_MAP = {
+        'inter': 'Inter',
+        'roboto': 'Roboto',
+        'open-sans': 'Open Sans',
+        'lato': 'Lato',
+        'merriweather': 'Merriweather',
+        'playfair': 'Playfair Display',
+        'georgia': 'Georgia, serif'
+    };
+
     var FONT_OPTIONS = [
         { id: '', label: 'Default (site font)' },
         { id: 'inter', label: 'Inter' },
@@ -15,7 +25,8 @@
     var editorState = {
         content: null,
         activeTab: 'navbar',
-        selectedPageId: 'about'
+        selectedPageId: 'about',
+        selectedElementId: ''
     };
 
     function escapeHtml(value) {
@@ -296,125 +307,384 @@
         return pages[pageId];
     }
 
-    function renderPagesPanel(root) {
+    function fontOptionsHtml(selected) {
+        return FONT_OPTIONS.map(function (opt) {
+            return '<option value="' + escapeHtml(opt.id) + '" ' + (opt.id === selected ? 'selected' : '') + '>' + escapeHtml(opt.label) + '</option>';
+        }).join('');
+    }
+
+    function ensurePageElements(page) {
+        page.elements = Array.isArray(page.elements) ? page.elements : [];
+        if (!page.canvasHeight) page.canvasHeight = 520;
+        if (!page.backgroundColor) page.backgroundColor = '#ffffff';
+        return page;
+    }
+
+    function makeElement(type, x, y) {
+        return {
+            id: 'el-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            type: type,
+            x: x != null ? x : 10,
+            y: y != null ? y : 10,
+            width: type === 'image' ? 35 : (type === 'title' ? 80 : 55),
+            zIndex: 1,
+            content: type === 'title' ? 'New title' : (type === 'text' ? '<p>New paragraph — double-click to edit.</p>' : ''),
+            url: '',
+            alt: '',
+            font: '',
+            fontSize: type === 'title' ? 32 : 16,
+            color: type === 'title' ? '#0f172a' : '#334155',
+            align: 'left'
+        };
+    }
+
+    function getSelectedElement(page) {
+        if (!page || !editorState.selectedElementId) return null;
+        return (page.elements || []).find(function (el) { return el.id === editorState.selectedElementId; }) || null;
+    }
+
+    function scrollPreviewToPage(iframe, slug) {
+        if (!iframe || !slug) return;
+        try {
+            var doc = iframe.contentDocument || iframe.contentWindow.document;
+            if (!doc) return;
+            var target = doc.getElementById(slug);
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        } catch (_e) {}
+    }
+
+    function renderVisualPagesPanel(root) {
         var pages = editorState.content.pages || {};
         var pageIds = Object.keys(pages);
-        var page = getSelectedPage();
-        var htmlBlock = (page.blocks || []).find(function (b) { return b && b.type === 'html'; }) || { type: 'html', content: '' };
+        var page = ensurePageElements(getSelectedPage());
+        pages[editorState.selectedPageId] = page;
 
         var pageOptions = pageIds.map(function (id) {
             var p = pages[id];
             return '<option value="' + escapeHtml(id) + '" ' + (id === editorState.selectedPageId ? 'selected' : '') + '>' + escapeHtml(p.title || id) + '</option>';
         }).join('');
 
-        var fontOptions = function (selected) {
-            return FONT_OPTIONS.map(function (opt) {
-                return '<option value="' + escapeHtml(opt.id) + '" ' + (opt.id === selected ? 'selected' : '') + '>' + escapeHtml(opt.label) + '</option>';
-            }).join('');
-        };
+        var previewSrc = String(window.location.pathname || '').indexOf('subdomain-dashboard') >= 0 ? '../index.html' : 'index.html';
 
         root.innerHTML = [
-            '<div class="site-admin-card">',
-            '<div class="site-admin-row">',
-            '<label>Page<select data-page-select>' + pageOptions + '</select></label>',
-            '<label>Section ID / anchor<input type="text" data-page-slug value="' + escapeHtml(page.slug || page.id || '') + '"></label>',
-            '<label style="flex-direction:row;align-items:center;gap:6px;margin-top:22px;"><input type="checkbox" data-page-visible ' + (page.visible !== false ? 'checked' : '') + '> Visible on site</label>',
+            '<div class="visual-page-editor">',
+            '<div class="visual-page-toolbar">',
+            '<label>Page <select data-page-select>' + pageOptions + '</select></label>',
+            '<label>Anchor <input type="text" data-page-slug value="' + escapeHtml(page.slug || page.id || '') + '" style="width:120px;"></label>',
+            '<label><input type="checkbox" data-page-visible ' + (page.visible !== false ? 'checked' : '') + '> Visible</label>',
+            '<label>Height <input type="number" min="320" max="2400" step="20" data-page-height value="' + (page.canvasHeight || 520) + '" style="width:90px;"> px</label>',
+            '<button type="button" class="btn btn-outline" data-add-title>+ Title</button>',
+            '<button type="button" class="btn btn-outline" data-add-text>+ Text</button>',
+            '<button type="button" class="btn btn-outline" data-add-image>+ Image</button>',
             '</div>',
-            '<div class="site-admin-row">',
-            '<label>Page title<input type="text" data-page-title value="' + escapeHtml(page.title || '') + '"></label>',
-            '<label>Subtitle<input type="text" data-page-subtitle value="' + escapeHtml(page.subtitle || '') + '"></label>',
+            '<div class="visual-page-layout">',
+            '<div>',
+            '<div class="visual-preview-wrap">',
+            '<iframe data-page-preview src="' + previewSrc + '" title="Live page preview"></iframe>',
             '</div>',
-            '<div class="site-admin-row">',
-            '<label>Heading font<select data-page-heading-font>' + fontOptions(page.headingFont || '') + '</select></label>',
-            '<label>Body font<select data-page-body-font>' + fontOptions(page.bodyFont || '') + '</select></label>',
+            '<p class="visual-canvas-label">This is your editable page area — click anywhere to add content, or drag elements to reposition them. The preview above shows how the section appears on the live site.</p>',
+            '<div class="visual-canvas-wrap">',
+            '<div class="visual-canvas" data-visual-canvas style="min-height:' + (page.canvasHeight || 520) + 'px;background-color:' + escapeHtml(page.backgroundColor || '#ffffff') + ';' + (page.backgroundImage ? 'background-image:url(' + page.backgroundImage + ');background-size:cover;background-position:center;' : '') + '"></div>',
             '</div>',
-            '<label>Hero image URL<input type="text" data-page-hero value="' + escapeHtml(page.heroImage || '') + '"></label>',
-            '<div style="margin:8px 0;"><input type="file" accept="image/*" data-page-hero-upload style="display:none;"><button type="button" class="btn btn-outline" data-page-hero-upload-btn>Upload hero image</button></div>',
-            '<div class="site-admin-toolbar" data-rich-toolbar>',
-            '<button type="button" data-cmd="bold">Bold</button>',
-            '<button type="button" data-cmd="italic">Italic</button>',
-            '<button type="button" data-cmd="underline">Underline</button>',
-            '<button type="button" data-cmd="insertUnorderedList">Bullet list</button>',
-            '<button type="button" data-cmd="formatBlock" data-value="h3">Heading</button>',
-            '<button type="button" data-cmd="createLink">Link</button>',
-            '<button type="button" data-cmd="insertImage">Image</button>',
             '</div>',
-            '<div class="site-admin-rich" contenteditable="true" data-page-editor>' + String(htmlBlock.content || '') + '</div>',
-            '<button type="button" class="btn btn-outline" data-add-image-block style="margin-top:8px;">Add image block below text</button>',
+            '<aside class="visual-inspector" data-visual-inspector></aside>',
+            '</div>',
             '</div>'
         ].join('');
 
-        var editor = root.querySelector('[data-page-editor]');
-        var toolbar = root.querySelector('[data-rich-toolbar]');
-        bindRichToolbar(toolbar, editor);
+        var canvas = root.querySelector('[data-visual-canvas]');
+        var inspector = root.querySelector('[data-visual-inspector]');
+        var iframe = root.querySelector('[data-page-preview]');
+        var dragState = null;
 
-        function syncPageFromForm() {
-            page.title = root.querySelector('[data-page-title]').value;
-            page.subtitle = root.querySelector('[data-page-subtitle]').value;
+        function syncPageMeta() {
             page.slug = root.querySelector('[data-page-slug]').value || page.id;
-            page.headingFont = root.querySelector('[data-page-heading-font]').value;
-            page.bodyFont = root.querySelector('[data-page-body-font]').value;
-            page.heroImage = root.querySelector('[data-page-hero]').value;
             page.visible = root.querySelector('[data-page-visible]').checked;
-            htmlBlock.content = editor.innerHTML;
-            page.blocks = [htmlBlock].concat((page.blocks || []).filter(function (b) { return b && b.type === 'image'; }));
+            page.canvasHeight = parseInt(root.querySelector('[data-page-height]').value, 10) || 520;
             pages[editorState.selectedPageId] = page;
             editorState.content.pages = pages;
         }
 
-        root.querySelector('[data-page-select]').addEventListener('change', function (e) {
-            syncPageFromForm();
-            editorState.selectedPageId = e.target.value;
-            renderPagesPanel(root);
-        });
-        ['[data-page-title]', '[data-page-subtitle]', '[data-page-slug]', '[data-page-heading-font]', '[data-page-body-font]', '[data-page-hero]'].forEach(function (sel) {
-            root.querySelector(sel).addEventListener('input', syncPageFromForm);
-            root.querySelector(sel).addEventListener('change', syncPageFromForm);
-        });
-        root.querySelector('[data-page-visible]').addEventListener('change', syncPageFromForm);
-        editor.addEventListener('input', syncPageFromForm);
+        function paintCanvas() {
+            canvas.style.minHeight = (page.canvasHeight || 520) + 'px';
+            canvas.style.backgroundColor = page.backgroundColor || '#ffffff';
+            canvas.innerHTML = (page.elements || []).map(function (el) {
+                var style = 'left:' + el.x + '%;top:' + el.y + '%;width:' + el.width + '%;z-index:' + (el.zIndex || 1) + ';';
+                if (el.font) style += 'font-family:' + (FONT_FAMILY_MAP[el.font] || el.font) + ';';
+                if (el.fontSize) style += 'font-size:' + el.fontSize + 'px;';
+                if (el.color) style += 'color:' + el.color + ';';
+                if (el.align) style += 'text-align:' + el.align + ';';
+                var selected = el.id === editorState.selectedElementId ? ' is-selected' : '';
+                if (el.type === 'image') {
+                    return '<div class="visual-canvas-element is-image' + selected + '" data-el-id="' + escapeHtml(el.id) + '" style="' + style + '"><img src="' + escapeHtml(el.url || '') + '" alt=""></div>';
+                }
+                if (el.type === 'title') {
+                    return '<div class="visual-canvas-element is-title' + selected + '" data-el-id="' + escapeHtml(el.id) + '" style="' + style + '">' + escapeHtml(el.content || '') + '</div>';
+                }
+                return '<div class="visual-canvas-element is-text' + selected + '" data-el-id="' + escapeHtml(el.id) + '" style="' + style + '">' + String(el.content || '') + '</div>';
+            }).join('');
+            paintInspector();
+        }
 
-        root.querySelector('[data-page-hero-upload-btn]').addEventListener('click', function () {
-            root.querySelector('[data-page-hero-upload]').click();
-        });
-        root.querySelector('[data-page-hero-upload]').addEventListener('change', function (e) {
-            var file = e.target.files && e.target.files[0];
-            if (!file) return;
-            uploadImage(file).then(function (url) {
-                root.querySelector('[data-page-hero]').value = url;
-                syncPageFromForm();
-            }).catch(function (err) {
-                window.alert(err && err.message ? err.message : 'Upload failed.');
-            });
-        });
+        function paintInspector() {
+            var el = getSelectedElement(page);
+            if (!el) {
+                inspector.innerHTML = '<h4>Element settings</h4><p class="visual-inspector-empty">Click an element on the canvas, or add a new title, text block, or image.</p>';
+                return;
+            }
+            inspector.innerHTML = [
+                '<h4>Edit ' + escapeHtml(el.type) + '</h4>',
+                el.type !== 'image'
+                    ? '<label>Content<textarea data-el-content>' + escapeHtml(el.content || '') + '</textarea></label>'
+                    : '<label>Image URL<input type="text" data-el-url value="' + escapeHtml(el.url || '') + '"></label><label>Alt text<input type="text" data-el-alt value="' + escapeHtml(el.alt || '') + '"></label><input type="file" accept="image/*" data-el-upload style="display:none;"><button type="button" class="btn btn-outline" data-el-upload-btn style="margin-bottom:8px;">Upload image</button>',
+                '<label>Width %<input type="number" min="10" max="100" data-el-width value="' + el.width + '"></label>',
+                '<label>Font<select data-el-font>' + fontOptionsHtml(el.font || '') + '</select></label>',
+                '<label>Size (px)<input type="number" min="10" max="96" data-el-size value="' + el.fontSize + '"></label>',
+                '<label>Colour<input type="color" data-el-color value="' + escapeHtml(el.color || '#0f172a') + '"></label>',
+                '<label>Align<select data-el-align><option value="left"' + (el.align === 'left' ? ' selected' : '') + '>Left</option><option value="center"' + (el.align === 'center' ? ' selected' : '') + '>Center</option><option value="right"' + (el.align === 'right' ? ' selected' : '') + '>Right</option></select></label>',
+                '<label>Layer<input type="number" min="1" max="20" data-el-z value="' + (el.zIndex || 1) + '"></label>',
+                '<button type="button" class="btn btn-outline" data-el-delete style="margin-top:6px;color:#b91c1c;border-color:#fecaca;">Delete element</button>'
+            ].join('');
 
-        root.querySelector('[data-add-image-block]').addEventListener('click', function () {
-            var input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.onchange = function () {
-                var file = input.files && input.files[0];
-                if (!file) return;
-                uploadImage(file).then(function (url) {
-                    page.blocks = page.blocks || [];
-                    page.blocks.push({ type: 'image', url: url, caption: '', alt: page.title || '' });
-                    pages[editorState.selectedPageId] = page;
-                    syncPageFromForm();
-                    setStatus(root.closest('.site-admin-editor').querySelector('[data-site-admin-status]'), 'Image block added. Save to publish.', false);
+            var contentInput = inspector.querySelector('[data-el-content]');
+            if (contentInput) {
+                contentInput.addEventListener('input', function (e) {
+                    el.content = e.target.value;
+                    paintCanvas();
                 });
+            }
+            var urlInput = inspector.querySelector('[data-el-url]');
+            if (urlInput) {
+                urlInput.addEventListener('input', function (e) {
+                    el.url = e.target.value;
+                    paintCanvas();
+                });
+            }
+            inspector.querySelector('[data-el-alt]')?.addEventListener('input', function (e) {
+                el.alt = e.target.value;
+            });
+            inspector.querySelector('[data-el-width]')?.addEventListener('input', function (e) {
+                el.width = parseFloat(e.target.value) || el.width;
+                paintCanvas();
+            });
+            inspector.querySelector('[data-el-font]')?.addEventListener('change', function (e) {
+                el.font = e.target.value;
+                paintCanvas();
+            });
+            inspector.querySelector('[data-el-size]')?.addEventListener('input', function (e) {
+                el.fontSize = parseInt(e.target.value, 10) || el.fontSize;
+                paintCanvas();
+            });
+            inspector.querySelector('[data-el-color]')?.addEventListener('input', function (e) {
+                el.color = e.target.value;
+                paintCanvas();
+            });
+            inspector.querySelector('[data-el-align]')?.addEventListener('change', function (e) {
+                el.align = e.target.value;
+                paintCanvas();
+            });
+            inspector.querySelector('[data-el-z]')?.addEventListener('input', function (e) {
+                el.zIndex = parseInt(e.target.value, 10) || 1;
+                paintCanvas();
+            });
+            inspector.querySelector('[data-el-delete]')?.addEventListener('click', function () {
+                page.elements = (page.elements || []).filter(function (item) { return item.id !== el.id; });
+                editorState.selectedElementId = '';
+                paintCanvas();
+            });
+            var uploadBtn = inspector.querySelector('[data-el-upload-btn]');
+            var uploadInput = inspector.querySelector('[data-el-upload]');
+            if (uploadBtn && uploadInput) {
+                uploadBtn.addEventListener('click', function () { uploadInput.click(); });
+                uploadInput.addEventListener('change', function (e) {
+                    var file = e.target.files && e.target.files[0];
+                    if (!file) return;
+                    uploadImage(file).then(function (url) {
+                        el.url = url;
+                        paintCanvas();
+                    });
+                });
+            }
+        }
+
+        function addElement(type) {
+            syncPageMeta();
+            var el = makeElement(type, 12, 12 + (page.elements.length * 8));
+            page.elements.push(el);
+            editorState.selectedElementId = el.id;
+            if (type === 'image') {
+                var input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.onchange = function () {
+                    var file = input.files && input.files[0];
+                    if (!file) return;
+                    uploadImage(file).then(function (url) {
+                        el.url = url;
+                        paintCanvas();
+                    });
+                };
+                input.click();
+            }
+            paintCanvas();
+        }
+
+        function showPlacementMenu(clientX, clientY, percentX, percentY) {
+            var existing = root.querySelector('.visual-placement-menu');
+            if (existing) existing.remove();
+
+            var menu = document.createElement('div');
+            menu.className = 'visual-placement-menu';
+            menu.innerHTML = [
+                '<span class="visual-placement-menu-label">Add here</span>',
+                '<button type="button" data-place="title">Title</button>',
+                '<button type="button" data-place="text">Text</button>',
+                '<button type="button" data-place="image">Image</button>'
+            ].join('');
+            menu.style.left = clientX + 'px';
+            menu.style.top = clientY + 'px';
+            document.body.appendChild(menu);
+
+            function closeMenu() {
+                menu.remove();
+                document.removeEventListener('click', onDocClick, true);
+            }
+
+            function onDocClick(e) {
+                if (!menu.contains(e.target)) closeMenu();
+            }
+
+            setTimeout(function () {
+                document.addEventListener('click', onDocClick, true);
+            }, 0);
+
+            menu.querySelectorAll('[data-place]').forEach(function (btn) {
+                btn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    var type = btn.getAttribute('data-place');
+                    closeMenu();
+                    syncPageMeta();
+                    var el = makeElement(type, percentX, percentY);
+                    page.elements.push(el);
+                    editorState.selectedElementId = el.id;
+                    if (type === 'image') {
+                        var input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = 'image/*';
+                        input.onchange = function () {
+                            var file = input.files && input.files[0];
+                            if (!file) return;
+                            uploadImage(file).then(function (url) {
+                                el.url = url;
+                                paintCanvas();
+                            });
+                        };
+                        input.click();
+                    }
+                    paintCanvas();
+                });
+            });
+        }
+
+        canvas.addEventListener('mousedown', function (e) {
+            var node = e.target.closest('[data-el-id]');
+            if (!node) {
+                if (e.target === canvas || e.target.closest('[data-visual-canvas]') === canvas) {
+                    var rect = canvas.getBoundingClientRect();
+                    var percentX = Math.max(0, Math.min(92, ((e.clientX - rect.left) / rect.width) * 100));
+                    var percentY = Math.max(0, Math.min(92, ((e.clientY - rect.top) / rect.height) * 100));
+                    showPlacementMenu(e.clientX, e.clientY, percentX, percentY);
+                }
+                editorState.selectedElementId = '';
+                paintCanvas();
+                return;
+            }
+            e.preventDefault();
+            var elId = node.getAttribute('data-el-id');
+            var el = (page.elements || []).find(function (item) { return item.id === elId; });
+            if (!el) return;
+            editorState.selectedElementId = el.id;
+            paintCanvas();
+            var rect = canvas.getBoundingClientRect();
+            dragState = {
+                el: el,
+                startX: e.clientX,
+                startY: e.clientY,
+                origX: el.x,
+                origY: el.y,
+                width: rect.width,
+                height: rect.height
             };
-            input.click();
+            canvas.classList.add('is-dragging');
         });
+
+        window.addEventListener('mousemove', function onMove(e) {
+            if (!dragState) return;
+            var dx = ((e.clientX - dragState.startX) / dragState.width) * 100;
+            var dy = ((e.clientY - dragState.startY) / dragState.height) * 100;
+            dragState.el.x = Math.max(0, Math.min(95, dragState.origX + dx));
+            dragState.el.y = Math.max(0, Math.min(95, dragState.origY + dy));
+            paintCanvas();
+        });
+
+        window.addEventListener('mouseup', function onUp() {
+            if (!dragState) return;
+            dragState = null;
+            canvas.classList.remove('is-dragging');
+            syncPageMeta();
+        });
+
+        canvas.addEventListener('dblclick', function (e) {
+            var node = e.target.closest('[data-el-id]');
+            if (!node) return;
+            var elId = node.getAttribute('data-el-id');
+            var el = (page.elements || []).find(function (item) { return item.id === elId; });
+            if (!el || el.type === 'image') return;
+            var next = window.prompt('Edit content (HTML allowed for text blocks):', el.content || '');
+            if (next != null) {
+                el.content = next;
+                paintCanvas();
+            }
+        });
+
+        root.querySelector('[data-page-select]').addEventListener('change', function (e) {
+            syncPageMeta();
+            editorState.selectedPageId = e.target.value;
+            editorState.selectedElementId = '';
+            renderVisualPagesPanel(root);
+        });
+        root.querySelector('[data-page-slug]').addEventListener('input', syncPageMeta);
+        root.querySelector('[data-page-visible]').addEventListener('change', syncPageMeta);
+        root.querySelector('[data-page-height]').addEventListener('input', function () {
+            syncPageMeta();
+            paintCanvas();
+        });
+        root.querySelector('[data-add-title]').addEventListener('click', function () { addElement('title'); });
+        root.querySelector('[data-add-text]').addEventListener('click', function () { addElement('text'); });
+        root.querySelector('[data-add-image]').addEventListener('click', function () { addElement('image'); });
+
+        iframe.addEventListener('load', function () {
+            scrollPreviewToPage(iframe, page.slug || page.id);
+        });
+        scrollPreviewToPage(iframe, page.slug || page.id);
+
+        paintCanvas();
+    }
+
+    function renderPagesPanel(root) {
+        renderVisualPagesPanel(root);
     }
 
     function renderEditor(mount) {
         mount.innerHTML = [
             '<div class="site-admin-editor">',
-            '<p class="muted-text" style="margin:0 0 12px;">Edit navbar links, footer columns, and page content shown on the landing site. Use the rich editor for text, links, and images.</p>',
+            '<p class="muted-text" style="margin:0 0 12px;">Edit navbar and footer links, then use the visual page builder to place titles, text, and images anywhere on each page section.</p>',
             '<div class="site-admin-tabs">',
             '<button type="button" class="site-admin-tab is-active" data-tab="navbar">Navbar</button>',
             '<button type="button" class="site-admin-tab" data-tab="footer">Footer</button>',
-            '<button type="button" class="site-admin-tab" data-tab="pages">Page content</button>',
+            '<button type="button" class="site-admin-tab" data-tab="pages">Visual page builder</button>',
             '</div>',
             '<div class="site-admin-panel is-active" data-panel="navbar"></div>',
             '<div class="site-admin-panel" data-panel="footer"></div>',
@@ -453,17 +723,6 @@
 
         mount.querySelector('[data-site-save]').addEventListener('click', function () {
             try {
-                if (editorState.activeTab === 'pages') {
-                    var pagesPanel = panels.pages;
-                    var editor = pagesPanel.querySelector('[data-page-editor]');
-                    if (editor) {
-                        var page = getSelectedPage();
-                        var htmlBlock = (page.blocks || []).find(function (b) { return b && b.type === 'html'; }) || { type: 'html', content: '' };
-                        htmlBlock.content = editor.innerHTML;
-                        page.blocks = [htmlBlock].concat((page.blocks || []).filter(function (b) { return b && b.type === 'image'; }));
-                        editorState.content.pages[editorState.selectedPageId] = page;
-                    }
-                }
                 saveContent(statusEl);
             } catch (err) {
                 setStatus(statusEl, err && err.message ? err.message : 'Save failed.', true);

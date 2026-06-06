@@ -2523,7 +2523,7 @@
                 '<div>',
                 '<section id="admin-section-site-content" style="margin-bottom:24px;">',
                 '<h3 style="margin:0 0 10px;">Site content editor</h3>',
-                '<p class="muted-text" style="margin:0 0 12px;">Manage navbar links, footer links, and landing page content (text, images, fonts).</p>',
+                '<p class="muted-text" style="margin:0 0 12px;">Manage navbar links, footer links, and page sections with the visual builder — drag titles, text, and images anywhere on each page.</p>',
                 '<div id="admin-site-content-editor"></div>',
                 '</section>',
                 '<section id="admin-section-profile-changes" style="margin-bottom:24px;">',

@@ -59,13 +59,37 @@ function get_default_site_content() {
             'id' => $id,
             'slug' => $id,
             'title' => $title,
-            'subtitle' => '',
-            'headingFont' => '',
-            'bodyFont' => '',
-            'heroImage' => '',
             'visible' => true,
-            'blocks' => array(
-                array('type' => 'html', 'content' => $html)
+            'canvasHeight' => 520,
+            'backgroundColor' => '#ffffff',
+            'backgroundImage' => '',
+            'elements' => array(
+                array(
+                    'id' => 'el-' . $id . '-title',
+                    'type' => 'title',
+                    'content' => $title,
+                    'x' => 5,
+                    'y' => 6,
+                    'width' => 90,
+                    'zIndex' => 1,
+                    'font' => '',
+                    'fontSize' => 34,
+                    'color' => '#0f172a',
+                    'align' => 'left'
+                ),
+                array(
+                    'id' => 'el-' . $id . '-text',
+                    'type' => 'text',
+                    'content' => $html,
+                    'x' => 5,
+                    'y' => 20,
+                    'width' => 65,
+                    'zIndex' => 2,
+                    'font' => '',
+                    'fontSize' => 16,
+                    'color' => '#334155',
+                    'align' => 'left'
+                )
             )
         );
     };
@@ -166,6 +190,134 @@ function normalize_site_footer_link($link, $fallbackId = '') {
     );
 }
 
+function normalize_site_page_element($element, $fallbackId = '') {
+    if (!is_array($element)) {
+        return null;
+    }
+    $id = trim((string) ($element['id'] ?? $fallbackId));
+    if ($id === '') {
+        $id = make_id('el');
+    }
+    $type = strtolower(trim((string) ($element['type'] ?? 'text')));
+    if (!in_array($type, array('title', 'text', 'image'), true)) {
+        $type = 'text';
+    }
+    $normalized = array(
+        'id' => $id,
+        'type' => $type,
+        'x' => max(0, min(95, (float) ($element['x'] ?? 5))),
+        'y' => max(0, min(95, (float) ($element['y'] ?? 5))),
+        'width' => max(10, min(100, (float) ($element['width'] ?? 50))),
+        'zIndex' => max(1, (int) ($element['zIndex'] ?? 1)),
+        'font' => trim((string) ($element['font'] ?? '')),
+        'fontSize' => max(10, min(96, (int) ($element['fontSize'] ?? ($type === 'title' ? 32 : 16)))),
+        'color' => trim((string) ($element['color'] ?? '#0f172a')),
+        'align' => in_array(strtolower(trim((string) ($element['align'] ?? 'left'))), array('left', 'center', 'right'), true)
+            ? strtolower(trim((string) ($element['align']))
+            : 'left'
+    );
+    if ($type === 'image') {
+        $url = trim((string) ($element['url'] ?? ''));
+        if ($url === '') {
+            return null;
+        }
+        $normalized['url'] = $url;
+        $normalized['alt'] = trim((string) ($element['alt'] ?? ''));
+        return $normalized;
+    }
+    $content = trim((string) ($element['content'] ?? ''));
+    if ($content === '') {
+        return null;
+    }
+    $normalized['content'] = $content;
+    return $normalized;
+}
+
+function migrate_site_page_blocks_to_elements($page) {
+    $existing = isset($page['elements']) && is_array($page['elements']) ? $page['elements'] : array();
+    if ($existing) {
+        return $existing;
+    }
+    $elements = array();
+    $y = 6;
+    $title = trim((string) ($page['title'] ?? ''));
+    if ($title !== '') {
+        $elements[] = array(
+            'id' => make_id('el'),
+            'type' => 'title',
+            'content' => $title,
+            'x' => 5,
+            'y' => $y,
+            'width' => 90,
+            'zIndex' => 1,
+            'font' => trim((string) ($page['headingFont'] ?? '')),
+            'fontSize' => 32,
+            'color' => '#0f172a',
+            'align' => 'left'
+        );
+        $y += 14;
+    }
+    foreach ((array) ($page['blocks'] ?? array()) as $block) {
+        if (!is_array($block)) {
+            continue;
+        }
+        if (($block['type'] ?? '') === 'image') {
+            $url = trim((string) ($block['url'] ?? ''));
+            if ($url !== '') {
+                $elements[] = array(
+                    'id' => make_id('el'),
+                    'type' => 'image',
+                    'url' => $url,
+                    'alt' => trim((string) ($block['alt'] ?? $title)),
+                    'x' => 5,
+                    'y' => $y,
+                    'width' => 40,
+                    'zIndex' => 1,
+                    'font' => '',
+                    'fontSize' => 16,
+                    'color' => '#0f172a',
+                    'align' => 'left'
+                );
+                $y += 22;
+            }
+            continue;
+        }
+        $html = trim((string) ($block['content'] ?? ''));
+        if ($html !== '') {
+            $elements[] = array(
+                'id' => make_id('el'),
+                'type' => 'text',
+                'content' => $html,
+                'x' => 5,
+                'y' => $y,
+                'width' => 70,
+                'zIndex' => 1,
+                'font' => trim((string) ($page['bodyFont'] ?? '')),
+                'fontSize' => 16,
+                'color' => '#334155',
+                'align' => 'left'
+            );
+            $y += 18;
+        }
+    }
+    if (!$elements) {
+        $elements[] = array(
+            'id' => make_id('el'),
+            'type' => 'text',
+            'content' => '<p>Click and drag elements anywhere on this page area.</p>',
+            'x' => 5,
+            'y' => 10,
+            'width' => 60,
+            'zIndex' => 1,
+            'font' => '',
+            'fontSize' => 16,
+            'color' => '#334155',
+            'align' => 'left'
+        );
+    }
+    return $elements;
+}
+
 function normalize_site_page_block($block) {
     if (!is_array($block)) {
         return null;
@@ -201,26 +353,32 @@ function normalize_site_page($page, $fallbackId = '') {
     if ($id === '') {
         return null;
     }
-    $blocks = array();
-    foreach ((array) ($page['blocks'] ?? array()) as $block) {
-        $normalizedBlock = normalize_site_page_block($block);
-        if ($normalizedBlock !== null) {
-            $blocks[] = $normalizedBlock;
+    $elementsIn = migrate_site_page_blocks_to_elements($page);
+    $elements = array();
+    foreach ($elementsIn as $idx => $element) {
+        $normalizedElement = normalize_site_page_element($element, 'el-' . $idx);
+        if ($normalizedElement !== null) {
+            $elements[] = $normalizedElement;
         }
     }
-    if (!$blocks) {
-        $blocks[] = array('type' => 'html', 'content' => '<p>Content coming soon.</p>');
+    if (!$elements) {
+        $fallbackElements = migrate_site_page_blocks_to_elements($page);
+        foreach ($fallbackElements as $idx => $element) {
+            $normalizedElement = normalize_site_page_element($element, 'el-' . $idx);
+            if ($normalizedElement !== null) {
+                $elements[] = $normalizedElement;
+            }
+        }
     }
     return array(
         'id' => $id,
         'slug' => trim((string) ($page['slug'] ?? $id)) ?: $id,
         'title' => trim((string) ($page['title'] ?? $id)),
-        'subtitle' => trim((string) ($page['subtitle'] ?? '')),
-        'headingFont' => trim((string) ($page['headingFont'] ?? '')),
-        'bodyFont' => trim((string) ($page['bodyFont'] ?? '')),
-        'heroImage' => trim((string) ($page['heroImage'] ?? '')),
         'visible' => !array_key_exists('visible', $page) || !empty($page['visible']),
-        'blocks' => $blocks
+        'canvasHeight' => max(320, min(2400, (int) ($page['canvasHeight'] ?? 520))),
+        'backgroundColor' => trim((string) ($page['backgroundColor'] ?? '#ffffff')),
+        'backgroundImage' => trim((string) ($page['backgroundImage'] ?? '')),
+        'elements' => $elements
     );
 }
 

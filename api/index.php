@@ -6613,14 +6613,16 @@ switch ($action) {
         $normalized = normalize_site_content($incoming);
         if (is_array($normalized['pages'] ?? null)) {
             foreach ($normalized['pages'] as $pageId => $page) {
-                if (!is_array($page) || !isset($page['blocks']) || !is_array($page['blocks'])) {
+                if (!is_array($page) || !isset($page['elements']) || !is_array($page['elements'])) {
                     continue;
                 }
-                foreach ($page['blocks'] as $bidx => $block) {
-                    if (!is_array($block) || ($block['type'] ?? '') !== 'html') {
+                foreach ($page['elements'] as $eidx => $element) {
+                    if (!is_array($element)) {
                         continue;
                     }
-                    $normalized['pages'][$pageId]['blocks'][$bidx]['content'] = sanitize_site_content_html($block['content'] ?? '');
+                    if (($element['type'] ?? '') === 'text') {
+                        $normalized['pages'][$pageId]['elements'][$eidx]['content'] = sanitize_site_content_html($element['content'] ?? '');
+                    }
                 }
             }
         }
