@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
     const STANDARD_TRANSPORT_MODES = ['Car', 'Motorbike', 'Bicycle', 'Van', 'Truck', 'Trailer'];
     const STANDARD_PAYMENT_METHOD_KEYS = ['cash', 'cheque', 'visa', 'mastercard', 'paypal', 'americanExpress', 'bankTransfer', 'revolut'];
     let editorCustomTransportModes = [];
@@ -26,16 +26,40 @@
             return;
         }
 
+        const viewer = getViewer();
+        if (!viewer || !viewer.id) {
+            renderError('Sign in to view transport provider profiles.');
+            return;
+        }
+
         loadProvider(userId).then(function (user) {
             if (!user) {
                 renderError('Provider not found.');
                 return;
             }
-            renderProvider(user);
+            const isOwn = viewer && String(viewer.id) === String(user.id);
+            applyProfilePageChrome(user, isOwn);
+            renderProvider(user, isOwn);
+            renderJobHistory(user.id, isOwn);
         }).catch(function (err) {
             console.error(err);
             renderError('Failed to load provider.');
         });
+    }
+
+    function applyProfilePageChrome(user, isOwn) {
+        const name = firstText(user.businessName, user.name, user.nickname, user.username, 'Transport provider');
+        const titleEl = document.querySelector('.profile-page-title');
+        const introEl = document.querySelector('.profile-page-intro');
+        if (titleEl) {
+            titleEl.textContent = isOwn ? 'My Profile' : name;
+        }
+        if (introEl) {
+            introEl.textContent = isOwn
+                ? 'Keep your provider profile current with business details, services, payment options, and photos. When you save, changes are sent to an admin for review before they go live.'
+                : 'View this transport provider\'s public profile, customer reviews, and job history before you hire.';
+        }
+        document.body.classList.toggle('provider-profile-public-view', !isOwn);
     }
 
     // Expose a helper to render a compact profile into any container (used by dashboard)
@@ -51,11 +75,10 @@
             const contact = escapeHtml(firstText(contactVal || 'Not provided'));
             const about = escapeHtml(firstText(u.description, u.businessDescription, u.about, 'No description provided.'));
             const services = Array.isArray(u.services) && u.services.length ? '<ul>' + u.services.map(s => '<li>' + escapeHtml(s) + '</li>').join('') + '</ul>' : 'Not provided';
-            const transportModes = getTransportModes(u);
-            const transportModesHtml = transportModes.length
-                ? '<div style="display:flex; gap:6px; flex-wrap:wrap;">' + transportModes.map(function (mode) {
-                    return '<span class="provider-transport-chip">' + escapeHtml(mode) + '</span>';
-                }).join('') + '</div>'
+            const fleetApi = getFleetApi();
+            const fleet = fleetApi ? fleetApi.normalizeFleetFromUser(u, getTransportModes) : [];
+            const fleetHtml = fleetApi && fleet.length
+                ? fleetApi.renderPublicFleetHtml(fleet)
                 : 'Not provided';
             const initial = escapeHtml(String((u.name || '').toString().charAt(0) || 'P'));
             return '<div class="provider-card">' +
@@ -67,13 +90,7 @@
                 '<div style="margin-top:8px;"><span class="label">Contact</span><div class="profile-value">' + contact + '</div></div>' +
                 '<div style="margin-top:8px;"><span class="label">About</span><div class="profile-value">' + about + '</div></div>' +
                 '<div style="margin-top:8px;"><span class="label">Services</span><div class="profile-value">' + services + '</div></div>' +
-                '<div style="margin-top:8px;"><span class="label">Modes of transport</span><div class="profile-value">' + transportModesHtml + '</div></div>' +
-                (function () {
-                    const fleet = formatVehicleCountLabel(u);
-                    return fleet
-                        ? '<div style="margin-top:8px;"><span class="label">Vehicles available</span><div class="profile-value">' + escapeHtml(fleet) + '</div></div>'
-                        : '';
-                })() +
+                '<div style="margin-top:8px;"><span class="label">Vehicles</span><div class="profile-value">' + fleetHtml + '</div></div>' +
                 '</div>';
         }
 
@@ -145,7 +162,8 @@
         });
     }
 
-    function renderProvider(u) {
+    function renderProvider(u, isOwn) {
+        const ownProfile = isOwn !== false && canEditProfile(u);
         setText('provider-name', firstText(u.businessName, u.name, u.nickname, u.username, u.email));
         setText('provider-role', u.role ? capitalize(String(u.role)) : 'Transport Provider');
         const descEl = document.getElementById('provider-description');
@@ -163,11 +181,15 @@
             if (loc) cityEl.textContent = loc;
             else cityEl.innerHTML = '<span class="provider-empty-hint">Not added yet</span>';
         }
-        const contact = revealContact(u) || '';
         const contactEl = document.getElementById('provider-contact');
         if (contactEl) {
-            if (contact) contactEl.textContent = contact;
-            else contactEl.innerHTML = '<span class="provider-empty-hint">Not provided</span>';
+            if (ownProfile) {
+                const contact = revealContact(u) || '';
+                if (contact) contactEl.textContent = contact;
+                else contactEl.innerHTML = '<span class="provider-empty-hint">Not provided</span>';
+            } else {
+                contactEl.innerHTML = '<span class="provider-empty-hint">Contact details are shared through AnyTransport messages after you connect.</span>';
+            }
         }
         const aboutCombined = firstText(u.bio, u.summary, descText, '');
         const aboutEl = document.getElementById('provider-about');
@@ -177,14 +199,169 @@
         }
 
         renderServices(u);
-        renderTransportModes(u);
-        renderVehicleCount(u);
+        renderVehicleFleet(u);
         renderPayments(u);
         renderPhotos(u);
-        renderActions(u);
-        syncPendingProviderNav(u, canEditProfile(u));
+        renderActions(u, ownProfile);
+        syncPendingProviderNav(u, ownProfile);
         renderAvatar(u);
-        renderEditor(u, getProfileEditorUser(u));
+        if (ownProfile) {
+            renderEditor(u, getProfileEditorUser(u));
+        } else {
+            const editRoot = document.getElementById('provider-edit');
+            if (editRoot) editRoot.innerHTML = '';
+        }
+        renderReviews(u);
+    }
+
+    function renderJobHistory(providerId, isOwn) {
+        const section = document.getElementById('provider-job-history-section');
+        const summaryEl = document.getElementById('provider-job-history-summary');
+        const listEl = document.getElementById('provider-job-history-list');
+        if (!section || !listEl) return;
+
+        section.style.display = '';
+
+        function paint(payload) {
+            const history = payload && Array.isArray(payload.jobHistory) ? payload.jobHistory : [];
+            const stats = payload && payload.stats ? payload.stats : {};
+            const completed = Number(stats.completedJobs) || 0;
+            const quoted = Number(stats.quotedJobs) || history.length;
+            if (summaryEl) {
+                if (!history.length) {
+                    summaryEl.textContent = isOwn
+                        ? 'When you complete jobs on AnyTransport, they appear here for customers to see.'
+                        : 'This provider has no recorded job history on AnyTransport yet.';
+                } else {
+                    summaryEl.textContent = completed + ' completed · ' + quoted + ' total on platform'
+                        + (isOwn ? ' (visible to customers on your profile).' : '.');
+                }
+            }
+            if (!history.length) {
+                listEl.innerHTML = '<p class="provider-empty-hint" style="margin:0;">No jobs to show yet.</p>';
+                return;
+            }
+            listEl.innerHTML = history.map(function (job) {
+                const service = escapeHtml(firstText(job.service, 'Transport job'));
+                const route = escapeHtml(firstText(job.route, 'Route not listed'));
+                const when = escapeHtml(formatReviewWhen(job.date) || 'Date unknown');
+                const formId = job.formId ? ('Listing #' + escapeHtml(String(job.formId))) : '';
+                const amount = job.bidAmount != null && Number(job.bidAmount) > 0
+                    ? (' · €' + escapeHtml(String(Number(job.bidAmount).toFixed(2))))
+                    : '';
+                const status = String(job.status || 'Quoted');
+                const statusClass = status === 'Completed'
+                    ? 'provider-job-history-status--completed'
+                    : (status === 'Awarded' ? 'provider-job-history-status--awarded' : 'provider-job-history-status--quoted');
+                return [
+                    '<article class="provider-job-history-item">',
+                    '<h4>' + service + '</h4>',
+                    '<p class="provider-job-history-meta">' + route + (formId ? (' · ' + formId) : '') + ' · ' + when + amount + '</p>',
+                    '<span class="provider-job-history-status ' + statusClass + '">' + escapeHtml(status) + '</span>',
+                    '</article>'
+                ].join('');
+            }).join('');
+        }
+
+        if (window.anytransportApi && typeof window.anytransportApi.getProviderPublicProfile === 'function') {
+            try {
+                paint(window.anytransportApi.getProviderPublicProfile(providerId));
+                return;
+            } catch (_e) {
+                /* fetch fallback */
+            }
+        }
+
+        const apiBase = String(window.ANYTRANSPORT_API_URL || 'api/index.php').trim();
+        const sep = apiBase.indexOf('?') >= 0 ? '&' : '?';
+        const apiUrl = apiBase + sep + 'action=providers.publicProfile&providerId=' + encodeURIComponent(String(providerId || ''));
+        fetch(apiUrl, { credentials: 'include' })
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .then(function (payload) {
+                if (!payload || !payload.ok) {
+                    if (summaryEl) summaryEl.textContent = 'Job history is unavailable right now.';
+                    listEl.innerHTML = '';
+                    return;
+                }
+                paint(payload);
+            })
+            .catch(function () {
+                if (summaryEl) summaryEl.textContent = 'Job history is unavailable right now.';
+                listEl.innerHTML = '';
+            });
+    }
+
+    function renderReviews(u) {
+        const summaryEl = document.getElementById('provider-review-summary');
+        const listEl = document.getElementById('provider-reviews-list');
+        if (!summaryEl && !listEl) return;
+
+        const providerId = String(u && u.id || '').trim();
+        if (!providerId) {
+            if (summaryEl) summaryEl.textContent = 'No reviews yet.';
+            if (listEl) listEl.innerHTML = '';
+            return;
+        }
+
+        function paint(payload) {
+            const stats = payload && payload.stats ? payload.stats : { count: 0, average: 0 };
+            const reviews = payload && Array.isArray(payload.reviews) ? payload.reviews : [];
+            const count = Number(stats.count) || 0;
+            const average = Number(stats.average) || 0;
+            if (summaryEl) {
+                summaryEl.textContent = count > 0
+                    ? (average.toFixed(1) + ' ★ average · ' + count + ' review' + (count === 1 ? '' : 's'))
+                    : 'No reviews yet.';
+            }
+            if (!listEl) return;
+            if (!reviews.length) {
+                listEl.innerHTML = '<p class="provider-empty-hint" style="margin:0;">Reviews appear here after customers complete a job and leave feedback.</p>';
+                return;
+            }
+            const top = reviews.slice(0, 6);
+            listEl.innerHTML = '<ul class="provider-services-list" style="padding-left:1rem;">' + top.map(function (review) {
+                const rating = Math.max(1, Math.min(5, parseInt(review.rating, 10) || 0));
+                const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+                const who = escapeHtml(firstText(review.customerName, 'Customer'));
+                const when = review.createdAt ? escapeHtml(formatReviewWhen(review.createdAt)) : '';
+                const text = escapeHtml(firstText(review.text, ''));
+                const formId = review.formId ? (' · Listing #' + escapeHtml(String(review.formId))) : '';
+                return '<li style="margin-bottom:10px;"><strong>' + stars + '</strong> ' + who
+                    + (when ? (' · ' + when) : '') + formId
+                    + (text ? ('<div style="margin-top:4px;color:#475569;">' + text + '</div>') : '')
+                    + '</li>';
+            }).join('') + '</ul>';
+        }
+
+        if (window.anytransportApi && typeof window.anytransportApi.listProviderReviews === 'function') {
+            try {
+                paint(window.anytransportApi.listProviderReviews(providerId, ''));
+                return;
+            } catch (_e) {
+                /* fall through to fetch */
+            }
+        }
+
+        const apiBase = String(window.ANYTRANSPORT_API_URL || 'api/index.php').trim();
+        const sep = apiBase.indexOf('?') >= 0 ? '&' : '?';
+        const apiUrl = apiBase + sep + 'action=reviews.list&providerId=' + encodeURIComponent(providerId);
+        fetch(apiUrl, { credentials: 'include' })
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .then(function (payload) { paint(payload || {}); })
+            .catch(function () {
+                if (summaryEl) summaryEl.textContent = 'Reviews unavailable.';
+                if (listEl) listEl.innerHTML = '';
+            });
+    }
+
+    function formatReviewWhen(iso) {
+        try {
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        } catch (_e) {
+            return '';
+        }
     }
 
     // Viewer helpers — decide whether to reveal full email or mask
@@ -228,17 +405,28 @@
         el.innerHTML = '<span class="provider-empty-hint">Add specialties in the editor below so customers see what you offer.</span>';
     }
 
-    function renderTransportModes(u) {
-        const el = document.getElementById('provider-transport-modes');
+    function getFleetApi() {
+        return window.anytransportProviderVehicles || null;
+    }
+
+    function renderVehicleFleet(u) {
+        const el = document.getElementById('provider-vehicle-fleet');
         if (!el) return;
-        const modes = getTransportModes(u);
-        if (modes.length) {
-            el.innerHTML = '<div class="provider-transport-chip-list">' + modes.map(function (mode) {
-                return '<span class="provider-transport-chip">' + transportModeIconSvg(mode) + '<span>' + escapeHtml(mode) + '</span></span>';
-            }).join('') + '</div>';
+        const fleetApi = getFleetApi();
+        const fleet = fleetApi ? fleetApi.normalizeFleetFromUser(u, getTransportModes) : [];
+        if (fleet.length && fleetApi) {
+            el.innerHTML = fleetApi.renderPublicFleetHtml(fleet);
             return;
         }
-        el.innerHTML = '<span class="provider-empty-hint">Add your transport modes in the editor below so customers know what vehicles you operate.</span>';
+        el.innerHTML = '<span class="provider-empty-hint">Add your vehicles in the editor below so customers know what you operate.</span>';
+    }
+
+    function renderTransportModes(u) {
+        renderVehicleFleet(u);
+    }
+
+    function renderVehicleCount(u) {
+        /* legacy hook — fleet display is unified in renderVehicleFleet */
     }
 
     function formatVehicleCountLabel(u) {
@@ -254,24 +442,13 @@
     }
 
     function parseVehicleCountFromInput() {
-        const el = document.getElementById('profile-vehicle-count');
-        if (!el) return null;
-        const raw = String(el.value || '').trim();
-        if (raw === '') return null;
-        const count = parseInt(raw, 10);
-        if (!Number.isFinite(count) || count < 0) return null;
-        return Math.min(9999, count);
-    }
-
-    function renderVehicleCount(u) {
-        const el = document.getElementById('provider-vehicle-count');
-        if (!el) return;
-        const label = formatVehicleCountLabel(u);
-        if (label) {
-            el.textContent = label;
-            return;
+        const fleetApi = getFleetApi();
+        const editorRoot = document.getElementById('profile-vehicle-fleet-editor');
+        if (fleetApi && editorRoot) {
+            const legacy = fleetApi.deriveLegacyFromFleet(fleetApi.collectFleetFromEditor(editorRoot));
+            return legacy.vehicleCount;
         }
-        el.innerHTML = '<span class="provider-empty-hint">Add how many vehicles you have available in the editor below.</span>';
+        return null;
     }
 
     function paymentMethodLabel(key) {
@@ -440,42 +617,51 @@
         });
     }
 
-    function renderActions(u) {
+    function renderActions(u, isOwnProfile) {
         const root = document.getElementById('provider-actions');
         if (!root) return;
         root.innerHTML = '';
 
         const reviewStatus = String(u.identityReviewStatus || '').trim();
+        const stripeComplete = String(u.stripeOnboardingStatus || '').trim().toLowerCase() === 'complete';
         const statusBadge = document.createElement('div');
         statusBadge.style.marginBottom = '10px';
-        const stripeComplete = String(u.stripeOnboardingStatus || '').trim().toLowerCase() === 'complete';
         if (stripeComplete || reviewStatus === 'approved' || u.verified) {
             statusBadge.className = 'provider-verified-badge';
             statusBadge.innerHTML = '<span aria-hidden="true">\u2713</span> Verified by AnyTransport';
         } else if (reviewStatus === 'rejected') {
             statusBadge.className = 'provider-verified-badge provider-verified-badge--rejected';
             statusBadge.textContent = 'Identity review rejected';
-        } else {
+        } else if (isOwnProfile) {
             statusBadge.className = 'provider-verified-badge provider-verified-badge--pending';
             statusBadge.textContent = 'Verification pending — check your email for the Stripe verification link';
         }
-        root.appendChild(statusBadge);
+        if (statusBadge.textContent || statusBadge.innerHTML) {
+            root.appendChild(statusBadge);
+        }
 
         const viewer = getViewer();
-        const isOwn = viewer && String(viewer.id) === String(u.id);
+        const isOwn = isOwnProfile !== false && viewer && String(viewer.id) === String(u.id);
 
         if (!isOwn) {
             const btnMessage = document.createElement('a');
-            btnMessage.className = 'btn btn-outline';
+            btnMessage.className = 'btn btn-primary';
             btnMessage.href = 'messages.html?to=' + encodeURIComponent(u.id);
             btnMessage.textContent = 'Message provider';
             root.appendChild(btnMessage);
+
+            const btnBack = document.createElement('a');
+            btnBack.className = 'btn btn-outline';
+            btnBack.href = 'customer-dashboard.html';
+            btnBack.textContent = 'Back to My Listings';
+            root.appendChild(btnBack);
+            return;
         }
 
         const btnListings = document.createElement('a');
         btnListings.className = 'btn btn-primary';
-        btnListings.href = 'dashboard.html?provider=' + encodeURIComponent(u.id);
-        btnListings.textContent = isOwn ? 'My listings' : 'View listings';
+        btnListings.href = 'dashboard.html';
+        btnListings.textContent = 'Provider dashboard';
         root.appendChild(btnListings);
     }
 
@@ -521,6 +707,8 @@
         const transportModeOptions = STANDARD_TRANSPORT_MODES.slice();
         let customTransportModes = getCustomTransportModes(u);
         editorCustomTransportModes = customTransportModes.slice();
+        const fleetApi = getFleetApi();
+        let editorFleet = fleetApi ? fleetApi.normalizeFleetFromUser(u, getTransportModes) : [];
         let pendingPhotos = [];
 
         root.innerHTML = [
@@ -606,25 +794,9 @@
                 return buildCheckbox('service_' + option.replace(/[^a-z0-9]+/ig, '_').toLowerCase(), option, serviceMatches(option, u), ' data-service-label="' + escapeAttribute(option) + '"' + disabledAttr);
             }).join(''),
             '      </div>',
-            '      <h3 class="profile-section-title" style="margin-top:20px;">Modes of transport</h3>',
-            '      <div class="profile-muted">Select the types of transport you currently operate so customers can quickly see if you are a fit.</div>',
-            '      <div class="profile-check-grid" id="profile-transport-modes-grid"></div>',
-            '      <div id="profile-custom-transport-wrap" style="margin-top:12px;">',
-            '        <div class="profile-help">Add other vehicle types you operate (e.g. Horse box, 7.5 tonne).</div>',
-            '        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center;">',
-            '          <input id="profile-custom-transport-input" class="form-input" type="text" placeholder="Vehicle name" maxlength="60" style="flex:1; min-width:180px;"' + disabledAttr + '>',
-            (isEditable ? '          <button type="button" id="profile-custom-transport-add" class="btn btn-outline">Add vehicle</button>' : ''),
-            '        </div>',
-            '      </div>',
-            '      <h3 class="profile-section-title" style="margin-top:20px;">Vehicles available</h3>',
-            '      <div class="profile-muted">How many vehicles do you have available for jobs?</div>',
-            '      <div class="profile-form-row" style="margin-top:12px;">',
-            '        <div class="profile-form-label">Number of vehicles</div>',
-            '        <div>',
-            '          <input id="profile-vehicle-count" class="form-input" type="number" min="0" max="9999" step="1" placeholder="e.g. 2" value="' + escapeAttribute(u.vehicleCount != null && u.vehicleCount !== '' ? String(u.vehicleCount) : '') + '"' + disabledAttr + '>',
-            '          <div class="profile-help">Optional. Shown on your public profile so customers know your capacity.</div>',
-            '        </div>',
-            '      </div>',
+            '      <h3 class="profile-section-title" style="margin-top:20px;">Vehicles</h3>',
+            '      <div class="profile-muted">Select the vehicles you operate, their max capacity, and how many of each you have. Customers see this on your public profile.</div>',
+            '      <div id="profile-vehicle-fleet-editor"></div>',
             '      <h3 class="profile-section-title" style="margin-top:20px;">Don\'t want any more invitations to bid?</h3>',
             '      <div class="profile-muted">Please tick here to prevent customers inviting you to quote.</div>',
             '      <div class="profile-check-grid" style="margin-top:14px;">',
@@ -759,19 +931,14 @@
             const servicesChange = formatArrayChange('Jobs you specialise in', saved.services, current.services);
             if (servicesChange) changes.push(servicesChange);
 
-            const transportChange = formatArrayChange('Modes of transport', saved.transportModes, current.transportModes);
+            const transportChange = fleetApi
+                ? fleetApi.formatFleetChange(saved.providerVehicles, current.providerVehicles)
+                : formatArrayChange('Modes of transport', saved.transportModes, current.transportModes);
             if (transportChange) changes.push(transportChange);
 
             formatPaymentMethodsChange(saved, current).forEach(function (line) {
                 changes.push(line);
             });
-
-            const vehicleChange = formatTextChange(
-                'Number of vehicles',
-                saved.vehicleCount != null && saved.vehicleCount !== '' ? String(saved.vehicleCount) : '',
-                current.vehicleCount != null && current.vehicleCount !== '' ? String(current.vehicleCount) : ''
-            );
-            if (vehicleChange) changes.push(vehicleChange);
 
             const inviteChange = formatBooleanChange('Stop job invitations', saved.blockInvites, current.blockInvites);
             if (inviteChange) changes.push(inviteChange);
@@ -857,9 +1024,16 @@
 
         function buildPayload() {
             const services = collectCheckedServices();
-            const transportModes = collectCheckedTransportModes();
             const paymentMethods = collectPaymentMethods();
             const paymentMethodsCustom = collectCheckedCustomPaymentMethods();
+            const fleetRoot = document.getElementById('profile-vehicle-fleet-editor');
+            const fleetApiLocal = getFleetApi();
+            const fleet = fleetApiLocal && fleetRoot
+                ? fleetApiLocal.collectFleetFromEditor(fleetRoot)
+                : editorFleet;
+            const fleetLegacy = fleetApiLocal
+                ? fleetApiLocal.deriveLegacyFromFleet(fleet)
+                : { providerVehicles: [], transportModes: collectCheckedTransportModes(), vehicleCount: null };
             const city = String(document.getElementById('profile-city')?.value || '').trim();
             const businessName = String(document.getElementById('profile-business-name')?.value || '').trim();
             return {
@@ -886,8 +1060,9 @@
                 services: services,
                 categories: services,
                 skills: services,
-                transportModes: transportModes,
-                vehicleCount: parseVehicleCountFromInput(),
+                transportModes: fleetLegacy.transportModes,
+                providerVehicles: fleetLegacy.providerVehicles,
+                vehicleCount: fleetLegacy.vehicleCount,
                 paymentMethods: paymentMethods,
                 paymentMethodsCustom: paymentMethodsCustom,
                 acceptsCash: !!paymentMethods.cash,
@@ -1033,8 +1208,7 @@
                     try {
                         renderPayments(liveUser);
                         renderServices(liveUser);
-                        renderTransportModes(liveUser);
-                        renderVehicleCount(liveUser);
+                        renderVehicleFleet(liveUser);
                     } catch (_e) {}
                     const successText = document.getElementById('profile-save-success-text');
                     const successTitle = document.getElementById('profile-save-success-title');
@@ -1046,6 +1220,18 @@
                     }
                     if (successTitle) {
                         successTitle.textContent = pendingReview ? 'Changes submitted' : 'Profile saved';
+                    }
+                    const bannerHost = root.querySelector('.profile-editor-header > div');
+                    if (bannerHost && isEditable) {
+                        const existingBanner = bannerHost.querySelector('[data-profile-review-banner]');
+                        if (existingBanner) existingBanner.remove();
+                        const bannerHtml = buildProfileChangeStatusBanner(liveUser);
+                        if (bannerHtml) {
+                            const wrap = document.createElement('div');
+                            wrap.setAttribute('data-profile-review-banner', '1');
+                            wrap.innerHTML = bannerHtml;
+                            bannerHost.insertBefore(wrap.firstChild, bannerHost.querySelector('.profile-editor-subtitle')?.nextSibling || null);
+                        }
                     }
                     const viewer = getViewer();
                     if (viewer && String(viewer.id) === String(serverUser.id) && window.auth) {
@@ -1214,98 +1400,14 @@
             });
         }
 
-        function readCheckedTransportModeKeys() {
-            const keys = {};
-            const grid = document.getElementById('profile-transport-modes-grid');
-            if (!grid) return keys;
-            grid.querySelectorAll('input[data-transport-mode-label]:checked').forEach(function (input) {
-                const key = transportModeKey(input.getAttribute('data-transport-mode-label'));
-                if (key) keys[key] = true;
-            });
-            return keys;
-        }
-
-        function renderTransportModesGrid() {
-            const grid = document.getElementById('profile-transport-modes-grid');
-            if (!grid) return;
-            const checkedKeys = readCheckedTransportModeKeys();
-            const hasChecked = Object.keys(checkedKeys).length > 0;
-            function isChecked(option) {
-                const key = transportModeKey(option);
-                if (hasChecked) return !!checkedKeys[key];
-                return transportModeMatches(option, u);
-            }
-            grid.innerHTML =
-                transportModeOptions.map(function (option) {
-                    return buildTransportModeCheckbox(option, isChecked(option), disabledAttr);
-                }).join('') +
-                customTransportModes.map(function (mode, index) {
-                    return buildCustomTransportModeCheckbox(mode, isChecked(mode), disabledAttr, index, isEditable);
-                }).join('');
-            editorCustomTransportModes = customTransportModes.slice();
-        }
-
-        function addCustomTransportMode() {
-            const input = document.getElementById('profile-custom-transport-input');
-            const name = String(input && input.value || '').trim();
-            if (!name) return;
-            if (isStandardTransportMode(name)) {
-                alert('That vehicle is already listed above — tick it there instead.');
-                return;
-            }
-            const key = transportModeKey(name);
-            if (customTransportModes.some(function (entry) { return transportModeKey(entry) === key; })) {
-                alert('You already added that vehicle.');
-                return;
-            }
-            const checkedKeys = readCheckedTransportModeKeys();
-            checkedKeys[key] = true;
-            customTransportModes.push(name);
-            if (input) input.value = '';
-            const grid = document.getElementById('profile-transport-modes-grid');
-            if (grid) {
-                grid.innerHTML =
-                    transportModeOptions.map(function (option) {
-                        return buildTransportModeCheckbox(option, !!checkedKeys[transportModeKey(option)], disabledAttr);
-                    }).join('') +
-                    customTransportModes.map(function (mode, index) {
-                        return buildCustomTransportModeCheckbox(mode, !!checkedKeys[transportModeKey(mode)], disabledAttr, index, isEditable);
-                    }).join('');
-                editorCustomTransportModes = customTransportModes.slice();
-            }
-            markProfileDirty();
-        }
-
-        const customTransportAddBtn = document.getElementById('profile-custom-transport-add');
-        const customTransportInput = document.getElementById('profile-custom-transport-input');
-        const transportModesGrid = document.getElementById('profile-transport-modes-grid');
-
-        renderTransportModesGrid();
-
-        if (customTransportAddBtn && isEditable) {
-            customTransportAddBtn.addEventListener('click', addCustomTransportMode);
-        }
-        if (customTransportInput && isEditable) {
-            customTransportInput.addEventListener('keydown', function (event) {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    addCustomTransportMode();
-                }
-            });
-        }
-        if (transportModesGrid && isEditable) {
-            transportModesGrid.addEventListener('click', function (event) {
-                const btn = event.target.closest('.profile-transport-remove-btn');
-                if (!btn) return;
-                event.preventDefault();
-                event.stopPropagation();
-                const index = Number(btn.getAttribute('data-custom-transport-index'));
-                if (!Number.isFinite(index) || index < 0) return;
-                customTransportModes.splice(index, 1);
-                renderTransportModesGrid();
+        const fleetEditorRoot = document.getElementById('profile-vehicle-fleet-editor');
+        if (fleetEditorRoot && fleetApi) {
+            fleetEditorRoot.innerHTML = fleetApi.renderEditorHtml(editorFleet, !isEditable);
+            fleetApi.bindEditor(fleetEditorRoot, function () {
                 markProfileDirty();
             });
         }
+
         renderPhotoPreviews();
         syncSavedSnapshot(buildPayload());
         updateAboutWordCount();
