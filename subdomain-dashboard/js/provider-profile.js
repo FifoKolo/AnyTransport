@@ -709,6 +709,8 @@
         editorCustomTransportModes = customTransportModes.slice();
         const fleetApi = getFleetApi();
         let editorFleet = fleetApi ? fleetApi.normalizeFleetFromUser(u, getTransportModes) : [];
+        let vehiclesEditMode = false;
+        let editorFleetSnapshot = editorFleet.slice();
         let pendingPhotos = [];
 
         root.innerHTML = [
@@ -794,9 +796,18 @@
                 return buildCheckbox('service_' + option.replace(/[^a-z0-9]+/ig, '_').toLowerCase(), option, serviceMatches(option, u), ' data-service-label="' + escapeAttribute(option) + '"' + disabledAttr);
             }).join(''),
             '      </div>',
-            '      <h3 class="profile-section-title" style="margin-top:20px;">Vehicles</h3>',
-            '      <div class="profile-muted">Select the vehicles you operate, their max capacity, and how many of each you have. Customers see this on your public profile.</div>',
-            '      <div id="profile-vehicle-fleet-editor"></div>',
+            '      <div class="profile-vehicle-section">',
+            '        <div class="profile-vehicle-section-header">',
+            '          <h3 class="profile-section-title profile-vehicle-section-title">Vehicles</h3>',
+            (isEditable ? '          <button type="button" id="profile-vehicle-edit-toggle" class="btn btn-outline profile-vehicle-edit-btn">Edit vehicles</button>' : ''),
+            '        </div>',
+            '        <div class="profile-muted">These are shown on your public profile. Use Edit vehicles to change type, capacity, or quantity.</div>',
+            '        <div id="profile-vehicle-fleet-overview" class="profile-vehicle-fleet-overview"></div>',
+            '        <div id="profile-vehicle-fleet-editor-wrap" class="profile-vehicle-fleet-editor-wrap" hidden>',
+            '          <div id="profile-vehicle-fleet-editor"></div>',
+            (isEditable ? '          <div class="profile-vehicle-edit-actions"><button type="button" id="profile-vehicle-edit-done" class="btn btn-primary">Done</button><button type="button" id="profile-vehicle-edit-cancel" class="btn btn-outline">Cancel</button></div>' : ''),
+            '        </div>',
+            '      </div>',
             '      <h3 class="profile-section-title" style="margin-top:20px;">Don\'t want any more invitations to bid?</h3>',
             '      <div class="profile-muted">Please tick here to prevent customers inviting you to quote.</div>',
             '      <div class="profile-check-grid" style="margin-top:14px;">',
@@ -1022,17 +1033,21 @@
             return coords;
         }
 
+        function getCurrentEditorFleet() {
+            const fleetRoot = document.getElementById('profile-vehicle-fleet-editor');
+            if (vehiclesEditMode && fleetRoot && fleetApi) {
+                return fleetApi.collectFleetFromEditor(fleetRoot);
+            }
+            return editorFleet;
+        }
+
         function buildPayload() {
             const services = collectCheckedServices();
             const paymentMethods = collectPaymentMethods();
             const paymentMethodsCustom = collectCheckedCustomPaymentMethods();
-            const fleetRoot = document.getElementById('profile-vehicle-fleet-editor');
-            const fleetApiLocal = getFleetApi();
-            const fleet = fleetApiLocal && fleetRoot
-                ? fleetApiLocal.collectFleetFromEditor(fleetRoot)
-                : editorFleet;
-            const fleetLegacy = fleetApiLocal
-                ? fleetApiLocal.deriveLegacyFromFleet(fleet)
+            const fleet = getCurrentEditorFleet();
+            const fleetLegacy = fleetApi
+                ? fleetApi.deriveLegacyFromFleet(fleet)
                 : { providerVehicles: [], transportModes: collectCheckedTransportModes(), vehicleCount: null };
             const city = String(document.getElementById('profile-city')?.value || '').trim();
             const businessName = String(document.getElementById('profile-business-name')?.value || '').trim();
@@ -1205,6 +1220,14 @@
                     delete liveUser._pendingReview;
                     delete liveUser._profileSaveMessage;
                     Object.assign(u, getProfileEditorUser(liveUser));
+                    if (fleetApi && payload.providerVehicles) {
+                        editorFleet = payload.providerVehicles.map(function (entry) {
+                            return fleetApi.normalizeVehicleEntry(entry);
+                        }).filter(Boolean);
+                        editorFleetSnapshot = JSON.parse(JSON.stringify(editorFleet));
+                        renderVehicleFleetOverview();
+                        setVehicleEditMode(false);
+                    }
                     try {
                         renderPayments(liveUser);
                         renderServices(liveUser);
@@ -1400,11 +1423,77 @@
             });
         }
 
+        const fleetOverviewRoot = document.getElementById('profile-vehicle-fleet-overview');
+        const fleetEditorWrap = document.getElementById('profile-vehicle-fleet-editor-wrap');
         const fleetEditorRoot = document.getElementById('profile-vehicle-fleet-editor');
-        if (fleetEditorRoot && fleetApi) {
-            fleetEditorRoot.innerHTML = fleetApi.renderEditorHtml(editorFleet, !isEditable);
-            fleetApi.bindEditor(fleetEditorRoot, function () {
+        const fleetEditToggle = document.getElementById('profile-vehicle-edit-toggle');
+        const fleetEditDone = document.getElementById('profile-vehicle-edit-done');
+        const fleetEditCancel = document.getElementById('profile-vehicle-edit-cancel');
+
+        function renderVehicleFleetOverview() {
+            if (!fleetOverviewRoot || !fleetApi) return;
+            if (editorFleet.length) {
+                fleetOverviewRoot.innerHTML = fleetApi.renderPublicFleetHtml(editorFleet);
+            } else {
+                fleetOverviewRoot.innerHTML = fleetApi.renderOverviewEmptyHtml();
+            }
+        }
+
+        function mountVehicleFleetEditor() {
+            if (!fleetEditorRoot || !fleetApi) return;
+            fleetEditorRoot.innerHTML = fleetApi.renderEditorHtml(editorFleet, false);
+            fleetApi.bindEditor(fleetEditorRoot, function (collected) {
+                editorFleet = collected || fleetApi.collectFleetFromEditor(fleetEditorRoot);
                 markProfileDirty();
+            });
+        }
+
+        function setVehicleEditMode(editing) {
+            vehiclesEditMode = !!editing;
+            if (fleetOverviewRoot) fleetOverviewRoot.hidden = vehiclesEditMode;
+            if (fleetEditorWrap) fleetEditorWrap.hidden = !vehiclesEditMode;
+            if (fleetEditToggle) {
+                fleetEditToggle.hidden = vehiclesEditMode;
+            }
+        }
+
+        function openVehicleEditor() {
+            editorFleetSnapshot = JSON.parse(JSON.stringify(editorFleet || []));
+            mountVehicleFleetEditor();
+            setVehicleEditMode(true);
+        }
+
+        function finishVehicleEditor(saveChanges) {
+            if (saveChanges && fleetEditorRoot && fleetApi) {
+                editorFleet = fleetApi.collectFleetFromEditor(fleetEditorRoot);
+                renderVehicleFleetOverview();
+                markProfileDirty();
+            } else {
+                editorFleet = JSON.parse(JSON.stringify(editorFleetSnapshot || []));
+                renderVehicleFleetOverview();
+            }
+            setVehicleEditMode(false);
+        }
+
+        renderVehicleFleetOverview();
+        setVehicleEditMode(false);
+
+        if (fleetEditToggle && isEditable) {
+            fleetEditToggle.addEventListener('click', function (e) {
+                e.preventDefault();
+                openVehicleEditor();
+            });
+        }
+        if (fleetEditDone && isEditable) {
+            fleetEditDone.addEventListener('click', function (e) {
+                e.preventDefault();
+                finishVehicleEditor(true);
+            });
+        }
+        if (fleetEditCancel && isEditable) {
+            fleetEditCancel.addEventListener('click', function (e) {
+                e.preventDefault();
+                finishVehicleEditor(false);
             });
         }
 
