@@ -1428,9 +1428,9 @@
             container: 'details-map',
             style: 'mapbox://styles/mapbox/streets-v12',
             center: center,
-            zoom: 6,
-            scrollZoom: false
+            zoom: 6
         });
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
         map.on('load', async function () {
             const bounds = new mapboxgl.LngLatBounds();
@@ -5407,6 +5407,10 @@
         if (!root) return;
 
         const fields = [
+            ['Pickup', getPickupDisplayLabel(quote)],
+            ['Pickup Eircode', resolveQuoteEircode(quote, 'pickup') || 'Not provided'],
+            ['Delivery', getDeliveryDisplayLabel(quote)],
+            ['Delivery Eircode', resolveQuoteEircode(quote, 'delivery') || 'Not provided'],
             ['Pickup property type', getPropertyPickupType(quote)],
             ['Delivery property type', getPropertyDeliveryType(quote)],
             ['Service', getServiceLabel(quote)],
@@ -5467,10 +5471,9 @@
                     container: 'inline-route-map',
                     style: 'mapbox://styles/mapbox/streets-v12',
                     center: center,
-                    zoom: 6,
-                    scrollZoom: false,
-                    dragPan: false
+                    zoom: 6
                 });
+                map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
                 map.on('load', function () {
                     const bounds = new mapboxgl.LngLatBounds();
@@ -5793,15 +5796,70 @@
             .replace(/\b\w/g, function (char) { return char.toUpperCase(); });
     }
 
+    function isEircodeValue(value) {
+        if (!value) return false;
+        return /^[A-Z][0-9][A-Z0-9]\s?[A-Z0-9]{4}$/i.test(String(value).trim());
+    }
+
+    function resolveQuoteEircode(quote, kind) {
+        const isPickup = kind === 'pickup';
+        return firstText(
+            isPickup ? quote.pickupPostcode : quote.deliveryPostcode,
+            isPickup ? quote.pickupAreaEircode : quote.deliveryAreaEircode,
+            isPickup ? quote.pickupEircode : quote.deliveryEircode,
+            isPickup ? quote['pickup-postcode'] : quote['delivery-postcode']
+        );
+    }
+
+    function resolveQuoteCityAreaLabel(quote, kind) {
+        const isPickup = kind === 'pickup';
+        const eircode = resolveQuoteEircode(quote, kind);
+        const combined = firstText(isPickup ? quote.pickupAreaEircode : quote.deliveryAreaEircode);
+        const candidates = [
+            combined && !isEircodeValue(combined) ? combined : '',
+            isPickup ? quote.pickupCityArea : quote.deliveryCityArea,
+            isPickup ? quote.pickupArea : quote.deliveryArea
+        ];
+
+        for (let i = 0; i < candidates.length; i += 1) {
+            const text = String(candidates[i] || '').trim();
+            if (!text) continue;
+            if (eircode && text.toUpperCase() === eircode.toUpperCase()) continue;
+            if (isEircodeValue(text)) continue;
+            return text;
+        }
+
+        return '';
+    }
+
     function formatFullLocationLabel(quote, kind) {
         const isPickup = kind === 'pickup';
-        const address = String(isPickup ? quote.pickupAddress : quote.deliveryAddress || '').trim();
-        const city = String(isPickup ? quote.pickupCity : quote.deliveryCity || '').trim();
-        const postcode = String(isPickup ? quote.pickupPostcode : quote.deliveryPostcode || '').trim();
-        const parts = [address, city, postcode].filter(Boolean);
+        const city = firstText(
+            isPickup ? quote.pickupCity : quote.deliveryCity,
+            isPickup ? quote.pickupAddress : quote.deliveryAddress,
+            isPickup ? quote.pickupTown : quote.deliveryTown,
+            isPickup ? quote.pickupLocation : quote.deliveryLocation
+        );
+        const cityArea = resolveQuoteCityAreaLabel(quote, kind);
+        const eircode = resolveQuoteEircode(quote, kind);
+        const parts = [];
+
+        const pushUnique = function (value) {
+            const text = String(value || '').trim();
+            if (!text) return;
+            const lower = text.toLowerCase();
+            if (parts.some(function (part) { return part.toLowerCase() === lower; })) return;
+            parts.push(text);
+        };
+
+        pushUnique(city);
+        pushUnique(cityArea);
+        pushUnique(eircode);
+
         if (parts.length) {
             return parts.join(', ');
         }
+
         return firstText(
             isPickup ? quote.pickupLocation : quote.deliveryLocation,
             isPickup ? quote.pickupTown : quote.deliveryTown,

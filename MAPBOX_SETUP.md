@@ -31,6 +31,12 @@ mapboxgl.accessToken = 'pk.YOUR_ACTUAL_TOKEN_HERE';
 
 ## Features Implemented
 
+✅ **Eircode & City Area Autocomplete**
+- Combined "City Area or Eircode" fields use Mapbox Geocoding API
+- Partial Eircode typing (e.g. `D02`, `D02 X285`) shows Irish postcode suggestions
+- City areas and localities (e.g. `Ballinteer`, `Galway`) also suggest while typing
+- Full Eircode lookup geocodes coordinates for route calculation
+
 ✅ **Interactive Map Display**
 - Mapbox GL JS v2.14.1 integrated
 - Street map style with navigation controls
