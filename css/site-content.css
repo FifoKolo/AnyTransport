@@ -186,6 +186,10 @@
     user-select: none;
 }
 
+.visual-canvas.is-dragging .visual-canvas-element {
+    z-index: 50;
+}
+
 .visual-placement-menu {
     position: fixed;
     z-index: 10000;
@@ -815,6 +819,13 @@
     user-select: none;
 }
 
+.visual-footer-social-chip,
+.visual-footer-bottom-chip {
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
 .visual-footer-bottom-chip {
     color: rgba(255, 255, 255, 0.7);
     font-size: 0.9rem;
@@ -837,11 +848,15 @@
     box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18);
 }
 
-.site-admin-footer-preview.is-dragging-links .visual-footer-link-chip {
+.site-admin-footer-preview.is-dragging-links .visual-footer-link-chip,
+.site-admin-footer-preview.is-dragging-links .visual-footer-social-chip,
+.site-admin-footer-preview.is-dragging-links .visual-footer-bottom-chip {
     cursor: grabbing;
 }
 
-.visual-footer-link-chip.is-dragging-chip {
+.visual-footer-link-chip.is-dragging-chip,
+.visual-footer-social-chip.is-dragging-chip,
+.visual-footer-bottom-chip.is-dragging-chip {
     opacity: 0.88;
     cursor: grabbing;
     position: relative;

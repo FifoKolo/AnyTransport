@@ -2145,20 +2145,25 @@
             lines.push(servicesChange);
         }
 
+        const formatAdminFleetSummary = function (user) {
+            if (user && Array.isArray(user.providerVehicles) && user.providerVehicles.length) {
+                return user.providerVehicles.map(function (entry) {
+                    const qty = entry && entry.quantity != null ? entry.quantity : 1;
+                    const type = entry && entry.type ? entry.type : 'Vehicle';
+                    const capacity = entry && entry.capacity ? entry.capacity : '';
+                    return qty + '× ' + type + (capacity ? ' (' + capacity + ')' : '');
+                });
+            }
+            return Array.isArray(user && user.transportModes) ? user.transportModes.slice() : [];
+        };
+
         const transportChange = formatAdminProfileArrayChange(
-            'Modes of transport',
-            live.transportModes,
-            pending.transportModes
+            'Vehicles',
+            formatAdminFleetSummary(live),
+            formatAdminFleetSummary(pending)
         );
         if (transportChange) {
             lines.push(transportChange);
-        }
-
-        const liveVehicle = live.vehicleCount != null && live.vehicleCount !== '' ? String(live.vehicleCount) : '';
-        const pendingVehicle = pending.vehicleCount != null && pending.vehicleCount !== '' ? String(pending.vehicleCount) : '';
-        const vehicleChange = formatAdminProfileTextChange('Number of vehicles', liveVehicle, pendingVehicle);
-        if (vehicleChange) {
-            lines.push(vehicleChange);
         }
 
         const inviteChange = formatAdminProfileBooleanChange('Stop job invitations', live.blockInvites, pending.blockInvites);

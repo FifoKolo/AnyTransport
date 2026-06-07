@@ -435,6 +435,38 @@ function normalize_user($user) {
         $normalized['vehicleCount'] = max(0, min(9999, (int) $normalized['vehicleCount']));
     }
 
+    if (!isset($normalized['providerVehicles']) || !is_array($normalized['providerVehicles'])) {
+        $normalized['providerVehicles'] = array();
+    } else {
+        $fleet = array();
+        foreach ($normalized['providerVehicles'] as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $type = trim((string) ($entry['type'] ?? $entry['customType'] ?? ''));
+            if ($type === '') {
+                continue;
+            }
+            $capacity = trim((string) ($entry['capacity'] ?? $entry['maxCapacity'] ?? 'Up to 3.5 t.'));
+            if ($capacity === '') {
+                $capacity = 'Up to 3.5 t.';
+            }
+            $quantity = isset($entry['quantity']) ? (int) $entry['quantity'] : (isset($entry['qty']) ? (int) $entry['qty'] : 1);
+            if ($quantity < 1) {
+                $quantity = 1;
+            }
+            if ($quantity > 999) {
+                $quantity = 999;
+            }
+            $fleet[] = array(
+                'type' => $type,
+                'capacity' => $capacity,
+                'quantity' => $quantity,
+            );
+        }
+        $normalized['providerVehicles'] = $fleet;
+    }
+
     $cityValue = trim((string) ($normalized['serviceAreaCity'] ?? $normalized['city'] ?? $normalized['town'] ?? $normalized['location'] ?? ''));
     if ($cityValue !== '') {
         $normalized['serviceAreaCity'] = $cityValue;
@@ -1114,7 +1146,7 @@ function provider_profile_review_field_names() {
         'city', 'town', 'location', 'phone', 'contact',
         'description', 'businessDescription', 'about', 'bio', 'summary',
         'services', 'categories', 'skills', 'photos', 'avatar', 'coverImage',
-        'transportModes', 'vehicleCount',
+        'transportModes', 'providerVehicles', 'vehicleCount',
         'website', 'companyType', 'paymentMethods', 'paymentMethodsCustom', 'acceptsCash', 'paypal', 'visa', 'mastercard', 'bankTransfer', 'americanExpress', 'cheque', 'cash',
         'blockInvites', 'muteInviteEmails',
         'serviceAreaCity', 'serviceAreaAddress', 'serviceAreaLat', 'serviceAreaLng',
@@ -1192,6 +1224,7 @@ function provider_profile_field_labels() {
         'avatar' => 'Avatar',
         'coverImage' => 'Cover image',
         'transportModes' => 'Transport modes',
+        'providerVehicles' => 'Vehicles',
         'vehicleCount' => 'Vehicle count',
         'website' => 'Website',
         'companyType' => 'Company type',
@@ -4830,7 +4863,7 @@ switch ($action) {
                 'city', 'town', 'location', 'phone', 'contact',
                 'description', 'businessDescription', 'about', 'bio', 'summary',
                 'services', 'categories', 'skills', 'photos', 'avatar', 'coverImage',
-                'transportModes', 'vehicleCount',
+                'transportModes', 'providerVehicles', 'vehicleCount',
                 'website', 'companyType', 'paymentMethods', 'paymentMethodsCustom', 'acceptsCash', 'paypal', 'visa', 'mastercard', 'bankTransfer', 'americanExpress', 'cheque', 'cash',
                 'blockInvites', 'muteInviteEmails',
                 'serviceAreaCity', 'serviceAreaAddress', 'serviceAreaLat', 'serviceAreaLng',

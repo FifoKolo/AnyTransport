@@ -155,7 +155,7 @@
         return options;
     }
 
-    var EDITOR_BUILD = '20260605-18';
+    var EDITOR_BUILD = '20260605-21';
 
     function getCmsImagesApi() {
         return window.anytransportCmsImages || null;
@@ -348,6 +348,7 @@
             if (!linksCanvas || links.length !== linksCanvas.children.length) {
                 return false;
             }
+            syncNavLinksDomOrder();
             var linkColor = useCustomNavbarColors() && navbar.linkColor ? navbar.linkColor : '';
             for (var i = 0; i < links.length; i += 1) {
                 var link = links[i];
@@ -371,6 +372,8 @@
             links.forEach(function (link, i) { link.order = i + 1; });
             editorState.content.navbar = navbar;
             navbar.links = links;
+            if (linkDragState) return;
+            syncNavLinksDomOrder();
             paintNavbarCanvas({ preserveLinksDom: true });
         }
 
@@ -650,13 +653,32 @@
 
         function computeNavDropIndex(clientX) {
             if (!linksCanvas) return 0;
-            var chips = Array.prototype.slice.call(linksCanvas.querySelectorAll('[data-nav-link-id]'));
+            var dragId = linkDragState ? linkDragState.linkId : '';
+            var chips = Array.prototype.slice.call(linksCanvas.querySelectorAll('[data-nav-link-id]'))
+                .filter(function (chip) {
+                    return chip.getAttribute('data-nav-link-id') !== dragId;
+                });
             for (var i = 0; i < chips.length; i += 1) {
                 var rect = chips[i].getBoundingClientRect();
                 var mid = rect.left + rect.width / 2;
-                if (clientX < mid) return i;
+                if (clientX < mid) {
+                    var id = chips[i].getAttribute('data-nav-link-id');
+                    var idx = links.findIndex(function (l) { return l.id === id; });
+                    return idx >= 0 ? idx : i;
+                }
             }
-            return Math.max(0, chips.length - 1);
+            return Math.max(0, links.length - 1);
+        }
+
+        function compensateNavChipAfterReorder(e) {
+            if (!linkDragState || !linkDragState.chip) return;
+            var chip = linkDragState.chip;
+            var visualLeft = chip.getBoundingClientRect().left;
+            chip.style.transform = '';
+            var layoutLeft = chip.getBoundingClientRect().left;
+            var offsetX = visualLeft - layoutLeft;
+            chip.style.transform = 'translateX(' + offsetX + 'px)';
+            linkDragState.startX = e.clientX - offsetX;
         }
 
         function moveNavLinkToIndex(linkId, toIndex) {
@@ -710,7 +732,7 @@
                     linkDragState.chip = linksCanvas.querySelector('[data-nav-link-id="' + linkDragState.linkId + '"]');
                     if (linkDragState.chip) {
                         linkDragState.chip.classList.add('is-dragging-chip');
-                        linkDragState.chip.style.transform = 'translateX(' + (e.clientX - linkDragState.startX) + 'px)';
+                        compensateNavChipAfterReorder(e);
                     }
                 }
             }
@@ -754,10 +776,14 @@
             }
             linkDragState = null;
             if (navCanvas) navCanvas.classList.remove('is-dragging-links');
+            links.forEach(function (link, i) { link.order = i + 1; });
+            navbar.links = links;
+            editorState.content.navbar = navbar;
+            syncNavLinksDomOrder();
             if (wasMoved) {
                 suppressNavClick = true;
                 editorState.selectedNavbarItem = 'link:' + savedLinkId;
-                syncNavbarPreview();
+                paintNavbarCanvas();
                 paintNavbarInspector();
             } else {
                 selectNavbarItem('link:' + savedLinkId);
@@ -875,7 +901,7 @@
         var brand = footer.brand;
         var columns = footer.columns;
         var hrefPresets = getHrefPresetOptions();
-        var linkDragState = null;
+        var footerDragState = null;
         var suppressFooterClick = false;
         var FOOTER_PREVIEW_WIDTH = 1200;
 
@@ -889,7 +915,7 @@
             '</div>',
             '<div class="visual-page-layout">',
             '<div>',
-            '<p class="visual-canvas-label">Click the <strong>logo/brand</strong>, <strong>social icons</strong>, <strong>column titles</strong>, <strong>links</strong>, <strong>copyright</strong>, or <strong>bottom links</strong> to edit them in the panel on the right. Drag links within a column to reorder.</p>',
+            '<p class="visual-canvas-label">Click the <strong>logo/brand</strong>, <strong>social icons</strong>, <strong>column titles</strong>, <strong>links</strong>, <strong>copyright</strong>, or <strong>bottom links</strong> to edit them in the panel on the right. Drag links, social icons, or bottom links to reorder them.</p>',
             '<div class="site-admin-footer-preview-wrap" data-footer-preview-wrap>',
             '<div class="site-admin-footer-preview-label">Desktop preview (1200px) · click to select · drag links to move · build ' + EDITOR_BUILD + '</div>',
             '<div class="site-admin-footer-preview-viewport" data-footer-preview-viewport>',
@@ -998,13 +1024,30 @@
                 editorState.selectedFooterItem === 'copyright'
             );
 
-            if (!linkDragState && socialCanvas) {
+            if (footerDragState) {
+                syncFooterPreviewScale();
+                return;
+            }
+
+            if (options.preserveDom) {
+                var preserved = updateFooterSocialChipsInPlace();
+                preserved = updateFooterBottomChipsInPlace() && preserved;
+                var allColumnsOk = columns.every(function (col) {
+                    return !col || !col.id || updateFooterLinkChipsInPlace(col.id);
+                });
+                if (preserved && allColumnsOk) {
+                    syncFooterPreviewScale();
+                    return;
+                }
+            }
+
+            if (socialCanvas) {
                 socialCanvas.innerHTML = footer.social.map(function (item) {
                     return renderSocialChipMarkup(item, editorState.selectedFooterItem || '');
                 }).join('');
             }
 
-            if (!linkDragState && bottomCanvas) {
+            if (bottomCanvas) {
                 bottomCanvas.innerHTML = footer.bottomLinks.map(function (link) {
                     if (!link || !link.id) return '';
                     var hidden = link.visible === false;
@@ -1019,7 +1062,7 @@
                 }).join('');
             }
 
-            if (!linkDragState && columnsCanvas) {
+            if (columnsCanvas) {
                 columnsCanvas.innerHTML = columns.map(function (col) {
                     if (!col || !col.id) return '';
                     var colSelected = editorState.selectedFooterItem === ('column:' + col.id);
@@ -1051,9 +1094,109 @@
             syncFooterPreviewScale();
         }
 
+        function syncFooterLinksDomOrder(columnId) {
+            var col = findColumnById(columnId);
+            var list = root.querySelector('[data-footer-links-canvas="' + columnId + '"]');
+            if (!col || !list || !Array.isArray(col.links)) return;
+            col.links.forEach(function (link) {
+                if (!link || !link.id) return;
+                var chip = list.querySelector('[data-footer-link-id="' + link.id + '"]');
+                if (!chip) return;
+                var li = chip.closest('li');
+                if (li) list.appendChild(li);
+            });
+        }
+
+        function syncFooterSocialDomOrder() {
+            if (!socialCanvas) return;
+            footer.social.forEach(function (item) {
+                if (!item || !item.id) return;
+                var chip = socialCanvas.querySelector('[data-footer-social-id="' + item.id + '"]');
+                if (chip) socialCanvas.appendChild(chip);
+            });
+        }
+
+        function syncFooterBottomDomOrder() {
+            if (!bottomCanvas) return;
+            footer.bottomLinks.forEach(function (link) {
+                if (!link || !link.id) return;
+                var chip = bottomCanvas.querySelector('[data-footer-bottom-id="' + link.id + '"]');
+                if (chip) bottomCanvas.appendChild(chip);
+            });
+        }
+
+        function syncAllFooterDomOrders() {
+            columns.forEach(function (col) {
+                if (col && col.id) syncFooterLinksDomOrder(col.id);
+            });
+            syncFooterSocialDomOrder();
+            syncFooterBottomDomOrder();
+        }
+
+        function updateFooterLinkChipsInPlace(columnId) {
+            var col = findColumnById(columnId);
+            var list = root.querySelector('[data-footer-links-canvas="' + columnId + '"]');
+            if (!col || !list || !Array.isArray(col.links)) return false;
+            if (col.links.length !== list.children.length) return false;
+            syncFooterLinksDomOrder(columnId);
+            for (var i = 0; i < col.links.length; i += 1) {
+                var link = col.links[i];
+                if (!link || !link.id) return false;
+                var chip = list.querySelector('[data-footer-link-id="' + link.id + '"]');
+                if (!chip) return false;
+                var hidden = link.visible === false;
+                var selected = editorState.selectedFooterItem === ('link:' + columnId + ':' + link.id);
+                chip.className = 'visual-footer-link-chip' + (hidden ? ' is-hidden-link' : '') + (selected ? ' is-target-selected' : '');
+                if (hidden) {
+                    chip.innerHTML = escapeHtml(link.label || 'Link') + ' <em class="visual-nav-hidden-badge">hidden</em>';
+                } else {
+                    chip.textContent = link.label || 'Link';
+                }
+            }
+            return true;
+        }
+
+        function updateFooterSocialChipsInPlace() {
+            if (!socialCanvas || footer.social.length !== socialCanvas.children.length) return false;
+            syncFooterSocialDomOrder();
+            var api = getSocialIconsApi();
+            footer.social.forEach(function (item) {
+                if (!item || !item.id) return;
+                var chip = socialCanvas.querySelector('[data-footer-social-id="' + item.id + '"]');
+                if (!chip) return;
+                var normalized = api ? api.normalizeSocialItem(item) : item;
+                var hidden = normalized.visible === false;
+                var selected = editorState.selectedFooterItem === ('social:' + normalized.id);
+                var extra = 'visual-footer-social-chip' + (hidden ? ' is-hidden-link' : '') + (selected ? ' is-target-selected' : '');
+                chip.className = api ? api.socialIconClassName(normalized, extra) : ('social-icon ' + extra);
+            });
+            return true;
+        }
+
+        function updateFooterBottomChipsInPlace() {
+            if (!bottomCanvas || footer.bottomLinks.length !== bottomCanvas.children.length) return false;
+            syncFooterBottomDomOrder();
+            footer.bottomLinks.forEach(function (link) {
+                if (!link || !link.id) return;
+                var chip = bottomCanvas.querySelector('[data-footer-bottom-id="' + link.id + '"]');
+                if (!chip) return;
+                var hidden = link.visible === false;
+                var selected = editorState.selectedFooterItem === ('bottom:' + link.id);
+                chip.className = 'visual-footer-bottom-chip' + (hidden ? ' is-hidden-link' : '') + (selected ? ' is-target-selected' : '') + (link.action === 'provider-signup' ? ' footer-provider-link' : '');
+                if (hidden) {
+                    chip.innerHTML = escapeHtml(link.label || 'Link') + ' <em class="visual-nav-hidden-badge">hidden</em>';
+                } else {
+                    chip.textContent = link.label || 'Link';
+                }
+            });
+            return true;
+        }
+
         function syncFooterPreview() {
             editorState.content.footer = footer;
-            paintFooterCanvas();
+            if (footerDragState) return;
+            syncAllFooterDomOrders();
+            paintFooterCanvas({ preserveDom: true });
         }
 
         function footerInspectorHasFocus() {
@@ -1195,7 +1338,7 @@
             inspector.innerHTML = [
                 '<h4>Footer editor</h4>',
                 '<p class="visual-inspector-empty">Click the <strong>brand</strong>, <strong>social icons</strong>, a <strong>column title</strong>, any <strong>link</strong>, <strong>copyright</strong>, or <strong>bottom links</strong> to edit them here.</p>',
-                '<p class="visual-inspector-empty">Use <strong>+ Add social icon</strong> for new shapes. Drag column links to reorder them.</p>'
+                '<p class="visual-inspector-empty">Use <strong>+ Add social icon</strong> for new shapes. Drag column links, social icons, or bottom links to reorder them.</p>'
             ].join('');
         }
 
@@ -1508,149 +1651,349 @@
         inspector.addEventListener('mousedown', function (e) { e.stopPropagation(); });
         inspector.addEventListener('click', function (e) { e.stopPropagation(); });
 
-        function swapFooterLinksInDom(dragEl, targetEl) {
-            var dragLi = dragEl.closest('li');
-            var targetLi = targetEl.closest('li');
-            if (!dragLi || !targetLi || dragLi === targetLi) return;
-            var list = dragLi.parentNode;
-            if (!list || list !== targetLi.parentNode) return;
-            var fromIdx = Array.prototype.indexOf.call(list.children, dragLi);
-            var toIdx = Array.prototype.indexOf.call(list.children, targetLi);
-            if (fromIdx < 0 || toIdx < 0) return;
-            if (fromIdx < toIdx) {
-                list.insertBefore(dragLi, targetLi.nextSibling);
-            } else {
-                list.insertBefore(dragLi, targetLi);
-            }
-        }
-
-        function swapFooterLinksInData(columnId, dragId, targetId) {
-            var col = findColumnById(columnId);
-            if (!col || !Array.isArray(col.links)) return false;
-            var fromIdx = col.links.findIndex(function (l) { return l.id === dragId; });
-            var toIdx = col.links.findIndex(function (l) { return l.id === targetId; });
-            if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return false;
-            var moved = col.links.splice(fromIdx, 1)[0];
-            col.links.splice(toIdx, 0, moved);
+        function moveArrayItemToIndex(arr, itemId, toIndex) {
+            var fromIdx = arr.findIndex(function (item) { return item && item.id === itemId; });
+            if (fromIdx < 0 || toIndex < 0) return false;
+            toIndex = Math.max(0, Math.min(arr.length - 1, toIndex));
+            if (fromIdx === toIndex) return false;
+            var item = arr.splice(fromIdx, 1)[0];
+            var insertAt = toIndex;
+            if (fromIdx < toIndex) insertAt = toIndex - 1;
+            arr.splice(insertAt, 0, item);
             return true;
         }
 
-        function findFooterDropTargetChip(clientY, dragChip, columnId) {
-            var list = root.querySelector('[data-footer-links-canvas="' + columnId + '"]');
-            if (!list) return null;
-            var chips = Array.prototype.slice.call(list.querySelectorAll('[data-footer-link-id]'));
-            var over = null;
-            chips.forEach(function (chip) {
-                if (chip === dragChip) return;
-                var rect = chip.getBoundingClientRect();
-                if (clientY >= rect.top && clientY <= rect.bottom) {
-                    over = chip;
+        function getFooterDragItems() {
+            if (!footerDragState) return [];
+            if (footerDragState.kind === 'column-link') {
+                var col = findColumnById(footerDragState.columnId);
+                return col && col.links ? col.links : [];
+            }
+            if (footerDragState.kind === 'social') return footer.social;
+            if (footerDragState.kind === 'bottom') return footer.bottomLinks;
+            return [];
+        }
+
+        function getFooterDragContainer() {
+            if (!footerDragState) return null;
+            if (footerDragState.kind === 'column-link') {
+                return root.querySelector('[data-footer-links-canvas="' + footerDragState.columnId + '"]');
+            }
+            if (footerDragState.kind === 'social') return socialCanvas;
+            if (footerDragState.kind === 'bottom') return bottomCanvas;
+            return null;
+        }
+
+        function getFooterDragIdAttr() {
+            if (!footerDragState) return '';
+            if (footerDragState.kind === 'column-link') return 'data-footer-link-id';
+            if (footerDragState.kind === 'social') return 'data-footer-social-id';
+            return 'data-footer-bottom-id';
+        }
+
+        function computeFooterDropIndex(clientCoord) {
+            if (!footerDragState) return 0;
+            var container = getFooterDragContainer();
+            var items = getFooterDragItems();
+            var idAttr = getFooterDragIdAttr();
+            var dragId = footerDragState.itemId;
+            var axis = footerDragState.axis;
+            if (!container) return 0;
+            var chips = Array.prototype.slice.call(container.querySelectorAll('[' + idAttr + ']'))
+                .filter(function (chip) { return chip.getAttribute(idAttr) !== dragId; });
+            for (var i = 0; i < chips.length; i += 1) {
+                var rect = chips[i].getBoundingClientRect();
+                var mid = axis === 'y' ? (rect.top + rect.height / 2) : (rect.left + rect.width / 2);
+                if (clientCoord < mid) {
+                    var id = chips[i].getAttribute(idAttr);
+                    var idx = items.findIndex(function (item) { return item && item.id === id; });
+                    return idx >= 0 ? idx : i;
                 }
-            });
-            if (over) return over;
-            var best = null;
-            var bestDist = Infinity;
-            chips.forEach(function (chip) {
-                if (chip === dragChip) return;
-                var rect = chip.getBoundingClientRect();
-                var center = rect.top + rect.height / 2;
-                var dist = Math.abs(clientY - center);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    best = chip;
-                }
-            });
-            return best;
+            }
+            return Math.max(0, items.length - 1);
+        }
+
+        function moveFooterDragItem(toIndex) {
+            if (!footerDragState) return false;
+            var moved = false;
+            if (footerDragState.kind === 'column-link') {
+                var col = findColumnById(footerDragState.columnId);
+                if (!col || !col.links) return false;
+                moved = moveArrayItemToIndex(col.links, footerDragState.itemId, toIndex);
+                if (moved) syncFooterLinksDomOrder(footerDragState.columnId);
+                return moved;
+            }
+            if (footerDragState.kind === 'social') {
+                moved = moveArrayItemToIndex(footer.social, footerDragState.itemId, toIndex);
+                if (moved) syncFooterSocialDomOrder();
+                return moved;
+            }
+            if (footerDragState.kind === 'bottom') {
+                moved = moveArrayItemToIndex(footer.bottomLinks, footerDragState.itemId, toIndex);
+                if (moved) syncFooterBottomDomOrder();
+                return moved;
+            }
+            return false;
+        }
+
+        function compensateFooterChipAfterReorder(e) {
+            if (!footerDragState || !footerDragState.chip) return;
+            var chip = footerDragState.chip;
+            var before = chip.getBoundingClientRect();
+            chip.style.transform = '';
+            var after = chip.getBoundingClientRect();
+            if (footerDragState.axis === 'y') {
+                var offsetY = before.top - after.top;
+                chip.style.transform = 'translateY(' + offsetY + 'px)';
+                footerDragState.startY = e.clientY - offsetY;
+            } else {
+                var offsetX = before.left - after.left;
+                chip.style.transform = 'translateX(' + offsetX + 'px)';
+                footerDragState.startX = e.clientX - offsetX;
+            }
+        }
+
+        function refreshFooterDragChip() {
+            if (!footerDragState) return;
+            var container = getFooterDragContainer();
+            var idAttr = getFooterDragIdAttr();
+            if (!container) return;
+            footerDragState.chip = container.querySelector('[' + idAttr + '="' + footerDragState.itemId + '"]');
         }
 
         var footerPointerMoveHandler = null;
         var footerPointerUpHandler = null;
+        var footerMouseMoveHandler = null;
+        var footerMouseUpHandler = null;
 
         function clearFooterPointerHandlers() {
             if (footerPointerMoveHandler) {
                 window.removeEventListener('pointermove', footerPointerMoveHandler);
-                footerPointerMoveHandler = null;
             }
             if (footerPointerUpHandler) {
                 window.removeEventListener('pointerup', footerPointerUpHandler);
                 window.removeEventListener('pointercancel', footerPointerUpHandler);
-                footerPointerUpHandler = null;
+            }
+            if (footerMouseMoveHandler) {
+                window.removeEventListener('mousemove', footerMouseMoveHandler);
+            }
+            if (footerMouseUpHandler) {
+                window.removeEventListener('mouseup', footerMouseUpHandler);
+            }
+        }
+
+        function onFooterDragMove(e, pointerId) {
+            if (!footerDragState || footerDragState.pointerId !== pointerId) return;
+            var threshold = footerDragState.axis === 'y'
+                ? Math.abs(e.clientY - footerDragState.startY)
+                : Math.abs(e.clientX - footerDragState.startX);
+            if (threshold > 4) footerDragState.moved = true;
+            if (!footerDragState.moved) return;
+            e.preventDefault();
+            if (footerDragState.chip) {
+                if (footerDragState.axis === 'y') {
+                    footerDragState.chip.style.transform = 'translateY(' + (e.clientY - footerDragState.startY) + 'px)';
+                } else {
+                    footerDragState.chip.style.transform = 'translateX(' + (e.clientX - footerDragState.startX) + 'px)';
+                }
+            }
+            var clientCoord = footerDragState.axis === 'y' ? e.clientY : e.clientX;
+            var dropIdx = computeFooterDropIndex(clientCoord);
+            if (dropIdx !== footerDragState.lastTargetIndex) {
+                footerDragState.lastTargetIndex = dropIdx;
+                if (moveFooterDragItem(dropIdx)) {
+                    refreshFooterDragChip();
+                    if (footerDragState.chip) {
+                        footerDragState.chip.classList.add('is-dragging-chip');
+                        compensateFooterChipAfterReorder(e);
+                    }
+                }
             }
         }
 
         footerPointerMoveHandler = function (e) {
-            if (!linkDragState || e.pointerId !== linkDragState.pointerId) return;
-            if (Math.abs(e.clientY - linkDragState.startY) > 5) {
-                linkDragState.moved = true;
-            }
-            if (!linkDragState.moved) return;
-            e.preventDefault();
-            var targetChip = findFooterDropTargetChip(e.clientY, linkDragState.chip, linkDragState.columnId);
-            if (!targetChip || targetChip === linkDragState.chip) return;
-            var targetId = targetChip.getAttribute('data-footer-link-id');
-            if (!targetId || targetId === linkDragState.lastTargetId) return;
-            linkDragState.lastTargetId = targetId;
-            if (swapFooterLinksInData(linkDragState.columnId, linkDragState.linkId, targetId)) {
-                swapFooterLinksInDom(linkDragState.chip, targetChip);
-            }
+            onFooterDragMove(e, e.pointerId);
+        };
+
+        footerMouseMoveHandler = function (e) {
+            onFooterDragMove(e, 'mouse');
         };
 
         footerPointerUpHandler = function (e) {
-            if (!linkDragState || e.pointerId !== linkDragState.pointerId) return;
+            if (!footerDragState || e.pointerId !== footerDragState.pointerId) return;
             clearFooterPointerHandlers();
-            finishFooterLinkDrag(e);
+            finishFooterDrag(e);
         };
 
-        function finishFooterLinkDrag(e) {
-            if (!linkDragState) return;
-            var saved = {
-                columnId: linkDragState.columnId,
-                linkId: linkDragState.linkId,
-                moved: !!linkDragState.moved
-            };
-            if (linkDragState.chip) {
-                try {
-                    linkDragState.chip.releasePointerCapture(linkDragState.pointerId);
-                } catch (_e) {}
-                linkDragState.chip.classList.remove('is-dragging-chip');
+        footerMouseUpHandler = function (e) {
+            if (!footerDragState || footerDragState.pointerId !== 'mouse') return;
+            clearFooterPointerHandlers();
+            finishFooterDrag(e);
+        };
+
+        function getFooterSelectionKey(state) {
+            if (state.kind === 'column-link') {
+                return 'link:' + state.columnId + ':' + state.itemId;
             }
-            linkDragState = null;
+            if (state.kind === 'social') return 'social:' + state.itemId;
+            if (state.kind === 'bottom') return 'bottom:' + state.itemId;
+            return '';
+        }
+
+        function finishFooterDrag(e) {
+            if (!footerDragState) return;
+            if (e && footerDragState.pointerId !== 'mouse' && e.pointerId != null && footerDragState.pointerId != null && e.pointerId !== footerDragState.pointerId) {
+                return;
+            }
+            var saved = {
+                kind: footerDragState.kind,
+                columnId: footerDragState.columnId,
+                itemId: footerDragState.itemId,
+                moved: !!footerDragState.moved,
+                selectionKey: getFooterSelectionKey(footerDragState)
+            };
+            if (footerDragState.chip) {
+                if (footerDragState.pointerId !== 'mouse') {
+                    try {
+                        footerDragState.chip.releasePointerCapture(footerDragState.pointerId);
+                    } catch (_e) {}
+                }
+                footerDragState.chip.classList.remove('is-dragging-chip');
+                footerDragState.chip.style.transform = '';
+            }
+            footerDragState = null;
             if (footerCanvas) footerCanvas.classList.remove('is-dragging-links');
+            editorState.content.footer = footer;
+            syncAllFooterDomOrders();
             if (saved.moved) {
                 suppressFooterClick = true;
-                editorState.selectedFooterItem = 'link:' + saved.columnId + ':' + saved.linkId;
-                syncFooterPreview();
+                editorState.selectedFooterItem = saved.selectionKey;
+                paintFooterCanvas();
                 paintFooterInspector();
             } else {
-                selectFooterItem('link:' + saved.columnId + ':' + saved.linkId);
+                selectFooterItem(saved.selectionKey);
+            }
+        }
+
+        function beginFooterDrag(e, chip, config) {
+            e.preventDefault();
+            e.stopPropagation();
+            footerCanvas.classList.add('is-dragging-links');
+            chip.classList.add('is-dragging-chip');
+            footerDragState = {
+                kind: config.kind,
+                axis: config.axis,
+                columnId: config.columnId || '',
+                itemId: config.itemId,
+                chip: chip,
+                pointerId: config.pointerId,
+                startX: e.clientX,
+                startY: e.clientY,
+                moved: false,
+                lastTargetIndex: config.initialIndex
+            };
+            clearFooterPointerHandlers();
+            if (config.pointerId === 'mouse') {
+                window.addEventListener('mousemove', footerMouseMoveHandler, { passive: false });
+                window.addEventListener('mouseup', footerMouseUpHandler);
+            } else {
+                try {
+                    chip.setPointerCapture(config.pointerId);
+                } catch (_captureErr) {}
+                window.addEventListener('pointermove', footerPointerMoveHandler, { passive: false });
+                window.addEventListener('pointerup', footerPointerUpHandler);
+                window.addEventListener('pointercancel', footerPointerUpHandler);
             }
         }
 
         footerCanvas.addEventListener('pointerdown', function (e) {
-            var chip = e.target.closest('[data-footer-link-id]');
-            if (!chip) return;
-            e.preventDefault();
-            e.stopPropagation();
-            var columnId = chip.getAttribute('data-footer-column-id');
-            var linkId = chip.getAttribute('data-footer-link-id');
-            try {
-                chip.setPointerCapture(e.pointerId);
-            } catch (_e) {}
-            footerCanvas.classList.add('is-dragging-links');
-            chip.classList.add('is-dragging-chip');
-            linkDragState = {
-                columnId: columnId,
-                linkId: linkId,
-                chip: chip,
-                pointerId: e.pointerId,
-                startY: e.clientY,
-                moved: false,
-                lastTargetId: ''
-            };
-            clearFooterPointerHandlers();
-            window.addEventListener('pointermove', footerPointerMoveHandler, { passive: false });
-            window.addEventListener('pointerup', footerPointerUpHandler);
-            window.addEventListener('pointercancel', footerPointerUpHandler);
+            var linkChip = e.target.closest('[data-footer-link-id]');
+            if (linkChip) {
+                var columnId = linkChip.getAttribute('data-footer-column-id');
+                var linkId = linkChip.getAttribute('data-footer-link-id');
+                var col = findColumnById(columnId);
+                var initialIndex = col && col.links ? col.links.findIndex(function (l) { return l.id === linkId; }) : 0;
+                beginFooterDrag(e, linkChip, {
+                    kind: 'column-link',
+                    axis: 'y',
+                    columnId: columnId,
+                    itemId: linkId,
+                    pointerId: e.pointerId,
+                    initialIndex: initialIndex >= 0 ? initialIndex : 0
+                });
+                return;
+            }
+            var socialChip = e.target.closest('[data-footer-social-id]');
+            if (socialChip) {
+                var socialId = socialChip.getAttribute('data-footer-social-id');
+                var socialIndex = footer.social.findIndex(function (item) { return item.id === socialId; });
+                beginFooterDrag(e, socialChip, {
+                    kind: 'social',
+                    axis: 'x',
+                    itemId: socialId,
+                    pointerId: e.pointerId,
+                    initialIndex: socialIndex >= 0 ? socialIndex : 0
+                });
+                return;
+            }
+            var bottomChip = e.target.closest('[data-footer-bottom-id]');
+            if (bottomChip) {
+                var bottomId = bottomChip.getAttribute('data-footer-bottom-id');
+                var bottomIndex = footer.bottomLinks.findIndex(function (item) { return item.id === bottomId; });
+                beginFooterDrag(e, bottomChip, {
+                    kind: 'bottom',
+                    axis: 'x',
+                    itemId: bottomId,
+                    pointerId: e.pointerId,
+                    initialIndex: bottomIndex >= 0 ? bottomIndex : 0
+                });
+            }
+        });
+
+        footerCanvas.addEventListener('mousedown', function (e) {
+            if (e.button !== 0 || footerDragState) return;
+            if (window.PointerEvent) return;
+            var linkChip = e.target.closest('[data-footer-link-id]');
+            if (linkChip) {
+                var columnId = linkChip.getAttribute('data-footer-column-id');
+                var linkId = linkChip.getAttribute('data-footer-link-id');
+                var col = findColumnById(columnId);
+                var initialIndex = col && col.links ? col.links.findIndex(function (l) { return l.id === linkId; }) : 0;
+                beginFooterDrag(e, linkChip, {
+                    kind: 'column-link',
+                    axis: 'y',
+                    columnId: columnId,
+                    itemId: linkId,
+                    pointerId: 'mouse',
+                    initialIndex: initialIndex >= 0 ? initialIndex : 0
+                });
+                return;
+            }
+            var socialChip = e.target.closest('[data-footer-social-id]');
+            if (socialChip) {
+                var socialId = socialChip.getAttribute('data-footer-social-id');
+                var socialIndex = footer.social.findIndex(function (item) { return item.id === socialId; });
+                beginFooterDrag(e, socialChip, {
+                    kind: 'social',
+                    axis: 'x',
+                    itemId: socialId,
+                    pointerId: 'mouse',
+                    initialIndex: socialIndex >= 0 ? socialIndex : 0
+                });
+                return;
+            }
+            var bottomChip = e.target.closest('[data-footer-bottom-id]');
+            if (bottomChip) {
+                var bottomId = bottomChip.getAttribute('data-footer-bottom-id');
+                var bottomIndex = footer.bottomLinks.findIndex(function (item) { return item.id === bottomId; });
+                beginFooterDrag(e, bottomChip, {
+                    kind: 'bottom',
+                    axis: 'x',
+                    itemId: bottomId,
+                    pointerId: 'mouse',
+                    initialIndex: bottomIndex >= 0 ? bottomIndex : 0
+                });
+            }
         });
 
         footerCanvas.addEventListener('click', function (e) {
@@ -1660,7 +2003,7 @@
                 e.stopPropagation();
                 return;
             }
-            if (linkDragState && linkDragState.moved) return;
+            if (footerDragState && footerDragState.moved) return;
 
             var linkChip = e.target.closest('[data-footer-link-id]');
             if (linkChip) {
@@ -1705,7 +2048,7 @@
                 footerPreviewResizeObserver = null;
             }
             window.removeEventListener('resize', syncFooterPreviewScale);
-            linkDragState = null;
+            footerDragState = null;
         };
 
         if (previewWrap && typeof ResizeObserver !== 'undefined') {
@@ -2243,21 +2586,37 @@
 
         function clearCanvasPointerHandlers() {
             window.removeEventListener('pointermove', onCanvasPointerMove);
-            window.removeEventListener('pointerup', finishCanvasPointer);
-            window.removeEventListener('pointercancel', finishCanvasPointer);
+            window.removeEventListener('pointerup', finishCanvasPointer, true);
+            window.removeEventListener('pointercancel', finishCanvasPointer, true);
+            window.removeEventListener('mousemove', onCanvasMouseMove);
+            window.removeEventListener('mouseup', finishCanvasMouse);
         }
 
-        function armCanvasPointerHandlers() {
+        function armCanvasPointerHandlers(useMouse) {
             clearCanvasPointerHandlers();
-            window.addEventListener('pointermove', onCanvasPointerMove, { passive: false });
-            window.addEventListener('pointerup', finishCanvasPointer);
-            window.addEventListener('pointercancel', finishCanvasPointer);
+            if (useMouse) {
+                window.addEventListener('mousemove', onCanvasMouseMove, { passive: false });
+                window.addEventListener('mouseup', finishCanvasMouse);
+            } else {
+                window.addEventListener('pointermove', onCanvasPointerMove, { passive: false });
+                window.addEventListener('pointerup', finishCanvasPointer, true);
+                window.addEventListener('pointercancel', finishCanvasPointer, true);
+            }
         }
 
         function finishCanvasPointer(e) {
             if (canvasPointerId != null && e && e.pointerId != null && e.pointerId !== canvasPointerId) {
                 return;
             }
+            finalizeCanvasDrag(e);
+        }
+
+        function finishCanvasMouse(e) {
+            if (canvasPointerId !== 'mouse') return;
+            finalizeCanvasDrag(e);
+        }
+
+        function finalizeCanvasDrag(e) {
             clearCanvasPointerHandlers();
             if (resizeState) {
                 resizeState = null;
@@ -2272,20 +2631,38 @@
                 return;
             }
             var didMove = !!dragState.moved;
+            if (e) {
+                if (Math.abs(e.clientX - dragState.startX) > 4 || Math.abs(e.clientY - dragState.startY) > 4) {
+                    didMove = true;
+                }
+                if (didMove) {
+                    var dx = ((e.clientX - dragState.startX) / dragState.width) * 100;
+                    var dy = ((e.clientY - dragState.startY) / dragState.height) * 100;
+                    dragState.el.x = Math.max(0, Math.min(95, dragState.origX + dx));
+                    dragState.el.y = Math.max(0, Math.min(95, dragState.origY + dy));
+                }
+            }
+            if (dragState.node) {
+                dragState.node.style.transform = '';
+            }
             suppressCanvasClick = didMove;
             dragState = null;
             canvasPointerId = null;
             canvas.classList.remove('is-dragging');
             syncPageMeta();
-            if (didMove) {
-                paintCanvas({ skipInspector: true });
-            } else {
-                paintCanvas();
-            }
+            paintCanvas({ skipInspector: true });
         }
 
         function onCanvasPointerMove(e) {
-            if (canvasPointerId != null && e.pointerId !== canvasPointerId) return;
+            onCanvasDragMove(e, e.pointerId);
+        }
+
+        function onCanvasMouseMove(e) {
+            onCanvasDragMove(e, 'mouse');
+        }
+
+        function onCanvasDragMove(e, pointerId) {
+            if (canvasPointerId != null && pointerId !== canvasPointerId) return;
             if (resizeState) {
                 var dw = ((e.clientX - resizeState.startX) / resizeState.canvasW) * 100;
                 var dh = ((e.clientY - resizeState.startY) / resizeState.canvasH) * 100;
@@ -2300,14 +2677,16 @@
                 return;
             }
             if (!dragState) return;
-            var dx = ((e.clientX - dragState.startX) / dragState.width) * 100;
-            var dy = ((e.clientY - dragState.startY) / dragState.height) * 100;
-            if (Math.abs(e.clientX - dragState.startX) > 4 || Math.abs(e.clientY - dragState.startY) > 4) {
+            var dxPx = e.clientX - dragState.startX;
+            var dyPx = e.clientY - dragState.startY;
+            if (Math.abs(dxPx) > 4 || Math.abs(dyPx) > 4) {
                 dragState.moved = true;
             }
-            dragState.el.x = Math.max(0, Math.min(95, dragState.origX + dx));
-            dragState.el.y = Math.max(0, Math.min(95, dragState.origY + dy));
-            syncCanvasElementDom(dragState.el);
+            if (!dragState.moved) return;
+            e.preventDefault();
+            if (dragState.node) {
+                dragState.node.style.transform = 'translate(' + dxPx + 'px,' + dyPx + 'px)';
+            }
         }
 
         canvas.addEventListener('pointerdown', function (e) {
@@ -2335,7 +2714,7 @@
                     canvasH: rect.height
                 };
                 canvas.classList.add('is-resizing-image');
-                armCanvasPointerHandlers();
+                armCanvasPointerHandlers(false);
                 return;
             }
 
@@ -2360,6 +2739,7 @@
             } catch (_captureErr2) {}
             dragState = {
                 el: el,
+                node: node,
                 startX: e.clientX,
                 startY: e.clientY,
                 origX: el.x,
@@ -2370,7 +2750,37 @@
             };
             canvas.classList.add('is-dragging');
             paintInspector();
-            armCanvasPointerHandlers();
+            armCanvasPointerHandlers(false);
+        });
+
+        canvas.addEventListener('mousedown', function (e) {
+            if (e.button !== 0 || canvasPointerId != null) return;
+            if (e.target.closest('[data-image-resize-handle]')) return;
+            var node = e.target.closest('[data-el-id]');
+            if (!node) return;
+            if (window.PointerEvent) return;
+            e.preventDefault();
+            var elId = node.getAttribute('data-el-id');
+            var el = (page.elements || []).find(function (item) { return item.id === elId; });
+            if (!el) return;
+            editorState.selectedElementId = el.id;
+            updateCanvasSelectionClasses(el.id);
+            var rect = canvas.getBoundingClientRect();
+            canvasPointerId = 'mouse';
+            dragState = {
+                el: el,
+                node: node,
+                startX: e.clientX,
+                startY: e.clientY,
+                origX: el.x,
+                origY: el.y,
+                width: rect.width,
+                height: rect.height,
+                moved: false
+            };
+            canvas.classList.add('is-dragging');
+            paintInspector();
+            armCanvasPointerHandlers(true);
         });
 
         canvas.addEventListener('click', function (e) {
