@@ -32569,13 +32569,6 @@ function updateRouteIfReady() {
     const origin = pickupPlaceName || pickupQuery;
     const destination = deliveryPlaceName || deliveryQuery;
 
-// Initialize notification bell
-document.addEventListener('DOMContentLoaded', function () {
-    if (typeof window.notificationSystem === 'object' && window.notificationSystem.initBell) {
-        window.notificationSystem.initBell();
-    }
-}, { once: true });
-    
     updateRouteLabels();
     calculateAndRenderRoute(origin, destination);
 }
