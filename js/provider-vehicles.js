@@ -343,6 +343,10 @@
         }).join('') + '</div>';
     }
 
+    function renderOverviewEmptyHtml() {
+        return '<p class="provider-vehicle-overview-empty">No vehicles listed yet. Click <strong>Edit vehicles</strong> to add your fleet.</p>';
+    }
+
     global.anytransportProviderVehicles = {
         OTHER_TYPE_VALUE: OTHER_TYPE_VALUE,
         STANDARD_VEHICLE_TYPES: STANDARD_VEHICLE_TYPES,
@@ -355,6 +359,7 @@
         bindEditor: bindEditor,
         collectFleetFromEditor: collectFleetFromEditor,
         renderPublicFleetHtml: renderPublicFleetHtml,
+        renderOverviewEmptyHtml: renderOverviewEmptyHtml,
         iconSvg: iconSvg
     };
 })(typeof window !== 'undefined' ? window : this);
