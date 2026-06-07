@@ -31569,6 +31569,12 @@ let overviewRouteGeometry = null;
 let overviewStartCoords = null;
 let overviewEndCoords = null;
 
+const eircodeLookupGeneration = {
+    pickup: 0,
+    delivery: 0,
+    'multi-stop': 0
+};
+
 
 function initRoutePlanner() {
     if (!window.mapboxgl) {
@@ -31828,10 +31834,6 @@ function setupAreaOrEircodeAutocomplete(inputEl, type) {
             } else {
                 fetchCityAreaSuggestions(value, inputEl, type);
             }
-
-            if (isEircode(value)) {
-                handleAreaOrEircodeLookup(inputEl, type);
-            }
         }, 250);
     });
 
@@ -31999,11 +32001,20 @@ function fetchPostcodeSuggestions(query, inputEl, type) {
     fetch(geocodeUrl)
         .then(response => response.json())
         .then(data => {
-            const features = (data.features || []).filter((feature) => {
+            let features = (data.features || []).filter((feature) => {
                 if (getEircodeFromFeature(feature)) return true;
                 const placeTypes = Array.isArray(feature.place_type) ? feature.place_type : [];
                 return placeTypes.includes('postcode');
             });
+
+            if (isExact && isEircode(query)) {
+                features = features.filter((feature) => !mapboxFeatureIsRoutingKeyOnly(feature));
+                if (features.length === 0) {
+                    removeAutocompleteList(inputEl);
+                    return;
+                }
+            }
+
             if (features.length > 0) {
                 showPostcodeSuggestions(inputEl, features, type);
             } else {
@@ -32178,6 +32189,10 @@ function selectPostcodeSuggestion(feature, postcodeInput, type) {
         return;
     }
     const preferred = normalizeEircodeInput(String(postcodeInput?.value || '').trim());
+    if (isEircode(preferred) && mapboxFeatureIsRoutingKeyOnly(feature)) {
+        handleAreaOrEircodeLookup(postcodeInput, type);
+        return;
+    }
     applyAreaOrEircodeFeature(feature, type, postcodeInput, preferred);
 }
 
@@ -32305,15 +32320,23 @@ function applyAreaOrEircodeFeature(feature, type, sourceInput, preferredValue) {
     const typedEircode = isEircode(typedValue) ? normalizeEircodeInput(typedValue) : '';
 
     let eircode = getEircodeFromFeature(feature);
-    if (typedEircode && (!eircode || isRoutingKeyOnly(eircode) || !isEircode(eircode))) {
+    if (typedEircode) {
         eircode = typedEircode;
+    } else if (!eircode || isRoutingKeyOnly(eircode) || !isEircode(eircode)) {
+        eircode = '';
     }
 
     const city = getCityFromFeature(feature);
     const cityArea = getCityAreaFromFeature(feature, city);
-    const displayValue = eircode || cityArea || String(feature.text || '').trim() || String(feature.place_name || '').split(',')[0].trim();
+    let displayValue = eircode || cityArea || String(feature.text || '').trim() || String(feature.place_name || '').split(',')[0].trim();
 
     const combinedInput = document.getElementById(type === 'pickup' ? 'pickup-area-eircode' : 'delivery-area-eircode');
+    const currentCombined = String(combinedInput?.value || '').trim();
+    const currentFullEircode = isEircode(currentCombined) ? normalizeEircodeInput(currentCombined) : '';
+    if (currentFullEircode && (!displayValue || isRoutingKeyOnly(displayValue) || !isEircode(displayValue))) {
+        displayValue = currentFullEircode;
+        eircode = currentFullEircode;
+    }
     const addressInput = document.getElementById(type === 'pickup' ? 'pickup-address' : 'delivery-address');
     const cityInput = document.getElementById(type === 'pickup' ? 'pickup-city' : 'delivery-city');
     const cityAreaInput = document.getElementById(type === 'pickup' ? 'pickup-city-area' : 'delivery-city-area');
@@ -32393,24 +32416,46 @@ function handleAreaOrEircodeLookup(combinedInput, type) {
         return;
     }
 
-    if (isEircode(value)) {
-        geocodeEircode(value).then((feature) => {
-            if (!feature) {
-                updateRouteIfReady();
-                return;
-            }
-            applyAreaOrEircodeFeature(feature, type, combinedInput, value);
-        });
-        return;
-    }
+    const lookupKey = type === 'pickup' || type === 'delivery' ? type : 'multi-stop';
+    const generation = ++eircodeLookupGeneration[lookupKey];
+    const preferredValue = value;
 
-    geocodeCityArea(value).then((feature) => {
+    const finishLookup = (feature) => {
+        if (generation !== eircodeLookupGeneration[lookupKey]) {
+            return;
+        }
         if (!feature) {
+            if (isEircode(preferredValue)) {
+                applyTypedEircodeWithoutFeature(type, combinedInput, preferredValue);
+            }
             updateRouteIfReady();
             return;
         }
-        applyAreaOrEircodeFeature(feature, type, combinedInput);
-    });
+        applyAreaOrEircodeFeature(feature, type, combinedInput, preferredValue);
+    };
+
+    if (isEircode(value)) {
+        geocodeEircode(value).then(finishLookup);
+        return;
+    }
+
+    geocodeCityArea(value).then(finishLookup);
+}
+
+function applyTypedEircodeWithoutFeature(type, sourceInput, eircodeValue) {
+    const normalized = normalizeEircodeInput(eircodeValue);
+    if (!isEircode(normalized)) return;
+
+    const combinedInput = document.getElementById(type === 'pickup' ? 'pickup-area-eircode' : 'delivery-area-eircode');
+    const postcodeInput = document.getElementById(type === 'pickup' ? 'pickup-postcode' : 'delivery-postcode');
+    const activeInput = sourceInput || combinedInput || postcodeInput;
+
+    if (combinedInput) combinedInput.value = normalized;
+    if (postcodeInput) postcodeInput.value = normalized;
+    if (activeInput) {
+        activeInput.dataset.coords = '';
+        activeInput.dataset.placeName = normalized;
+    }
 }
 
 function handleEircodeLookup(postcodeInput, type) {
@@ -32482,68 +32527,44 @@ function geocodeEircode(eircode) {
         });
 }
 
-const NOMINATIM_USER_AGENT = 'AnyTransport.ie/1.0 (https://anytransport.ie)';
-
 function geocodeEircodeViaNominatim(eircode) {
     const normalized = normalizeEircodeInput(eircode);
-    if (!normalized) return Promise.resolve(null);
+    if (!normalized || !isEircode(normalized)) return Promise.resolve(null);
 
-    const compact = normalized.replace(/\s+/g, '');
-    const queryVariants = [`${normalized}, Ireland`, `${compact}, Ireland`].filter((query, index, list) => query && list.indexOf(query) === index);
+    const encoded = encodeURIComponent(normalized);
+    const apiPaths = ['api/index.php', './api/index.php', '../api/index.php'];
 
-    const fetchVariant = (index) => {
-        if (index >= queryVariants.length) return Promise.resolve(null);
-
-        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ie&q=${encodeURIComponent(queryVariants[index])}`;
-
-        return fetch(url, {
-            headers: {
-                Accept: 'application/json',
-                'User-Agent': NOMINATIM_USER_AGENT
-            }
-        })
-            .then((response) => response.json())
-            .then((results) => {
-                if (!Array.isArray(results) || results.length === 0) {
-                    return fetchVariant(index + 1);
-                }
-
-                const hit = results[0];
-                if (!nominatimResultMatchesEircode(hit, normalized)) {
-                    return fetchVariant(index + 1);
-                }
-
-                return mapNominatimToFeature(hit, normalized);
-            })
-            .catch(() => fetchVariant(index + 1));
-    };
-
-    return fetchVariant(0);
-}
-
-function nominatimResultMatchesEircode(hit, eircode) {
-    if (!hit || !eircode) return false;
-    const compact = normalizeEircodeInput(eircode).replace(/\s+/g, '').toUpperCase();
-    const displayCompact = String(hit.display_name || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-    return displayCompact.includes(compact);
-}
-
-function mapNominatimToFeature(hit, eircode) {
-    if (!hit) return null;
-
-    const lng = parseFloat(hit.lon);
-    const lat = parseFloat(hit.lat);
-    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
-
-    return {
-        place_name: hit.display_name || eircode,
-        text: normalizeEircodeInput(eircode),
-        place_type: ['postcode'],
-        context: [],
-        geometry: {
-            coordinates: [lng, lat]
+    const tryApiPath = (index) => {
+        if (index >= apiPaths.length) {
+            return Promise.resolve(null);
         }
+
+        const url = `${apiPaths[index]}?action=geocode.eircode&eircode=${encoded}`;
+        return fetch(url, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' }
+        })
+            .then((response) => {
+                if (!response.ok) {
+                    return tryApiPath(index + 1);
+                }
+                return response.json();
+            })
+            .then((payload) => {
+                if (payload && payload.ok && payload.feature) {
+                    const feature = payload.feature;
+                    if (!feature.text || !isEircode(feature.text)) {
+                        feature.text = normalized;
+                    }
+                    return feature;
+                }
+                return tryApiPath(index + 1);
+            })
+            .catch(() => tryApiPath(index + 1));
     };
+
+    return tryApiPath(0);
 }
 
 function mapboxFeatureIsRoutingKeyOnly(feature) {

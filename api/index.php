@@ -4346,6 +4346,92 @@ if (!empty($selected['file']) && $selected['file'] !== $storeFile) {
 }
 $input = read_json_input();
 
+function normalize_eircode_value($value) {
+    $raw = strtoupper(trim((string) $value));
+    if ($raw === '') {
+        return '';
+    }
+    if (!preg_match('/[0-9]/', $raw)) {
+        return $raw;
+    }
+    $stripped = preg_replace('/[^A-Z0-9]/', '', $raw);
+    $trimmed = substr($stripped, 0, 7);
+    if (strlen($trimmed) <= 3) {
+        return $trimmed;
+    }
+    return substr($trimmed, 0, 3) . ' ' . substr($trimmed, 3);
+}
+
+function is_full_eircode_value($value) {
+    $normalized = normalize_eircode_value($value);
+    return $normalized !== '' && preg_match('/^[A-Z][0-9][A-Z0-9] [A-Z0-9]{4}$/', $normalized);
+}
+
+function nominatim_hit_matches_eircode($hit, $eircode) {
+    if (!is_array($hit)) {
+        return false;
+    }
+    $compact = strtoupper(preg_replace('/[^A-Z0-9]/', '', normalize_eircode_value($eircode)));
+    $displayCompact = strtoupper(preg_replace('/[^A-Z0-9]/', '', (string) ($hit['display_name'] ?? '')));
+    return $compact !== '' && strpos($displayCompact, $compact) !== false;
+}
+
+function geocode_eircode_via_nominatim($eircode) {
+    $normalized = normalize_eircode_value($eircode);
+    if ($normalized === '') {
+        return null;
+    }
+
+    $compact = str_replace(' ', '', $normalized);
+    $queries = array_unique(array(
+        $normalized . ', Ireland',
+        $compact . ', Ireland'
+    ));
+
+    foreach ($queries as $query) {
+        $url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ie&q=' . rawurlencode($query);
+        $context = stream_context_create(array(
+            'http' => array(
+                'method' => 'GET',
+                'header' => "User-Agent: AnyTransport.ie/1.0 (https://anytransport.ie)\r\nAccept: application/json\r\n",
+                'timeout' => 8
+            )
+        ));
+        $body = @file_get_contents($url, false, $context);
+        if (!is_string($body) || trim($body) === '') {
+            continue;
+        }
+
+        $results = json_decode($body, true);
+        if (!is_array($results) || count($results) === 0 || !is_array($results[0])) {
+            continue;
+        }
+
+        $hit = $results[0];
+        if (!nominatim_hit_matches_eircode($hit, $normalized)) {
+            continue;
+        }
+
+        $lng = isset($hit['lon']) ? (float) $hit['lon'] : 0.0;
+        $lat = isset($hit['lat']) ? (float) $hit['lat'] : 0.0;
+        if ($lng === 0.0 && $lat === 0.0) {
+            continue;
+        }
+
+        return array(
+            'place_name' => (string) ($hit['display_name'] ?? $normalized),
+            'text' => $normalized,
+            'place_type' => array('postcode'),
+            'context' => array(),
+            'geometry' => array(
+                'coordinates' => array($lng, $lat)
+            )
+        );
+    }
+
+    return null;
+}
+
 switch ($action) {
     case 'auth.me':
         ensure_store_auto_bid_collections($store);
@@ -6284,6 +6370,24 @@ switch ($action) {
         header('Content-Type: ' . $contentType);
         echo $response;
         exit;
+
+    case 'geocode.eircode':
+        $eircode = trim((string) ($input['eircode'] ?? $_GET['eircode'] ?? ''));
+        if ($eircode === '') {
+            send_json(array('ok' => false, 'error' => 'Eircode is required.'), 400);
+        }
+        if (!is_full_eircode_value($eircode)) {
+            send_json(array('ok' => false, 'error' => 'Enter a full Eircode (for example D02 X285).'), 400);
+        }
+        $feature = geocode_eircode_via_nominatim($eircode);
+        if (!is_array($feature)) {
+            send_json(array('ok' => false, 'error' => 'Could not locate that Eircode.'), 404);
+        }
+        send_json(array(
+            'ok' => true,
+            'feature' => $feature,
+            'eircode' => normalize_eircode_value($eircode)
+        ));
 
     case 'providers.search':
         $sessionUser = get_current_user_record($store);
