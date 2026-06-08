@@ -80,6 +80,11 @@
             const fleetHtml = fleetApi && fleet.length
                 ? fleetApi.renderPublicFleetHtml(fleet)
                 : 'Not provided';
+            const insuranceApi = getInsuranceApi();
+            const insurance = insuranceApi ? insuranceApi.normalizeInsuranceFromUser(u) : [];
+            const insuranceHtml = insuranceApi && insurance.length
+                ? insuranceApi.renderPublicInsuranceHtml(insurance)
+                : 'Not provided';
             const initial = escapeHtml(String((u.name || '').toString().charAt(0) || 'P'));
             return '<div class="provider-card">' +
                 '<div style="display:flex;gap:12px;align-items:center;">' +
@@ -91,6 +96,7 @@
                 '<div style="margin-top:8px;"><span class="label">About</span><div class="profile-value">' + about + '</div></div>' +
                 '<div style="margin-top:8px;"><span class="label">Services</span><div class="profile-value">' + services + '</div></div>' +
                 '<div style="margin-top:8px;"><span class="label">Vehicles</span><div class="profile-value">' + fleetHtml + '</div></div>' +
+                '<div style="margin-top:8px;"><span class="label">Insurance</span><div class="profile-value">' + insuranceHtml + '</div></div>' +
                 '</div>';
         }
 
@@ -200,6 +206,7 @@
 
         renderServices(u);
         renderVehicleFleet(u);
+        renderInsuranceList(u);
         renderPayments(u);
         renderPhotos(u);
         renderActions(u, ownProfile);
@@ -409,6 +416,10 @@
         return window.anytransportProviderVehicles || null;
     }
 
+    function getInsuranceApi() {
+        return window.anytransportProviderInsurance || null;
+    }
+
     function renderVehicleFleet(u) {
         const el = document.getElementById('provider-vehicle-fleet');
         if (!el) return;
@@ -419,6 +430,18 @@
             return;
         }
         el.innerHTML = '<span class="provider-empty-hint">Add your vehicles in the editor below so customers know what you operate.</span>';
+    }
+
+    function renderInsuranceList(u) {
+        const el = document.getElementById('provider-insurance-list');
+        if (!el) return;
+        const insuranceApi = getInsuranceApi();
+        const insurance = insuranceApi ? insuranceApi.normalizeInsuranceFromUser(u) : [];
+        if (insurance.length && insuranceApi) {
+            el.innerHTML = insuranceApi.renderPublicInsuranceHtml(insurance);
+            return;
+        }
+        el.innerHTML = '<span class="provider-empty-hint">Add your insurance details in the editor below so customers know what cover you hold.</span>';
     }
 
     function renderTransportModes(u) {
@@ -711,6 +734,10 @@
         let editorFleet = fleetApi ? fleetApi.normalizeFleetFromUser(u, getTransportModes) : [];
         let vehiclesEditMode = false;
         let editorFleetSnapshot = editorFleet.slice();
+        const insuranceApi = getInsuranceApi();
+        let editorInsurance = insuranceApi ? insuranceApi.normalizeInsuranceFromUser(u) : [];
+        let insuranceEditMode = false;
+        let editorInsuranceSnapshot = editorInsurance.slice();
         let pendingPhotos = [];
 
         root.innerHTML = [
@@ -806,6 +833,18 @@
             '        <div id="profile-vehicle-fleet-editor-wrap" class="profile-vehicle-fleet-editor-wrap" hidden>',
             '          <div id="profile-vehicle-fleet-editor"></div>',
             (isEditable ? '          <div class="profile-vehicle-edit-actions"><button type="button" id="profile-vehicle-edit-done" class="btn btn-primary">Done</button><button type="button" id="profile-vehicle-edit-cancel" class="btn btn-outline">Cancel</button></div>' : ''),
+            '        </div>',
+            '      </div>',
+            '      <div class="profile-insurance-section">',
+            '        <div class="profile-insurance-section-header">',
+            '          <h3 class="profile-section-title profile-insurance-section-title">Insurance</h3>',
+            (isEditable ? '          <button type="button" id="profile-insurance-edit-toggle" class="btn btn-outline profile-insurance-edit-btn">Edit insurance</button>' : ''),
+            '        </div>',
+            '        <div class="profile-muted">Tell customers what insurance you hold and the maximum value each policy covers.</div>',
+            '        <div id="profile-insurance-overview" class="profile-insurance-overview"></div>',
+            '        <div id="profile-insurance-editor-wrap" class="profile-insurance-editor-wrap" hidden>',
+            '          <div id="profile-insurance-editor"></div>',
+            (isEditable ? '          <div class="profile-insurance-edit-actions"><button type="button" id="profile-insurance-edit-done" class="btn btn-primary">Done</button><button type="button" id="profile-insurance-edit-cancel" class="btn btn-outline">Cancel</button></div>' : ''),
             '        </div>',
             '      </div>',
             '      <h3 class="profile-section-title" style="margin-top:20px;">Don\'t want any more invitations to bid?</h3>',
@@ -947,6 +986,11 @@
                 : formatArrayChange('Modes of transport', saved.transportModes, current.transportModes);
             if (transportChange) changes.push(transportChange);
 
+            const insuranceChange = insuranceApi
+                ? insuranceApi.formatInsuranceChange(saved.providerInsurance, current.providerInsurance)
+                : null;
+            if (insuranceChange) changes.push(insuranceChange);
+
             formatPaymentMethodsChange(saved, current).forEach(function (line) {
                 changes.push(line);
             });
@@ -1041,6 +1085,14 @@
             return editorFleet;
         }
 
+        function getCurrentEditorInsurance() {
+            const insuranceRoot = document.getElementById('profile-insurance-editor');
+            if (insuranceEditMode && insuranceRoot && insuranceApi) {
+                return insuranceApi.collectInsuranceFromEditor(insuranceRoot);
+            }
+            return editorInsurance;
+        }
+
         function buildPayload() {
             const services = collectCheckedServices();
             const paymentMethods = collectPaymentMethods();
@@ -1049,6 +1101,7 @@
             const fleetLegacy = fleetApi
                 ? fleetApi.deriveLegacyFromFleet(fleet)
                 : { providerVehicles: [], transportModes: collectCheckedTransportModes(), vehicleCount: null };
+            const insurance = getCurrentEditorInsurance();
             const city = String(document.getElementById('profile-city')?.value || '').trim();
             const businessName = String(document.getElementById('profile-business-name')?.value || '').trim();
             return {
@@ -1078,6 +1131,9 @@
                 transportModes: fleetLegacy.transportModes,
                 providerVehicles: fleetLegacy.providerVehicles,
                 vehicleCount: fleetLegacy.vehicleCount,
+                providerInsurance: insuranceApi
+                    ? insurance.map(function (entry) { return insuranceApi.normalizeInsuranceEntry(entry); }).filter(Boolean)
+                    : insurance,
                 paymentMethods: paymentMethods,
                 paymentMethodsCustom: paymentMethodsCustom,
                 acceptsCash: !!paymentMethods.cash,
@@ -1228,10 +1284,19 @@
                         renderVehicleFleetOverview();
                         setVehicleEditMode(false);
                     }
+                    if (insuranceApi && payload.providerInsurance) {
+                        editorInsurance = payload.providerInsurance.map(function (entry) {
+                            return insuranceApi.normalizeInsuranceEntry(entry);
+                        }).filter(Boolean);
+                        editorInsuranceSnapshot = JSON.parse(JSON.stringify(editorInsurance));
+                        renderInsuranceOverview();
+                        setInsuranceEditMode(false);
+                    }
                     try {
                         renderPayments(liveUser);
                         renderServices(liveUser);
                         renderVehicleFleet(liveUser);
+                        renderInsuranceList(liveUser);
                     } catch (_e) {}
                     const successText = document.getElementById('profile-save-success-text');
                     const successTitle = document.getElementById('profile-save-success-title');
@@ -1494,6 +1559,80 @@
             fleetEditCancel.addEventListener('click', function (e) {
                 e.preventDefault();
                 finishVehicleEditor(false);
+            });
+        }
+
+        const insuranceOverviewRoot = document.getElementById('profile-insurance-overview');
+        const insuranceEditorWrap = document.getElementById('profile-insurance-editor-wrap');
+        const insuranceEditorRoot = document.getElementById('profile-insurance-editor');
+        const insuranceEditToggle = document.getElementById('profile-insurance-edit-toggle');
+        const insuranceEditDone = document.getElementById('profile-insurance-edit-done');
+        const insuranceEditCancel = document.getElementById('profile-insurance-edit-cancel');
+
+        function renderInsuranceOverview() {
+            if (!insuranceOverviewRoot || !insuranceApi) return;
+            if (editorInsurance.length) {
+                insuranceOverviewRoot.innerHTML = insuranceApi.renderPublicInsuranceHtml(editorInsurance);
+            } else {
+                insuranceOverviewRoot.innerHTML = insuranceApi.renderOverviewEmptyHtml();
+            }
+        }
+
+        function mountInsuranceEditor() {
+            if (!insuranceEditorRoot || !insuranceApi) return;
+            insuranceEditorRoot.innerHTML = insuranceApi.renderEditorHtml(editorInsurance, false);
+            insuranceApi.bindEditor(insuranceEditorRoot, function (collected) {
+                editorInsurance = collected || insuranceApi.collectInsuranceFromEditor(insuranceEditorRoot);
+                markProfileDirty();
+            });
+        }
+
+        function setInsuranceEditMode(editing) {
+            insuranceEditMode = !!editing;
+            if (insuranceOverviewRoot) insuranceOverviewRoot.hidden = insuranceEditMode;
+            if (insuranceEditorWrap) insuranceEditorWrap.hidden = !insuranceEditMode;
+            if (insuranceEditToggle) {
+                insuranceEditToggle.hidden = insuranceEditMode;
+            }
+        }
+
+        function openInsuranceEditor() {
+            editorInsuranceSnapshot = JSON.parse(JSON.stringify(editorInsurance || []));
+            mountInsuranceEditor();
+            setInsuranceEditMode(true);
+        }
+
+        function finishInsuranceEditor(saveChanges) {
+            if (saveChanges && insuranceEditorRoot && insuranceApi) {
+                editorInsurance = insuranceApi.collectInsuranceFromEditor(insuranceEditorRoot);
+                renderInsuranceOverview();
+                markProfileDirty();
+            } else {
+                editorInsurance = JSON.parse(JSON.stringify(editorInsuranceSnapshot || []));
+                renderInsuranceOverview();
+            }
+            setInsuranceEditMode(false);
+        }
+
+        renderInsuranceOverview();
+        setInsuranceEditMode(false);
+
+        if (insuranceEditToggle && isEditable) {
+            insuranceEditToggle.addEventListener('click', function (e) {
+                e.preventDefault();
+                openInsuranceEditor();
+            });
+        }
+        if (insuranceEditDone && isEditable) {
+            insuranceEditDone.addEventListener('click', function (e) {
+                e.preventDefault();
+                finishInsuranceEditor(true);
+            });
+        }
+        if (insuranceEditCancel && isEditable) {
+            insuranceEditCancel.addEventListener('click', function (e) {
+                e.preventDefault();
+                finishInsuranceEditor(false);
             });
         }
 

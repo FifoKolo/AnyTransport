@@ -467,6 +467,36 @@ function normalize_user($user) {
         $normalized['providerVehicles'] = $fleet;
     }
 
+    if (!isset($normalized['providerInsurance']) || !is_array($normalized['providerInsurance'])) {
+        $normalized['providerInsurance'] = array();
+    } else {
+        $insuranceList = array();
+        foreach ($normalized['providerInsurance'] as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $type = trim((string) ($entry['type'] ?? $entry['customType'] ?? $entry['insuranceType'] ?? ''));
+            if ($type === '') {
+                continue;
+            }
+            $coverageRaw = $entry['coverageUpTo'] ?? $entry['coverageValue'] ?? null;
+            $coverageUpTo = null;
+            if (strtolower($type) !== 'no insurance' && $coverageRaw !== null && $coverageRaw !== '') {
+                $coverageUpTo = (float) preg_replace('/[^0-9.]/', '', (string) $coverageRaw);
+                if (!is_finite($coverageUpTo) || $coverageUpTo < 0) {
+                    $coverageUpTo = null;
+                } else {
+                    $coverageUpTo = min(999999999, round($coverageUpTo));
+                }
+            }
+            $insuranceList[] = array(
+                'type' => $type,
+                'coverageUpTo' => $coverageUpTo,
+            );
+        }
+        $normalized['providerInsurance'] = $insuranceList;
+    }
+
     $cityValue = trim((string) ($normalized['serviceAreaCity'] ?? $normalized['city'] ?? $normalized['town'] ?? $normalized['location'] ?? ''));
     if ($cityValue !== '') {
         $normalized['serviceAreaCity'] = $cityValue;
@@ -1146,7 +1176,7 @@ function provider_profile_review_field_names() {
         'city', 'town', 'location', 'phone', 'contact',
         'description', 'businessDescription', 'about', 'bio', 'summary',
         'services', 'categories', 'skills', 'photos', 'avatar', 'coverImage',
-        'transportModes', 'providerVehicles', 'vehicleCount',
+        'transportModes', 'providerVehicles', 'vehicleCount', 'providerInsurance',
         'website', 'companyType', 'paymentMethods', 'paymentMethodsCustom', 'acceptsCash', 'paypal', 'visa', 'mastercard', 'bankTransfer', 'americanExpress', 'cheque', 'cash',
         'blockInvites', 'muteInviteEmails',
         'serviceAreaCity', 'serviceAreaAddress', 'serviceAreaLat', 'serviceAreaLng',
@@ -1226,6 +1256,7 @@ function provider_profile_field_labels() {
         'transportModes' => 'Transport modes',
         'providerVehicles' => 'Vehicles',
         'vehicleCount' => 'Vehicle count',
+        'providerInsurance' => 'Insurance',
         'website' => 'Website',
         'companyType' => 'Company type',
         'paymentMethods' => 'Payment methods',
@@ -1251,6 +1282,22 @@ function format_provider_profile_value_for_email($value) {
     if (is_array($value)) {
         $parts = array();
         foreach ($value as $entry) {
+            if (is_array($entry)) {
+                $label = trim((string) ($entry['type'] ?? $entry['name'] ?? ''));
+                if ($label === '') {
+                    continue;
+                }
+                if (isset($entry['coverageUpTo']) && $entry['coverageUpTo'] !== null && $entry['coverageUpTo'] !== '') {
+                    $parts[] = $label . ' (up to £' . number_format((float) $entry['coverageUpTo']) . ')';
+                } elseif (isset($entry['quantity']) && isset($entry['capacity'])) {
+                    $parts[] = (int) $entry['quantity'] . '× ' . $label . ' (' . trim((string) $entry['capacity']) . ')';
+                } elseif (isset($entry['quantity'])) {
+                    $parts[] = (int) $entry['quantity'] . '× ' . $label;
+                } else {
+                    $parts[] = $label;
+                }
+                continue;
+            }
             if (is_scalar($entry) && trim((string) $entry) !== '') {
                 $parts[] = trim((string) $entry);
             }
@@ -4949,7 +4996,7 @@ switch ($action) {
                 'city', 'town', 'location', 'phone', 'contact',
                 'description', 'businessDescription', 'about', 'bio', 'summary',
                 'services', 'categories', 'skills', 'photos', 'avatar', 'coverImage',
-                'transportModes', 'providerVehicles', 'vehicleCount',
+                'transportModes', 'providerVehicles', 'vehicleCount', 'providerInsurance',
                 'website', 'companyType', 'paymentMethods', 'paymentMethodsCustom', 'acceptsCash', 'paypal', 'visa', 'mastercard', 'bankTransfer', 'americanExpress', 'cheque', 'cash',
                 'blockInvites', 'muteInviteEmails',
                 'serviceAreaCity', 'serviceAreaAddress', 'serviceAreaLat', 'serviceAreaLng',
