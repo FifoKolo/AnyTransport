@@ -5255,6 +5255,55 @@ switch ($action) {
 
         exit;
 
+    case 'provider.profile.review.cancel':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $currentUser = get_current_user_record($store);
+        $currentUserId = is_array($currentUser) ? trim((string) ($currentUser['id'] ?? '')) : '';
+        if ($currentUserId === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+
+        $providerId = trim((string) ($input['providerId'] ?? $currentUserId));
+        if ($providerId === '') {
+            $providerId = $currentUserId;
+        }
+        if ($providerId !== $currentUserId && !is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'You can only withdraw your own pending profile changes.'), 403);
+        }
+
+        $index = find_user_index_by_id($store['users'], $providerId);
+        if ($index < 0) {
+            send_json(array('ok' => false, 'error' => 'Provider not found.'), 404);
+        }
+
+        $provider = normalize_user($store['users'][$index]);
+        if (!is_provider_account($provider)) {
+            send_json(array('ok' => false, 'error' => 'This user is not a provider.'), 400);
+        }
+        if (strtolower(trim((string) ($provider['profileChangeStatus'] ?? ''))) !== 'pending_review') {
+            send_json(array('ok' => false, 'error' => 'There are no profile changes awaiting review to withdraw.'), 400);
+        }
+
+        $store['users'][$index]['profileChangePending'] = array();
+        $store['users'][$index]['profileChangeStatus'] = 'none';
+        $store['users'][$index]['profileChangeSubmittedAt'] = '';
+        $store['users'][$index]['profileChangeReviewedAt'] = '';
+        $store['users'][$index]['profileChangeReviewedBy'] = '';
+        $store['users'][$index]['profileChangeReviewNotes'] = '';
+        $updatedProvider = normalize_user($store['users'][$index]);
+        $store['users'][$index] = $updatedProvider;
+        write_store($storeFile, $store);
+
+        send_json(array(
+            'ok' => true,
+            'user' => sanitize_user_for_client($updatedProvider),
+            'message' => 'Your pending profile changes were withdrawn. Your live profile is unchanged.'
+        ));
+
+        exit;
+
     case 'provider.profile.review.queue':
         $currentUser = get_current_user_record($store);
         if (!is_admin_user($currentUser)) {

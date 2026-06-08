@@ -573,10 +573,18 @@
         const status = String(u && u.profileChangeStatus || '').trim().toLowerCase();
         if (status === 'pending_review') {
             const submitted = u.profileChangeSubmittedAt ? formatDateTime(u.profileChangeSubmittedAt) : '';
-            return '<div class="signup-mode-note" style="margin:0 0 14px; padding:12px 14px; border-radius:10px; background:#fffbeb; border:1px solid #fde68a; color:#92400e;">' +
-                '<strong>Changes awaiting admin review.</strong> Your public profile still shows the previous approved details' +
-                (submitted ? (' (submitted ' + escapeHtml(submitted) + ').') : '.') +
-                ' You will receive an email when an admin approves or declines them.</div>';
+            return [
+                '<div class="profile-pending-review-banner">',
+                '  <p class="profile-pending-review-text">',
+                '    <strong>Changes awaiting admin review.</strong> Your public profile still shows the previous approved details',
+                (submitted ? (' (submitted ' + escapeHtml(submitted) + ').') : '.'),
+                '    You will receive an email when an admin approves or declines them.',
+                '  </p>',
+                '  <div class="profile-pending-review-actions">',
+                '    <button type="button" id="profile-cancel-pending-btn" class="btn btn-outline profile-cancel-pending-btn">Undo profile changes</button>',
+                '  </div>',
+                '</div>'
+            ].join('');
         }
         if (status === 'rejected') {
             const notes = String(u.profileChangeReviewNotes || '').trim();
@@ -597,6 +605,52 @@
         } catch (_e) {
             return '';
         }
+    }
+
+    function withdrawPendingProfileChanges(liveUser) {
+        if (!liveUser || !liveUser.id) {
+            return;
+        }
+        const status = String(liveUser.profileChangeStatus || '').trim().toLowerCase();
+        if (status !== 'pending_review') {
+            return;
+        }
+        if (!window.confirm('Withdraw your pending profile changes? Your live profile will stay as it is now and the admin review request will be cancelled.')) {
+            return;
+        }
+
+        const userId = String(liveUser.id);
+        Promise.resolve().then(function () {
+            if (window.anytransportApi && typeof window.anytransportApi.cancelProviderProfileReview === 'function') {
+                return window.anytransportApi.cancelProviderProfileReview(userId);
+            }
+            throw new Error('Profile withdraw is not available right now.');
+        }).then(function (updated) {
+            if (!updated || !updated.id) {
+                throw new Error('Could not withdraw profile changes. Please try again.');
+            }
+            if (window.auth) {
+                if (typeof window.auth.mergeUserIntoLocalCache === 'function') {
+                    window.auth.mergeUserIntoLocalCache(updated);
+                }
+                if (window.auth.getUser && String(window.auth.getUser().id) === String(updated.id)) {
+                    window.auth.currentUser = updated;
+                    if (typeof window.auth.setStoredCurrentUser === 'function') {
+                        window.auth.setStoredCurrentUser(updated);
+                    }
+                }
+                if (typeof window.auth.refreshSessionUserFromServer === 'function') {
+                    window.auth.refreshSessionUserFromServer();
+                }
+            }
+            return loadProvider(userId).then(function (freshUser) {
+                renderProvider(freshUser || updated, true);
+            });
+        }).then(function () {
+            alert('Your pending profile changes were withdrawn. Your live profile is unchanged.');
+        }).catch(function (err) {
+            alert(err && err.message ? err.message : 'Could not withdraw profile changes.');
+        });
     }
 
     function syncPendingProviderNav(u, ownProfile) {
@@ -1494,6 +1548,14 @@
             fleetEditCancel.addEventListener('click', function (e) {
                 e.preventDefault();
                 finishVehicleEditor(false);
+            });
+        }
+
+        const cancelPendingBtn = document.getElementById('profile-cancel-pending-btn');
+        if (cancelPendingBtn && isEditable) {
+            cancelPendingBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                withdrawPendingProfileChanges(liveUser);
             });
         }
 

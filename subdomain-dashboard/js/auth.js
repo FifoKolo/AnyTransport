@@ -423,6 +423,12 @@ window.anytransportApi = window.anytransportApi || (function () {
                 notes: notes || ''
             });
         },
+        cancelProviderProfileReview: function (providerId) {
+            const response = request('provider.profile.review.cancel', 'POST', {
+                providerId: providerId ? String(providerId) : ''
+            });
+            return response.user || null;
+        },
         replaceUsers: function (users) {
             const response = request('users.replaceAll', 'POST', { users: Array.isArray(users) ? users : [] });
             return Array.isArray(response.users) ? response.users : [];
