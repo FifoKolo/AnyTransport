@@ -2,10 +2,13 @@
     const STANDARD_TRANSPORT_MODES = ['Car', 'Motorbike', 'Bicycle', 'Van', 'Truck', 'Trailer'];
     const STANDARD_PAYMENT_METHOD_KEYS = ['cash', 'cheque', 'visa', 'mastercard', 'paypal', 'americanExpress', 'bankTransfer', 'revolut'];
     let editorCustomTransportModes = [];
+    let profileEditorLiveUserRef = null;
+    let profileEditActionsBound = false;
 
     document.addEventListener('DOMContentLoaded', init);
 
     function init() {
+        ensureProfileEditActions();
         const params = new URLSearchParams(window.location.search);
         let userId = String(params.get('userId') || params.get('id') || params.get('provider') || '').trim();
 
@@ -697,6 +700,69 @@
         return '';
     }
 
+    function setProfileEditorLiveUser(user) {
+        if (user && typeof user === 'object' && user.id) {
+            profileEditorLiveUserRef = user;
+        }
+    }
+
+    function resolveProfileEditorLiveUser(fallback) {
+        let candidate = fallback || profileEditorLiveUserRef || null;
+        try {
+            const viewer = getViewer();
+            if (viewer && viewer.id) {
+                if (!candidate || String(candidate.id) !== String(viewer.id)) {
+                    candidate = Object.assign({}, viewer, candidate || {});
+                } else {
+                    candidate = Object.assign({}, candidate, viewer);
+                }
+            }
+        } catch (_e) {
+            /* ignore */
+        }
+        return candidate;
+    }
+
+    function ensureProfileEditActions() {
+        if (profileEditActionsBound) {
+            return;
+        }
+        profileEditActionsBound = true;
+        document.addEventListener('click', function (event) {
+            const btn = event.target.closest('#profile-cancel-pending-btn');
+            if (!btn) {
+                return;
+            }
+            const editRoot = document.getElementById('provider-edit');
+            if (!editRoot || !editRoot.contains(btn)) {
+                return;
+            }
+            event.preventDefault();
+            withdrawPendingProfileChanges(resolveProfileEditorLiveUser());
+        });
+    }
+
+    function mountProfileReviewBanner(bannerHost, liveUser) {
+        if (!bannerHost || !liveUser) {
+            return;
+        }
+        const existingBanner = bannerHost.querySelector('[data-profile-review-banner]');
+        if (existingBanner) {
+            existingBanner.remove();
+        }
+        const bannerHtml = buildProfileChangeStatusBanner(liveUser);
+        if (!bannerHtml) {
+            return;
+        }
+        const wrap = document.createElement('div');
+        wrap.setAttribute('data-profile-review-banner', '1');
+        wrap.innerHTML = bannerHtml;
+        const bannerNode = wrap.firstElementChild;
+        if (bannerNode) {
+            bannerHost.insertBefore(bannerNode, bannerHost.querySelector('.profile-editor-subtitle')?.nextSibling || null);
+        }
+    }
+
     function formatDateTime(value) {
         if (!value) return '';
         try {
@@ -709,18 +775,21 @@
     }
 
     function withdrawPendingProfileChanges(liveUser) {
-        if (!liveUser || !liveUser.id) {
+        const user = resolveProfileEditorLiveUser(liveUser);
+        if (!user || !user.id) {
+            alert('Could not resolve your profile session. Please refresh the page and try again.');
             return;
         }
-        const status = String(liveUser.profileChangeStatus || '').trim().toLowerCase();
+        const status = String(user.profileChangeStatus || '').trim().toLowerCase();
         if (status !== 'pending_review') {
+            alert('There are no profile changes awaiting review to withdraw.');
             return;
         }
         if (!window.confirm('Withdraw your pending profile changes? Your live profile will stay as it is now and the admin review request will be cancelled.')) {
             return;
         }
 
-        const userId = String(liveUser.id);
+        const userId = String(user.id);
         Promise.resolve().then(function () {
             if (window.anytransportApi && typeof window.anytransportApi.cancelProviderProfileReview === 'function') {
                 return window.anytransportApi.cancelProviderProfileReview(userId);
@@ -743,6 +812,7 @@
                 }
             }
             renderProvider(updated, true);
+            setProfileEditorLiveUser(updated);
             return loadProvider(userId).then(function (freshUser) {
                 if (freshUser && freshUser.id) {
                     clearPendingProfileReviewClientState(freshUser);
@@ -832,6 +902,8 @@
     }
 
     function renderEditor(liveUser, editorUser) {
+        ensureProfileEditActions();
+        setProfileEditorLiveUser(liveUser);
         const u = editorUser || liveUser;
         const root = document.getElementById('provider-edit');
         if (!root) return;
@@ -1416,8 +1488,15 @@
                 }
                 if (serverUser && typeof serverUser === 'object' && serverUser.id) {
                     Object.assign(liveUser, serverUser);
+                    if (pendingReview) {
+                        liveUser.profileChangeStatus = 'pending_review';
+                    }
                     delete liveUser._pendingReview;
                     delete liveUser._profileSaveMessage;
+                    if (pendingReview) {
+                        liveUser._pendingReview = true;
+                    }
+                    setProfileEditorLiveUser(liveUser);
                     Object.assign(u, getProfileEditorUser(liveUser));
                     if (fleetApi && payload.providerVehicles) {
                         editorFleet = payload.providerVehicles.map(function (entry) {
@@ -1454,21 +1533,18 @@
                     }
                     const bannerHost = root.querySelector('.profile-editor-header > div');
                     if (bannerHost && isEditable) {
-                        const existingBanner = bannerHost.querySelector('[data-profile-review-banner]');
-                        if (existingBanner) existingBanner.remove();
-                        const bannerHtml = buildProfileChangeStatusBanner(liveUser);
-                        if (bannerHtml) {
-                            const wrap = document.createElement('div');
-                            wrap.setAttribute('data-profile-review-banner', '1');
-                            wrap.innerHTML = bannerHtml;
-                            bannerHost.insertBefore(wrap.firstChild, bannerHost.querySelector('.profile-editor-subtitle')?.nextSibling || null);
-                        }
+                        mountProfileReviewBanner(bannerHost, liveUser);
+                    }
+                    try {
+                        syncPendingProviderNav(liveUser, true);
+                    } catch (_navErr) {
+                        /* ignore */
                     }
                     const viewer = getViewer();
                     if (viewer && String(viewer.id) === String(serverUser.id) && window.auth) {
                         const merged = typeof window.auth.mergeUserIntoLocalCache === 'function'
-                            ? window.auth.mergeUserIntoLocalCache(Object.assign({}, viewer, serverUser))
-                            : Object.assign({}, viewer, serverUser);
+                            ? window.auth.mergeUserIntoLocalCache(Object.assign({}, viewer, liveUser, serverUser))
+                            : Object.assign({}, viewer, liveUser, serverUser);
                         window.auth.currentUser = merged;
                         if (typeof window.auth.setStoredCurrentUser === 'function') {
                             window.auth.setStoredCurrentUser(merged);
@@ -1776,14 +1852,6 @@
             insuranceEditCancel.addEventListener('click', function (e) {
                 e.preventDefault();
                 finishInsuranceEditor(false);
-            });
-        }
-
-        const cancelPendingBtn = document.getElementById('profile-cancel-pending-btn');
-        if (cancelPendingBtn && isEditable) {
-            cancelPendingBtn.addEventListener('click', function (e) {
-                e.preventDefault();
-                withdrawPendingProfileChanges(liveUser);
             });
         }
 
