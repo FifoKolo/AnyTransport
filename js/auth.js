@@ -162,10 +162,24 @@ window.anytransportApi = window.anytransportApi || (function () {
     }
 
     function resolveApiUrl() {
+        try {
+            const cached = sessionStorage.getItem('anytransport_resolved_api_url');
+            if (cached && isApiReachable(cached)) {
+                return cached;
+            }
+        } catch (_cacheError) {
+            // Ignore storage errors and probe candidates below.
+        }
+
         const candidates = getApiCandidates();
         for (let i = 0; i < candidates.length; i += 1) {
             if (isApiReachable(candidates[i])) {
                 console.info('[AnyTransport API] Resolved to:', candidates[i]);
+                try {
+                    sessionStorage.setItem('anytransport_resolved_api_url', candidates[i]);
+                } catch (_saveError) {
+                    // Ignore storage errors.
+                }
                 return candidates[i];
             }
         }
@@ -425,7 +439,13 @@ window.anytransportApi = window.anytransportApi || (function () {
             const response = request('provider.profile.review.cancel', 'POST', {
                 providerId: providerId ? String(providerId) : ''
             });
-            return response.user || null;
+            const user = response.user || null;
+            if (user && typeof user === 'object') {
+                user._pendingReview = false;
+                user.profileChangeStatus = user.profileChangeStatus || 'none';
+                user.profileChangePending = user.profileChangePending || {};
+            }
+            return user;
         },
         replaceUsers: function (users) {
             const response = request('users.replaceAll', 'POST', { users: Array.isArray(users) ? users : [] });
@@ -454,6 +474,9 @@ window.anytransportApi = window.anytransportApi || (function () {
                 }
                 if (options && typeof options === 'object' && options.scope) {
                     params.scope = String(options.scope);
+                }
+                if (options && typeof options === 'object' && options.light) {
+                    params.light = '1';
                 }
                 const response = request('quotes.list', 'GET', null, params);
                 return Array.isArray(response.quotes) ? response.quotes : [];
@@ -822,7 +845,13 @@ class AuthManager {
         if (!normalized.profileChangeStatus) {
             normalized.profileChangeStatus = 'none';
         }
-        if (!normalized.profileChangePending || typeof normalized.profileChangePending !== 'object') {
+        const profileReviewStatus = String(normalized.profileChangeStatus || '').trim().toLowerCase();
+        if (profileReviewStatus !== 'pending_review') {
+            normalized.profileChangePending = {};
+            if (profileReviewStatus === '') {
+                normalized.profileChangeStatus = 'none';
+            }
+        } else if (!normalized.profileChangePending || typeof normalized.profileChangePending !== 'object') {
             normalized.profileChangePending = {};
         }
         if (!normalized.profileChangeSubmittedAt) {

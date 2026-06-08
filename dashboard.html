@@ -244,13 +244,10 @@
     </div>
 
     <script src="js/cache-maintenance.js?v=20260322-2"></script>
-    <script src="js/auth.js?v=20260605-1"></script>
+    <script src="js/auth.js?v=20260609-3"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             try {
-                if (window.auth && typeof auth.refreshSessionUserFromServer === 'function') {
-                    auth.refreshSessionUserFromServer();
-                }
                 if (window.auth && typeof auth.guardProviderDashboardPage === 'function') {
                     auth.guardProviderDashboardPage();
                 }
@@ -261,11 +258,11 @@
     <script src="js/transport-mode-icons.js?v=20260605-23"></script>
     <script src="js/provider-vehicles.js?v=20260605-23"></script>
     <script src="js/provider-insurance.js?v=20260608-2"></script>
-    <script src="js/provider-profile.js?v=20260609-1"></script>
+    <script src="js/provider-profile.js?v=20260609-2"></script>
     <script src="js/site-content-images.js?v=20260605-21"></script>
     <script src="js/site-content-social.js?v=20260605-21"></script>
     <script src="js/site-content-admin.js?v=20260605-21"></script>
     <script src="js/admin-panel.js?v=20260608-1"></script>
-    <script src="js/dashboard-fixed.js?v=20260608-1"></script>
+    <script src="js/dashboard-fixed.js?v=20260609-1"></script>
 </body>
 </html>

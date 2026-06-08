@@ -74,8 +74,104 @@
         adminExpandedReportGroups: {},
         adminReviewRefreshTimer: null,
         siteContentAdminInitialized: false,
-        adminPanelInitialized: false
+        adminPanelInitialized: false,
+        adminDataCache: {
+            users: null,
+            quotes: null,
+            fetchedAt: 0,
+            ttlMs: 60000
+        }
     };
+
+    function invalidateAdminDataCache() {
+        state.adminDataCache.users = null;
+        state.adminDataCache.quotes = null;
+        state.adminDataCache.fetchedAt = 0;
+    }
+
+    function isAdminDataCacheFresh() {
+        return !!(state.adminDataCache.fetchedAt && (Date.now() - state.adminDataCache.fetchedAt) < state.adminDataCache.ttlMs);
+    }
+
+    function fetchAdminUsersCached(forceRefresh) {
+        if (!forceRefresh && isAdminDataCacheFresh() && Array.isArray(state.adminDataCache.users)) {
+            return state.adminDataCache.users;
+        }
+        let users = [];
+        try {
+            if (window.anytransportApi && typeof window.anytransportApi.getUsers === 'function') {
+                users = window.anytransportApi.getUsers();
+            }
+        } catch (_error) {
+            users = [];
+        }
+        if (!users.length) {
+            try {
+                users = auth && typeof auth.loadUsers === 'function' ? auth.loadUsers() : [];
+            } catch (_error2) {
+                users = [];
+            }
+        }
+        state.adminDataCache.users = Array.isArray(users) ? users : [];
+        state.adminDataCache.fetchedAt = Date.now();
+        return state.adminDataCache.users;
+    }
+
+    function fetchAdminQuotesCached(forceRefresh) {
+        if (!forceRefresh && isAdminDataCacheFresh() && Array.isArray(state.adminDataCache.quotes)) {
+            return state.adminDataCache.quotes;
+        }
+        let quotes = [];
+        if (window.anytransportApi && typeof window.anytransportApi.getQuotes === 'function') {
+            try {
+                quotes = window.anytransportApi.getQuotes(null, { light: true });
+            } catch (_error) {
+                quotes = [];
+            }
+        } else {
+            quotes = getAllQuotesFromLocalStorage();
+        }
+        state.adminDataCache.quotes = Array.isArray(quotes) ? quotes : [];
+        state.adminDataCache.fetchedAt = Date.now();
+        return state.adminDataCache.quotes;
+    }
+
+    function getAllQuotesFromLocalStorage() {
+        try {
+            const raw = JSON.parse(localStorage.getItem(LISTING_STORAGE_KEY) || '[]');
+            if (!Array.isArray(raw)) return [];
+
+            let changed = false;
+            const usedFormIds = new Set();
+            raw.forEach((quote) => {
+                if (!quote || typeof quote !== 'object') return;
+                const existing = String(quote.formId || '').trim();
+                if (/^\d{5}$/.test(existing)) {
+                    usedFormIds.add(existing);
+                }
+            });
+
+            raw.forEach((quote) => {
+                if (!quote || typeof quote !== 'object') return;
+                const existing = String(quote.formId || '').trim();
+                if (/^\d{5}$/.test(existing)) return;
+                quote.formId = generateUniqueFormId(usedFormIds);
+                changed = true;
+            });
+
+            if (changed) {
+                try {
+                    saveQuotesToStorage(raw);
+                } catch (_error) {
+                    // Ignore auto-fix persistence issues and continue with in-memory result.
+                }
+            }
+
+            return raw;
+        } catch (_error) {
+            return [];
+        }
+    }
 
     let adminReviewQueueRenderTimer = null;
 
@@ -422,13 +518,15 @@
 
         // Web-safe fallback: fetch all users and filter providers client-side.
         try {
-            if (window.anytransportApi && typeof window.anytransportApi.getUsers === 'function') {
-                const users = window.anytransportApi.getUsers();
-                if (Array.isArray(users) && users.length) {
-                    providers = users.filter(isProviderPendingReview);
-                    if (providers.length) {
-                        return providers;
-                    }
+            const users = auth.isAdmin && auth.isAdmin()
+                ? fetchAdminUsersCached(false)
+                : (window.anytransportApi && typeof window.anytransportApi.getUsers === 'function'
+                    ? window.anytransportApi.getUsers()
+                    : []);
+            if (Array.isArray(users) && users.length) {
+                providers = users.filter(isProviderPendingReview);
+                if (providers.length) {
+                    return providers;
                 }
             }
         } catch (_error) {
@@ -449,29 +547,14 @@
     }
 
     function getAllProvidersForAdmin() {
-        let providers = [];
-        try {
-            if (window.anytransportApi && typeof window.anytransportApi.getUsers === 'function') {
-                const users = window.anytransportApi.getUsers();
-                if (Array.isArray(users) && users.length) {
-                    providers = users.filter((user) => String(user && user.role || '').toLowerCase().trim() === 'provider');
-                    return providers;
-                }
-            }
-        } catch (_error) {}
-
-        try {
-            const users = auth && typeof auth.loadUsers === 'function' ? auth.loadUsers() : [];
-            if (Array.isArray(users) && users.length) {
-                providers = users.filter((user) => String(user && user.role || '').toLowerCase().trim() === 'provider');
-            }
-        } catch (_error) {
-            providers = [];
-        }
-        return providers;
+        const users = getAllUsersForAdmin();
+        return users.filter((user) => String(user && user.role || '').toLowerCase().trim() === 'provider');
     }
 
     function getAllUsersForAdmin() {
+        if (auth.isAdmin && auth.isAdmin()) {
+            return fetchAdminUsersCached(false);
+        }
         try {
             if (window.anytransportApi && typeof window.anytransportApi.getUsers === 'function') {
                 const users = window.anytransportApi.getUsers();
@@ -570,13 +653,6 @@
             applyFocusedFormContext();
             renderAll(user);
 
-            if (canBeProvider) {
-                showTab('provider-board');
-            } else {
-                showTab('provider-board');
-                hideProviderOnlyTabs();
-            }
-
             // If the signed-in user is an admin, restrict the UI to admin-only views.
             if (auth.isAdmin && auth.isAdmin()) {
                 document.querySelectorAll('.nav-item').forEach((item) => {
@@ -588,11 +664,16 @@
                 });
                 const modeSwitch = document.getElementById('provider-mode-switch');
                 if (modeSwitch) modeSwitch.style.display = 'none';
-                // Ensure admin sees the verification review immediately
                 showTab('verification-review');
-                // Re-check inline nav visibility after adjustments
                 consolidateInlineNav();
                 return;
+            }
+
+            if (canBeProvider) {
+                showTab('provider-board');
+            } else {
+                showTab('provider-board');
+                hideProviderOnlyTabs();
             }
 
             // Re-check inline nav visibility after provider-only tabs may have been hidden
@@ -1348,7 +1429,7 @@
                         alert('Profile review is not available right now.');
                         return;
                     }
-                    renderAdminReviewQueue();
+                    renderAdminReviewQueue(true);
                 } catch (error) {
                     alert(error && error.message ? error.message : 'Unable to update the profile review status.');
                 }
@@ -1410,7 +1491,7 @@
                             auth.saveUsers(users);
                         }
                     }
-                    renderAdminReviewQueue();
+                    renderAdminReviewQueue(true);
                 } catch (error) {
                     alert(error && error.message ? error.message : 'Unable to update the review status.');
                 }
@@ -1556,7 +1637,7 @@
                 }
                 try {
                     window.anytransportApi.updateFormReport(reportId, 'resolved');
-                    renderAdminReviewQueue();
+                    renderAdminReviewQueue(true);
                 } catch (error) {
                     alert(error && error.message ? error.message : 'Unable to resolve report.');
                 }
@@ -1651,7 +1732,7 @@
                     }
 
                     identityInput.value = '';
-                    renderAdminReviewQueue();
+                    renderAdminReviewQueue(true);
                     alert('Identity photos uploaded successfully.');
                 } catch (error) {
                     alert(error && error.message ? error.message : 'Unable to upload identity photos.');
@@ -1709,9 +1790,11 @@
     }
 
     function renderAll(user) {
+        if (auth.isAdmin && auth.isAdmin()) {
+            return;
+        }
         renderProviderListings(user);
         renderMyBids(user);
-        renderAdminReviewQueue();
     }
 
     function loadUserInfo(user) {
@@ -2289,7 +2372,10 @@
         ].join('');
     }
 
-    function renderAdminReviewQueue() {
+    function renderAdminReviewQueue(forceRefresh) {
+        if (forceRefresh) {
+            invalidateAdminDataCache();
+        }
         const container = document.getElementById('admin-operations-content');
         if (!container) return;
 
@@ -4298,7 +4384,7 @@
 
         renderAll(user);
         if (auth.isAdmin && auth.isAdmin()) {
-            renderAdminReviewQueue();
+            renderAdminReviewQueue(true);
         }
     }
 
@@ -4344,6 +4430,9 @@
     }
 
     function getAllQuotes() {
+        if (auth.isAdmin && auth.isAdmin()) {
+            return fetchAdminQuotesCached(false);
+        }
         if (window.anytransportApi && typeof window.anytransportApi.getQuotes === 'function') {
             try {
                 return window.anytransportApi.getQuotes();

@@ -5299,6 +5299,7 @@ switch ($action) {
         send_json(array(
             'ok' => true,
             'user' => sanitize_user_for_client($updatedProvider),
+            'pendingReview' => false,
             'message' => 'Your pending profile changes were withdrawn. Your live profile is unchanged.'
         ));
 
@@ -5461,9 +5462,12 @@ switch ($action) {
                 }));
             }
         }
-        $quotes = array_map(function ($quote) use ($store) {
-            return attach_quote_media($store, $quote);
-        }, $quotes);
+        $lightList = trim((string) ($_GET['light'] ?? '')) === '1';
+        if (!$lightList) {
+            $quotes = array_map(function ($quote) use ($store) {
+                return attach_quote_media($store, $quote);
+            }, $quotes);
+        }
         send_json(array('ok' => true, 'quotes' => $quotes));
 
     case 'quotes.get':

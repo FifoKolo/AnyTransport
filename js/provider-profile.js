@@ -158,9 +158,9 @@
     function loadProvider(userId) {
         const apiBase = String(window.ANYTRANSPORT_API_URL || '../api/index.php' || 'api/index.php').trim();
         const sep = apiBase.indexOf('?') >= 0 ? '&' : '?';
-        const apiUrl = apiBase + sep + 'action=users.get&id=' + encodeURIComponent(String(userId || '').trim());
+        const apiUrl = apiBase + sep + 'action=users.get&id=' + encodeURIComponent(String(userId || '').trim()) + '&_=' + Date.now();
 
-        return fetch(apiUrl, { credentials: 'include' }).then(function (res) {
+        return fetch(apiUrl, { credentials: 'include', cache: 'no-store' }).then(function (res) {
             if (!res.ok) throw new Error('Network');
             return res.json();
         }).then(function (payload) {
@@ -592,6 +592,84 @@
         return u;
     }
 
+    function clearPendingProfileReviewClientState(user) {
+        if (!user || typeof user !== 'object') {
+            return user;
+        }
+        user.profileChangeStatus = 'none';
+        user.profileChangePending = {};
+        user.profileChangeSubmittedAt = '';
+        user._pendingReview = false;
+        delete user._profileSaveMessage;
+        return user;
+    }
+
+    function buildProfilePayloadFromRecord(user) {
+        if (!user || typeof user !== 'object') {
+            return {};
+        }
+        const fleetApi = getFleetApi();
+        const insuranceApi = getInsuranceApi();
+        const services = Array.isArray(user.services) ? user.services.slice()
+            : Array.isArray(user.categories) ? user.categories.slice()
+                : Array.isArray(user.skills) ? user.skills.slice() : [];
+        const paymentMethods = normalizePaymentMethods(user);
+        const paymentMethodsCustom = getCustomPaymentMethods(user);
+        const fleet = fleetApi ? fleetApi.normalizeFleetFromUser(user, getTransportModes) : [];
+        const fleetLegacy = fleetApi
+            ? fleetApi.deriveLegacyFromFleet(fleet)
+            : { providerVehicles: [], transportModes: getTransportModes(user), vehicleCount: null };
+        const insurance = insuranceApi ? insuranceApi.normalizeInsuranceFromUser(user) : [];
+        const city = firstText(user.serviceAreaCity, user.city, user.town, user.location, '');
+        const businessName = firstText(user.businessName, user.name, user.nickname, user.username, '');
+        const photos = normalizePhotos(user.photos || user.images || user.media || []);
+        return {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            businessName: businessName,
+            name: businessName || firstText(user.name, ''),
+            nickname: firstText(user.nickname, businessName, user.username, ''),
+            companyType: firstText(user.companyType, user.company, user.businessType, 'Sole trader'),
+            city: city,
+            location: city,
+            serviceAreaCity: city,
+            serviceAreaAddress: firstText(user.serviceAreaAddress, ''),
+            serviceAreaLat: Number(user.serviceAreaLat) || 0,
+            serviceAreaLng: Number(user.serviceAreaLng) || 0,
+            showExactAddressOnMap: !!user.showExactAddressOnMap,
+            phone: firstText(user.phone, user.contact, ''),
+            contact: firstText(user.phone, user.contact, ''),
+            website: firstText(user.website, user.url, ''),
+            description: firstText(user.description, user.businessDescription, user.about, user.bio, user.summary, ''),
+            businessDescription: firstText(user.description, user.businessDescription, user.about, user.bio, user.summary, ''),
+            about: firstText(user.description, user.businessDescription, user.about, user.bio, user.summary, ''),
+            services: services,
+            categories: services,
+            skills: services,
+            transportModes: fleetLegacy.transportModes,
+            providerVehicles: fleetLegacy.providerVehicles,
+            vehicleCount: fleetLegacy.vehicleCount,
+            providerInsurance: insuranceApi
+                ? insurance.map(function (entry) { return insuranceApi.normalizeInsuranceEntry(entry); }).filter(Boolean)
+                : insurance,
+            paymentMethods: paymentMethods,
+            paymentMethodsCustom: paymentMethodsCustom,
+            acceptsCash: !!paymentMethods.cash,
+            paypal: !!paymentMethods.paypal,
+            visa: !!paymentMethods.visa,
+            mastercard: !!paymentMethods.mastercard,
+            bankTransfer: !!paymentMethods.bankTransfer,
+            americanExpress: !!paymentMethods.americanExpress,
+            cheque: !!paymentMethods.cheque,
+            cash: !!paymentMethods.cash,
+            blockInvites: !!user.blockInvites,
+            muteInviteEmails: !!user.muteInviteEmails,
+            avatar: firstText(user.avatar, ''),
+            photos: photos.filter(Boolean)
+        };
+    }
+
     function buildProfileChangeStatusBanner(u) {
         const status = String(u && u.profileChangeStatus || '').trim().toLowerCase();
         if (status === 'pending_review') {
@@ -652,22 +730,27 @@
             if (!updated || !updated.id) {
                 throw new Error('Could not withdraw profile changes. Please try again.');
             }
+            clearPendingProfileReviewClientState(updated);
             if (window.auth) {
                 if (typeof window.auth.mergeUserIntoLocalCache === 'function') {
                     window.auth.mergeUserIntoLocalCache(updated);
                 }
                 if (window.auth.getUser && String(window.auth.getUser().id) === String(updated.id)) {
-                    window.auth.currentUser = updated;
+                    window.auth.currentUser = Object.assign({}, updated);
                     if (typeof window.auth.setStoredCurrentUser === 'function') {
                         window.auth.setStoredCurrentUser(updated);
                     }
                 }
-                if (typeof window.auth.refreshSessionUserFromServer === 'function') {
-                    window.auth.refreshSessionUserFromServer();
-                }
             }
+            renderProvider(updated, true);
             return loadProvider(userId).then(function (freshUser) {
-                renderProvider(freshUser || updated, true);
+                if (freshUser && freshUser.id) {
+                    clearPendingProfileReviewClientState(freshUser);
+                    renderProvider(freshUser, true);
+                    if (window.auth && typeof window.auth.mergeUserIntoLocalCache === 'function') {
+                        window.auth.mergeUserIntoLocalCache(freshUser);
+                    }
+                }
             });
         }).then(function () {
             alert('Your pending profile changes were withdrawn. Your live profile is unchanged.');
@@ -944,6 +1027,7 @@
         const aboutWordCountEl = document.getElementById('profile-about-wordcount');
         let lastSavedPayload = null;
         let lastSavedSignature = '';
+        const liveBaselineSignature = payloadSignature(buildProfilePayloadFromRecord(liveUser));
 
         function snapshotPayload(payload) {
             return JSON.parse(JSON.stringify(payload || {}));
@@ -1279,7 +1363,8 @@
                 return Promise.reject(new Error('Profile saving is not available yet.'));
             }
 
-            if (signature === lastSavedSignature) {
+            const differsFromLiveProfile = signature !== liveBaselineSignature;
+            if (signature === lastSavedSignature && !differsFromLiveProfile) {
                 setSaveBadge('All changes saved', 'saved');
                 updateSaveUi();
                 return Promise.resolve();
@@ -1313,6 +1398,10 @@
 
             return Promise.resolve(window.anytransportApi.saveUser(payload)).then(function (serverUser) {
                 const pendingReview = !!(serverUser && (serverUser._pendingReview || String(serverUser.profileChangeStatus || '').toLowerCase() === 'pending_review'));
+                const saveMessage = serverUser && serverUser._profileSaveMessage ? String(serverUser._profileSaveMessage) : '';
+                if (!pendingReview && /no profile changes/i.test(saveMessage)) {
+                    throw new Error(saveMessage || 'No profile changes to submit.');
+                }
                 syncSavedSnapshot(payload);
                 setSaveBadge(pendingReview ? 'Submitted for admin review' : 'All changes saved', pendingReview ? '' : 'saved');
                 updateSaveUi();
