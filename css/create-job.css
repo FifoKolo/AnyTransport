@@ -2902,6 +2902,48 @@ body.floor-block-mode #generic-floors-section [data-location-group="pickup-detai
     background: #22c55e;
 }
 
+.route-marker {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: 0.88rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    border: 2px solid rgba(255, 255, 255, 0.95);
+    box-shadow: 0 10px 18px rgba(18, 44, 66, 0.18);
+    transform: translateY(-2px);
+    cursor: default;
+}
+
+.route-marker::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -7px;
+    width: 10px;
+    height: 10px;
+    background: inherit;
+    transform: translateX(-50%) rotate(45deg);
+    border-radius: 2px;
+    z-index: -1;
+}
+
+.route-marker--pickup {
+    background: linear-gradient(180deg, #32b77e 0%, #17885a 100%);
+}
+
+.route-marker--delivery {
+    background: linear-gradient(180deg, #ff5a98 0%, #d91f68 100%);
+}
+
+.route-marker--stop {
+    background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+}
+
 .overview-inventory-grid {
     margin-top: 14px;
     display: grid;

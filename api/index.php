@@ -4347,7 +4347,7 @@ if (!empty($selected['file']) && $selected['file'] !== $storeFile) {
 $input = read_json_input();
 
 function normalize_eircode_value($value) {
-    $raw = strtoupper(trim((string) $value));
+    $raw = strtoupper(trim(str_replace(',', ' ', (string) $value)));
     if ($raw === '') {
         return '';
     }
@@ -6381,7 +6381,7 @@ switch ($action) {
         }
         $feature = geocode_eircode_via_nominatim($eircode);
         if (!is_array($feature)) {
-            send_json(array('ok' => false, 'error' => 'Could not locate that Eircode.'), 404);
+            send_json(array('ok' => false, 'error' => 'Could not locate that Eircode.'), 200);
         }
         send_json(array(
             'ok' => true,

@@ -468,8 +468,17 @@ function setupCombinedAreaOrEircodeFields() {
             if (syncing) return;
             syncing = true;
             const value = String(combinedInput.value || '').trim();
-            cityAreaInput.value = value;
-            postcodeInput.value = value;
+            const normalized = isLikelyEircodeInput(value) ? normalizeEircodeInput(value) : value;
+            if (isEircode(normalized)) {
+                postcodeInput.value = normalized;
+                cityAreaInput.value = '';
+                combinedInput.value = normalized;
+                combinedInput.dataset.fullEircode = normalized;
+            } else {
+                cityAreaInput.value = normalized;
+                postcodeInput.value = '';
+                delete combinedInput.dataset.fullEircode;
+            }
             syncing = false;
         };
 
@@ -478,7 +487,30 @@ function setupCombinedAreaOrEircodeFields() {
             syncing = true;
             const cityValue = String(cityAreaInput.value || '').trim();
             const postcodeValue = String(postcodeInput.value || '').trim();
-            combinedInput.value = cityValue || postcodeValue;
+            const currentCombined = String(combinedInput.value || '').trim();
+
+            let nextValue = '';
+            if (isEircode(postcodeValue)) {
+                nextValue = normalizeEircodeInput(postcodeValue);
+            } else if (isEircode(cityValue)) {
+                nextValue = normalizeEircodeInput(cityValue);
+            } else if (isEircode(currentCombined)) {
+                nextValue = normalizeEircodeInput(currentCombined);
+            } else {
+                nextValue = cityValue || postcodeValue;
+            }
+
+            if (isEircode(currentCombined) && isRoutingKeyOnly(nextValue)) {
+                syncing = false;
+                return;
+            }
+
+            combinedInput.value = nextValue;
+            if (isEircode(nextValue)) {
+                combinedInput.dataset.fullEircode = nextValue;
+            } else {
+                delete combinedInput.dataset.fullEircode;
+            }
             syncing = false;
         };
 
@@ -521,10 +553,24 @@ function syncCombinedAreaFieldsFromLegacy() {
         const combinedValue = String(combined.value || '').trim();
 
         if (!combinedValue && (cityValue || postcodeValue)) {
-            combined.value = cityValue || postcodeValue;
+            if (isEircode(postcodeValue)) {
+                const normalized = normalizeEircodeInput(postcodeValue);
+                combined.value = normalized;
+                combined.dataset.fullEircode = normalized;
+            } else {
+                combined.value = cityValue || postcodeValue;
+            }
         } else if (combinedValue && cityArea && postcode && !cityValue && !postcodeValue) {
-            cityArea.value = combinedValue;
-            postcode.value = combinedValue;
+            if (isEircode(combinedValue)) {
+                const normalized = normalizeEircodeInput(combinedValue);
+                combined.value = normalized;
+                combined.dataset.fullEircode = normalized;
+                postcode.value = normalized;
+                cityArea.value = '';
+            } else {
+                cityArea.value = combinedValue;
+                postcode.value = '';
+            }
         }
     });
 }
@@ -31574,7 +31620,16 @@ const eircodeLookupGeneration = {
     delivery: 0,
     'multi-stop': 0
 };
+const eircodeGeocodeCache = new Map();
+const lastAreaEircodeLookupValue = { pickup: '', delivery: '' };
 
+
+function createRouteMarkerElement(label, variant) {
+    const element = document.createElement('div');
+    element.className = 'route-marker route-marker--' + String(variant || '').trim();
+    element.textContent = String(label || '').trim();
+    return element;
+}
 
 function initRoutePlanner() {
     if (!window.mapboxgl) {
@@ -31712,28 +31767,13 @@ function setupRouteListeners() {
 
     if (pickupAreaEircode) {
         setupAreaOrEircodeAutocomplete(pickupAreaEircode, 'pickup');
-        pickupAreaEircode.addEventListener('blur', () => handleAreaOrEircodeLookup(pickupAreaEircode, 'pickup'));
-        pickupAreaEircode.addEventListener('change', () => handleAreaOrEircodeLookup(pickupAreaEircode, 'pickup'));
+        pickupAreaEircode.addEventListener('blur', () => scheduleAreaOrEircodeLookup(pickupAreaEircode, 'pickup'));
         pickupAreaEircode.addEventListener('input', syncClearanceDeliveryFromPickup);
         pickupAreaEircode.addEventListener('change', syncClearanceDeliveryFromPickup);
     }
     if (deliveryAreaEircode) {
         setupAreaOrEircodeAutocomplete(deliveryAreaEircode, 'delivery');
-        deliveryAreaEircode.addEventListener('blur', () => handleAreaOrEircodeLookup(deliveryAreaEircode, 'delivery'));
-        deliveryAreaEircode.addEventListener('change', () => handleAreaOrEircodeLookup(deliveryAreaEircode, 'delivery'));
-    }
-
-    if (pickupPostcode) {
-        setupPostcodeAutocomplete(pickupPostcode, 'pickup');
-        pickupPostcode.addEventListener('blur', () => handleEircodeLookup(pickupPostcode, 'pickup'));
-        pickupPostcode.addEventListener('change', () => handleEircodeLookup(pickupPostcode, 'pickup'));
-        pickupPostcode.addEventListener('input', syncClearanceDeliveryFromPickup);
-        pickupPostcode.addEventListener('change', syncClearanceDeliveryFromPickup);
-    }
-    if (deliveryPostcode) {
-        setupPostcodeAutocomplete(deliveryPostcode, 'delivery');
-        deliveryPostcode.addEventListener('blur', () => handleEircodeLookup(deliveryPostcode, 'delivery'));
-        deliveryPostcode.addEventListener('change', () => handleEircodeLookup(deliveryPostcode, 'delivery'));
+        deliveryAreaEircode.addEventListener('blur', () => scheduleAreaOrEircodeLookup(deliveryAreaEircode, 'delivery'));
     }
 
     syncHiddenCityFromPrimaryInputs();
@@ -31818,6 +31858,13 @@ function setupAreaOrEircodeAutocomplete(inputEl, type) {
                 e.target.value = normalized;
             }
             value = normalized;
+            if (isEircode(value)) {
+                inputEl.dataset.fullEircode = value;
+            } else {
+                delete inputEl.dataset.fullEircode;
+            }
+        } else {
+            delete inputEl.dataset.fullEircode;
         }
 
         inputEl.dataset.coords = '';
@@ -31828,11 +31875,23 @@ function setupAreaOrEircodeAutocomplete(inputEl, type) {
             return;
         }
 
+        if (isEircode(value)) {
+            removeAutocompleteList(inputEl);
+            return;
+        }
+
         debounceTimer = setTimeout(() => {
-            if (isLikelyEircodeInput(value)) {
-                fetchPostcodeSuggestions(value, inputEl, type);
+            const liveValue = isLikelyEircodeInput(inputEl.value)
+                ? normalizeEircodeInput(inputEl.value)
+                : String(inputEl.value || '').trim();
+            if (isEircode(liveValue)) {
+                removeAutocompleteList(inputEl);
+                return;
+            }
+            if (isLikelyEircodeInput(liveValue)) {
+                fetchPostcodeSuggestions(liveValue, inputEl, type);
             } else {
-                fetchCityAreaSuggestions(value, inputEl, type);
+                fetchCityAreaSuggestions(liveValue, inputEl, type);
             }
         }, 250);
     });
@@ -31963,7 +32022,7 @@ function handleMultiStopEircodeLookup(postcodeInput) {
 
 function normalizeEircodeInput(value) {
     if (!value) return '';
-    const raw = String(value).trim().toUpperCase();
+    const raw = String(value).trim().toUpperCase().replace(/,/g, ' ');
     if (!/[0-9]/.test(raw)) return raw;
     const stripped = raw.replace(/\s+/g, '').replace(/[^A-Z0-9]/g, '');
     const trimmed = stripped.slice(0, 7);
@@ -31991,9 +32050,57 @@ function fetchAddressSuggestions(query, inputEl, type) {
         });
 }
 
+function commitFullEircodeValue(type, sourceInput, normalized) {
+    if (!isEircode(normalized)) return;
+
+    const combinedInput = document.getElementById(type === 'pickup' ? 'pickup-area-eircode' : 'delivery-area-eircode');
+    const postcodeInput = document.getElementById(type === 'pickup' ? 'pickup-postcode' : 'delivery-postcode');
+    const cityAreaInput = document.getElementById(type === 'pickup' ? 'pickup-city-area' : 'delivery-city-area');
+    const activeInput = sourceInput || combinedInput || postcodeInput;
+
+    if (combinedInput) {
+        combinedInput.value = normalized;
+        combinedInput.dataset.fullEircode = normalized;
+    }
+    if (postcodeInput) {
+        postcodeInput.value = normalized;
+    }
+    if (cityAreaInput) {
+        cityAreaInput.value = '';
+    }
+    if (activeInput) {
+        activeInput.dataset.placeName = normalized;
+    }
+}
+
+function resolveLockedEircode(preferredValue, combinedInput, postcodeInput) {
+    const candidates = [
+        preferredValue,
+        combinedInput?.dataset?.fullEircode,
+        combinedInput?.value,
+        postcodeInput?.value
+    ];
+    for (let i = 0; i < candidates.length; i += 1) {
+        const normalized = normalizeEircodeInput(String(candidates[i] || '').trim());
+        if (isEircode(normalized)) {
+            return normalized;
+        }
+    }
+    return '';
+}
+
 function fetchPostcodeSuggestions(query, inputEl, type) {
-    const encodedQuery = encodeURIComponent(query);
-    const isExact = isEircode(query);
+    inputEl._postcodeSuggestGen = (inputEl._postcodeSuggestGen || 0) + 1;
+    const generation = inputEl._postcodeSuggestGen;
+    const querySnapshot = isLikelyEircodeInput(query) ? normalizeEircodeInput(query) : String(query || '').trim();
+
+    if (isEircode(querySnapshot)) {
+        removeAutocompleteList(inputEl);
+        return;
+    }
+
+    const encodedQuery = encodeURIComponent(querySnapshot);
+    const isExact = isEircode(querySnapshot);
     const limit = isExact ? 1 : 6;
     const autocomplete = isExact ? 'false' : 'true';
     const geocodeUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${mapboxgl.accessToken}&limit=${limit}&country=ie&types=postcode,address&autocomplete=${autocomplete}&language=en`;
@@ -32001,18 +32108,33 @@ function fetchPostcodeSuggestions(query, inputEl, type) {
     fetch(geocodeUrl)
         .then(response => response.json())
         .then(data => {
+            if (generation !== inputEl._postcodeSuggestGen) {
+                return;
+            }
+
+            const currentValue = isLikelyEircodeInput(inputEl.value)
+                ? normalizeEircodeInput(inputEl.value)
+                : String(inputEl.value || '').trim();
+            if (currentValue !== querySnapshot) {
+                return;
+            }
+            if (isEircode(currentValue)) {
+                removeAutocompleteList(inputEl);
+                return;
+            }
+            if (inputEl.dataset.fullEircode && isEircode(inputEl.dataset.fullEircode)) {
+                removeAutocompleteList(inputEl);
+                return;
+            }
+
             let features = (data.features || []).filter((feature) => {
                 if (getEircodeFromFeature(feature)) return true;
                 const placeTypes = Array.isArray(feature.place_type) ? feature.place_type : [];
                 return placeTypes.includes('postcode');
             });
 
-            if (isExact && isEircode(query)) {
+            if (isExact && isEircode(querySnapshot)) {
                 features = features.filter((feature) => !mapboxFeatureIsRoutingKeyOnly(feature));
-                if (features.length === 0) {
-                    removeAutocompleteList(inputEl);
-                    return;
-                }
             }
 
             if (features.length > 0) {
@@ -32123,7 +32245,8 @@ function showPostcodeSuggestions(inputEl, features, type) {
         li.addEventListener('mouseenter', () => li.style.backgroundColor = '#f5f5f5');
         li.addEventListener('mouseleave', () => li.style.backgroundColor = 'white');
 
-        li.addEventListener('click', () => {
+        li.addEventListener('mousedown', (e) => {
+            e.preventDefault();
             selectPostcodeSuggestion(feature, inputEl, type);
             removeAutocompleteList(inputEl);
         });
@@ -32183,17 +32306,19 @@ function selectAddressSuggestion(feature, inputEl, type) {
     setTimeout(updateRouteIfReady, 100);
 }
 
-function selectPostcodeSuggestion(feature, postcodeInput, type) {
+function selectPostcodeSuggestion(feature, combinedInput, type) {
     if (type === 'multi-stop') {
-        applyMultiStopEircodeFeature(feature, postcodeInput);
+        applyMultiStopEircodeFeature(feature, combinedInput);
         return;
     }
-    const preferred = normalizeEircodeInput(String(postcodeInput?.value || '').trim());
-    if (isEircode(preferred) && mapboxFeatureIsRoutingKeyOnly(feature)) {
-        handleAreaOrEircodeLookup(postcodeInput, type);
+    const hiddenPostcode = document.getElementById(type === 'pickup' ? 'pickup-postcode' : 'delivery-postcode');
+    const preferred = resolveLockedEircode(combinedInput?.value, combinedInput, hiddenPostcode);
+    if (preferred && mapboxFeatureIsRoutingKeyOnly(feature)) {
+        commitFullEircodeValue(type, combinedInput, preferred);
+        handleAreaOrEircodeLookup(combinedInput, type);
         return;
     }
-    applyAreaOrEircodeFeature(feature, type, postcodeInput, preferred);
+    applyAreaOrEircodeFeature(feature, type, combinedInput, preferred || combinedInput?.value);
 }
 
 function removeAutocompleteList(inputEl) {
@@ -32316,38 +32441,45 @@ function bindOverviewModalAddressAutocomplete(addressInput, cityInput, postcodeI
 function applyAreaOrEircodeFeature(feature, type, sourceInput, preferredValue) {
     if (!feature) return;
 
-    const typedValue = String(preferredValue || sourceInput?.value || '').trim();
-    const typedEircode = isEircode(typedValue) ? normalizeEircodeInput(typedValue) : '';
+    const combinedInput = document.getElementById(type === 'pickup' ? 'pickup-area-eircode' : 'delivery-area-eircode');
+    const postcodeInput = document.getElementById(type === 'pickup' ? 'pickup-postcode' : 'delivery-postcode');
+    const lockedEircode = resolveLockedEircode(preferredValue, combinedInput, postcodeInput);
 
     let eircode = getEircodeFromFeature(feature);
-    if (typedEircode) {
-        eircode = typedEircode;
+    if (lockedEircode) {
+        eircode = lockedEircode;
     } else if (!eircode || isRoutingKeyOnly(eircode) || !isEircode(eircode)) {
         eircode = '';
     }
 
     const city = getCityFromFeature(feature);
     const cityArea = getCityAreaFromFeature(feature, city);
-    let displayValue = eircode || cityArea || String(feature.text || '').trim() || String(feature.place_name || '').split(',')[0].trim();
+    let displayValue = lockedEircode || eircode || cityArea || String(feature.text || '').trim() || String(feature.place_name || '').split(',')[0].trim();
 
-    const combinedInput = document.getElementById(type === 'pickup' ? 'pickup-area-eircode' : 'delivery-area-eircode');
-    const currentCombined = String(combinedInput?.value || '').trim();
-    const currentFullEircode = isEircode(currentCombined) ? normalizeEircodeInput(currentCombined) : '';
-    if (currentFullEircode && (!displayValue || isRoutingKeyOnly(displayValue) || !isEircode(displayValue))) {
-        displayValue = currentFullEircode;
-        eircode = currentFullEircode;
+    if (lockedEircode) {
+        displayValue = lockedEircode;
+        eircode = lockedEircode;
+    } else if (isRoutingKeyOnly(displayValue)) {
+        const currentCombined = String(combinedInput?.value || '').trim();
+        if (isEircode(currentCombined)) {
+            displayValue = normalizeEircodeInput(currentCombined);
+            eircode = displayValue;
+        }
     }
+
     const addressInput = document.getElementById(type === 'pickup' ? 'pickup-address' : 'delivery-address');
     const cityInput = document.getElementById(type === 'pickup' ? 'pickup-city' : 'delivery-city');
     const cityAreaInput = document.getElementById(type === 'pickup' ? 'pickup-city-area' : 'delivery-city-area');
-    const postcodeInput = document.getElementById(type === 'pickup' ? 'pickup-postcode' : 'delivery-postcode');
     const activeInput = sourceInput || combinedInput || postcodeInput;
 
     if (combinedInput && displayValue) {
         combinedInput.value = displayValue;
+        if (isEircode(displayValue)) {
+            combinedInput.dataset.fullEircode = normalizeEircodeInput(displayValue);
+        }
     }
     if (postcodeInput) {
-        postcodeInput.value = eircode || (isLikelyEircodeInput(displayValue) ? displayValue : '');
+        postcodeInput.value = lockedEircode || eircode || (isLikelyEircodeInput(displayValue) ? displayValue : '');
     }
     if (cityAreaInput) {
         cityAreaInput.value = eircode ? (cityArea || '') : (cityArea || displayValue);
@@ -32411,6 +32543,12 @@ function handleAreaOrEircodeLookup(combinedInput, type) {
         value = normalized || value;
     }
 
+    if (isEircode(value)) {
+        const normalized = normalizeEircodeInput(value);
+        commitFullEircodeValue(type, combinedInput, normalized);
+        value = normalized;
+    }
+
     if (!value) {
         updateRouteIfReady();
         return;
@@ -32426,7 +32564,7 @@ function handleAreaOrEircodeLookup(combinedInput, type) {
         }
         if (!feature) {
             if (isEircode(preferredValue)) {
-                applyTypedEircodeWithoutFeature(type, combinedInput, preferredValue);
+                commitFullEircodeValue(type, combinedInput, normalizeEircodeInput(preferredValue));
             }
             updateRouteIfReady();
             return;
@@ -32482,14 +32620,33 @@ function handleEircodeLookup(postcodeInput, type) {
 }
 
 function geocodeEircode(eircode) {
+    const normalized = normalizeEircodeInput(eircode);
+    const needsFullLookup = isEircode(normalized);
+
+    if (needsFullLookup) {
+        return geocodeEircodeViaNominatim(normalized).then((nominatimFeature) => {
+            if (nominatimFeature) {
+                return nominatimFeature;
+            }
+            return geocodeEircodeViaMapbox(normalized);
+        });
+    }
+
     if (!mapboxgl || !mapboxgl.accessToken) {
-        return geocodeEircodeViaNominatim(eircode);
+        return Promise.resolve(null);
+    }
+
+    return geocodeEircodeViaMapbox(normalized);
+}
+
+function geocodeEircodeViaMapbox(eircode) {
+    if (!mapboxgl || !mapboxgl.accessToken) {
+        return Promise.resolve(null);
     }
 
     const normalized = normalizeEircodeInput(eircode);
     const compact = normalized.replace(/\s+/g, '');
     const queries = [normalized, compact].filter((value, index, list) => value && list.indexOf(value) === index);
-    const needsFullLookup = isEircode(normalized);
 
     const fetchFeature = (query) => {
         const encoded = encodeURIComponent(query);
@@ -32511,60 +32668,71 @@ function geocodeEircode(eircode) {
     return queries.reduce(
         (chain, query) => chain.then((feature) => feature || fetchFeature(query)),
         Promise.resolve(null)
-    )
-        .then((feature) => {
-            if (needsFullLookup && mapboxFeatureIsRoutingKeyOnly(feature)) {
-                return geocodeEircodeViaNominatim(normalized).then((nominatimFeature) => nominatimFeature || feature);
-            }
-            return feature;
-        })
-        .catch((err) => {
-            console.error('Eircode geocoding error:', err);
-            if (needsFullLookup) {
-                return geocodeEircodeViaNominatim(normalized);
-            }
-            return null;
-        });
+    ).catch((err) => {
+        console.error('Eircode geocoding error:', err);
+        return null;
+    });
+}
+
+function scheduleAreaOrEircodeLookup(combinedInput, type) {
+    if (!combinedInput || (type !== 'pickup' && type !== 'delivery')) {
+        handleAreaOrEircodeLookup(combinedInput, type);
+        return;
+    }
+
+    const value = isLikelyEircodeInput(combinedInput.value)
+        ? normalizeEircodeInput(combinedInput.value)
+        : String(combinedInput.value || '').trim();
+
+    if (value && value === lastAreaEircodeLookupValue[type] && combinedInput.dataset.coords) {
+        return;
+    }
+
+    lastAreaEircodeLookupValue[type] = value;
+    handleAreaOrEircodeLookup(combinedInput, type);
+}
+
+function getEircodeApiUrl() {
+    const configured = String(window.ANYTRANSPORT_API_URL || '').trim();
+    if (configured) return configured;
+    return '/api/index.php';
 }
 
 function geocodeEircodeViaNominatim(eircode) {
     const normalized = normalizeEircodeInput(eircode);
     if (!normalized || !isEircode(normalized)) return Promise.resolve(null);
 
-    const encoded = encodeURIComponent(normalized);
-    const apiPaths = ['api/index.php', './api/index.php', '../api/index.php'];
+    if (eircodeGeocodeCache.has(normalized)) {
+        return Promise.resolve(eircodeGeocodeCache.get(normalized));
+    }
 
-    const tryApiPath = (index) => {
-        if (index >= apiPaths.length) {
-            return Promise.resolve(null);
-        }
+    const apiUrl = getEircodeApiUrl();
+    if (!apiUrl) {
+        eircodeGeocodeCache.set(normalized, null);
+        return Promise.resolve(null);
+    }
 
-        const url = `${apiPaths[index]}?action=geocode.eircode&eircode=${encoded}`;
-        return fetch(url, {
-            method: 'GET',
-            credentials: 'same-origin',
-            headers: { Accept: 'application/json' }
+    const queryPrefix = apiUrl.indexOf('?') >= 0 ? '&' : '?';
+    const url = `${apiUrl}${queryPrefix}action=geocode.eircode&eircode=${encodeURIComponent(normalized)}`;
+
+    return fetch(url, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' }
+    })
+        .then((response) => response.json().catch(() => null))
+        .then((payload) => {
+            const feature = payload && payload.ok && payload.feature ? payload.feature : null;
+            if (feature && (!feature.text || !isEircode(feature.text))) {
+                feature.text = normalized;
+            }
+            eircodeGeocodeCache.set(normalized, feature);
+            return feature;
         })
-            .then((response) => {
-                if (!response.ok) {
-                    return tryApiPath(index + 1);
-                }
-                return response.json();
-            })
-            .then((payload) => {
-                if (payload && payload.ok && payload.feature) {
-                    const feature = payload.feature;
-                    if (!feature.text || !isEircode(feature.text)) {
-                        feature.text = normalized;
-                    }
-                    return feature;
-                }
-                return tryApiPath(index + 1);
-            })
-            .catch(() => tryApiPath(index + 1));
-    };
-
-    return tryApiPath(0);
+        .catch(() => {
+            eircodeGeocodeCache.set(normalized, null);
+            return null;
+        });
 }
 
 function mapboxFeatureIsRoutingKeyOnly(feature) {
@@ -32879,10 +33047,11 @@ function drawMultiStopRoute(route, coordsList) {
         coordsList.forEach((coords, index) => {
             const isFirst = index === 0;
             const isLast = index === coordsList.length - 1;
-            const color = isFirst ? '#10B981' : isLast ? '#EF4444' : '#3B82F6';
-            const marker = new mapboxgl.Marker({ color })
+            const label = isFirst ? 'A' : isLast ? 'B' : String(index + 1);
+            const variant = isFirst ? 'pickup' : isLast ? 'delivery' : 'stop';
+            const marker = new mapboxgl.Marker({ element: createRouteMarkerElement(label, variant) })
                 .setLngLat(coords)
-                .setPopup(new mapboxgl.Popup().setText(`Stop ${index + 1}`))
+                .setPopup(new mapboxgl.Popup().setText(isFirst ? 'Pickup (A)' : isLast ? 'Delivery (B)' : `Stop ${index + 1}`))
                 .addTo(map);
             multiStopMarkers.push(marker);
         });
@@ -33107,14 +33276,14 @@ function drawMapRoute(route, pickupCoords, deliveryCoords) {
             deliveryMarker = null;
         }
 
-        pickupMarker = new mapboxgl.Marker({ color: '#10B981' })
+        pickupMarker = new mapboxgl.Marker({ element: createRouteMarkerElement('A', 'pickup') })
             .setLngLat(pickupCoords)
-            .setPopup(new mapboxgl.Popup().setText('Pickup location'))
+            .setPopup(new mapboxgl.Popup().setText('Pickup (A)'))
             .addTo(map);
 
-        deliveryMarker = new mapboxgl.Marker({ color: '#EF4444' })
+        deliveryMarker = new mapboxgl.Marker({ element: createRouteMarkerElement('B', 'delivery') })
             .setLngLat(deliveryCoords)
-            .setPopup(new mapboxgl.Popup().setText('Delivery location'))
+            .setPopup(new mapboxgl.Popup().setText('Delivery (B)'))
             .addTo(map);
 
         const bounds = new mapboxgl.LngLatBounds();
@@ -33217,14 +33386,14 @@ function renderOverviewRouteMap() {
     }
 
     if (overviewStartCoords) {
-        overviewPickupMarker = new mapboxgl.Marker({ color: '#10B981' })
+        overviewPickupMarker = new mapboxgl.Marker({ element: createRouteMarkerElement('A', 'pickup') })
             .setLngLat(overviewStartCoords)
             .setPopup(new mapboxgl.Popup().setText('A: Pickup'))
             .addTo(overviewMap);
     }
 
     if (overviewEndCoords) {
-        overviewDeliveryMarker = new mapboxgl.Marker({ color: '#EF4444' })
+        overviewDeliveryMarker = new mapboxgl.Marker({ element: createRouteMarkerElement('B', 'delivery') })
             .setLngLat(overviewEndCoords)
             .setPopup(new mapboxgl.Popup().setText('B: Delivery'))
             .addTo(overviewMap);
