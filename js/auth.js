@@ -620,6 +620,17 @@ window.anytransportApi = window.anytransportApi || (function () {
             const response = request('messages.save', 'POST', { message: message });
             return response.message || null;
         },
+        getAllMessagesForAdmin: function () {
+            try {
+                const response = request('admin.messages.all', 'GET');
+                return Array.isArray(response.messages) ? response.messages : [];
+            } catch (err) {
+                if (window.anytransportIsDebug && window.anytransportIsDebug()) {
+                    console.debug('[AnyTransport API] getAllMessagesForAdmin failed', err);
+                }
+                return [];
+            }
+        },
         getConversation: function (participantA, participantB) {
             try {
                 const response = request('messages.list', 'GET', null, { participantA: participantA, participantB: participantB });

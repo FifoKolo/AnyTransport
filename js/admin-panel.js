@@ -1,0 +1,482 @@
+(function (global) {
+    'use strict';
+
+    var panelState = {
+        section: 'operations',
+        userQuery: '',
+        userRole: 'all',
+        expandedUserId: '',
+        expandedThreadKey: '',
+        messageQuery: ''
+    };
+
+    var depsRef = null;
+    var shellReady = false;
+
+    function escapeHtml(value) {
+        return String(value || '').replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function escapeAttr(value) {
+        return String(value || '').replace(/"/g, '&quot;');
+    }
+
+    function firstText() {
+        for (var i = 0; i < arguments.length; i += 1) {
+            var v = arguments[i];
+            if (v !== undefined && v !== null && String(v).trim() !== '') {
+                return String(v).trim();
+            }
+        }
+        return '';
+    }
+
+    function formatWhen(value) {
+        if (!value) return '—';
+        try {
+            var d = new Date(value);
+            if (Number.isNaN(d.getTime())) return '—';
+            return d.toLocaleString();
+        } catch (_e) {
+            return '—';
+        }
+    }
+
+    function userDisplayName(user) {
+        if (!user) return 'Unknown user';
+        return firstText(user.businessName, user.name, user.nickname, user.username, user.email, user.id);
+    }
+
+    function userRoleLabel(user) {
+        var role = String(user && user.role || '').trim().toLowerCase();
+        if (role === 'admin') return 'Admin';
+        if (role === 'provider') return 'Provider';
+        return 'Customer';
+    }
+
+    function isProviderUser(user) {
+        return String(user && user.role || '').trim().toLowerCase() === 'provider';
+    }
+
+    function sectionFromHash() {
+        var hash = String(global.location.hash || '').replace(/^#/, '').trim().toLowerCase();
+        if (hash === 'admin-section-editor' || hash === 'admin-editor') return 'editor';
+        if (hash === 'admin-section-messages' || hash === 'admin-messages') return 'messages';
+        if (hash === 'admin-section-users' || hash === 'admin-users') return 'users';
+        return 'operations';
+    }
+
+    function hashForSection(section) {
+        if (section === 'editor') return '#admin-section-editor';
+        if (section === 'messages') return '#admin-section-messages';
+        if (section === 'users') return '#admin-section-users';
+        return '#verification-review';
+    }
+
+    function quoteBelongsToUser(quote, user) {
+        if (!quote || !user) return false;
+        var uid = String(user.id || '').trim();
+        var email = String(user.email || '').trim().toLowerCase();
+        var ownerId = String(quote.userId || quote.createdBy || '').trim();
+        if (uid && ownerId && uid === ownerId) return true;
+        var quoteEmail = String(quote.customerEmail || '').trim().toLowerCase();
+        return !!(email && quoteEmail && email === quoteEmail);
+    }
+
+    function buildUserDirectory(allUsers, allQuotes, allMessages) {
+        var map = {};
+        (allUsers || []).forEach(function (user) {
+            var id = String(user.id || '').trim();
+            if (!id) return;
+            map[id] = {
+                user: user,
+                quotes: [],
+                messages: [],
+                threads: {}
+            };
+        });
+
+        (allQuotes || []).forEach(function (quote) {
+            Object.keys(map).forEach(function (userId) {
+                if (quoteBelongsToUser(quote, map[userId].user)) {
+                    map[userId].quotes.push(quote);
+                }
+            });
+        });
+
+        (allMessages || []).forEach(function (message) {
+            var from = String(message.fromUserId || '').trim();
+            var to = String(message.toUserId || '').trim();
+            [from, to].forEach(function (userId) {
+                if (!userId || !map[userId]) return;
+                map[userId].messages.push(message);
+                var peerId = userId === from ? to : from;
+                if (!peerId) return;
+                var threadKey = [userId, peerId].sort().join('::');
+                if (!map[userId].threads[threadKey]) {
+                    map[userId].threads[threadKey] = { peerId: peerId, messages: [] };
+                }
+                map[userId].threads[threadKey].messages.push(message);
+            });
+        });
+
+        return map;
+    }
+
+    function conversationKey(a, b) {
+        return [String(a || ''), String(b || '')].sort().join('::');
+    }
+
+    function buildAllThreads(allMessages, allUsers) {
+        var usersById = {};
+        (allUsers || []).forEach(function (u) {
+            if (u && u.id) usersById[String(u.id)] = u;
+        });
+        var threads = {};
+        (allMessages || []).forEach(function (message) {
+            var from = String(message.fromUserId || '').trim();
+            var to = String(message.toUserId || '').trim();
+            if (!from || !to) return;
+            var key = conversationKey(from, to);
+            if (!threads[key]) {
+                threads[key] = {
+                    key: key,
+                    participantA: from,
+                    participantB: to,
+                    messages: [],
+                    latestAt: ''
+                };
+            }
+            threads[key].messages.push(message);
+            var ts = String(message.createdAt || '');
+            if (!threads[key].latestAt || ts > threads[key].latestAt) {
+                threads[key].latestAt = ts;
+            }
+        });
+        return Object.keys(threads).map(function (key) {
+            var thread = threads[key];
+            thread.messages.sort(function (a, b) {
+                return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+            });
+            return thread;
+        }).sort(function (a, b) {
+            return String(b.latestAt || '').localeCompare(String(a.latestAt || ''));
+        });
+    }
+
+    function renderPrimaryNav(active) {
+        var sections = [
+            { id: 'operations', label: 'Operations' },
+            { id: 'editor', label: 'Website editor' },
+            { id: 'messages', label: 'Messages' },
+            { id: 'users', label: 'Users' }
+        ];
+        return '<nav class="admin-primary-nav" aria-label="Admin sections">' +
+            sections.map(function (entry) {
+                var isActive = entry.id === active;
+                return '<button type="button" class="admin-primary-nav-btn' + (isActive ? ' active' : '') + '" data-admin-primary-section="' + entry.id + '" aria-current="' + (isActive ? 'page' : 'false') + '">' + escapeHtml(entry.label) + '</button>';
+            }).join('') +
+            '</nav>';
+    }
+
+    function renderShell(activeSection) {
+        var root = document.getElementById('admin-panel-root');
+        if (!root) return;
+        root.innerHTML = [
+            renderPrimaryNav(activeSection),
+            '<div class="admin-panel-panels">',
+            '  <section id="admin-panel-operations" class="admin-panel-section"' + (activeSection === 'operations' ? '' : ' hidden') + '>',
+            '    <div id="admin-operations-content" class="provider-listings"></div>',
+            '  </section>',
+            '  <section id="admin-panel-editor" class="admin-panel-section"' + (activeSection === 'editor' ? '' : ' hidden') + '>',
+            '    <h3 class="admin-panel-section-title">Website editor</h3>',
+            '    <p class="muted-text">Manage navbar links, footer links, and page sections with the visual builder.</p>',
+            '    <div id="admin-site-content-editor"></div>',
+            '  </section>',
+            '  <section id="admin-panel-messages" class="admin-panel-section"' + (activeSection === 'messages' ? '' : ' hidden') + '>',
+            '    <div id="admin-messages-content"></div>',
+            '  </section>',
+            '  <section id="admin-panel-users" class="admin-panel-section"' + (activeSection === 'users' ? '' : ' hidden') + '>',
+            '    <div id="admin-users-content"></div>',
+            '  </section>',
+            '</div>'
+        ].join('');
+        shellReady = true;
+        wirePrimaryNav();
+    }
+
+    function wirePrimaryNav() {
+        var root = document.getElementById('admin-panel-root');
+        if (!root) return;
+        root.querySelectorAll('[data-admin-primary-section]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var section = btn.getAttribute('data-admin-primary-section') || 'operations';
+                switchSection(section, true);
+            });
+        });
+    }
+
+    function togglePanelVisibility(activeSection) {
+        ['operations', 'editor', 'messages', 'users'].forEach(function (name) {
+            var panel = document.getElementById('admin-panel-' + name);
+            if (panel) panel.hidden = name !== activeSection;
+        });
+        var root = document.getElementById('admin-panel-root');
+        if (root) {
+            root.querySelectorAll('[data-admin-primary-section]').forEach(function (btn) {
+                var active = btn.getAttribute('data-admin-primary-section') === activeSection;
+                btn.classList.toggle('active', active);
+                btn.setAttribute('aria-current', active ? 'page' : 'false');
+            });
+        }
+    }
+
+    function renderMessagesPanel() {
+        var mount = document.getElementById('admin-messages-content');
+        if (!mount || !depsRef) return;
+
+        var allUsers = depsRef.getAllUsers ? depsRef.getAllUsers() : [];
+        var allMessages = depsRef.getAllMessages ? depsRef.getAllMessages() : [];
+        var usersById = {};
+        allUsers.forEach(function (u) {
+            if (u && u.id) usersById[String(u.id)] = u;
+        });
+
+        var query = String(panelState.messageQuery || '').trim().toLowerCase();
+        var threads = buildAllThreads(allMessages, allUsers).filter(function (thread) {
+            if (!query) return true;
+            var names = [thread.participantA, thread.participantB].map(function (id) {
+                return userDisplayName(usersById[id]).toLowerCase();
+            }).join(' ');
+            var preview = thread.messages.map(function (m) { return String(m.text || m.title || ''); }).join(' ').toLowerCase();
+            return names.indexOf(query) >= 0 || preview.indexOf(query) >= 0;
+        });
+
+        var listHtml = threads.length ? threads.map(function (thread) {
+            var userA = usersById[thread.participantA];
+            var userB = usersById[thread.participantB];
+            var label = escapeHtml(userDisplayName(userA)) + ' ↔ ' + escapeHtml(userDisplayName(userB));
+            var preview = escapeHtml(firstText(thread.messages[thread.messages.length - 1] && thread.messages[thread.messages.length - 1].text, thread.messages[thread.messages.length - 1] && thread.messages[thread.messages.length - 1].title, 'No text'));
+            var expanded = panelState.expandedThreadKey === thread.key;
+            var messagesHtml = expanded ? thread.messages.map(function (m) {
+                var sender = userDisplayName(usersById[m.fromUserId]);
+                return '<div class="admin-message-line">' +
+                    '<div class="admin-message-meta">' + escapeHtml(sender) + ' · ' + escapeHtml(formatWhen(m.createdAt)) + '</div>' +
+                    '<div class="admin-message-body">' + escapeHtml(firstText(m.text, m.title, '')) + '</div>' +
+                    '</div>';
+            }).join('') : '';
+            return [
+                '<article class="admin-thread-card">',
+                '  <button type="button" class="admin-thread-toggle" data-admin-thread-key="' + escapeAttr(thread.key) + '">',
+                '    <div class="admin-thread-title">' + label + '</div>',
+                '    <div class="admin-thread-preview">' + preview + '</div>',
+                '    <div class="admin-thread-meta">' + thread.messages.length + ' message(s) · Last ' + escapeHtml(formatWhen(thread.latestAt)) + '</div>',
+                '  </button>',
+                expanded ? '<div class="admin-thread-body">' + messagesHtml + '</div>' : '',
+                '</article>'
+            ].join('');
+        }).join('') : '<div class="empty-inventory">No platform messages yet.</div>';
+
+        mount.innerHTML = [
+            '<div class="admin-section-toolbar">',
+            '  <h3 class="admin-panel-section-title" style="margin:0;">All customer &amp; provider messages</h3>',
+            '  <input type="search" class="form-input admin-messages-search" placeholder="Search by name or message text" value="' + escapeAttr(panelState.messageQuery) + '">',
+            '</div>',
+            '<p class="muted-text">Read-only view of every conversation on the platform. Open a thread to inspect the full exchange.</p>',
+            '<div class="admin-thread-list">' + listHtml + '</div>'
+        ].join('');
+
+        mount.querySelector('.admin-messages-search').addEventListener('input', function (e) {
+            panelState.messageQuery = String(e.target.value || '');
+            renderMessagesPanel();
+        });
+        mount.querySelectorAll('[data-admin-thread-key]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var key = btn.getAttribute('data-admin-thread-key') || '';
+                panelState.expandedThreadKey = panelState.expandedThreadKey === key ? '' : key;
+                renderMessagesPanel();
+            });
+        });
+    }
+
+    function renderUsersPanel() {
+        var mount = document.getElementById('admin-users-content');
+        if (!mount || !depsRef) return;
+
+        var allUsers = depsRef.getAllUsers ? depsRef.getAllUsers() : [];
+        var allQuotes = depsRef.getAllQuotes ? depsRef.getAllQuotes() : [];
+        var allMessages = depsRef.getAllMessages ? depsRef.getAllMessages() : [];
+        var directory = buildUserDirectory(allUsers, allQuotes, allMessages);
+        var usersById = {};
+        allUsers.forEach(function (u) {
+            if (u && u.id) usersById[String(u.id)] = u;
+        });
+
+        var query = String(panelState.userQuery || '').trim().toLowerCase();
+        var roleFilter = String(panelState.userRole || 'all');
+
+        var rows = allUsers.filter(function (user) {
+            var role = String(user.role || '').trim().toLowerCase();
+            if (roleFilter === 'provider' && role !== 'provider') return false;
+            if (roleFilter === 'customer' && (role === 'provider' || role === 'admin')) return false;
+            if (roleFilter === 'admin' && role !== 'admin') return false;
+            if (!query) return true;
+            var hay = [
+                userDisplayName(user),
+                user.email,
+                user.username,
+                user.city,
+                user.location
+            ].join(' ').toLowerCase();
+            return hay.indexOf(query) >= 0;
+        }).sort(function (a, b) {
+            return userDisplayName(a).localeCompare(userDisplayName(b));
+        });
+
+        var listHtml = rows.length ? rows.map(function (user) {
+            var id = String(user.id || '');
+            var entry = directory[id] || { quotes: [], messages: [], threads: {} };
+            var expanded = panelState.expandedUserId === id;
+            var profileBtn = isProviderUser(user)
+                ? '<a class="btn btn-outline btn-sm" href="provider-profile.html?userId=' + encodeURIComponent(id) + '" target="_blank" rel="noopener">View provider profile</a>'
+                : '';
+
+            var quotesHtml = entry.quotes.length ? entry.quotes.slice().sort(function (a, b) {
+                return String(b.submittedAt || b.createdAt || '').localeCompare(String(a.submittedAt || a.createdAt || ''));
+            }).map(function (quote) {
+                var formId = firstText(quote.formId, quote.id, '—');
+                var quoteId = String(quote.id || '').trim();
+                return '<li class="admin-user-detail-item">' +
+                    '<strong>Listing #' + escapeHtml(formId) + '</strong> · ' + escapeHtml(formatWhen(quote.submittedAt || quote.createdAt)) +
+                    (quoteId ? ' · <a href="listing-details.html?id=' + encodeURIComponent(formId) + '" target="_blank" rel="noopener">Open</a>' : '') +
+                    '</li>';
+            }).join('') : '<li class="admin-user-detail-empty">No listings linked to this account.</li>';
+
+            var threadKeys = Object.keys(entry.threads || {});
+            var messagesHtml = threadKeys.length ? threadKeys.map(function (key) {
+                var thread = entry.threads[key];
+                var peer = usersById[thread.peerId];
+                var latest = thread.messages[thread.messages.length - 1];
+                return '<li class="admin-user-detail-item">' +
+                    '<strong>' + escapeHtml(userDisplayName(peer)) + '</strong> · ' + thread.messages.length + ' message(s)' +
+                    '<div class="admin-user-detail-sub">' + escapeHtml(firstText(latest && latest.text, latest && latest.title, '')) + '</div>' +
+                    '</li>';
+            }).join('') : '<li class="admin-user-detail-empty">No messages for this account.</li>';
+
+            return [
+                '<article class="admin-user-card">',
+                '  <div class="admin-user-card-head">',
+                '    <div>',
+                '      <div class="admin-user-name">' + escapeHtml(userDisplayName(user)) + '</div>',
+                '      <div class="admin-user-meta">' + escapeHtml(firstText(user.email, 'No email')) + ' · ' + escapeHtml(userRoleLabel(user)) + '</div>',
+                '    </div>',
+                '    <div class="admin-user-stats">',
+                '      <span>' + entry.quotes.length + ' listing(s)</span>',
+                '      <span>' + entry.messages.length + ' message(s)</span>',
+                '    </div>',
+                '  </div>',
+                '  <div class="admin-user-card-actions">',
+                '    <button type="button" class="btn btn-outline btn-sm" data-admin-expand-user="' + escapeAttr(id) + '">' + (expanded ? 'Hide details' : 'Show listings &amp; messages') + '</button>',
+                profileBtn,
+                '  </div>',
+                expanded ? [
+                    '  <div class="admin-user-detail-grid">',
+                    '    <div><h4>Listings / forms</h4><ul>' + quotesHtml + '</ul></div>',
+                    '    <div><h4>Messages</h4><ul>' + messagesHtml + '</ul></div>',
+                    '  </div>'
+                ].join('') : '',
+                '</article>'
+            ].join('');
+        }).join('') : '<div class="empty-inventory">No users match your filters.</div>';
+
+        mount.innerHTML = [
+            '<div class="admin-section-toolbar">',
+            '  <h3 class="admin-panel-section-title" style="margin:0;">Customers &amp; providers</h3>',
+            '  <div class="admin-user-filters">',
+            '    <select class="form-input admin-user-role-filter">',
+            '      <option value="all"' + (roleFilter === 'all' ? ' selected' : '') + '>All roles</option>',
+            '      <option value="customer"' + (roleFilter === 'customer' ? ' selected' : '') + '>Customers</option>',
+            '      <option value="provider"' + (roleFilter === 'provider' ? ' selected' : '') + '>Providers</option>',
+            '      <option value="admin"' + (roleFilter === 'admin' ? ' selected' : '') + '>Admins</option>',
+            '    </select>',
+            '    <input type="search" class="form-input admin-users-search" placeholder="Search name or email" value="' + escapeAttr(panelState.userQuery) + '">',
+            '  </div>',
+            '</div>',
+            '<p class="muted-text">Browse every account, see their listings and message activity, and open provider profiles.</p>',
+            '<div class="admin-user-list">' + listHtml + '</div>'
+        ].join('');
+
+        var roleSelect = mount.querySelector('.admin-user-role-filter');
+        if (roleSelect) {
+            roleSelect.addEventListener('change', function () {
+                panelState.userRole = String(roleSelect.value || 'all');
+                renderUsersPanel();
+            });
+        }
+        var searchInput = mount.querySelector('.admin-users-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', function () {
+                panelState.userQuery = String(searchInput.value || '');
+                renderUsersPanel();
+            });
+        }
+        mount.querySelectorAll('[data-admin-expand-user]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var id = btn.getAttribute('data-admin-expand-user') || '';
+                panelState.expandedUserId = panelState.expandedUserId === id ? '' : id;
+                renderUsersPanel();
+            });
+        });
+    }
+
+    function switchSection(section, updateHash) {
+        section = section || 'operations';
+        panelState.section = section;
+        if (!shellReady) {
+            renderShell(section);
+        }
+        togglePanelVisibility(section);
+        if (updateHash && global.history && typeof global.history.replaceState === 'function') {
+            global.history.replaceState(null, '', hashForSection(section));
+        }
+        if (!depsRef) return;
+        if (section === 'operations' && typeof depsRef.renderOperations === 'function') {
+            depsRef.renderOperations();
+        }
+        if (section === 'editor' && typeof depsRef.ensureSiteContentAdmin === 'function') {
+            depsRef.ensureSiteContentAdmin(true);
+        }
+        if (section === 'messages') {
+            renderMessagesPanel();
+        }
+        if (section === 'users') {
+            renderUsersPanel();
+        }
+    }
+
+    function init(deps) {
+        depsRef = deps || null;
+        var section = sectionFromHash();
+        renderShell(section);
+        switchSection(section, false);
+    }
+
+    function applyHash() {
+        switchSection(sectionFromHash(), false);
+    }
+
+    function getActiveSection() {
+        return panelState.section;
+    }
+
+    global.anytransportAdminPanel = {
+        init: init,
+        applyHash: applyHash,
+        switchSection: switchSection,
+        getActiveSection: getActiveSection,
+        renderMessagesPanel: renderMessagesPanel,
+        renderUsersPanel: renderUsersPanel
+    };
+})(typeof window !== 'undefined' ? window : this);

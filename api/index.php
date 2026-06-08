@@ -1288,7 +1288,7 @@ function format_provider_profile_value_for_email($value) {
                     continue;
                 }
                 if (isset($entry['coverageUpTo']) && $entry['coverageUpTo'] !== null && $entry['coverageUpTo'] !== '') {
-                    $parts[] = $label . ' (up to £' . number_format((float) $entry['coverageUpTo']) . ')';
+                    $parts[] = $label . ' (up to €' . number_format((float) $entry['coverageUpTo']) . ')';
                 } elseif (isset($entry['quantity']) && isset($entry['capacity'])) {
                     $parts[] = (int) $entry['quantity'] . '× ' . $label . ' (' . trim((string) $entry['capacity']) . ')';
                 } elseif (isset($entry['quantity'])) {
@@ -5952,6 +5952,14 @@ switch ($action) {
         $store['bids'] = $normalizedBids;
         write_store($storeFile, $store);
         send_json(array('ok' => true, 'bids' => array_values($store['bids'])));
+
+    case 'admin.messages.all':
+        $currentUser = get_current_user_record($store);
+        if (!is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin access required.'), 403);
+        }
+        $messages = isset($store['messages']) && is_array($store['messages']) ? array_values($store['messages']) : array();
+        send_json(array('ok' => true, 'messages' => $messages));
 
     case 'messages.list':
         $currentUser = get_current_user_record($store);

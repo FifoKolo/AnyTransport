@@ -73,12 +73,16 @@
         adminShowRejected: false,
         adminExpandedReportGroups: {},
         adminReviewRefreshTimer: null,
-        siteContentAdminInitialized: false
+        siteContentAdminInitialized: false,
+        adminPanelInitialized: false
     };
 
     let adminReviewQueueRenderTimer = null;
 
-    function ensureSiteContentAdminInitialized() {
+    function ensureSiteContentAdminInitialized(forceRemount) {
+        if (forceRemount) {
+            state.siteContentAdminInitialized = false;
+        }
         if (state.siteContentAdminInitialized) {
             return;
         }
@@ -88,6 +92,34 @@
         }
         window.initSiteContentAdmin(mount);
         state.siteContentAdminInitialized = true;
+    }
+
+    function getAllMessagesForAdmin() {
+        try {
+            if (window.anytransportApi && typeof window.anytransportApi.getAllMessagesForAdmin === 'function') {
+                const messages = window.anytransportApi.getAllMessagesForAdmin();
+                if (Array.isArray(messages)) {
+                    return messages;
+                }
+            }
+        } catch (_error) {
+            /* fallback below */
+        }
+        return [];
+    }
+
+    function ensureAdminPanelInitialized() {
+        if (state.adminPanelInitialized || !(window.anytransportAdminPanel && typeof window.anytransportAdminPanel.init === 'function')) {
+            return;
+        }
+        window.anytransportAdminPanel.init({
+            getAllUsers: getAllUsersForAdmin,
+            getAllQuotes: getAllQuotes,
+            getAllMessages: getAllMessagesForAdmin,
+            renderOperations: renderAdminReviewQueue,
+            ensureSiteContentAdmin: ensureSiteContentAdminInitialized
+        });
+        state.adminPanelInitialized = true;
     }
 
     function captureAdminSearchFocus() {
@@ -108,7 +140,7 @@
         if (!focusHint) {
             return;
         }
-        const container = document.getElementById('provider-review-queue');
+        const container = document.getElementById('admin-operations-content');
         if (!container) {
             return;
         }
@@ -459,6 +491,21 @@
     }
 
     document.addEventListener('DOMContentLoaded', initDashboard);
+    window.addEventListener('hashchange', function () {
+        if (!(auth && auth.isAdmin && auth.isAdmin())) {
+            return;
+        }
+        if (state.activeTab !== 'verification-review') {
+            return;
+        }
+        ensureAdminPanelInitialized();
+        if (window.anytransportAdminPanel && typeof window.anytransportAdminPanel.applyHash === 'function') {
+            window.anytransportAdminPanel.applyHash();
+        }
+        if (!window.anytransportAdminPanel || window.anytransportAdminPanel.getActiveSection() === 'operations') {
+            renderAdminReviewQueue();
+        }
+    });
 
     function initDashboard() {
         const canUsePageLoader =
@@ -927,8 +974,13 @@
         }
 
         if (tabName === 'verification-review') {
-            ensureSiteContentAdminInitialized();
-            renderAdminReviewQueue();
+            ensureAdminPanelInitialized();
+            if (window.anytransportAdminPanel && typeof window.anytransportAdminPanel.applyHash === 'function') {
+                window.anytransportAdminPanel.applyHash();
+            }
+            if (!window.anytransportAdminPanel || window.anytransportAdminPanel.getActiveSection() === 'operations') {
+                renderAdminReviewQueue();
+            }
             ensureAdminReviewAutoRefresh();
             return;
         }
@@ -1177,10 +1229,23 @@
         document.addEventListener('click', (event) => {
             const adminAnchor = event.target.closest('a[href^="#admin-section-"]');
             if (adminAnchor) {
-                const targetId = String(adminAnchor.getAttribute('href') || '').trim();
+                const targetId = String(adminAnchor.getAttribute('href') || '').trim().toLowerCase();
+                if (targetId === '#admin-section-editor' || targetId === '#admin-section-messages' || targetId === '#admin-section-users') {
+                    event.preventDefault();
+                    ensureAdminPanelInitialized();
+                    if (window.anytransportAdminPanel && typeof window.anytransportAdminPanel.switchSection === 'function') {
+                        var section = targetId.indexOf('editor') >= 0 ? 'editor' : targetId.indexOf('messages') >= 0 ? 'messages' : 'users';
+                        window.anytransportAdminPanel.switchSection(section, true);
+                    }
+                    return;
+                }
                 const targetEl = targetId ? document.querySelector(targetId) : null;
                 if (targetEl) {
                     event.preventDefault();
+                    ensureAdminPanelInitialized();
+                    if (window.anytransportAdminPanel && window.anytransportAdminPanel.getActiveSection() !== 'operations') {
+                        window.anytransportAdminPanel.switchSection('operations', true);
+                    }
                     const topOffset = 96;
                     const targetY = Math.max(0, window.pageYOffset + targetEl.getBoundingClientRect().top - topOffset);
                     window.scrollTo({ top: targetY, behavior: 'smooth' });
@@ -2225,7 +2290,7 @@
     }
 
     function renderAdminReviewQueue() {
-        const container = document.getElementById('provider-review-queue');
+        const container = document.getElementById('admin-operations-content');
         if (!container) return;
 
         const searchFocus = captureAdminSearchFocus();
@@ -2536,7 +2601,6 @@
                 '<a href="#admin-section-rejected" class="admin-side-nav-link">Rejected providers</a>',
                 '<a href="#admin-section-reports" class="admin-side-nav-link">Provider reports</a>',
                 '<a href="#admin-section-forms" class="admin-side-nav-link">Submitted listings</a>',
-                '<a href="#admin-section-site-content" class="admin-side-nav-link">Site content editor</a>',
                 '</nav>',
                 '</aside>',
                 '<div>',

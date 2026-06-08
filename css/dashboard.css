@@ -111,6 +111,189 @@
     outline: none;
 }
 
+.admin-primary-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 18px;
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid #d2e4f4;
+    background: #edf4fb;
+}
+
+.admin-primary-nav-btn {
+    appearance: none;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    color: #3f5f73;
+    font-weight: 700;
+    background: transparent;
+    cursor: pointer;
+}
+
+.admin-primary-nav-btn.active {
+    background: #fff;
+    color: #0f6ca5;
+    box-shadow: 0 4px 10px rgba(42, 98, 135, 0.16);
+}
+
+.admin-panel-section[hidden] {
+    display: none !important;
+}
+
+.admin-panel-section-title {
+    margin: 0 0 8px;
+    font-size: 1.15rem;
+    color: #0f172a;
+}
+
+.admin-section-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.admin-user-filters {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.admin-user-filters .form-input {
+    min-width: 180px;
+}
+
+.admin-thread-list,
+.admin-user-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.admin-thread-card,
+.admin-user-card {
+    border: 1px solid #dbe7f2;
+    border-radius: 12px;
+    background: #fff;
+    overflow: hidden;
+}
+
+.admin-thread-toggle {
+    width: 100%;
+    border: 0;
+    background: #f8fbff;
+    text-align: left;
+    padding: 14px 16px;
+    cursor: pointer;
+}
+
+.admin-thread-title,
+.admin-user-name {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.admin-thread-preview,
+.admin-user-meta,
+.admin-thread-meta,
+.admin-user-detail-sub {
+    color: #64748b;
+    font-size: 0.88rem;
+    margin-top: 4px;
+}
+
+.admin-thread-body {
+    padding: 0 16px 14px;
+    border-top: 1px solid #eef2f7;
+    background: #fff;
+}
+
+.admin-message-line {
+    padding: 10px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.admin-message-line:last-child {
+    border-bottom: 0;
+}
+
+.admin-message-meta {
+    font-size: 0.78rem;
+    color: #64748b;
+    margin-bottom: 4px;
+}
+
+.admin-user-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px 0;
+    flex-wrap: wrap;
+}
+
+.admin-user-stats {
+    display: flex;
+    gap: 10px;
+    color: #475569;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.admin-user-card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 16px 14px;
+}
+
+.admin-user-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    padding: 0 16px 16px;
+    border-top: 1px solid #eef2f7;
+}
+
+.admin-user-detail-grid h4 {
+    margin: 12px 0 8px;
+    font-size: 0.92rem;
+}
+
+.admin-user-detail-grid ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.admin-user-detail-item {
+    margin-bottom: 8px;
+    color: #334155;
+    font-size: 0.9rem;
+}
+
+.admin-user-detail-empty {
+    color: #94a3b8;
+    font-size: 0.88rem;
+    list-style: none;
+    margin-left: -18px;
+}
+
+.btn-sm {
+    padding: 7px 12px;
+    font-size: 0.84rem;
+}
+
+@media (max-width: 768px) {
+    .admin-user-detail-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Dropdown for profile nav */
 .dashboard-inline-nav .nav-dropdown {
     position: relative;
@@ -760,6 +943,7 @@
 }
 
 /* navbar.css used to style all .btn-outline for the header; keep admin actions readable */
+#admin-operations-content .btn-outline,
 #provider-review-queue .btn-outline,
 .admin-review-layout .btn-outline,
 .provider-listing .review-actions .btn-outline {
@@ -768,6 +952,7 @@
     border: 1px solid #cbd5e1;
 }
 
+#admin-operations-content .btn-outline:hover,
 #provider-review-queue .btn-outline:hover,
 .admin-review-layout .btn-outline:hover,
 .provider-listing .review-actions .btn-outline:hover {

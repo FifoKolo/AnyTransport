@@ -58,7 +58,7 @@
         if (num === null) {
             return 'Not specified';
         }
-        return 'Covers up to £' + num.toLocaleString('en-GB');
+        return 'Covers up to €' + num.toLocaleString('en-IE');
     }
 
     function normalizeInsuranceEntry(entry) {
@@ -151,7 +151,7 @@
             '    <input class="form-input provider-insurance-custom-type" data-insurance-custom-type type="text" maxlength="80" placeholder="Insurance type name"' + customStyle + ' value="' + escapeAttribute(isOther ? row.type : '') + '"' + disabledAttr + '>',
             '  </div>',
             '  <div class="provider-insurance-field provider-insurance-field--coverage" data-insurance-coverage-wrap' + coverageStyle + '>',
-            '    <span class="provider-insurance-field-label">Coverage up to (£)</span>',
+            '    <span class="provider-insurance-field-label">Coverage up to (€)</span>',
             '    <input class="form-input provider-insurance-coverage-input" data-insurance-coverage type="number" min="0" step="1000" placeholder="e.g. 50000" value="' + escapeAttribute(coverageValue) + '"' + disabledAttr + '>',
             '  </div>',
             disabled ? '' : '  <button type="button" class="provider-insurance-remove" data-insurance-remove aria-label="Remove insurance">×</button>',

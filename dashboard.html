@@ -9,7 +9,7 @@
     <title>My Dashboard - AnyTransport</title>
     <link rel="stylesheet" href="css/style.css?v=20260602-1">
     <link rel="stylesheet" href="css/navbar.css?v=20260529-2">
-    <link rel="stylesheet" href="css/dashboard.css?v=20260608-1">
+    <link rel="stylesheet" href="css/dashboard.css?v=20260608-2">
     <link rel="stylesheet" href="css/responsive.css?v=20260529-1">
     <link rel="stylesheet" href="css/site-content.css?v=20260605-21">
     <link href="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css" rel="stylesheet">
@@ -186,18 +186,13 @@
                 <div id="my-bids-list" class="quotes-list"></div>
             </div>
 
-            <!-- Verification Review Tab -->
+            <!-- Admin Panel -->
             <div id="verification-review" class="tab-content">
-                <div class="tab-header">
-                    <h2>Provider Verification Review</h2>
-                    <p class="muted-text">Review identity photos submitted by providers and approve or reject them.</p>
+                <div class="tab-header admin-panel-header">
+                    <h2>Admin panel</h2>
+                    <p class="muted-text">Manage website content, platform messages, users, and day-to-day operations.</p>
                 </div>
-                <section id="admin-section-site-content" style="margin-bottom:24px;">
-                    <h3 style="margin:0 0 10px;">Site content editor</h3>
-                    <p class="muted-text" style="margin:0 0 12px;">Manage navbar links, footer links, and page sections with the visual builder — drag titles, text, and images anywhere on each page.</p>
-                    <div id="admin-site-content-editor"></div>
-                </section>
-                <div id="provider-review-queue" class="provider-listings" aria-live="polite"></div>
+                <div id="admin-panel-root" class="admin-panel-root" aria-live="polite"></div>
             </div>
 
             <!-- Profile Tab -->
@@ -265,11 +260,12 @@
     <script src="js/notifications.js?v=20260420-4"></script>
     <script src="js/transport-mode-icons.js?v=20260605-23"></script>
     <script src="js/provider-vehicles.js?v=20260605-23"></script>
-    <script src="js/provider-insurance.js?v=20260608-1"></script>
+    <script src="js/provider-insurance.js?v=20260608-2"></script>
     <script src="js/provider-profile.js?v=20260608-1"></script>
     <script src="js/site-content-images.js?v=20260605-21"></script>
     <script src="js/site-content-social.js?v=20260605-21"></script>
     <script src="js/site-content-admin.js?v=20260605-21"></script>
-    <script src="js/dashboard-fixed.js?v=20260605-4"></script>
+    <script src="js/admin-panel.js?v=20260608-1"></script>
+    <script src="js/dashboard-fixed.js?v=20260608-1"></script>
 </body>
 </html>
