@@ -858,21 +858,32 @@ textarea {
 
 .footer-newsletter {
     display: flex;
-    gap: 12px;
+    flex-direction: column;
+    gap: 10px;
     margin-bottom: 40px;
     padding: 30px;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 8px;
 }
 
+.footer-newsletter-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: stretch;
+}
+
 .newsletter-input {
-    flex: 1;
+    flex: 1 1 200px;
+    min-width: 180px;
+    width: auto;
     padding: 12px 16px;
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 6px;
     background: rgba(255, 255, 255, 0.1);
     color: white;
     font-size: 0.95rem;
+    box-shadow: none;
 }
 
 .newsletter-input::placeholder {
@@ -880,6 +891,7 @@ textarea {
 }
 
 .btn-newsletter {
+    flex: 0 0 auto;
     padding: 12px 30px;
     background: var(--primary-color);
     color: white;
@@ -888,6 +900,22 @@ textarea {
     font-weight: 600;
     cursor: pointer;
     transition: background 0.3s;
+    white-space: nowrap;
+}
+
+.footer-newsletter-forgot {
+    margin: 0;
+    text-align: right;
+}
+
+.footer-newsletter-forgot a {
+    color: #93c5fd;
+    font-size: 0.88rem;
+    text-decoration: underline;
+}
+
+.footer-newsletter-forgot a:hover {
+    color: #bfdbfe;
 }
 
 .btn-newsletter:hover {
@@ -968,8 +996,13 @@ textarea {
         grid-template-columns: 1fr;
     }
     
-    .footer-newsletter {
+    .footer-newsletter-fields {
         flex-direction: column;
+    }
+
+    .newsletter-input,
+    .btn-newsletter {
+        width: 100%;
     }
 
     .service-examples-header {
