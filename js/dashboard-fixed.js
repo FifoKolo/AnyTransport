@@ -2702,26 +2702,74 @@
         return { lines: lines.slice(0, 20), photoSources: photoSources };
     }
 
-    function buildPendingProfilePhotosMarkup(photoSources) {
+    function buildProfileChangeChip(item) {
+        const labelPrefix = String(item && item.label || '') + ': ';
+        const summary = String(item && item.summary || '');
+        if (summary.indexOf(labelPrefix) === 0) {
+            return summary.slice(labelPrefix.length);
+        }
+        return summary;
+    }
+
+    function buildProfileChangeDiffMarkup(detailLines) {
+        if (!Array.isArray(detailLines) || !detailLines.length) {
+            return '';
+        }
+        let before = '';
+        let after = '';
+        detailLines.forEach(function (line) {
+            const text = String(line || '');
+            if (text.indexOf('Before:') === 0) {
+                before = text.slice(7).trim();
+            } else if (text.indexOf('After:') === 0) {
+                after = text.slice(6).trim();
+            }
+        });
+        if (!before && !after) {
+            return '';
+        }
+        return [
+            '<div class="admin-profile-change-diff">',
+            '<div class="admin-profile-change-diff-col">',
+            '<span class="admin-profile-change-diff-label">Before</span>',
+            '<span class="admin-profile-change-diff-value">' + escapeHtml(before || '(none)') + '</span>',
+            '</div>',
+            '<div class="admin-profile-change-diff-arrow" aria-hidden="true">→</div>',
+            '<div class="admin-profile-change-diff-col admin-profile-change-diff-col--after">',
+            '<span class="admin-profile-change-diff-label">After</span>',
+            '<span class="admin-profile-change-diff-value">' + escapeHtml(after || '(none)') + '</span>',
+            '</div>',
+            '</div>'
+        ].join('');
+    }
+
+    function buildPendingProfilePhotosMarkup(photoSources, compact) {
         const photos = Array.isArray(photoSources) ? photoSources : [];
         if (!photos.length) {
             return '';
         }
+
+        const thumbWidth = compact ? 72 : 120;
+        const thumbHeight = compact ? 54 : 90;
 
         const items = photos.map(function (src, index) {
             if (!src) {
                 return '';
             }
             return [
-                '<figure style="margin:0; width:120px;">',
-                '<img src="' + escapeHtml(src) + '" alt="Changed profile photo ' + (index + 1) + '" loading="lazy" style="width:120px; height:90px; object-fit:cover; border-radius:10px; border:1px solid #dbeafe; background:#f8fafc;">',
-                '<figcaption style="font-size:11px; color:#64748b; margin-top:4px;">Changed photo ' + (index + 1) + '</figcaption>',
+                '<figure class="admin-profile-change-photo"' + (compact ? ' style="width:' + thumbWidth + 'px;"' : ' style="margin:0; width:120px;"') + '>',
+                '<img src="' + escapeHtml(src) + '" alt="Changed profile photo ' + (index + 1) + '" loading="lazy" style="width:' + thumbWidth + 'px; height:' + thumbHeight + 'px; object-fit:cover; border-radius:8px; border:1px solid #dbeafe; background:#f8fafc;">',
+                compact ? '' : '<figcaption style="font-size:11px; color:#64748b; margin-top:4px;">Changed photo ' + (index + 1) + '</figcaption>',
                 '</figure>'
             ].join('');
         }).filter(Boolean).join('');
 
         if (!items) {
             return '';
+        }
+
+        if (compact) {
+            return '<div class="admin-profile-change-photos">' + items + '</div>';
         }
 
         return [
@@ -2850,20 +2898,27 @@
                         '<div class="admin-profile-change-list">',
                         changeItems.map(function (item) {
                             const photosMarkup = item.key === 'photos'
-                                ? buildPendingProfilePhotosMarkup(item.photoSources || [])
+                                ? buildPendingProfilePhotosMarkup(item.photoSources || [], true)
+                                : '';
+                            const diffMarkup = buildProfileChangeDiffMarkup(item.detailLines);
+                            const chip = buildProfileChangeChip(item);
+                            const chipMarkup = chip
+                                ? '<span class="admin-profile-change-chip">' + escapeHtml(chip) + '</span>'
+                                : '';
+                            const noteMarkup = !diffMarkup && item.summary
+                                ? '<p class="admin-profile-change-note">' + escapeHtml(item.summary) + '</p>'
                                 : '';
                             return [
                                 '<label class="admin-profile-change-item">',
                                 '<div class="admin-profile-change-item-head">',
                                 '<input type="checkbox" class="profile-change-approve-checkbox" data-provider-id="' + escapeHtml(provider.id) + '" data-change-key="' + escapeHtml(item.key) + '" checked>',
+                                '<div class="admin-profile-change-item-heading">',
                                 '<span class="admin-profile-change-item-title">' + escapeHtml(item.label) + '</span>',
+                                chipMarkup,
                                 '</div>',
-                                '<div class="admin-profile-change-item-summary">' + escapeHtml(item.summary) + '</div>',
-                                (item.detailLines && item.detailLines.length
-                                    ? '<ul class="admin-profile-change-item-details">' + item.detailLines.map(function (line) {
-                                        return '<li>' + escapeHtml(line) + '</li>';
-                                    }).join('') + '</ul>'
-                                    : ''),
+                                '</div>',
+                                diffMarkup,
+                                noteMarkup,
                                 photosMarkup,
                                 '</label>'
                             ].join('');
@@ -2886,7 +2941,7 @@
                     '</div>',
                     '<div class="listing-cell review-actions-cell">',
                     '<label class="listing-sub" for="profile-change-notes-' + escapeHtml(provider.id) + '"><strong>Reason for declined changes</strong></label>',
-                    '<textarea id="profile-change-notes-' + escapeHtml(provider.id) + '" class="form-input profile-change-review-notes" rows="5" data-provider-id="' + escapeHtml(provider.id) + '" placeholder="Required if you uncheck any change. Explain what was not approved and why." style="width:100%; box-sizing:border-box; margin-top:6px;"></textarea>',
+                    '<textarea id="profile-change-notes-' + escapeHtml(provider.id) + '" class="form-input profile-change-review-notes" rows="3" data-provider-id="' + escapeHtml(provider.id) + '" placeholder="Required if you uncheck any change. Explain what was not approved and why." style="width:100%; box-sizing:border-box; margin-top:6px;"></textarea>',
                     '<div class="actions review-actions" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-start;">',
                     '<a class="btn btn-outline" href="provider-profile.html?userId=' + encodeURIComponent(String(provider.id || '')) + '" target="_blank" rel="noopener">View profile</a>',
                     '<button type="button" class="btn btn-outline btn-sm" data-profile-change-select="all">Select all</button>',
