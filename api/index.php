@@ -1831,6 +1831,17 @@ function clear_password_reset_for_user(&$store, $userIndex) {
     $store['users'][$userIndex]['passwordResetExpiresAt'] = '';
 }
 
+function provider_password_requirement_error($password) {
+    $password = (string) $password;
+    if ($password === '') {
+        return 'Password is required.';
+    }
+    if (strlen($password) < 6) {
+        return 'Password must be at least 6 characters.';
+    }
+    return '';
+}
+
 function find_user_index_by_password_reset_token($users, $token) {
     $token = trim((string) $token);
     if ($token === '') {
@@ -4668,7 +4679,11 @@ switch ($action) {
         if (!password_reset_token_is_valid($user)) {
             send_json(array('ok' => false, 'valid' => false, 'error' => 'This reset link has expired. Request a new one from the login page.'), 410);
         }
-        send_json(array('ok' => true, 'valid' => true));
+        send_json(array(
+            'ok' => true,
+            'valid' => true,
+            'isProvider' => is_provider_account($user)
+        ));
 
     case 'auth.password.reset':
         if ($method !== 'POST') {
@@ -4679,9 +4694,6 @@ switch ($action) {
         if ($token === '') {
             send_json(array('ok' => false, 'error' => 'Reset link is missing or invalid.'), 400);
         }
-        if (strlen($password) < 6) {
-            send_json(array('ok' => false, 'error' => 'Password must be at least 6 characters.'), 400);
-        }
         $userIndex = find_user_index_by_password_reset_token($store['users'], $token);
         if ($userIndex < 0) {
             send_json(array('ok' => false, 'error' => 'This reset link is invalid or has already been used.'), 404);
@@ -4689,6 +4701,14 @@ switch ($action) {
         $user = normalize_user($store['users'][$userIndex]);
         if (!password_reset_token_is_valid($user)) {
             send_json(array('ok' => false, 'error' => 'This reset link has expired. Request a new one from the login page.'), 410);
+        }
+        if (is_provider_account($user)) {
+            $providerPasswordError = provider_password_requirement_error($password);
+            if ($providerPasswordError !== '') {
+                send_json(array('ok' => false, 'error' => $providerPasswordError), 400);
+            }
+        } elseif (strlen($password) < 6) {
+            send_json(array('ok' => false, 'error' => 'Password must be at least 6 characters.'), 400);
         }
         $userId = trim((string) ($user['id'] ?? ''));
         $store['users'][$userIndex]['password'] = $password;
@@ -4790,6 +4810,12 @@ switch ($action) {
 
         $normalizedEmail = strtolower($email);
         $requestedRole = strtolower($role);
+        if ($requestedRole === 'provider') {
+            $providerPasswordError = provider_password_requirement_error($password);
+            if ($providerPasswordError !== '') {
+                send_json(array('ok' => false, 'error' => $providerPasswordError), 400);
+            }
+        }
         $existingByEmailIndex = -1;
         foreach ($store['users'] as $existingIndex => $existingUser) {
             if (strtolower(trim((string) ($existingUser['email'] ?? ''))) === $normalizedEmail) {
@@ -5218,6 +5244,14 @@ switch ($action) {
             'email' => $email
         );
         if ($passwordChanged) {
+            if (is_provider_account($existingUser)) {
+                $providerPasswordError = provider_password_requirement_error($newPassword);
+                if ($providerPasswordError !== '') {
+                    send_json(array('ok' => false, 'error' => $providerPasswordError), 400);
+                }
+            } elseif (strlen(trim($newPassword)) < 6) {
+                send_json(array('ok' => false, 'error' => 'Password must be at least 6 characters.'), 400);
+            }
             $updates['password'] = $newPassword;
         }
 
@@ -5451,7 +5485,12 @@ switch ($action) {
         }
 
         $newPassword = (string) ($input['password'] ?? $input['newPassword'] ?? '');
-        if (strlen(trim($newPassword)) < 6) {
+        if (is_provider_account($targetUser)) {
+            $providerPasswordError = provider_password_requirement_error($newPassword);
+            if ($providerPasswordError !== '') {
+                send_json(array('ok' => false, 'error' => $providerPasswordError), 400);
+            }
+        } elseif (strlen(trim($newPassword)) < 6) {
             send_json(array('ok' => false, 'error' => 'Password must be at least 6 characters.'), 400);
         }
 

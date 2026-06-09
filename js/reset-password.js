@@ -27,10 +27,22 @@
         if (btn) btn.disabled = !enabled;
     }
 
+    function getProviderPasswordRequirementError(password) {
+        if (window.anytransportApi && typeof window.anytransportApi.getProviderPasswordRequirementError === 'function') {
+            return window.anytransportApi.getProviderPasswordRequirementError(password);
+        }
+        const value = String(password || '');
+        if (value.length < 6) {
+            return 'Password must be at least 6 characters.';
+        }
+        return '';
+    }
+
     function init() {
         const token = getTokenFromUrl();
         const form = document.getElementById('reset-password-form');
         const intro = document.getElementById('reset-intro');
+        let resetIsProvider = false;
 
         if (!token) {
             if (intro) intro.textContent = 'This reset link is missing or invalid.';
@@ -46,7 +58,11 @@
         }
 
         try {
-            window.anytransportApi.validatePasswordResetToken(token);
+            const validateResp = window.anytransportApi.validatePasswordResetToken(token);
+            resetIsProvider = !!(validateResp && validateResp.isProvider);
+            if (resetIsProvider && intro) {
+                intro.textContent = 'Choose a new provider password. It must be at least 6 characters long.';
+            }
         } catch (error) {
             if (intro) intro.textContent = 'Unable to use this reset link.';
             setFormEnabled(false);
@@ -61,7 +77,13 @@
             const password = String(document.getElementById('reset-password')?.value || '');
             const confirm = String(document.getElementById('reset-password-confirm')?.value || '');
 
-            if (password.length < 6) {
+            if (resetIsProvider) {
+                const providerPasswordError = getProviderPasswordRequirementError(password);
+                if (providerPasswordError) {
+                    showStatus(providerPasswordError, true);
+                    return;
+                }
+            } else if (password.length < 6) {
                 showStatus('Password must be at least 6 characters.', true);
                 return;
             }

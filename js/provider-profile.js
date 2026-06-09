@@ -1088,14 +1088,18 @@
                 '      </div>',
                 '      <div class="profile-form-row">',
                 '        <div class="profile-form-label">New password</div>',
-                '        <div><input id="profile-account-new-password" class="form-input" type="password" autocomplete="new-password" minlength="6" placeholder="At least 6 characters"></div>',
+                '        <div>',
+                '          <input id="profile-account-new-password" class="form-input" type="password" autocomplete="new-password" required minlength="6" placeholder="At least 6 characters">',
+                '          <p class="profile-help">Password must be at least 6 characters long.</p>',
+                '          <p id="profile-account-password-hint" class="profile-account-password-hint" aria-live="polite"></p>',
+                '        </div>',
                 '      </div>',
                 '      <div class="profile-form-row">',
-                '        <div class="profile-form-label">Confirm password</div>',
-                '        <div><input id="profile-account-confirm-password" class="form-input" type="password" autocomplete="new-password" minlength="6" placeholder="Repeat new password"></div>',
+                '        <div class="profile-form-label">Confirm new password</div>',
+                '        <div><input id="profile-account-confirm-password" class="form-input" type="password" autocomplete="new-password" required placeholder="Re-enter new password"></div>',
                 '      </div>',
                 '      <div class="profile-account-actions">',
-                '        <button type="submit" class="btn btn-primary">Update password</button>',
+                '        <button type="submit" id="profile-account-submit-btn" class="btn btn-primary" disabled>Update password</button>',
                 '        <button type="button" id="profile-forgot-password-btn" class="btn btn-outline">Email me a reset link</button>',
                 '      </div>',
                 '      <p id="profile-account-status" class="profile-account-status" aria-live="polite"></p>',
@@ -1904,12 +1908,76 @@
             statusEl.classList.toggle('is-error', !!isError);
         }
 
+        function getProviderPasswordRequirementError(password) {
+            if (window.anytransportApi && typeof window.anytransportApi.getProviderPasswordRequirementError === 'function') {
+                return window.anytransportApi.getProviderPasswordRequirementError(password);
+            }
+            const value = String(password || '');
+            if (value.length < 6) {
+                return 'Password must be at least 6 characters.';
+            }
+            return '';
+        }
+
+        function refreshAccountPasswordFormState() {
+            const currentPassword = String(document.getElementById('profile-account-current-password')?.value || '');
+            const newPassword = String(document.getElementById('profile-account-new-password')?.value || '');
+            const confirmPassword = String(document.getElementById('profile-account-confirm-password')?.value || '');
+            const submitBtn = document.getElementById('profile-account-submit-btn');
+            const hintEl = document.getElementById('profile-account-password-hint');
+            const passwordError = newPassword ? getProviderPasswordRequirementError(newPassword) : '';
+            const passwordsMatch = !!newPassword && newPassword === confirmPassword;
+            const canSubmit = !!currentPassword && !!newPassword && !!confirmPassword && !passwordError && passwordsMatch;
+
+            if (submitBtn) {
+                submitBtn.disabled = !canSubmit;
+            }
+            if (hintEl) {
+                if (!newPassword) {
+                    hintEl.textContent = '';
+                    hintEl.classList.remove('is-error', 'is-ok');
+                } else if (passwordError) {
+                    hintEl.textContent = passwordError;
+                    hintEl.classList.add('is-error');
+                    hintEl.classList.remove('is-ok');
+                } else if (!confirmPassword) {
+                    hintEl.textContent = 'Confirm your new password to continue.';
+                    hintEl.classList.remove('is-error', 'is-ok');
+                } else if (!passwordsMatch) {
+                    hintEl.textContent = 'Passwords do not match.';
+                    hintEl.classList.add('is-error');
+                    hintEl.classList.remove('is-ok');
+                } else if (!currentPassword) {
+                    hintEl.textContent = 'Enter your current password to change it.';
+                    hintEl.classList.remove('is-error', 'is-ok');
+                } else {
+                    hintEl.textContent = 'Password meets requirements.';
+                    hintEl.classList.add('is-ok');
+                    hintEl.classList.remove('is-error');
+                }
+            }
+        }
+
         function wireAccountSecurity(accountUser) {
             const accountForm = document.getElementById('profile-account-form');
             const forgotBtn = document.getElementById('profile-forgot-password-btn');
             if (!accountForm || !isEditable) {
                 return;
             }
+
+            accountForm.addEventListener('input', function (event) {
+                const target = event.target;
+                if (!target || !target.id) return;
+                if (
+                    target.id === 'profile-account-current-password' ||
+                    target.id === 'profile-account-new-password' ||
+                    target.id === 'profile-account-confirm-password'
+                ) {
+                    refreshAccountPasswordFormState();
+                }
+            });
+
+            refreshAccountPasswordFormState();
 
             accountForm.addEventListener('submit', function (event) {
                 event.preventDefault();
@@ -1924,24 +1992,33 @@
                 const newPassword = String(document.getElementById('profile-account-new-password')?.value || '');
                 const confirmPassword = String(document.getElementById('profile-account-confirm-password')?.value || '');
 
+                if (!currentPassword) {
+                    setAccountStatus('Enter your current password to change it.', true);
+                    return;
+                }
                 if (!newPassword) {
                     setAccountStatus('Enter a new password to update your login.', true);
                     return;
                 }
-                if (newPassword.length < 6) {
-                    setAccountStatus('New password must be at least 6 characters.', true);
+                if (!confirmPassword) {
+                    setAccountStatus('Please confirm your new password.', true);
+                    return;
+                }
+                const passwordRequirementError = getProviderPasswordRequirementError(newPassword);
+                if (passwordRequirementError) {
+                    setAccountStatus(passwordRequirementError, true);
+                    refreshAccountPasswordFormState();
                     return;
                 }
                 if (newPassword !== confirmPassword) {
                     setAccountStatus('New password and confirmation do not match.', true);
                     return;
                 }
-                if (!currentPassword) {
-                    setAccountStatus('Enter your current password to change it.', true);
+                if (!window.confirm('Change your login password? You will need the new password the next time you sign in.')) {
                     return;
                 }
 
-                const submitBtn = accountForm.querySelector('button[type="submit"]');
+                const submitBtn = document.getElementById('profile-account-submit-btn');
                 if (submitBtn) submitBtn.disabled = true;
 
                 try {
@@ -1970,6 +2047,7 @@
                         emailField.value = firstText(updatedUser.email, accountUser.email, '');
                     }
                     setAccountStatus('Your password was updated successfully.', false);
+                    refreshAccountPasswordFormState();
                 } catch (error) {
                     setAccountStatus(error && error.message ? error.message : 'Unable to update your password.', true);
                 } finally {

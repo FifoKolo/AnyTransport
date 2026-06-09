@@ -319,6 +319,14 @@ window.anytransportApi = window.anytransportApi || (function () {
         } catch (_e) {}
     }
 
+    function getProviderPasswordRequirementError(password) {
+        const value = String(password || '');
+        if (value.length < 6) {
+            return 'Password must be at least 6 characters.';
+        }
+        return '';
+    }
+
     return {
         isDebug: function () {
             return window.anytransportIsDebug && window.anytransportIsDebug();
@@ -378,6 +386,10 @@ window.anytransportApi = window.anytransportApi || (function () {
         resetPassword: function (token, password) {
             return request('auth.password.reset', 'POST', { token: token, password: password });
         },
+        getProviderPasswordRequirementError: function (password) {
+            return getProviderPasswordRequirementError(password);
+        },
+        providerPasswordRequirementsText: 'At least 6 characters.',
         getSiteContent: function () {
             return request('site.content.get', 'GET');
         },
@@ -2394,6 +2406,16 @@ if (signupForm) {
         if (formData.password !== formData.confirmPassword) {
             alert('Passwords do not match. Please try again.');
             return;
+        }
+
+        if (String(formData.role || '').trim().toLowerCase() === 'provider') {
+            const providerPasswordError = window.anytransportApi && typeof window.anytransportApi.getProviderPasswordRequirementError === 'function'
+                ? window.anytransportApi.getProviderPasswordRequirementError(formData.password)
+                : '';
+            if (providerPasswordError) {
+                alert(providerPasswordError);
+                return;
+            }
         }
 
         if (formData.name && formData.email && formData.password) {

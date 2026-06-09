@@ -135,7 +135,7 @@
             '    <button type="button" class="btn btn-outline btn-sm" data-admin-password-reveal="' + escapeAttr(id) + '">' + revealLabel + '</button>',
             '  </div>',
             '  <div class="admin-user-password-row">',
-            '    <input type="password" class="form-input admin-user-password-input" data-admin-password-input="' + escapeAttr(id) + '" placeholder="New password (min 6 characters)" minlength="6" autocomplete="new-password">',
+            '    <input type="password" class="form-input admin-user-password-input" data-admin-password-input="' + escapeAttr(id) + '" placeholder="At least 6 characters" minlength="6" autocomplete="new-password">',
             '    <button type="button" class="btn btn-primary btn-sm" data-admin-password-set="' + escapeAttr(id) + '">Set password</button>',
             '  </div>',
             '  <p class="admin-user-password-status" data-admin-password-status="' + escapeAttr(id) + '" aria-live="polite"></p>',
@@ -207,7 +207,28 @@
             setUserPasswordStatus(userId, 'Enter a new password first.', true);
             return;
         }
-        if (password.length < 6) {
+        var targetUser = null;
+        if (depsRef && typeof depsRef.getAllUsers === 'function') {
+            (depsRef.getAllUsers() || []).some(function (user) {
+                if (user && String(user.id || '') === String(userId)) {
+                    targetUser = user;
+                    return true;
+                }
+                return false;
+            });
+        }
+        if (targetUser && isProviderUser(targetUser)) {
+            var providerPasswordError = '';
+            if (window.anytransportApi && typeof window.anytransportApi.getProviderPasswordRequirementError === 'function') {
+                providerPasswordError = window.anytransportApi.getProviderPasswordRequirementError(password);
+            } else if (password.length < 6) {
+                providerPasswordError = 'Password must be at least 6 characters.';
+            }
+            if (providerPasswordError) {
+                setUserPasswordStatus(userId, providerPasswordError, true);
+                return;
+            }
+        } else if (password.length < 6) {
             setUserPasswordStatus(userId, 'Password must be at least 6 characters.', true);
             return;
         }
