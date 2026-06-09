@@ -8,7 +8,8 @@
         expandedUserId: '',
         expandedThreadKey: '',
         messageQuery: '',
-        messageRoomThreadKey: ''
+        messageRoomThreadKey: '',
+        revealedPasswords: {}
     };
 
     var depsRef = null;
@@ -112,6 +113,128 @@
         return parts.join('');
     }
 
+    function buildUserPasswordControls(user) {
+        var id = String(user && user.id || '').trim();
+        if (!id) return '';
+        var role = String(user.role || '').trim().toLowerCase();
+        if (role === 'admin') {
+            return '';
+        }
+
+        var revealed = panelState.revealedPasswords[id];
+        var displayText = revealed !== undefined
+            ? (revealed === '' ? '(no password set)' : revealed)
+            : 'Hidden — click Show to view';
+        var revealLabel = revealed !== undefined ? 'Hide password' : 'Show password';
+
+        return [
+            '<div class="admin-user-password">',
+            '  <h4>Password</h4>',
+            '  <div class="admin-user-password-row">',
+            '    <code class="admin-user-password-display" data-admin-password-display="' + escapeAttr(id) + '">' + escapeHtml(displayText) + '</code>',
+            '    <button type="button" class="btn btn-outline btn-sm" data-admin-password-reveal="' + escapeAttr(id) + '">' + revealLabel + '</button>',
+            '  </div>',
+            '  <div class="admin-user-password-row">',
+            '    <input type="password" class="form-input admin-user-password-input" data-admin-password-input="' + escapeAttr(id) + '" placeholder="New password (min 6 characters)" minlength="6" autocomplete="new-password">',
+            '    <button type="button" class="btn btn-primary btn-sm" data-admin-password-set="' + escapeAttr(id) + '">Set password</button>',
+            '  </div>',
+            '  <p class="admin-user-password-status" data-admin-password-status="' + escapeAttr(id) + '" aria-live="polite"></p>',
+            '</div>'
+        ].join('');
+    }
+
+    function setUserPasswordStatus(userId, message, isError) {
+        var mount = document.getElementById('admin-users-content');
+        if (!mount) return;
+        var statusEl = mount.querySelector('[data-admin-password-status="' + userId + '"]');
+        if (!statusEl) return;
+        statusEl.textContent = String(message || '');
+        statusEl.classList.toggle('is-error', !!isError);
+    }
+
+    function updateUserPasswordDisplay(userId) {
+        var mount = document.getElementById('admin-users-content');
+        if (!mount) return;
+        var displayEl = mount.querySelector('[data-admin-password-display="' + userId + '"]');
+        var revealBtn = mount.querySelector('[data-admin-password-reveal="' + userId + '"]');
+        if (!displayEl) return;
+        var revealed = panelState.revealedPasswords[userId];
+        if (revealed === undefined) {
+            displayEl.textContent = 'Hidden — click Show to view';
+            if (revealBtn) revealBtn.textContent = 'Show password';
+            return;
+        }
+        displayEl.textContent = revealed === '' ? '(no password set)' : revealed;
+        if (revealBtn) revealBtn.textContent = 'Hide password';
+    }
+
+    function toggleAdminUserPasswordReveal(userId) {
+        if (!window.anytransportApi || typeof window.anytransportApi.getAdminUserPassword !== 'function') {
+            setUserPasswordStatus(userId, 'Password lookup is not available right now.', true);
+            return;
+        }
+
+        if (panelState.revealedPasswords[userId] !== undefined) {
+            delete panelState.revealedPasswords[userId];
+            updateUserPasswordDisplay(userId);
+            setUserPasswordStatus(userId, '', false);
+            return;
+        }
+
+        var revealBtn = document.querySelector('[data-admin-password-reveal="' + userId + '"]');
+        if (revealBtn) revealBtn.disabled = true;
+        setUserPasswordStatus(userId, 'Loading password…', false);
+
+        Promise.resolve(window.anytransportApi.getAdminUserPassword(userId)).then(function (resp) {
+            panelState.revealedPasswords[userId] = resp && resp.hasPassword
+                ? String(resp.password || '')
+                : '';
+            updateUserPasswordDisplay(userId);
+            setUserPasswordStatus(userId, '', false);
+        }).catch(function (err) {
+            setUserPasswordStatus(userId, err && err.message ? err.message : 'Unable to load password.', true);
+        }).finally(function () {
+            if (revealBtn) revealBtn.disabled = false;
+        });
+    }
+
+    function setAdminUserPassword(userId) {
+        var mount = document.getElementById('admin-users-content');
+        if (!mount) return;
+        var input = mount.querySelector('[data-admin-password-input="' + userId + '"]');
+        var password = String(input && input.value || '').trim();
+        if (!password) {
+            setUserPasswordStatus(userId, 'Enter a new password first.', true);
+            return;
+        }
+        if (password.length < 6) {
+            setUserPasswordStatus(userId, 'Password must be at least 6 characters.', true);
+            return;
+        }
+        if (!window.confirm('Set a new password for this user? They will be signed out on other devices.')) {
+            return;
+        }
+        if (!window.anytransportApi || typeof window.anytransportApi.setAdminUserPassword !== 'function') {
+            setUserPasswordStatus(userId, 'Password updates are not available right now.', true);
+            return;
+        }
+
+        var setBtn = mount.querySelector('[data-admin-password-set="' + userId + '"]');
+        if (setBtn) setBtn.disabled = true;
+        setUserPasswordStatus(userId, 'Saving password…', false);
+
+        Promise.resolve(window.anytransportApi.setAdminUserPassword(userId, password)).then(function (resp) {
+            if (input) input.value = '';
+            panelState.revealedPasswords[userId] = password;
+            updateUserPasswordDisplay(userId);
+            setUserPasswordStatus(userId, (resp && resp.message) ? resp.message : 'Password updated.', false);
+        }).catch(function (err) {
+            setUserPasswordStatus(userId, err && err.message ? err.message : 'Unable to update password.', true);
+        }).finally(function () {
+            if (setBtn) setBtn.disabled = false;
+        });
+    }
+
     function runUserModeration(userId, action) {
         if (!window.anytransportApi || typeof window.anytransportApi.moderateUser !== 'function') {
             alert('Account moderation is not available right now.');
@@ -186,15 +309,35 @@
         if (userModerationBound) return;
         userModerationBound = true;
         document.addEventListener('click', function (event) {
-            var btn = event.target.closest('[data-admin-moderate]');
-            if (!btn) return;
             var mount = document.getElementById('admin-users-content');
-            if (!mount || !mount.contains(btn)) return;
-            event.preventDefault();
-            var userId = btn.getAttribute('data-admin-moderate') || '';
-            var action = btn.getAttribute('data-admin-action') || '';
-            if (!userId || !action) return;
-            runUserModeration(userId, action);
+            if (!mount) return;
+
+            var moderateBtn = event.target.closest('[data-admin-moderate]');
+            if (moderateBtn && mount.contains(moderateBtn)) {
+                event.preventDefault();
+                var userId = moderateBtn.getAttribute('data-admin-moderate') || '';
+                var action = moderateBtn.getAttribute('data-admin-action') || '';
+                if (!userId || !action) return;
+                runUserModeration(userId, action);
+                return;
+            }
+
+            var revealBtn = event.target.closest('[data-admin-password-reveal]');
+            if (revealBtn && mount.contains(revealBtn)) {
+                event.preventDefault();
+                var revealUserId = revealBtn.getAttribute('data-admin-password-reveal') || '';
+                if (!revealUserId) return;
+                toggleAdminUserPasswordReveal(revealUserId);
+                return;
+            }
+
+            var setBtn = event.target.closest('[data-admin-password-set]');
+            if (setBtn && mount.contains(setBtn)) {
+                event.preventDefault();
+                var setUserId = setBtn.getAttribute('data-admin-password-set') || '';
+                if (!setUserId) return;
+                setAdminUserPassword(setUserId);
+            }
         });
     }
 
@@ -655,6 +798,7 @@
                 '    <button type="button" class="btn btn-outline btn-sm" data-admin-expand-user="' + escapeAttr(id) + '">' + (expanded ? 'Hide details' : 'Show listings &amp; messages') + '</button>',
                 profileBtn,
                 buildUserModerationActions(user),
+                buildUserPasswordControls(user),
                 '  </div>',
                 expanded ? [
                     '  <div class="admin-user-detail-grid">',
@@ -679,7 +823,7 @@
             '    <input type="search" class="form-input admin-users-search" placeholder="Search name or email" value="' + escapeAttr(panelState.userQuery) + '">',
             '  </div>',
             '</div>',
-            '<p class="muted-text">Browse every account, see their listings and message activity, and open provider profiles.</p>',
+            '<p class="muted-text">Browse every account, view or reset passwords, see listings and message activity, and open provider profiles.</p>',
             '<div class="admin-user-list">' + listHtml + '</div>'
         ].join('');
 

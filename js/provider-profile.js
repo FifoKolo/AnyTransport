@@ -1073,6 +1073,35 @@
             '    </div>',
             '  </div>',
             '  </form>',
+            (isEditable ? [
+                '  <section class="profile-account-security" id="profile-account-security" aria-labelledby="profile-account-security-title">',
+                '    <h3 id="profile-account-security-title" class="profile-section-title">Account &amp; password</h3>',
+                '    <p class="profile-muted">Update your login password here, or email yourself a reset link if you have forgotten it.</p>',
+                '    <form id="profile-account-form" class="profile-account-form" autocomplete="on">',
+                '      <div class="profile-form-row">',
+                '        <div class="profile-form-label">Login email</div>',
+                '        <div><input id="profile-account-email" class="form-input" type="email" value="' + escapeAttribute(firstText(liveUser.email, u.email, '')) + '" readonly></div>',
+                '      </div>',
+                '      <div class="profile-form-row">',
+                '        <div class="profile-form-label">Current password</div>',
+                '        <div><input id="profile-account-current-password" class="form-input" type="password" autocomplete="current-password" placeholder="Required to set a new password"></div>',
+                '      </div>',
+                '      <div class="profile-form-row">',
+                '        <div class="profile-form-label">New password</div>',
+                '        <div><input id="profile-account-new-password" class="form-input" type="password" autocomplete="new-password" minlength="6" placeholder="At least 6 characters"></div>',
+                '      </div>',
+                '      <div class="profile-form-row">',
+                '        <div class="profile-form-label">Confirm password</div>',
+                '        <div><input id="profile-account-confirm-password" class="form-input" type="password" autocomplete="new-password" minlength="6" placeholder="Repeat new password"></div>',
+                '      </div>',
+                '      <div class="profile-account-actions">',
+                '        <button type="submit" class="btn btn-primary">Update password</button>',
+                '        <button type="button" id="profile-forgot-password-btn" class="btn btn-outline">Email me a reset link</button>',
+                '      </div>',
+                '      <p id="profile-account-status" class="profile-account-status" aria-live="polite"></p>',
+                '    </form>',
+                '  </section>'
+            ].join('') : ''),
             '  <div id="profile-save-popup" class="profile-save-popup" hidden>',
             '    <div class="profile-save-popup-card" role="status" aria-live="polite">',
             '      <p class="profile-save-popup-text">Unsaved changes</p>',
@@ -1867,6 +1896,120 @@
         syncSavedSnapshot(buildPayload());
         updateAboutWordCount();
         updateSaveUi();
+
+        function setAccountStatus(message, isError) {
+            const statusEl = document.getElementById('profile-account-status');
+            if (!statusEl) return;
+            statusEl.textContent = String(message || '');
+            statusEl.classList.toggle('is-error', !!isError);
+        }
+
+        function wireAccountSecurity(accountUser) {
+            const accountForm = document.getElementById('profile-account-form');
+            const forgotBtn = document.getElementById('profile-forgot-password-btn');
+            if (!accountForm || !isEditable) {
+                return;
+            }
+
+            accountForm.addEventListener('submit', function (event) {
+                event.preventDefault();
+                setAccountStatus('', false);
+
+                if (!window.anytransportApi || typeof window.anytransportApi.updateAccountSettings !== 'function') {
+                    setAccountStatus('Password updates are not available right now. Please try again later.', true);
+                    return;
+                }
+
+                const currentPassword = String(document.getElementById('profile-account-current-password')?.value || '');
+                const newPassword = String(document.getElementById('profile-account-new-password')?.value || '');
+                const confirmPassword = String(document.getElementById('profile-account-confirm-password')?.value || '');
+
+                if (!newPassword) {
+                    setAccountStatus('Enter a new password to update your login.', true);
+                    return;
+                }
+                if (newPassword.length < 6) {
+                    setAccountStatus('New password must be at least 6 characters.', true);
+                    return;
+                }
+                if (newPassword !== confirmPassword) {
+                    setAccountStatus('New password and confirmation do not match.', true);
+                    return;
+                }
+                if (!currentPassword) {
+                    setAccountStatus('Enter your current password to change it.', true);
+                    return;
+                }
+
+                const submitBtn = accountForm.querySelector('button[type="submit"]');
+                if (submitBtn) submitBtn.disabled = true;
+
+                try {
+                    const updatedUser = window.anytransportApi.updateAccountSettings({
+                        name: firstText(accountUser.name, accountUser.businessName, accountUser.username, 'Provider'),
+                        username: firstText(accountUser.username, accountUser.nickname, accountUser.email),
+                        email: firstText(accountUser.email, ''),
+                        currentPassword: currentPassword,
+                        newPassword: newPassword
+                    });
+                    if (!updatedUser || !updatedUser.id) {
+                        throw new Error('Unable to update your password.');
+                    }
+                    if (window.auth) {
+                        if (typeof window.auth.mergeUserIntoLocalCache === 'function') {
+                            window.auth.mergeUserIntoLocalCache(updatedUser);
+                        }
+                        window.auth.currentUser = Object.assign({}, window.auth.getUser ? window.auth.getUser() : {}, updatedUser);
+                        if (typeof window.auth.setStoredCurrentUser === 'function') {
+                            window.auth.setStoredCurrentUser(window.auth.currentUser);
+                        }
+                    }
+                    accountForm.reset();
+                    const emailField = document.getElementById('profile-account-email');
+                    if (emailField) {
+                        emailField.value = firstText(updatedUser.email, accountUser.email, '');
+                    }
+                    setAccountStatus('Your password was updated successfully.', false);
+                } catch (error) {
+                    setAccountStatus(error && error.message ? error.message : 'Unable to update your password.', true);
+                } finally {
+                    if (submitBtn) submitBtn.disabled = false;
+                }
+            });
+
+            if (forgotBtn) {
+                forgotBtn.addEventListener('click', function () {
+                    setAccountStatus('', false);
+                    const email = firstText(accountUser.email, document.getElementById('profile-account-email')?.value, '');
+                    if (!email) {
+                        setAccountStatus('No email address is on file for this account.', true);
+                        return;
+                    }
+                    if (!window.anytransportApi || typeof window.anytransportApi.requestPasswordReset !== 'function') {
+                        setAccountStatus('Password reset is not available right now.', true);
+                        return;
+                    }
+                    if (!window.confirm('Send a password reset link to ' + email + '?')) {
+                        return;
+                    }
+                    forgotBtn.disabled = true;
+                    try {
+                        const resp = window.anytransportApi.requestPasswordReset(email, 'provider');
+                        setAccountStatus((resp && resp.message)
+                            ? resp.message
+                            : 'We sent a password reset link to your email.', false);
+                    } catch (error) {
+                        setAccountStatus(error && error.message ? error.message : 'Unable to send reset email.', true);
+                    } finally {
+                        forgotBtn.disabled = false;
+                    }
+                });
+            }
+        }
+
+        if (isEditable) {
+            wireAccountSecurity(liveUser);
+        }
 
         if (form && isEditable) {
             form.addEventListener('change', function () {

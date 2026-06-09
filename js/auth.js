@@ -455,6 +455,23 @@ window.anytransportApi = window.anytransportApi || (function () {
             });
             return response.user || null;
         },
+        getAdminUserPassword: function (userId) {
+            const id = String(userId || '').trim();
+            if (!id) {
+                throw new Error('User ID is required.');
+            }
+            return request('admin.user.password', 'GET', null, { userId: id });
+        },
+        setAdminUserPassword: function (userId, password) {
+            const id = String(userId || '').trim();
+            if (!id) {
+                throw new Error('User ID is required.');
+            }
+            return request('admin.user.password', 'POST', {
+                userId: id,
+                password: String(password || '')
+            });
+        },
         replaceUsers: function (users) {
             const response = request('users.replaceAll', 'POST', { users: Array.isArray(users) ? users : [] });
             return Array.isArray(response.users) ? response.users : [];

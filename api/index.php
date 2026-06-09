@@ -4610,12 +4610,16 @@ switch ($action) {
         $resetUser = normalize_user($store['users'][$userIndex]);
         $resetUserIsProvider = is_provider_account($resetUser);
         $resetUserIsAdmin = is_admin_user($resetUser);
+        $currentUser = get_session_user($store);
+        $isSelfReset = is_array($currentUser)
+            && strtolower(trim((string) ($currentUser['email'] ?? ''))) === strtolower($email)
+            && trim((string) ($currentUser['id'] ?? '')) === trim((string) ($resetUser['id'] ?? ''));
         if ($isProviderReset) {
             if (!$resetUserIsProvider) {
                 file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' context=provider found=1 role_mismatch=1' . "\n", FILE_APPEND | LOCK_EX);
                 send_json(array('ok' => false, 'error' => $providerWrongRoleError), 403);
             }
-            if (!is_verified_provider_account($resetUser)) {
+            if (!is_verified_provider_account($resetUser) && !$isSelfReset) {
                 file_put_contents(__DIR__ . '/email.log', gmdate('c') . ' | password_reset_request email=' . $email . ' context=provider found=1 verified=0' . "\n", FILE_APPEND | LOCK_EX);
                 send_json(array('ok' => false, 'error' => $providerNotVerifiedError), 403);
             }
@@ -5404,6 +5408,66 @@ switch ($action) {
             'ok' => true,
             'user' => sanitize_user_for_client($updatedUser),
             'action' => $action
+        ));
+
+        exit;
+
+    case 'admin.user.password':
+        $currentUser = get_current_user_record($store);
+        if (!is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin access required.'), 403);
+        }
+
+        $targetUserId = trim((string) ($input['userId'] ?? $_GET['userId'] ?? ''));
+        if ($targetUserId === '') {
+            send_json(array('ok' => false, 'error' => 'User ID is required.'), 400);
+        }
+
+        $index = find_user_index_by_id($store['users'], $targetUserId);
+        if ($index < 0) {
+            send_json(array('ok' => false, 'error' => 'User not found.'), 404);
+        }
+
+        $targetUser = normalize_user($store['users'][$index]);
+        $currentUserId = trim((string) ($currentUser['id'] ?? ''));
+        $targetIsAdmin = is_admin_user($targetUser);
+        if ($targetIsAdmin && $targetUserId !== $currentUserId) {
+            send_json(array('ok' => false, 'error' => 'Other admin account passwords cannot be viewed or changed here.'), 403);
+        }
+
+        if ($method === 'GET') {
+            $password = (string) ($targetUser['password'] ?? '');
+            send_json(array(
+                'ok' => true,
+                'userId' => $targetUserId,
+                'email' => trim((string) ($targetUser['email'] ?? '')),
+                'hasPassword' => $password !== '',
+                'password' => $password
+            ));
+        }
+
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+
+        $newPassword = (string) ($input['password'] ?? $input['newPassword'] ?? '');
+        if (strlen(trim($newPassword)) < 6) {
+            send_json(array('ok' => false, 'error' => 'Password must be at least 6 characters.'), 400);
+        }
+
+        $store['users'][$index]['password'] = $newPassword;
+        clear_password_reset_for_user($store, $index);
+        if ($targetUserId !== $currentUserId) {
+            revoke_sessions_for_user($store, $targetUserId);
+        }
+        $updatedUser = normalize_user($store['users'][$index]);
+        $store['users'][$index] = $updatedUser;
+        write_store($storeFile, $store);
+        send_json(array(
+            'ok' => true,
+            'userId' => $targetUserId,
+            'message' => 'Password updated for ' . trim((string) ($updatedUser['email'] ?? 'this user')) . '.',
+            'hasPassword' => true
         ));
 
         exit;

@@ -358,6 +358,60 @@
     font-size: 0.88rem;
 }
 
+.admin-user-password {
+    width: 100%;
+    margin-top: 4px;
+    padding: 12px 14px;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: #f8fbff;
+}
+
+.admin-user-password h4 {
+    margin: 0 0 8px;
+    width: 100%;
+    font-size: 0.92rem;
+    color: #1e3a8a;
+}
+
+.admin-user-password-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.admin-user-password-display {
+    flex: 1 1 180px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    font-size: 0.88rem;
+    color: #0f172a;
+    word-break: break-all;
+}
+
+.admin-user-password-input {
+    flex: 1 1 220px;
+    min-width: 180px;
+}
+
+.admin-user-password-status {
+    margin: 8px 0 0;
+    font-size: 0.84rem;
+    color: #166534;
+    font-weight: 600;
+}
+
+.admin-user-password-status.is-error {
+    color: #b42318;
+}
+
 .admin-user-badges {
     display: flex;
     flex-wrap: wrap;

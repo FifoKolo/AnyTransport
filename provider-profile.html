@@ -64,6 +64,28 @@
         .profile-form-row { display:grid; grid-template-columns: 150px minmax(0, 1fr); gap:16px; align-items:start; margin-bottom:16px; }
         .profile-form-label { font-weight:700; color:#334155; padding-top:10px; line-height:1.25; }
         .profile-help { font-size: .84rem; color:#64748b; margin-top: 6px; line-height: 1.35; }
+        .profile-account-security {
+            margin-top: 28px;
+            padding: 20px;
+            border: 1px solid #dbe7f2;
+            border-radius: 12px;
+            background: #f8fbff;
+        }
+        .profile-account-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 8px;
+        }
+        .profile-account-status {
+            margin: 12px 0 0;
+            font-size: 0.9rem;
+            color: #166534;
+            font-weight: 600;
+        }
+        .profile-account-status.is-error {
+            color: #b42318;
+        }
         .profile-upload-card { margin-top: 12px; }
         .profile-upload-preview { width: 130px; height: 130px; background:#fff; border:1px solid #d7e3ee; display:flex; align-items:center; justify-content:center; overflow:hidden; margin: 12px 0 8px; position:relative; border-radius: 14px; box-shadow: 0 8px 16px rgba(15, 23, 42, 0.06); }
         .profile-upload-preview img { width:100%; height:100%; object-fit:cover; }
@@ -442,6 +464,6 @@
     <script src="js/transport-mode-icons.js?v=20260605-23"></script>
     <script src="js/provider-vehicles.js?v=20260605-23"></script>
     <script src="js/provider-insurance.js?v=20260608-2"></script>
-    <script src="js/provider-profile.js?v=20260609-4"></script>
+    <script src="js/provider-profile.js?v=20260609-5"></script>
 </body>
 </html>
