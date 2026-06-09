@@ -7,11 +7,13 @@
         userRole: 'all',
         expandedUserId: '',
         expandedThreadKey: '',
-        messageQuery: ''
+        messageQuery: '',
+        messageRoomThreadKey: ''
     };
 
     var depsRef = null;
     var shellReady = false;
+    var INLINE_MESSAGE_PREVIEW_LIMIT = 4;
 
     function escapeHtml(value) {
         return String(value || '').replace(/[&<>"']/g, function (c) {
@@ -233,6 +235,120 @@
         }
     }
 
+    function renderMessageLine(message, usersById) {
+        var sender = userDisplayName(usersById[message.fromUserId]);
+        var body = firstText(message.text, message.title, '');
+        var title = firstText(message.title, '');
+        var bodyHtml = escapeHtml(body);
+        if (title && title !== body) {
+            bodyHtml = '<strong>' + escapeHtml(title) + '</strong>' + (body ? '<br>' + escapeHtml(body) : '');
+        }
+        return '<div class="admin-message-line">' +
+            '<div class="admin-message-meta">' + escapeHtml(sender) + ' · ' + escapeHtml(formatWhen(message.createdAt)) + '</div>' +
+            '<div class="admin-message-body">' + bodyHtml + '</div>' +
+            '</div>';
+    }
+
+    function ensureMessageRoomModal() {
+        var existing = document.getElementById('admin-message-room-modal');
+        if (existing) {
+            return existing;
+        }
+        var modal = document.createElement('div');
+        modal.id = 'admin-message-room-modal';
+        modal.className = 'admin-message-room-modal';
+        modal.hidden = true;
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-labelledby', 'admin-message-room-title');
+        modal.innerHTML = [
+            '<div class="admin-message-room-backdrop" data-admin-close-room></div>',
+            '<div class="admin-message-room-panel">',
+            '  <header class="admin-message-room-header">',
+            '    <div>',
+            '      <h3 id="admin-message-room-title" class="admin-message-room-title"></h3>',
+            '      <p id="admin-message-room-subtitle" class="admin-message-room-subtitle"></p>',
+            '    </div>',
+            '    <button type="button" class="btn btn-outline admin-message-room-close" data-admin-close-room aria-label="Close conversation">Close</button>',
+            '  </header>',
+            '  <div id="admin-message-room-thread" class="admin-message-room-thread"></div>',
+            '</div>'
+        ].join('');
+        document.body.appendChild(modal);
+        modal.addEventListener('click', function (event) {
+            if (event.target.closest('[data-admin-close-room]')) {
+                closeMessageRoom();
+            }
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && panelState.messageRoomThreadKey) {
+                closeMessageRoom();
+            }
+        });
+        return modal;
+    }
+
+    function closeMessageRoom() {
+        panelState.messageRoomThreadKey = '';
+        var modal = document.getElementById('admin-message-room-modal');
+        if (modal) {
+            modal.hidden = true;
+        }
+    }
+
+    function openMessageRoom(threadKey, threads, usersById) {
+        var thread = null;
+        for (var i = 0; i < threads.length; i += 1) {
+            if (threads[i].key === threadKey) {
+                thread = threads[i];
+                break;
+            }
+        }
+        if (!thread) {
+            return;
+        }
+
+        panelState.messageRoomThreadKey = threadKey;
+        var modal = ensureMessageRoomModal();
+        var userA = usersById[thread.participantA];
+        var userB = usersById[thread.participantB];
+        var titleEl = modal.querySelector('#admin-message-room-title');
+        var subtitleEl = modal.querySelector('#admin-message-room-subtitle');
+        var threadEl = modal.querySelector('#admin-message-room-thread');
+
+        if (titleEl) {
+            titleEl.textContent = userDisplayName(userA) + ' ↔ ' + userDisplayName(userB);
+        }
+        if (subtitleEl) {
+            subtitleEl.textContent = thread.messages.length + ' message(s) · Last activity ' + formatWhen(thread.latestAt);
+        }
+        if (threadEl) {
+            threadEl.innerHTML = thread.messages.map(function (message) {
+                return renderMessageLine(message, usersById);
+            }).join('');
+            threadEl.scrollTop = threadEl.scrollHeight;
+        }
+        modal.hidden = false;
+        var closeBtn = modal.querySelector('.admin-message-room-close');
+        if (closeBtn) {
+            closeBtn.focus();
+        }
+    }
+
+    function wireMessageRoomActions(mount, threads, usersById) {
+        if (!mount) {
+            return;
+        }
+        mount.querySelectorAll('[data-admin-open-room]').forEach(function (btn) {
+            btn.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                var key = btn.getAttribute('data-admin-open-room') || '';
+                openMessageRoom(key, threads, usersById);
+            });
+        });
+    }
+
     function renderMessagesPanel() {
         var mount = document.getElementById('admin-messages-content');
         if (!mount || !depsRef) return;
@@ -260,21 +376,37 @@
             var label = escapeHtml(userDisplayName(userA)) + ' ↔ ' + escapeHtml(userDisplayName(userB));
             var preview = escapeHtml(firstText(thread.messages[thread.messages.length - 1] && thread.messages[thread.messages.length - 1].text, thread.messages[thread.messages.length - 1] && thread.messages[thread.messages.length - 1].title, 'No text'));
             var expanded = panelState.expandedThreadKey === thread.key;
-            var messagesHtml = expanded ? thread.messages.map(function (m) {
-                var sender = userDisplayName(usersById[m.fromUserId]);
-                return '<div class="admin-message-line">' +
-                    '<div class="admin-message-meta">' + escapeHtml(sender) + ' · ' + escapeHtml(formatWhen(m.createdAt)) + '</div>' +
-                    '<div class="admin-message-body">' + escapeHtml(firstText(m.text, m.title, '')) + '</div>' +
-                    '</div>';
-            }).join('') : '';
+            var totalMessages = thread.messages.length;
+            var isLongThread = totalMessages > INLINE_MESSAGE_PREVIEW_LIMIT;
+            var previewMessages = expanded ? thread.messages.slice(0, INLINE_MESSAGE_PREVIEW_LIMIT) : [];
+            var messagesHtml = previewMessages.map(function (m) {
+                return renderMessageLine(m, usersById);
+            }).join('');
+            var inlineBody = expanded ? [
+                '<div class="admin-thread-body">',
+                messagesHtml,
+                isLongThread ? [
+                    '<div class="admin-thread-more">',
+                    '  <p class="admin-thread-more-note">Showing ' + INLINE_MESSAGE_PREVIEW_LIMIT + ' of ' + totalMessages + ' messages.</p>',
+                    '  <button type="button" class="btn btn-primary btn-sm" data-admin-open-room="' + escapeAttr(thread.key) + '">View full conversation</button>',
+                    '</div>'
+                ].join('') : '',
+                '</div>'
+            ].join('') : '';
+            var roomButton = isLongThread ? [
+                '<div class="admin-thread-actions">',
+                '  <button type="button" class="btn btn-outline btn-sm" data-admin-open-room="' + escapeAttr(thread.key) + '">Open conversation (' + totalMessages + ' messages)</button>',
+                '</div>'
+            ].join('') : '';
             return [
                 '<article class="admin-thread-card">',
                 '  <button type="button" class="admin-thread-toggle" data-admin-thread-key="' + escapeAttr(thread.key) + '">',
                 '    <div class="admin-thread-title">' + label + '</div>',
                 '    <div class="admin-thread-preview">' + preview + '</div>',
-                '    <div class="admin-thread-meta">' + thread.messages.length + ' message(s) · Last ' + escapeHtml(formatWhen(thread.latestAt)) + '</div>',
+                '    <div class="admin-thread-meta">' + totalMessages + ' message(s) · Last ' + escapeHtml(formatWhen(thread.latestAt)) + '</div>',
                 '  </button>',
-                expanded ? '<div class="admin-thread-body">' + messagesHtml + '</div>' : '',
+                roomButton,
+                inlineBody,
                 '</article>'
             ].join('');
         }).join('') : '<div class="empty-inventory">No platform messages yet.</div>';
@@ -284,7 +416,7 @@
             '  <h3 class="admin-panel-section-title" style="margin:0;">All customer &amp; provider messages</h3>',
             '  <input type="search" class="form-input admin-messages-search" placeholder="Search by name or message text" value="' + escapeAttr(panelState.messageQuery) + '">',
             '</div>',
-            '<p class="muted-text">Read-only view of every conversation on the platform. Open a thread to inspect the full exchange.</p>',
+            '<p class="muted-text">Read-only view of every conversation on the platform. Expand a thread for a quick preview, or open the conversation room for the full exchange.</p>',
             '<div class="admin-thread-list">' + listHtml + '</div>'
         ].join('');
 
@@ -299,6 +431,10 @@
                 renderMessagesPanel();
             });
         });
+        wireMessageRoomActions(mount, threads, usersById);
+        if (panelState.messageRoomThreadKey) {
+            openMessageRoom(panelState.messageRoomThreadKey, threads, usersById);
+        }
     }
 
     function renderUsersPanel() {
