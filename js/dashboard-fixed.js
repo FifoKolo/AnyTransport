@@ -2610,12 +2610,12 @@
                 fields: group.fields.slice()
             };
             if (group.key === 'photos') {
-                const livePhotos = normalizeProfilePhotoList(live.photos);
-                const pendingPhotos = normalizeProfilePhotoList(pending.photos);
-                const addedPhotos = pendingPhotos.filter(function (src) {
-                    return livePhotos.indexOf(src) === -1;
-                });
-                item.photoSources = addedPhotos.length ? addedPhotos : pendingPhotos;
+                item.photoSections = getProfilePhotoChangeSections(live, pending);
+                if (item.photoSections.length === 1) {
+                    item.label = item.photoSections[0].label;
+                } else if (item.photoSections.length > 1) {
+                    item.label = 'Photos & images';
+                }
             }
             return item;
         });
@@ -2702,13 +2702,80 @@
         return { lines: lines.slice(0, 20), photoSources: photoSources };
     }
 
-    function buildProfileChangeChip(item) {
-        const labelPrefix = String(item && item.label || '') + ': ';
-        const summary = String(item && item.summary || '');
-        if (summary.indexOf(labelPrefix) === 0) {
-            return summary.slice(labelPrefix.length);
+    function profilePhotoSrc(value) {
+        if (!value) {
+            return '';
         }
-        return summary;
+        return buildProviderProfilePhotoSrc(value);
+    }
+
+    function getProfilePhotoChangeSections(live, pending) {
+        const sections = [];
+        const liveAvatar = profilePhotoSrc(live && live.avatar);
+        const pendingAvatar = profilePhotoSrc(pending && pending.avatar);
+        if (liveAvatar !== pendingAvatar) {
+            sections.push({
+                label: 'Profile picture',
+                beforeSrcs: liveAvatar ? [liveAvatar] : [],
+                afterSrcs: pendingAvatar ? [pendingAvatar] : []
+            });
+        }
+
+        const liveCover = profilePhotoSrc(live && live.coverImage);
+        const pendingCover = profilePhotoSrc(pending && pending.coverImage);
+        if (liveCover !== pendingCover) {
+            sections.push({
+                label: 'Cover image',
+                beforeSrcs: liveCover ? [liveCover] : [],
+                afterSrcs: pendingCover ? [pendingCover] : []
+            });
+        }
+
+        const livePhotos = normalizeProfilePhotoList(live && live.photos);
+        const pendingPhotos = normalizeProfilePhotoList(pending && pending.photos);
+        if (JSON.stringify(livePhotos) !== JSON.stringify(pendingPhotos)) {
+            sections.push({
+                label: 'Profile photos',
+                beforeSrcs: livePhotos,
+                afterSrcs: pendingPhotos
+            });
+        }
+
+        return sections;
+    }
+
+    function buildProfilePhotoThumbsMarkup(srcs) {
+        const list = Array.isArray(srcs) ? srcs.filter(Boolean) : [];
+        if (!list.length) {
+            return '<span class="admin-profile-change-diff-empty">(none)</span>';
+        }
+        return '<div class="admin-profile-change-photo-thumbs">' + list.map(function (src, index) {
+            return '<img src="' + escapeHtml(src) + '" alt="Photo ' + (index + 1) + '" class="admin-profile-change-thumb" loading="lazy">';
+        }).join('') + '</div>';
+    }
+
+    function buildProfilePhotoSectionsMarkup(sections) {
+        if (!Array.isArray(sections) || !sections.length) {
+            return '';
+        }
+        return sections.map(function (section) {
+            return [
+                '<div class="admin-profile-change-photo-section">',
+                '<div class="admin-profile-change-photo-source">' + escapeHtml(section.label || 'Photos') + '</div>',
+                '<div class="admin-profile-change-diff">',
+                '<div class="admin-profile-change-diff-col">',
+                '<span class="admin-profile-change-diff-label">Before</span>',
+                buildProfilePhotoThumbsMarkup(section.beforeSrcs),
+                '</div>',
+                '<div class="admin-profile-change-diff-arrow" aria-hidden="true">→</div>',
+                '<div class="admin-profile-change-diff-col admin-profile-change-diff-col--after">',
+                '<span class="admin-profile-change-diff-label">After</span>',
+                buildProfilePhotoThumbsMarkup(section.afterSrcs),
+                '</div>',
+                '</div>',
+                '</div>'
+            ].join('');
+        }).join('');
     }
 
     function buildProfileChangeDiffMarkup(detailLines) {
@@ -2897,14 +2964,10 @@
                     ? [
                         '<div class="admin-profile-change-list">',
                         changeItems.map(function (item) {
-                            const photosMarkup = item.key === 'photos'
-                                ? buildPendingProfilePhotosMarkup(item.photoSources || [], true)
+                            const photoDiffMarkup = item.key === 'photos'
+                                ? buildProfilePhotoSectionsMarkup(item.photoSections || [])
                                 : '';
-                            const diffMarkup = buildProfileChangeDiffMarkup(item.detailLines);
-                            const chip = buildProfileChangeChip(item);
-                            const chipMarkup = chip
-                                ? '<span class="admin-profile-change-chip">' + escapeHtml(chip) + '</span>'
-                                : '';
+                            const diffMarkup = photoDiffMarkup || buildProfileChangeDiffMarkup(item.detailLines);
                             const noteMarkup = !diffMarkup && item.summary
                                 ? '<p class="admin-profile-change-note">' + escapeHtml(item.summary) + '</p>'
                                 : '';
@@ -2912,14 +2975,10 @@
                                 '<label class="admin-profile-change-item">',
                                 '<div class="admin-profile-change-item-head">',
                                 '<input type="checkbox" class="profile-change-approve-checkbox" data-provider-id="' + escapeHtml(provider.id) + '" data-change-key="' + escapeHtml(item.key) + '" checked>',
-                                '<div class="admin-profile-change-item-heading">',
                                 '<span class="admin-profile-change-item-title">' + escapeHtml(item.label) + '</span>',
-                                chipMarkup,
-                                '</div>',
                                 '</div>',
                                 diffMarkup,
                                 noteMarkup,
-                                photosMarkup,
                                 '</label>'
                             ].join('');
                         }).join(''),
