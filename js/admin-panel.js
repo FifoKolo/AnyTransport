@@ -109,17 +109,6 @@
         } else {
             parts.push('<button type="button" class="btn btn-danger btn-sm" data-admin-moderate="' + escapeAttr(id) + '" data-admin-action="ban">Ban user</button>');
         }
-        parts.push('</div>');
-        return parts.join('');
-    }
-
-    function buildUserPasswordControls(user) {
-        var id = String(user && user.id || '').trim();
-        if (!id) return '';
-        var role = String(user.role || '').trim().toLowerCase();
-        if (role === 'admin') {
-            return '';
-        }
 
         var revealed = panelState.revealedPasswords[id];
         var displayText = revealed !== undefined
@@ -127,20 +116,24 @@
             : 'Hidden — click Show to view';
         var revealLabel = revealed !== undefined ? 'Hide password' : 'Show password';
 
-        return [
+        parts.push(
             '<div class="admin-user-password">',
             '  <h4>Password</h4>',
+            '  <p class="admin-user-password-help">View the current login password or set a new one (minimum 6 characters). No email is sent.</p>',
             '  <div class="admin-user-password-row">',
             '    <code class="admin-user-password-display" data-admin-password-display="' + escapeAttr(id) + '">' + escapeHtml(displayText) + '</code>',
             '    <button type="button" class="btn btn-outline btn-sm" data-admin-password-reveal="' + escapeAttr(id) + '">' + revealLabel + '</button>',
             '  </div>',
             '  <div class="admin-user-password-row">',
-            '    <input type="password" class="form-input admin-user-password-input" data-admin-password-input="' + escapeAttr(id) + '" placeholder="At least 6 characters" minlength="6" autocomplete="new-password">',
+            '    <input type="password" class="form-input admin-user-password-input" data-admin-password-input="' + escapeAttr(id) + '" placeholder="New password" minlength="6" autocomplete="new-password">',
+            '    <input type="password" class="form-input admin-user-password-input" data-admin-password-confirm="' + escapeAttr(id) + '" placeholder="Confirm new password" minlength="6" autocomplete="new-password">',
             '    <button type="button" class="btn btn-primary btn-sm" data-admin-password-set="' + escapeAttr(id) + '">Set password</button>',
             '  </div>',
             '  <p class="admin-user-password-status" data-admin-password-status="' + escapeAttr(id) + '" aria-live="polite"></p>',
+            '</div>',
             '</div>'
-        ].join('');
+        );
+        return parts.join('');
     }
 
     function setUserPasswordStatus(userId, message, isError) {
@@ -202,9 +195,19 @@
         var mount = document.getElementById('admin-users-content');
         if (!mount) return;
         var input = mount.querySelector('[data-admin-password-input="' + userId + '"]');
+        var confirmInput = mount.querySelector('[data-admin-password-confirm="' + userId + '"]');
         var password = String(input && input.value || '').trim();
+        var confirmPassword = String(confirmInput && confirmInput.value || '').trim();
         if (!password) {
             setUserPasswordStatus(userId, 'Enter a new password first.', true);
+            return;
+        }
+        if (!confirmPassword) {
+            setUserPasswordStatus(userId, 'Please confirm the new password.', true);
+            return;
+        }
+        if (password !== confirmPassword) {
+            setUserPasswordStatus(userId, 'Password and confirmation do not match.', true);
             return;
         }
         var targetUser = null;
@@ -246,6 +249,7 @@
 
         Promise.resolve(window.anytransportApi.setAdminUserPassword(userId, password)).then(function (resp) {
             if (input) input.value = '';
+            if (confirmInput) confirmInput.value = '';
             panelState.revealedPasswords[userId] = password;
             updateUserPasswordDisplay(userId);
             setUserPasswordStatus(userId, (resp && resp.message) ? resp.message : 'Password updated.', false);
@@ -818,9 +822,8 @@
                 '  <div class="admin-user-card-actions">',
                 '    <button type="button" class="btn btn-outline btn-sm" data-admin-expand-user="' + escapeAttr(id) + '">' + (expanded ? 'Hide details' : 'Show listings &amp; messages') + '</button>',
                 profileBtn,
-                buildUserModerationActions(user),
-                buildUserPasswordControls(user),
                 '  </div>',
+                buildUserModerationActions(user),
                 expanded ? [
                     '  <div class="admin-user-detail-grid">',
                     '    <div><h4>Listings / forms</h4><ul>' + quotesHtml + '</ul></div>',
