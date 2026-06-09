@@ -705,6 +705,23 @@
                 (notes ? (' Reason: ' + escapeHtml(notes) + '.') : '') +
                 ' Update your profile and save again to submit for another review.</div>';
         }
+        const lastDecision = u.profileChangeLastDecision && typeof u.profileChangeLastDecision === 'object'
+            ? u.profileChangeLastDecision
+            : null;
+        const rejectedItems = lastDecision && Array.isArray(lastDecision.rejected) ? lastDecision.rejected : [];
+        const approvedItems = lastDecision && Array.isArray(lastDecision.approved) ? lastDecision.approved : [];
+        if (lastDecision && rejectedItems.length) {
+            const decisionNotes = String(lastDecision.notes || u.profileChangeReviewNotes || '').trim();
+            return [
+                '<div class="signup-mode-note" style="margin:0 0 14px; padding:12px 14px; border-radius:10px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e3a8a;">',
+                '<strong>Some of your profile changes were approved.</strong>',
+                approvedItems.length ? (' Approved: ' + escapeHtml(approvedItems.join(', ')) + '.') : '',
+                ' Not approved: ' + escapeHtml(rejectedItems.join(', ')) + '.',
+                decisionNotes ? (' Reason: ' + escapeHtml(decisionNotes) + '.') : '',
+                ' You can edit your profile and submit again for anything that was not approved.',
+                '</div>'
+            ].join('');
+        }
         return '';
     }
 

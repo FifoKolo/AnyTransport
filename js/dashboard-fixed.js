@@ -1393,38 +1393,69 @@
                 return;
             }
 
-            const profileChangeReviewBtn = event.target.closest('.profile-change-review-btn');
-            if (profileChangeReviewBtn) {
+            const profileChangeSelectBtn = event.target.closest('[data-profile-change-select]');
+            if (profileChangeSelectBtn) {
+                if (!(auth.isAdmin && auth.isAdmin())) {
+                    alert('Admin access required.');
+                    return;
+                }
+                const reviewCard = profileChangeSelectBtn.closest('.provider-listing');
+                if (!reviewCard) return;
+                const mode = String(profileChangeSelectBtn.getAttribute('data-profile-change-select') || '').trim();
+                reviewCard.querySelectorAll('.profile-change-approve-checkbox').forEach(function (checkbox) {
+                    checkbox.checked = mode !== 'none';
+                });
+                return;
+            }
+
+            const profileChangeApplyBtn = event.target.closest('.profile-change-apply-btn');
+            if (profileChangeApplyBtn) {
                 if (!(auth.isAdmin && auth.isAdmin())) {
                     alert('Admin access required.');
                     return;
                 }
 
-                const providerId = String(profileChangeReviewBtn.getAttribute('data-provider-id') || '').trim();
-                const status = String(profileChangeReviewBtn.getAttribute('data-status') || '').trim();
-                const reviewCard = profileChangeReviewBtn.closest('.provider-listing');
+                const providerId = String(profileChangeApplyBtn.getAttribute('data-provider-id') || '').trim();
+                const reviewCard = profileChangeApplyBtn.closest('.provider-listing');
                 const notesField = reviewCard ? reviewCard.querySelector('.profile-change-review-notes') : null;
                 const notes = notesField ? String(notesField.value || '').trim() : '';
+                const allCheckboxes = reviewCard ? reviewCard.querySelectorAll('.profile-change-approve-checkbox') : [];
+                const approvedKeys = [];
+                allCheckboxes.forEach(function (checkbox) {
+                    if (checkbox.checked) {
+                        const changeKey = String(checkbox.getAttribute('data-change-key') || '').trim();
+                        if (changeKey) approvedKeys.push(changeKey);
+                    }
+                });
 
-                if (status === 'rejected' && !notes) {
-                    alert('Please add a reason explaining why these profile changes are being declined.');
+                if (!approvedKeys.length) {
+                    alert('Select at least one change to approve.');
+                    return;
+                }
+
+                if (approvedKeys.length < allCheckboxes.length && !notes) {
+                    alert('Please add a reason for any changes you are not approving.');
                     if (notesField) notesField.focus();
                     return;
                 }
 
-                if (status === 'rejected' && !confirm('Decline these profile changes? The provider will be emailed your reason and their public profile will stay unchanged.')) {
-                    return;
-                }
-
-                if (status === 'approved' && !confirm('Approve these profile changes and publish them on the provider\'s public profile?')) {
+                const confirmMessage = approvedKeys.length === allCheckboxes.length
+                    ? 'Approve all selected profile changes and publish them on the provider\'s public profile?'
+                    : 'Apply only the approved profile changes? The provider will be emailed about what was approved and what was declined.';
+                if (!confirm(confirmMessage)) {
                     return;
                 }
 
                 try {
                     if (window.anytransportApi && typeof window.anytransportApi.updateProviderProfileReview === 'function') {
-                        window.anytransportApi.updateProviderProfileReview(providerId, status, notes);
-                        if (status === 'approved') {
-                            alert('Profile changes approved. The provider has been emailed.');
+                        window.anytransportApi.updateProviderProfileReview(providerId, {
+                            approvedKeys: approvedKeys,
+                            notes: notes
+                        });
+                        if (approvedKeys.length === allCheckboxes.length) {
+                            alert('All profile changes approved. The provider has been emailed.');
+                        } else if (approvedKeys.length) {
+                            alert('Selected profile changes were applied. The provider has been emailed with your decision.');
                         } else {
                             alert('Profile changes declined. The provider has been emailed with your reason.');
                         }
@@ -2297,7 +2328,84 @@
         return label + ': ' + (after ? 'enabled' : 'disabled');
     }
 
+    function providerProfileChangeGroups() {
+        return [
+            { key: 'business_name', label: 'Business name', fields: ['businessName', 'name'] },
+            { key: 'location', label: 'Town / city & service area', fields: ['serviceAreaCity', 'city', 'location', 'town', 'serviceAreaAddress', 'serviceAreaLat', 'serviceAreaLng', 'showExactAddressOnMap'] },
+            { key: 'contact', label: 'Contact phone', fields: ['phone', 'contact'] },
+            { key: 'company_type', label: 'Company type', fields: ['companyType'] },
+            { key: 'description', label: 'Business description', fields: ['description', 'about', 'businessDescription', 'bio', 'summary'] },
+            { key: 'services', label: 'Jobs / services', fields: ['services', 'categories', 'skills'] },
+            { key: 'vehicles', label: 'Vehicles / fleet', fields: ['transportModes', 'providerVehicles', 'vehicleCount'] },
+            { key: 'insurance', label: 'Insurance', fields: ['providerInsurance'] },
+            { key: 'photos', label: 'Profile photos', fields: ['photos', 'avatar', 'coverImage'] },
+            { key: 'payment_methods', label: 'Payment methods', fields: ['paymentMethods', 'paymentMethodsCustom', 'acceptsCash', 'paypal', 'visa', 'mastercard', 'bankTransfer', 'americanExpress', 'cheque', 'cash'] },
+            { key: 'website', label: 'Website', fields: ['website'] },
+            { key: 'social', label: 'Social links', fields: ['instagram', 'facebook', 'x', 'twitter', 'tiktok', 'linkedin'] },
+            { key: 'invites', label: 'Job invitation settings', fields: ['blockInvites', 'muteInviteEmails'] },
+            { key: 'auto_bid', label: 'Auto-bid subscription', fields: ['autoBidSubscriptionEnabled'] }
+        ];
+    }
+
+    function profileGroupHasChanges(live, pending, fields) {
+        return (fields || []).some(function (field) {
+            const before = live && Object.prototype.hasOwnProperty.call(live, field) ? live[field] : null;
+            const after = pending && Object.prototype.hasOwnProperty.call(pending, field) ? pending[field] : null;
+            return JSON.stringify(before) !== JSON.stringify(after);
+        });
+    }
+
+    function summarizeProviderProfileGroupChange(live, pending, group) {
+        const fields = group && Array.isArray(group.fields) ? group.fields : [];
+        const parts = [];
+        fields.forEach(function (field) {
+            const before = live && Object.prototype.hasOwnProperty.call(live, field) ? live[field] : null;
+            const after = pending && Object.prototype.hasOwnProperty.call(pending, field) ? pending[field] : null;
+            if (JSON.stringify(before) === JSON.stringify(after)) {
+                return;
+            }
+            parts.push(String(group.label || field) + ': updated');
+        });
+        return parts.length ? parts.join('; ') : String(group.label || 'Change') + ' updated';
+    }
+
+    function getProviderProfilePendingChangeItems(provider) {
+        const pending = provider && provider.profileChangePending;
+        if (!pending || typeof pending !== 'object') {
+            return [];
+        }
+        const live = provider && typeof provider === 'object' ? provider : {};
+        return providerProfileChangeGroups().filter(function (group) {
+            return profileGroupHasChanges(live, pending, group.fields);
+        }).map(function (group) {
+            const item = {
+                key: String(group.key || ''),
+                label: String(group.label || 'Change'),
+                summary: summarizeProviderProfileGroupChange(live, pending, group),
+                fields: group.fields.slice()
+            };
+            if (group.key === 'photos') {
+                const livePhotos = normalizeProfilePhotoList(live.photos);
+                const pendingPhotos = normalizeProfilePhotoList(pending.photos);
+                const addedPhotos = pendingPhotos.filter(function (src) {
+                    return livePhotos.indexOf(src) === -1;
+                });
+                item.photoSources = addedPhotos.length ? addedPhotos : pendingPhotos;
+            }
+            return item;
+        });
+    }
+
     function getProviderProfilePendingDiff(provider) {
+        const changeItems = getProviderProfilePendingChangeItems(provider);
+        if (changeItems.length) {
+            const photoItem = changeItems.find(function (item) { return item.key === 'photos'; });
+            return {
+                lines: changeItems.map(function (item) { return item.summary; }),
+                photoSources: photoItem && Array.isArray(photoItem.photoSources) ? photoItem.photoSources : []
+            };
+        }
+
         const pending = provider && provider.profileChangePending;
         if (!pending || typeof pending !== 'object') {
             return { lines: [], photoSources: [] };
@@ -2523,19 +2631,30 @@
                 const name = escapeHtml(firstText(provider.businessName, provider.name, provider.nickname, provider.username, provider.email));
                 const email = escapeHtml(firstText(provider.email, 'Not provided'));
                 const submittedAt = escapeHtml(formatDateTime(provider.profileChangeSubmittedAt || ''));
-                const profileDiff = getProviderProfilePendingDiff(provider);
-                const changeLines = profileDiff.lines;
-                const photosMarkup = buildPendingProfilePhotosMarkup(profileDiff.photoSources);
-                const changesMarkup = (changeLines.length || photosMarkup)
+                const changeItems = getProviderProfilePendingChangeItems(provider);
+                const changesMarkup = changeItems.length
                     ? [
-                        changeLines.length
-                            ? '<ul style="margin:8px 0 0; padding-left:18px;">' + changeLines.map((line) => '<li>' + escapeHtml(line) + '</li>').join('') + '</ul>'
-                            : '',
-                        photosMarkup
+                        '<div class="admin-profile-change-list">',
+                        changeItems.map(function (item) {
+                            const photosMarkup = item.key === 'photos'
+                                ? buildPendingProfilePhotosMarkup(item.photoSources || [])
+                                : '';
+                            return [
+                                '<label class="admin-profile-change-item">',
+                                '<div class="admin-profile-change-item-head">',
+                                '<input type="checkbox" class="profile-change-approve-checkbox" data-provider-id="' + escapeHtml(provider.id) + '" data-change-key="' + escapeHtml(item.key) + '" checked>',
+                                '<span class="admin-profile-change-item-title">' + escapeHtml(item.label) + '</span>',
+                                '</div>',
+                                '<div class="admin-profile-change-item-summary">' + escapeHtml(item.summary) + '</div>',
+                                photosMarkup,
+                                '</label>'
+                            ].join('');
+                        }).join(''),
+                        '</div>'
                     ].join('')
                     : '<div class="empty-inventory" style="margin-top:8px;">No field changes detected. Open the provider profile if you need to inspect the submission.</div>';
                 return [
-                    '<article class="provider-listing" style="margin-bottom:16px;">',
+                    '<article class="provider-listing admin-profile-change-card" style="margin-bottom:16px;">',
                     '<div class="listing-row body" style="grid-template-columns: 220px 1fr 1fr;">',
                     '<div class="listing-cell">',
                     '<div class="listing-title">' + name + '</div>',
@@ -2543,15 +2662,18 @@
                     '<div class="listing-sub" style="margin-top:6px;">Submitted: <strong>' + (submittedAt || '—') + '</strong></div>',
                     '</div>',
                     '<div class="listing-cell">',
-                    '<div class="listing-sub"><strong>Requested profile changes</strong></div>',
+                    '<div class="listing-sub"><strong>Select changes to approve</strong></div>',
+                    '<p class="muted-text" style="margin:6px 0 0; font-size:0.88rem;">Checked items will go live. Unchecked items need a reason below.</p>',
                     changesMarkup,
                     '</div>',
                     '<div class="listing-cell review-actions-cell">',
-                    '<textarea class="form-input profile-change-review-notes" rows="4" data-provider-id="' + escapeHtml(provider.id) + '" placeholder="Reason if declining (required)" style="width:100%; box-sizing:border-box;"></textarea>',
+                    '<label class="listing-sub" for="profile-change-notes-' + escapeHtml(provider.id) + '"><strong>Reason for declined changes</strong></label>',
+                    '<textarea id="profile-change-notes-' + escapeHtml(provider.id) + '" class="form-input profile-change-review-notes" rows="5" data-provider-id="' + escapeHtml(provider.id) + '" placeholder="Required if you uncheck any change. Explain what was not approved and why." style="width:100%; box-sizing:border-box; margin-top:6px;"></textarea>',
                     '<div class="actions review-actions" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-start;">',
                     '<a class="btn btn-outline" href="provider-profile.html?userId=' + encodeURIComponent(String(provider.id || '')) + '" target="_blank" rel="noopener">View profile</a>',
-                    '<button type="button" class="btn btn-primary profile-change-review-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="approved">Approve changes</button>',
-                    '<button type="button" class="btn btn-danger profile-change-review-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="rejected">Decline changes</button>',
+                    '<button type="button" class="btn btn-outline btn-sm" data-profile-change-select="all">Select all</button>',
+                    '<button type="button" class="btn btn-outline btn-sm" data-profile-change-select="none">Clear all</button>',
+                    '<button type="button" class="btn btn-primary profile-change-apply-btn" data-provider-id="' + escapeHtml(provider.id) + '">Apply selected changes</button>',
                     '</div>',
                     '</div>',
                     '</div>',

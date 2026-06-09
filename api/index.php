@@ -399,6 +399,10 @@ function normalize_user($user) {
         $normalized['profileChangeReviewNotes'] = '';
     }
 
+    if (!isset($normalized['profileChangeLastDecision']) || !is_array($normalized['profileChangeLastDecision'])) {
+        $normalized['profileChangeLastDecision'] = array();
+    }
+
     if (!isset($normalized['accountStatus']) || trim((string) $normalized['accountStatus']) === '') {
         $normalized['accountStatus'] = 'active';
     }
@@ -1359,6 +1363,100 @@ function build_provider_profile_change_summary($before, $after) {
     return $lines;
 }
 
+function provider_profile_change_groups() {
+    return array(
+        array('key' => 'business_name', 'label' => 'Business name', 'fields' => array('businessName', 'name')),
+        array('key' => 'location', 'label' => 'Town / city & service area', 'fields' => array('serviceAreaCity', 'city', 'location', 'town', 'serviceAreaAddress', 'serviceAreaLat', 'serviceAreaLng', 'showExactAddressOnMap')),
+        array('key' => 'contact', 'label' => 'Contact phone', 'fields' => array('phone', 'contact')),
+        array('key' => 'company_type', 'label' => 'Company type', 'fields' => array('companyType')),
+        array('key' => 'description', 'label' => 'Business description', 'fields' => array('description', 'businessDescription', 'about', 'bio', 'summary')),
+        array('key' => 'services', 'label' => 'Jobs / services', 'fields' => array('services', 'categories', 'skills')),
+        array('key' => 'vehicles', 'label' => 'Vehicles / fleet', 'fields' => array('transportModes', 'providerVehicles', 'vehicleCount')),
+        array('key' => 'insurance', 'label' => 'Insurance', 'fields' => array('providerInsurance')),
+        array('key' => 'photos', 'label' => 'Profile photos', 'fields' => array('photos', 'avatar', 'coverImage')),
+        array('key' => 'payment_methods', 'label' => 'Payment methods', 'fields' => array('paymentMethods', 'paymentMethodsCustom', 'acceptsCash', 'paypal', 'visa', 'mastercard', 'bankTransfer', 'americanExpress', 'cheque', 'cash')),
+        array('key' => 'website', 'label' => 'Website', 'fields' => array('website')),
+        array('key' => 'social', 'label' => 'Social links', 'fields' => array('instagram', 'facebook', 'x', 'twitter', 'tiktok', 'linkedin')),
+        array('key' => 'invites', 'label' => 'Job invitation settings', 'fields' => array('blockInvites', 'muteInviteEmails')),
+        array('key' => 'auto_bid', 'label' => 'Auto-bid subscription', 'fields' => array('autoBidSubscriptionEnabled'))
+    );
+}
+
+function provider_profile_group_has_changes($live, $pending, $fields) {
+    $live = is_array($live) ? $live : array();
+    $pending = is_array($pending) ? $pending : array();
+    foreach ($fields as $field) {
+        $old = array_key_exists($field, $live) ? $live[$field] : null;
+        $new = array_key_exists($field, $pending) ? $pending[$field] : null;
+        if (json_encode($old) !== json_encode($new)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function summarize_provider_profile_group_change($live, $pending, $group) {
+    $label = trim((string) ($group['label'] ?? 'Change'));
+    $fields = isset($group['fields']) && is_array($group['fields']) ? $group['fields'] : array();
+    $parts = array();
+    foreach ($fields as $field) {
+        $old = array_key_exists($field, $live) ? $live[$field] : null;
+        $new = array_key_exists($field, $pending) ? $pending[$field] : null;
+        if (json_encode($old) === json_encode($new)) {
+            continue;
+        }
+        $fieldLabel = provider_profile_field_labels();
+        $fieldName = isset($fieldLabel[$field]) ? $fieldLabel[$field] : $field;
+        $parts[] = $fieldName . ': ' . format_provider_profile_value_for_email($new);
+    }
+    if (!$parts) {
+        return $label . ' updated';
+    }
+    return $label . ' — ' . implode('; ', $parts);
+}
+
+function build_provider_profile_change_items($live, $pending) {
+    $liveSlice = extract_provider_profile_slice($live);
+    $pendingSlice = extract_provider_profile_slice($pending);
+    $items = array();
+    foreach (provider_profile_change_groups() as $group) {
+        $fields = isset($group['fields']) && is_array($group['fields']) ? $group['fields'] : array();
+        if (!provider_profile_group_has_changes($liveSlice, $pendingSlice, $fields)) {
+            continue;
+        }
+        $items[] = array(
+            'key' => trim((string) ($group['key'] ?? '')),
+            'label' => trim((string) ($group['label'] ?? 'Change')),
+            'summary' => summarize_provider_profile_group_change($liveSlice, $pendingSlice, $group),
+            'fields' => $fields
+        );
+    }
+    return $items;
+}
+
+function apply_provider_profile_change_groups($user, $pending, $approvedKeys) {
+    $user = is_array($user) ? $user : array();
+    $pending = is_array($pending) ? $pending : array();
+    $approvedKeys = is_array($approvedKeys) ? $approvedKeys : array();
+    $approvedLookup = array();
+    foreach ($approvedKeys as $key) {
+        $approvedLookup[trim((string) $key)] = true;
+    }
+    foreach (provider_profile_change_groups() as $group) {
+        $groupKey = trim((string) ($group['key'] ?? ''));
+        if ($groupKey === '' || empty($approvedLookup[$groupKey])) {
+            continue;
+        }
+        $fields = isset($group['fields']) && is_array($group['fields']) ? $group['fields'] : array();
+        foreach ($fields as $field) {
+            if (array_key_exists($field, $pending)) {
+                $user[$field] = $pending[$field];
+            }
+        }
+    }
+    return normalize_user($user);
+}
+
 function get_admin_notification_emails($store) {
     $emails = array();
     $configured = get_env_value(array('ADMIN_EMAIL', 'ADMIN_NOTIFY_EMAIL'), '');
@@ -1515,7 +1613,7 @@ function send_admin_listing_report_email($store, $report, $quote, $reporter) {
     return send_admin_panel_notification_email($store, $subject, $body, 'admin_listing_report report=' . trim((string) ($report['id'] ?? '')));
 }
 
-function send_provider_profile_change_decision_email($provider, $status, $notes = '') {
+function send_provider_profile_change_decision_email($provider, $status, $notes = '', $approvedLabels = array(), $rejectedLabels = array()) {
     $providerEmail = trim((string) ($provider['email'] ?? ''));
     if ($providerEmail === '') {
         return false;
@@ -1525,6 +1623,12 @@ function send_provider_profile_change_decision_email($provider, $status, $notes 
     $status = strtolower(trim((string) $status));
     $notes = trim((string) $notes);
     $profileUrl = get_app_url('provider-profile.html?userId=' . rawurlencode(trim((string) ($provider['id'] ?? ''))));
+    $approvedLabels = is_array($approvedLabels) ? array_values(array_filter(array_map(function ($label) {
+        return trim((string) $label);
+    }, $approvedLabels))) : array();
+    $rejectedLabels = is_array($rejectedLabels) ? array_values(array_filter(array_map(function ($label) {
+        return trim((string) $label);
+    }, $rejectedLabels))) : array();
 
     if ($status === 'approved') {
         $subject = 'Your AnyTransport profile changes were approved';
@@ -1534,10 +1638,32 @@ function send_provider_profile_change_decision_email($provider, $status, $notes 
             $body .= "View your profile:\n" . $profileUrl . "\n\n";
         }
         $body .= "Regards,\nAnyTransport";
+    } elseif ($status === 'partial') {
+        $subject = 'Some of your AnyTransport profile changes were approved';
+        $body = "Hello " . $providerName . ",\n\n";
+        $body .= "An admin reviewed your recent profile changes.\n\n";
+        if ($approvedLabels) {
+            $body .= "Approved and now live:\n- " . implode("\n- ", $approvedLabels) . "\n\n";
+        }
+        if ($rejectedLabels) {
+            $body .= "Not approved:\n- " . implode("\n- ", $rejectedLabels) . "\n\n";
+        }
+        if ($notes !== '') {
+            $body .= "Reason for declined changes:\n" . $notes . "\n\n";
+        }
+        $body .= "Your public profile shows the approved updates. You can edit your profile and submit again for anything that was not approved.\n\n";
+        if ($profileUrl !== '' && $profileUrl !== '/') {
+            $body .= "Open your profile:\n" . $profileUrl . "\n\n";
+        }
+        $body .= "Please do not reply to this email address.\n\n";
+        $body .= "Regards,\nAnyTransport";
     } elseif ($status === 'rejected') {
         $subject = 'Your AnyTransport profile changes were not approved';
         $body = "Hello " . $providerName . ",\n\n";
         $body .= "An admin reviewed your recent profile changes and did not approve them.\n\n";
+        if ($rejectedLabels) {
+            $body .= "Declined changes:\n- " . implode("\n- ", $rejectedLabels) . "\n\n";
+        }
         $body .= "Reason from admin:\n" . $notes . "\n\n";
         $body .= "Your public profile still shows your previous approved details. You can update your profile and submit again for review.\n\n";
         if ($profileUrl !== '' && $profileUrl !== '/') {
@@ -5142,6 +5268,7 @@ switch ($action) {
             $store['users'][$targetIndex]['profileChangeReviewedAt'] = '';
             $store['users'][$targetIndex]['profileChangeReviewedBy'] = '';
             $store['users'][$targetIndex]['profileChangeReviewNotes'] = '';
+            $store['users'][$targetIndex]['profileChangeLastDecision'] = array();
             $queuedUser = normalize_user($store['users'][$targetIndex]);
             $store['users'][$targetIndex] = $queuedUser;
             write_store($storeFile, $store);
@@ -5585,11 +5712,9 @@ switch ($action) {
         $providerId = trim((string) ($input['providerId'] ?? ''));
         $status = strtolower(trim((string) ($input['status'] ?? '')));
         $notes = trim((string) ($input['notes'] ?? ''));
-        if ($providerId === '' || !in_array($status, array('approved', 'rejected'), true)) {
-            send_json(array('ok' => false, 'error' => 'Provider ID and a valid review status are required.'), 400);
-        }
-        if ($status === 'rejected' && $notes === '') {
-            send_json(array('ok' => false, 'error' => 'A reason is required when declining profile changes.'), 400);
+        $approvedKeys = is_array($input['approvedKeys'] ?? null) ? $input['approvedKeys'] : array();
+        if ($providerId === '') {
+            send_json(array('ok' => false, 'error' => 'Provider ID is required.'), 400);
         }
 
         $index = find_user_index_by_id($store['users'], $providerId);
@@ -5608,32 +5733,151 @@ switch ($action) {
         $pending = isset($provider['profileChangePending']) && is_array($provider['profileChangePending'])
             ? $provider['profileChangePending']
             : array();
-        if ($status === 'approved') {
-            if (!$pending) {
-                send_json(array('ok' => false, 'error' => 'No pending profile changes were found for this provider.'), 400);
+        if (!$pending) {
+            send_json(array('ok' => false, 'error' => 'No pending profile changes were found for this provider.'), 400);
+        }
+
+        $changeItems = build_provider_profile_change_items($provider, $pending);
+        if (!$changeItems) {
+            send_json(array('ok' => false, 'error' => 'No reviewable profile changes were detected for this provider.'), 400);
+        }
+
+        $selectiveReview = !empty($approvedKeys) || $status === '';
+        $normalizedApprovedKeys = array();
+        if ($selectiveReview) {
+            $allowedKeys = array();
+            foreach ($changeItems as $item) {
+                $itemKey = trim((string) ($item['key'] ?? ''));
+                if ($itemKey !== '') {
+                    $allowedKeys[$itemKey] = true;
+                }
             }
-            $store['users'][$index] = array_merge($store['users'][$index], $pending);
+            foreach ($approvedKeys as $approvedKey) {
+                $approvedKey = trim((string) $approvedKey);
+                if ($approvedKey !== '' && !empty($allowedKeys[$approvedKey])) {
+                    $normalizedApprovedKeys[$approvedKey] = true;
+                }
+            }
+            if (!$normalizedApprovedKeys) {
+                send_json(array('ok' => false, 'error' => 'Select at least one change to approve.'), 400);
+            }
+            $approvedKeyList = array_keys($normalizedApprovedKeys);
+            $rejectedItems = array();
+            $approvedItems = array();
+            foreach ($changeItems as $item) {
+                $itemKey = trim((string) ($item['key'] ?? ''));
+                if ($itemKey === '') {
+                    continue;
+                }
+                if (!empty($normalizedApprovedKeys[$itemKey])) {
+                    $approvedItems[] = $item;
+                } else {
+                    $rejectedItems[] = $item;
+                }
+            }
+            if ($rejectedItems && $notes === '') {
+                send_json(array('ok' => false, 'error' => 'A reason is required when declining one or more profile changes.'), 400);
+            }
+            $emailStatus = 'approved';
+            if ($approvedItems && $rejectedItems) {
+                $emailStatus = 'partial';
+            } elseif ($rejectedItems) {
+                $emailStatus = 'rejected';
+            }
+            if ($emailStatus === 'rejected') {
+                $store['users'][$index]['profileChangeStatus'] = 'rejected';
+            } else {
+                $store['users'][$index] = apply_provider_profile_change_groups($store['users'][$index], $pending, $approvedKeyList);
+                $store['users'][$index]['profileChangeStatus'] = 'none';
+            }
             $store['users'][$index]['profileChangePending'] = array();
-            $store['users'][$index]['profileChangeStatus'] = 'none';
+            $approvedLabels = array_map(function ($item) {
+                return trim((string) ($item['label'] ?? 'Change'));
+            }, $approvedItems);
+            $rejectedLabels = array_map(function ($item) {
+                return trim((string) ($item['label'] ?? 'Change'));
+            }, $rejectedItems);
+            $store['users'][$index]['profileChangeLastDecision'] = array(
+                'status' => $emailStatus,
+                'approved' => $approvedLabels,
+                'rejected' => $rejectedLabels,
+                'notes' => $notes,
+                'reviewedAt' => gmdate('c')
+            );
+            $store['users'][$index]['profileChangeReviewNotes'] = $notes;
+            $status = $emailStatus;
         } else {
-            $store['users'][$index]['profileChangePending'] = array();
-            $store['users'][$index]['profileChangeStatus'] = 'rejected';
+            if (!in_array($status, array('approved', 'rejected'), true)) {
+                send_json(array('ok' => false, 'error' => 'Provider ID and a valid review status are required.'), 400);
+            }
+            if ($status === 'rejected' && $notes === '') {
+                send_json(array('ok' => false, 'error' => 'A reason is required when declining profile changes.'), 400);
+            }
+            $approvedLabels = array();
+            $rejectedLabels = array();
+            if ($status === 'approved') {
+                $store['users'][$index] = array_merge($store['users'][$index], $pending);
+                $store['users'][$index]['profileChangePending'] = array();
+                $store['users'][$index]['profileChangeStatus'] = 'none';
+                $approvedLabels = array_map(function ($item) {
+                    return trim((string) ($item['label'] ?? 'Change'));
+                }, $changeItems);
+                $store['users'][$index]['profileChangeLastDecision'] = array(
+                    'status' => 'approved',
+                    'approved' => $approvedLabels,
+                    'rejected' => array(),
+                    'notes' => '',
+                    'reviewedAt' => gmdate('c')
+                );
+            } else {
+                $store['users'][$index]['profileChangePending'] = array();
+                $store['users'][$index]['profileChangeStatus'] = 'rejected';
+                $rejectedLabels = array_map(function ($item) {
+                    return trim((string) ($item['label'] ?? 'Change'));
+                }, $changeItems);
+                $store['users'][$index]['profileChangeLastDecision'] = array(
+                    'status' => 'rejected',
+                    'approved' => array(),
+                    'rejected' => $rejectedLabels,
+                    'notes' => $notes,
+                    'reviewedAt' => gmdate('c')
+                );
+            }
+            $store['users'][$index]['profileChangeReviewNotes'] = $notes;
         }
 
         $store['users'][$index]['profileChangeReviewedAt'] = gmdate('c');
         $store['users'][$index]['profileChangeReviewedBy'] = trim((string) ($currentUser['id'] ?? ''));
-        $store['users'][$index]['profileChangeReviewNotes'] = $notes;
         $updatedProvider = normalize_user($store['users'][$index]);
         $store['users'][$index] = $updatedProvider;
         write_store($storeFile, $store);
 
+        $approvedLabelsForEmail = array();
+        $rejectedLabelsForEmail = array();
+        $lastDecision = isset($updatedProvider['profileChangeLastDecision']) && is_array($updatedProvider['profileChangeLastDecision'])
+            ? $updatedProvider['profileChangeLastDecision']
+            : array();
+        if (isset($lastDecision['approved']) && is_array($lastDecision['approved'])) {
+            $approvedLabelsForEmail = $lastDecision['approved'];
+        }
+        if (isset($lastDecision['rejected']) && is_array($lastDecision['rejected'])) {
+            $rejectedLabelsForEmail = $lastDecision['rejected'];
+        }
+
         send_json_and_continue(array(
             'ok' => true,
-            'provider' => sanitize_user_for_client($updatedProvider)
+            'provider' => sanitize_user_for_client($updatedProvider),
+            'decision' => $lastDecision
         ));
 
         try {
-            send_provider_profile_change_decision_email($updatedProvider, $status, $notes);
+            send_provider_profile_change_decision_email(
+                $updatedProvider,
+                $status,
+                $notes,
+                $approvedLabelsForEmail,
+                $rejectedLabelsForEmail
+            );
         } catch (Exception $_e) {
             // swallow email errors
         }

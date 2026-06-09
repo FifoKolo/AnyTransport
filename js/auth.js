@@ -440,12 +440,16 @@ window.anytransportApi = window.anytransportApi || (function () {
             const response = request('provider.profile.review.queue', 'GET');
             return Array.isArray(response.providers) ? response.providers : [];
         },
-        updateProviderProfileReview: function (providerId, status, notes) {
-            return request('provider.profile.review.update', 'POST', {
-                providerId: providerId,
-                status: status,
-                notes: notes || ''
-            });
+        updateProviderProfileReview: function (providerId, statusOrPayload, notes) {
+            let payload = { providerId: providerId ? String(providerId) : '' };
+            if (statusOrPayload && typeof statusOrPayload === 'object') {
+                payload = Object.assign(payload, statusOrPayload);
+            } else {
+                payload.status = String(statusOrPayload || '').trim();
+                payload.notes = notes || '';
+            }
+            const response = request('provider.profile.review.update', 'POST', payload);
+            return response.provider || null;
         },
         cancelProviderProfileReview: function (providerId) {
             const response = request('provider.profile.review.cancel', 'POST', {

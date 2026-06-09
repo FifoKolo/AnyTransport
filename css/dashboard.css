@@ -422,6 +422,44 @@
     color: #b42318;
 }
 
+.admin-profile-change-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.admin-profile-change-item {
+    display: block;
+    padding: 10px 12px;
+    border: 1px solid #dbe7f2;
+    border-radius: 10px;
+    background: #f8fbff;
+    cursor: pointer;
+}
+
+.admin-profile-change-item-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.admin-profile-change-item-title {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.admin-profile-change-item-summary {
+    margin-top: 6px;
+    margin-left: 24px;
+    font-size: 0.88rem;
+    color: #475569;
+    line-height: 1.4;
+}
+
+.admin-profile-change-card .admin-profile-change-item figure {
+    margin-left: 24px;
+}
+
 .admin-user-badges {
     display: flex;
     flex-wrap: wrap;
