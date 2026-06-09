@@ -1452,7 +1452,16 @@
                 }
                 try {
                     if (window.anytransportApi && typeof window.anytransportApi.moderateUser === 'function') {
-                        window.anytransportApi.moderateUser(providerId, 'verify_test', 'Verified by admin for testing (Stripe bypass).');
+                        const updated = window.anytransportApi.moderateUser(providerId, 'verify_test', 'Verified by admin for testing (Stripe bypass).');
+                        if (window.auth && updated && updated.id && window.auth.getUser && String(window.auth.getUser().id) === String(updated.id)) {
+                            if (typeof window.auth.mergeUserIntoLocalCache === 'function') {
+                                window.auth.mergeUserIntoLocalCache(updated);
+                            }
+                            window.auth.currentUser = Object.assign({}, window.auth.getUser(), updated);
+                            if (typeof window.auth.setStoredCurrentUser === 'function') {
+                                window.auth.setStoredCurrentUser(window.auth.currentUser);
+                            }
+                        }
                         alert('Provider verified for testing.');
                     } else {
                         alert('Verification override is not available right now.');

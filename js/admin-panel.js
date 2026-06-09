@@ -147,6 +147,19 @@
             if (!updated || !updated.id) {
                 throw new Error('Unable to update this account.');
             }
+            try {
+                if (window.auth && window.auth.getUser && String(window.auth.getUser().id) === String(updated.id)) {
+                    if (typeof window.auth.mergeUserIntoLocalCache === 'function') {
+                        window.auth.mergeUserIntoLocalCache(updated);
+                    }
+                    window.auth.currentUser = Object.assign({}, window.auth.getUser(), updated);
+                    if (typeof window.auth.setStoredCurrentUser === 'function') {
+                        window.auth.setStoredCurrentUser(window.auth.currentUser);
+                    }
+                }
+            } catch (_sessionError) {
+                /* ignore */
+            }
             if (depsRef && typeof depsRef.invalidateAdminCache === 'function') {
                 depsRef.invalidateAdminCache();
             }

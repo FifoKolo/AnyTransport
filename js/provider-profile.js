@@ -35,6 +35,14 @@
             return;
         }
 
+        if (window.auth && typeof window.auth.refreshSessionUserFromServer === 'function' && String(viewer.id) === String(userId)) {
+            try {
+                window.auth.refreshSessionUserFromServer();
+            } catch (_refreshError) {
+                /* continue with cached session */
+            }
+        }
+
         loadProvider(userId).then(function (user) {
             if (!user) {
                 renderError('Provider not found.');

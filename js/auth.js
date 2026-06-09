@@ -1646,9 +1646,13 @@ class AuthManager {
     isProviderApproved(user) {
         const record = user || this.currentUser;
         if (!record) return false;
-        const stripeComplete = String(record.stripeOnboardingStatus || '').trim().toLowerCase() === 'complete';
         const status = String(record.identityReviewStatus || '').trim().toLowerCase();
-        return stripeComplete && status === 'approved';
+        if (status !== 'approved') return false;
+        if (record.adminVerificationBypass) {
+            return true;
+        }
+        const stripeComplete = String(record.stripeOnboardingStatus || '').trim().toLowerCase() === 'complete';
+        return stripeComplete;
     }
 
     canProviderAccessListings(user) {

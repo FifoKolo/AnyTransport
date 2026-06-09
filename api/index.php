@@ -1625,7 +1625,14 @@ function provider_stripe_onboarding_is_complete($user) {
     if (!is_array($user)) {
         return false;
     }
+    if (!empty($user['adminVerificationBypass'])) {
+        return true;
+    }
     return strtolower(trim((string) ($user['stripeOnboardingStatus'] ?? ''))) === 'complete';
+}
+
+function provider_has_admin_verification_bypass($user) {
+    return is_array($user) && !empty($user['adminVerificationBypass']);
 }
 
 function provider_can_access_marketplace($user) {
@@ -1946,6 +1953,15 @@ function sync_stripe_account_status($store, $userId) {
     }
 
     $user = normalize_user($store['users'][$index]);
+    if (provider_has_admin_verification_bypass($user)) {
+        return array(
+            'user' => $user,
+            'complete' => true,
+            'status' => 'complete',
+            'skipped' => 'admin_verification_bypass'
+        );
+    }
+
     $identitySessionId = trim((string) ($user['stripeIdentitySessionId'] ?? ''));
     if ($identitySessionId === '') {
         return array('user' => $user, 'complete' => false, 'status' => 'not_started');
@@ -4531,7 +4547,7 @@ switch ($action) {
         if (is_array($user)) {
             $userId = trim((string) ($user['id'] ?? ''));
             $role = strtolower(trim((string) ($user['role'] ?? '')));
-            if ($userId !== '' && $role === 'provider') {
+            if ($userId !== '' && $role === 'provider' && !provider_has_admin_verification_bypass($user)) {
                 $syncResult = sync_stripe_account_status($store, $userId);
                 if (is_array($syncResult['user'])) {
                     $user = $syncResult['user'];
