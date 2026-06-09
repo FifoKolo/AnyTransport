@@ -1393,6 +1393,30 @@
                 return;
             }
 
+            const profileChangeThumbBtn = event.target.closest('.admin-profile-change-thumb-btn');
+            if (profileChangeThumbBtn) {
+                event.preventDefault();
+                event.stopPropagation();
+                const thumbImg = profileChangeThumbBtn.querySelector('img');
+                const src = thumbImg ? String(thumbImg.currentSrc || thumbImg.src || '').trim() : '';
+                if (!src) {
+                    return;
+                }
+                const section = profileChangeThumbBtn.closest('.admin-profile-change-photo-section');
+                const sourceLabel = section
+                    ? String(section.querySelector('.admin-profile-change-photo-source')?.textContent || '').trim()
+                    : '';
+                const phaseLabel = profileChangeThumbBtn.closest('.admin-profile-change-diff-col')
+                    ? String(profileChangeThumbBtn.closest('.admin-profile-change-diff-col').querySelector('.admin-profile-change-diff-label')?.textContent || '').trim()
+                    : '';
+                openAdminImagePreviewModal({
+                    src: src,
+                    title: sourceLabel || 'Profile image',
+                    subtitle: phaseLabel ? (phaseLabel + ' image') : 'Click outside or press Escape to close'
+                });
+                return;
+            }
+
             const profileChangeSelectBtn = event.target.closest('[data-profile-change-select]');
             if (profileChangeSelectBtn) {
                 if (!(auth.isAdmin && auth.isAdmin())) {
@@ -2744,13 +2768,97 @@
         return sections;
     }
 
+    function ensureAdminImagePreviewModal() {
+        let modal = document.getElementById('admin-image-preview-modal');
+        if (modal) {
+            return modal;
+        }
+
+        modal = document.createElement('div');
+        modal.id = 'admin-image-preview-modal';
+        modal.className = 'admin-image-preview-modal';
+        modal.hidden = true;
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-labelledby', 'admin-image-preview-title');
+        modal.innerHTML = [
+            '<div class="admin-image-preview-dialog">',
+            '<button type="button" class="admin-image-preview-close" aria-label="Close preview">&times;</button>',
+            '<div class="admin-image-preview-meta">',
+            '<div id="admin-image-preview-title" class="admin-image-preview-title"></div>',
+            '<div id="admin-image-preview-subtitle" class="admin-image-preview-subtitle"></div>',
+            '</div>',
+            '<div id="admin-image-preview-content" class="admin-image-preview-content"></div>',
+            '</div>'
+        ].join('');
+        document.body.appendChild(modal);
+
+        function closeAdminImagePreviewModal() {
+            const content = modal.querySelector('#admin-image-preview-content');
+            if (content) {
+                content.innerHTML = '';
+            }
+            modal.hidden = true;
+        }
+
+        modal.querySelector('.admin-image-preview-close').addEventListener('click', closeAdminImagePreviewModal);
+        modal.addEventListener('click', function (event) {
+            if (event.target === modal) {
+                closeAdminImagePreviewModal();
+            }
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && !modal.hidden) {
+                closeAdminImagePreviewModal();
+            }
+        });
+
+        modal._closeAdminImagePreviewModal = closeAdminImagePreviewModal;
+        return modal;
+    }
+
+    function openAdminImagePreviewModal(options) {
+        const src = String(options && options.src || '').trim();
+        if (!src) {
+            return;
+        }
+
+        const modal = ensureAdminImagePreviewModal();
+        const titleEl = modal.querySelector('#admin-image-preview-title');
+        const subtitleEl = modal.querySelector('#admin-image-preview-subtitle');
+        const contentEl = modal.querySelector('#admin-image-preview-content');
+
+        if (titleEl) {
+            titleEl.textContent = String(options && options.title || 'Profile image');
+        }
+        if (subtitleEl) {
+            subtitleEl.textContent = String(options && options.subtitle || '');
+        }
+        if (contentEl) {
+            contentEl.innerHTML = '';
+            const image = document.createElement('img');
+            image.src = src;
+            image.alt = String(options && options.title || 'Profile image');
+            image.className = 'admin-image-preview-image';
+            contentEl.appendChild(image);
+        }
+
+        modal.hidden = false;
+    }
+
     function buildProfilePhotoThumbsMarkup(srcs) {
         const list = Array.isArray(srcs) ? srcs.filter(Boolean) : [];
         if (!list.length) {
             return '<span class="admin-profile-change-diff-empty">(none)</span>';
         }
         return '<div class="admin-profile-change-photo-thumbs">' + list.map(function (src, index) {
-            return '<img src="' + escapeHtml(src) + '" alt="Photo ' + (index + 1) + '" class="admin-profile-change-thumb" loading="lazy">';
+            const alt = 'Photo ' + (index + 1);
+            return [
+                '<button type="button" class="admin-profile-change-thumb-btn" aria-label="View larger image ' + (index + 1) + '">',
+                '<img src="' + escapeHtml(src) + '" alt="' + alt + '" class="admin-profile-change-thumb" loading="lazy">',
+                '<span class="admin-profile-change-thumb-zoom" aria-hidden="true">&#128269;</span>',
+                '</button>'
+            ].join('');
         }).join('') + '</div>';
     }
 

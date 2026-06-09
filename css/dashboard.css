@@ -543,6 +543,26 @@
     gap: 6px;
 }
 
+.admin-profile-change-thumb-btn {
+    position: relative;
+    border: none;
+    padding: 0;
+    margin: 0;
+    background: none;
+    cursor: zoom-in;
+    line-height: 0;
+}
+
+.admin-profile-change-thumb-btn:hover .admin-profile-change-thumb,
+.admin-profile-change-thumb-btn:focus-visible .admin-profile-change-thumb {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.admin-profile-change-thumb-btn:focus-visible {
+    outline: none;
+}
+
 .admin-profile-change-thumb {
     width: 64px;
     height: 48px;
@@ -550,6 +570,98 @@
     border-radius: 6px;
     border: 1px solid #e2e8f0;
     background: #f8fafc;
+    display: block;
+}
+
+.admin-profile-change-thumb-zoom {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #fff;
+    font-size: 10px;
+    line-height: 18px;
+    text-align: center;
+    pointer-events: none;
+}
+
+.admin-image-preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+    background: rgba(15, 23, 42, 0.9);
+}
+
+.admin-image-preview-modal[hidden] {
+    display: none !important;
+}
+
+.admin-image-preview-dialog {
+    position: relative;
+    width: min(96vw, 960px);
+    max-height: 92vh;
+    background: #0b1220;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 12px;
+    padding: 16px;
+    box-sizing: border-box;
+}
+
+.admin-image-preview-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 50%;
+    background: #e2e8f0;
+    color: #0f172a;
+    font-size: 20px;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.admin-image-preview-meta {
+    padding-right: 42px;
+    margin-bottom: 10px;
+}
+
+.admin-image-preview-title {
+    font-weight: 700;
+    color: #f8fafc;
+    font-size: 1rem;
+}
+
+.admin-image-preview-subtitle {
+    font-size: 0.84rem;
+    color: #94a3b8;
+    margin-top: 2px;
+}
+
+.admin-image-preview-content {
+    width: 100%;
+    max-height: 78vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.admin-image-preview-image {
+    max-width: 100%;
+    max-height: 78vh;
+    border-radius: 10px;
+    object-fit: contain;
+    background: #000;
 }
 
 .admin-profile-change-diff-empty {
