@@ -507,6 +507,9 @@ window.anytransportApi = window.anytransportApi || (function () {
             const response = request('users.account.update', 'POST', payload || {});
             return response.user || null;
         },
+        getOwnAccountPassword: function () {
+            return request('users.account.password', 'GET');
+        },
         getQuotes: function (userId, options) {
             try {
                 const params = {};

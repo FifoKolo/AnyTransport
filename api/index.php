@@ -1395,8 +1395,95 @@ function provider_profile_group_has_changes($live, $pending, $fields) {
     return false;
 }
 
+function normalize_profile_string_list($value) {
+    if (!is_array($value)) {
+        return array();
+    }
+    $out = array();
+    foreach ($value as $entry) {
+        $text = trim((string) $entry);
+        if ($text !== '') {
+            $out[] = $text;
+        }
+    }
+    return $out;
+}
+
+function summarize_profile_array_change($label, $before, $after) {
+    $prev = normalize_profile_string_list($before);
+    $next = normalize_profile_string_list($after);
+    if (json_encode($prev) === json_encode($next)) {
+        return '';
+    }
+    $added = array_values(array_diff($next, $prev));
+    $removed = array_values(array_diff($prev, $next));
+    $parts = array();
+    if ($added) {
+        $parts[] = 'added ' . implode(', ', $added);
+    }
+    if ($removed) {
+        $parts[] = 'removed ' . implode(', ', $removed);
+    }
+    return $parts ? ($label . ': ' . implode('; ', $parts)) : ($label . ' updated');
+}
+
+function summarize_provider_fleet_list($user) {
+    $user = is_array($user) ? $user : array();
+    if (isset($user['providerVehicles']) && is_array($user['providerVehicles']) && count($user['providerVehicles'])) {
+        $parts = array();
+        foreach ($user['providerVehicles'] as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $qty = isset($entry['quantity']) ? (int) $entry['quantity'] : 1;
+            $type = trim((string) ($entry['type'] ?? 'Vehicle'));
+            $capacity = trim((string) ($entry['capacity'] ?? ''));
+            $parts[] = $qty . '× ' . ($type !== '' ? $type : 'Vehicle') . ($capacity !== '' ? ' (' . $capacity . ')' : '');
+        }
+        return $parts;
+    }
+    return normalize_profile_string_list(isset($user['transportModes']) ? $user['transportModes'] : array());
+}
+
+function summarize_provider_services_list($user) {
+    $user = is_array($user) ? $user : array();
+    foreach (array('services', 'categories', 'skills') as $field) {
+        if (isset($user[$field]) && is_array($user[$field]) && count($user[$field])) {
+            return normalize_profile_string_list($user[$field]);
+        }
+    }
+    return array();
+}
+
 function summarize_provider_profile_group_change($live, $pending, $group) {
     $label = trim((string) ($group['label'] ?? 'Change'));
+    $key = trim((string) ($group['key'] ?? ''));
+    $live = is_array($live) ? $live : array();
+    $pending = is_array($pending) ? $pending : array();
+
+    if ($key === 'services') {
+        return summarize_profile_array_change($label, summarize_provider_services_list($live), summarize_provider_services_list($pending));
+    }
+    if ($key === 'vehicles') {
+        return summarize_profile_array_change($label, summarize_provider_fleet_list($live), summarize_provider_fleet_list($pending));
+    }
+    if ($key === 'business_name') {
+        $before = trim((string) ($live['businessName'] ?? $live['name'] ?? ''));
+        $after = trim((string) ($pending['businessName'] ?? $pending['name'] ?? ''));
+        if ($before === $after) {
+            return '';
+        }
+        return $label . ': "' . ($before !== '' ? $before : '(empty)') . '" → "' . ($after !== '' ? $after : '(empty)') . '"';
+    }
+    if ($key === 'contact') {
+        $before = trim((string) ($live['phone'] ?? $live['contact'] ?? ''));
+        $after = trim((string) ($pending['phone'] ?? $pending['contact'] ?? ''));
+        if ($before === $after) {
+            return '';
+        }
+        return $label . ': "' . ($before !== '' ? $before : '(empty)') . '" → "' . ($after !== '' ? $after : '(empty)') . '"';
+    }
+
     $fields = isset($group['fields']) && is_array($group['fields']) ? $group['fields'] : array();
     $parts = array();
     foreach ($fields as $field) {
@@ -1405,14 +1492,14 @@ function summarize_provider_profile_group_change($live, $pending, $group) {
         if (json_encode($old) === json_encode($new)) {
             continue;
         }
-        $fieldLabel = provider_profile_field_labels();
-        $fieldName = isset($fieldLabel[$field]) ? $fieldLabel[$field] : $field;
+        $fieldLabels = provider_profile_field_labels();
+        $fieldName = isset($fieldLabels[$field]) ? $fieldLabels[$field] : $field;
         $parts[] = $fieldName . ': ' . format_provider_profile_value_for_email($new);
     }
     if (!$parts) {
         return $label . ' updated';
     }
-    return $label . ' — ' . implode('; ', $parts);
+    return $label . ' — ' . implode('; ', array_slice($parts, 0, 2));
 }
 
 function build_provider_profile_change_items($live, $pending) {
@@ -5314,6 +5401,21 @@ switch ($action) {
         }
         write_store($storeFile, $store);
         send_json(array('ok' => true, 'user' => sanitize_user_for_client($normalized)));
+
+    case 'users.account.password':
+        $currentUser = get_current_user_record($store);
+        if (!is_array($currentUser) || trim((string) ($currentUser['id'] ?? '')) === '') {
+            send_json(array('ok' => false, 'error' => 'Authentication required.'), 401);
+        }
+        if ($method !== 'GET') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $password = (string) ($currentUser['password'] ?? '');
+        send_json(array(
+            'ok' => true,
+            'hasPassword' => $password !== '',
+            'password' => $password
+        ));
 
     case 'users.account.update':
         $currentUser = get_current_user_record($store);

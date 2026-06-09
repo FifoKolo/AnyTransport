@@ -124,9 +124,15 @@
             '    <code class="admin-user-password-display" data-admin-password-display="' + escapeAttr(id) + '">' + escapeHtml(displayText) + '</code>',
             '    <button type="button" class="btn btn-outline btn-sm" data-admin-password-reveal="' + escapeAttr(id) + '">' + revealLabel + '</button>',
             '  </div>',
-            '  <div class="admin-user-password-row">',
-            '    <input type="password" class="form-input admin-user-password-input" data-admin-password-input="' + escapeAttr(id) + '" placeholder="New password" minlength="6" autocomplete="new-password">',
-            '    <input type="password" class="form-input admin-user-password-input" data-admin-password-confirm="' + escapeAttr(id) + '" placeholder="Confirm new password" minlength="6" autocomplete="new-password">',
+            '  <div class="admin-user-password-row admin-user-password-row--set">',
+            '    <div class="admin-user-password-field">',
+            '      <input type="password" class="form-input admin-user-password-input" data-admin-password-input="' + escapeAttr(id) + '" placeholder="New password" minlength="6" autocomplete="new-password">',
+            '      <button type="button" class="btn btn-outline btn-sm admin-user-password-visibility-btn" data-admin-password-visibility-toggle aria-label="Show new password">Show</button>',
+            '    </div>',
+            '    <div class="admin-user-password-field">',
+            '      <input type="password" class="form-input admin-user-password-input" data-admin-password-confirm="' + escapeAttr(id) + '" placeholder="Confirm new password" minlength="6" autocomplete="new-password">',
+            '      <button type="button" class="btn btn-outline btn-sm admin-user-password-visibility-btn" data-admin-password-visibility-toggle aria-label="Show confirm password">Show</button>',
+            '    </div>',
             '    <button type="button" class="btn btn-primary btn-sm" data-admin-password-set="' + escapeAttr(id) + '">Set password</button>',
             '  </div>',
             '  <p class="admin-user-password-status" data-admin-password-status="' + escapeAttr(id) + '" aria-live="polite"></p>',
@@ -353,6 +359,20 @@
                 var revealUserId = revealBtn.getAttribute('data-admin-password-reveal') || '';
                 if (!revealUserId) return;
                 toggleAdminUserPasswordReveal(revealUserId);
+                return;
+            }
+
+            var visibilityBtn = event.target.closest('[data-admin-password-visibility-toggle]');
+            if (visibilityBtn && mount.contains(visibilityBtn)) {
+                event.preventDefault();
+                var fieldWrap = visibilityBtn.closest('.admin-user-password-field');
+                if (!fieldWrap) return;
+                var passwordInput = fieldWrap.querySelector('input[type="password"], input[type="text"]');
+                if (!passwordInput) return;
+                var isHidden = passwordInput.type === 'password';
+                passwordInput.type = isHidden ? 'text' : 'password';
+                visibilityBtn.textContent = isHidden ? 'Hide' : 'Show';
+                visibilityBtn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
                 return;
             }
 

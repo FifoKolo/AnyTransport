@@ -1100,20 +1100,20 @@
                 '        <div><input id="profile-account-email" class="form-input" type="email" value="' + escapeAttribute(firstText(liveUser.email, u.email, '')) + '" readonly autocomplete="off" tabindex="-1"></div>',
                 '      </div>',
                 '      <div class="profile-form-row">',
-                '        <div class="profile-form-label">Current password</div>',
-                '        <div><input id="profile-account-current-password" class="form-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" readonly placeholder="Enter your current password"></div>',
+                '        <div class="profile-form-label">Login password</div>',
+                '        <div><input id="profile-account-login-password" class="form-input profile-password-plain" type="text" readonly autocomplete="off" spellcheck="false" value="Loading…"></div>',
                 '      </div>',
                 '      <div class="profile-form-row">',
                 '        <div class="profile-form-label">New password</div>',
                 '        <div>',
-                '          <input id="profile-account-new-password" class="form-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" required minlength="6" placeholder="At least 6 characters">',
+                '          <input id="profile-account-new-password" class="form-input profile-password-plain" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" required minlength="6" placeholder="At least 6 characters">',
                 '          <p class="profile-help">Password must be at least 6 characters long.</p>',
                 '          <p id="profile-account-password-hint" class="profile-account-password-hint" aria-live="polite"></p>',
                 '        </div>',
                 '      </div>',
                 '      <div class="profile-form-row">',
                 '        <div class="profile-form-label">Confirm new password</div>',
-                '        <div><input id="profile-account-confirm-password" class="form-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" required placeholder="Re-enter new password"></div>',
+                '        <div><input id="profile-account-confirm-password" class="form-input profile-password-plain" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" required placeholder="Re-enter new password"></div>',
                 '      </div>',
                 '      <div class="profile-account-actions">',
                 '        <button type="submit" id="profile-account-submit-btn" class="btn btn-primary" disabled>Update password</button>',
@@ -1935,15 +1935,45 @@
             return '';
         }
 
+        function getProviderLoginPasswordValue() {
+            const loginField = document.getElementById('profile-account-login-password');
+            const value = String(loginField && loginField.value || '').trim();
+            if (!value || value === 'Loading…' || value === '(no password set)' || value === 'Unable to load password') {
+                return '';
+            }
+            return value;
+        }
+
+        function loadProviderLoginPassword() {
+            const loginField = document.getElementById('profile-account-login-password');
+            if (!loginField) {
+                return;
+            }
+            loginField.value = 'Loading…';
+            if (!window.anytransportApi || typeof window.anytransportApi.getOwnAccountPassword !== 'function') {
+                loginField.value = 'Unable to load password';
+                return;
+            }
+            try {
+                const resp = window.anytransportApi.getOwnAccountPassword();
+                loginField.value = resp && resp.hasPassword
+                    ? String(resp.password || '')
+                    : '(no password set)';
+            } catch (_error) {
+                loginField.value = 'Unable to load password';
+            }
+            refreshAccountPasswordFormState();
+        }
+
         function refreshAccountPasswordFormState() {
-            const currentPassword = String(document.getElementById('profile-account-current-password')?.value || '');
             const newPassword = String(document.getElementById('profile-account-new-password')?.value || '');
             const confirmPassword = String(document.getElementById('profile-account-confirm-password')?.value || '');
             const submitBtn = document.getElementById('profile-account-submit-btn');
             const hintEl = document.getElementById('profile-account-password-hint');
             const passwordError = newPassword ? getProviderPasswordRequirementError(newPassword) : '';
             const passwordsMatch = !!newPassword && newPassword === confirmPassword;
-            const canSubmit = !!currentPassword && !!newPassword && !!confirmPassword && !passwordError && passwordsMatch;
+            const hasLoginPassword = !!getProviderLoginPasswordValue();
+            const canSubmit = hasLoginPassword && !!newPassword && !!confirmPassword && !passwordError && passwordsMatch;
 
             if (submitBtn) {
                 submitBtn.disabled = !canSubmit;
@@ -1963,9 +1993,10 @@
                     hintEl.textContent = 'Passwords do not match.';
                     hintEl.classList.add('is-error');
                     hintEl.classList.remove('is-ok');
-                } else if (!currentPassword) {
-                    hintEl.textContent = 'Enter your current password to change it.';
-                    hintEl.classList.remove('is-error', 'is-ok');
+                } else if (!hasLoginPassword) {
+                    hintEl.textContent = 'Your current login password could not be loaded.';
+                    hintEl.classList.add('is-error');
+                    hintEl.classList.remove('is-ok');
                 } else {
                     hintEl.textContent = 'Password meets requirements.';
                     hintEl.classList.add('is-ok');
@@ -1975,7 +2006,7 @@
         }
 
         function clearAccountPasswordFields() {
-            ['profile-account-current-password', 'profile-account-new-password', 'profile-account-confirm-password'].forEach(function (fieldId) {
+            ['profile-account-new-password', 'profile-account-confirm-password'].forEach(function (fieldId) {
                 const field = document.getElementById(fieldId);
                 if (field) {
                     field.value = '';
@@ -1984,34 +2015,18 @@
             refreshAccountPasswordFormState();
         }
 
-        function preventAccountPasswordAutofill() {
-            const currentField = document.getElementById('profile-account-current-password');
-            clearAccountPasswordFields();
-            if (!currentField) {
-                return;
-            }
-            currentField.setAttribute('readonly', 'readonly');
-            currentField.addEventListener('focus', function enableCurrentPasswordField() {
-                currentField.removeAttribute('readonly');
-            }, { once: true });
-            requestAnimationFrame(clearAccountPasswordFields);
-            setTimeout(clearAccountPasswordFields, 120);
-            setTimeout(clearAccountPasswordFields, 600);
-        }
-
         function wireAccountSecurity(accountUser) {
             const accountForm = document.getElementById('profile-account-form');
             if (!accountForm || !isEditable) {
                 return;
             }
 
-            preventAccountPasswordAutofill();
+            loadProviderLoginPassword();
 
             accountForm.addEventListener('input', function (event) {
                 const target = event.target;
                 if (!target || !target.id) return;
                 if (
-                    target.id === 'profile-account-current-password' ||
                     target.id === 'profile-account-new-password' ||
                     target.id === 'profile-account-confirm-password'
                 ) {
@@ -2030,12 +2045,12 @@
                     return;
                 }
 
-                const currentPassword = String(document.getElementById('profile-account-current-password')?.value || '');
+                const currentPassword = getProviderLoginPasswordValue();
                 const newPassword = String(document.getElementById('profile-account-new-password')?.value || '');
                 const confirmPassword = String(document.getElementById('profile-account-confirm-password')?.value || '');
 
                 if (!currentPassword) {
-                    setAccountStatus('Enter your current password to change it.', true);
+                    setAccountStatus('Your current login password could not be loaded. Refresh the page and try again.', true);
                     return;
                 }
                 if (!newPassword) {
@@ -2085,9 +2100,9 @@
                     if (emailField) {
                         emailField.value = firstText(updatedUser.email, accountUser.email, '');
                     }
-                    const currentField = document.getElementById('profile-account-current-password');
-                    if (currentField) {
-                        currentField.setAttribute('readonly', 'readonly');
+                    const loginField = document.getElementById('profile-account-login-password');
+                    if (loginField) {
+                        loginField.value = newPassword;
                     }
                     setAccountStatus('Your password was updated successfully.', false);
                     refreshAccountPasswordFormState();

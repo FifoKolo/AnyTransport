@@ -2328,6 +2328,111 @@
         return label + ': ' + (after ? 'enabled' : 'disabled');
     }
 
+    function formatAdminProfileArrayChangeDetailed(label, before, after) {
+        const prev = normalizeProfileStringList(before);
+        const next = normalizeProfileStringList(after);
+        if (JSON.stringify(prev) === JSON.stringify(next)) {
+            return null;
+        }
+        const added = next.filter(function (item) { return prev.indexOf(item) === -1; });
+        const removed = prev.filter(function (item) { return next.indexOf(item) === -1; });
+        const parts = [];
+        if (added.length) {
+            parts.push('added ' + added.join(', '));
+        }
+        if (removed.length) {
+            parts.push('removed ' + removed.join(', '));
+        }
+        const detailLines = [];
+        detailLines.push('Before: ' + (prev.length ? prev.join(', ') : '(none)'));
+        detailLines.push('After: ' + (next.length ? next.join(', ') : '(none)'));
+        return {
+            summary: parts.length ? (label + ': ' + parts.join('; ')) : (label + ' updated'),
+            detailLines: detailLines
+        };
+    }
+
+    function formatAdminFleetSummary(user) {
+        if (user && Array.isArray(user.providerVehicles) && user.providerVehicles.length) {
+            return user.providerVehicles.map(function (entry) {
+                const qty = entry && entry.quantity != null ? entry.quantity : 1;
+                const type = entry && entry.type ? entry.type : 'Vehicle';
+                const capacity = entry && entry.capacity ? entry.capacity : '';
+                return qty + '× ' + type + (capacity ? ' (' + capacity + ')' : '');
+            });
+        }
+        return Array.isArray(user && user.transportModes) ? user.transportModes.slice() : [];
+    }
+
+    function formatAdminInsuranceSummary(live, pending) {
+        const insuranceApi = window.anytransportProviderInsurance;
+        if (insuranceApi && typeof insuranceApi.formatInsuranceChange === 'function') {
+            const before = insuranceApi.normalizeInsuranceFromUser
+                ? insuranceApi.normalizeInsuranceFromUser(live)
+                : (Array.isArray(live && live.providerInsurance) ? live.providerInsurance : []);
+            const after = insuranceApi.normalizeInsuranceFromUser
+                ? insuranceApi.normalizeInsuranceFromUser(pending)
+                : (Array.isArray(pending && pending.providerInsurance) ? pending.providerInsurance : []);
+            const summary = insuranceApi.formatInsuranceChange(before, after);
+            if (!summary) {
+                return null;
+            }
+            const formatEntry = function (item) {
+                if (!item || !item.type) return '';
+                if (insuranceApi.formatCoverageValue && !String(item.type).toLowerCase().includes('no insurance')) {
+                    return item.type + ' (' + insuranceApi.formatCoverageValue(item.coverageUpTo) + ')';
+                }
+                return item.type;
+            };
+            return {
+                summary: summary,
+                detailLines: [
+                    'Before: ' + (before.length ? before.map(formatEntry).filter(Boolean).join('; ') : '(none)'),
+                    'After: ' + (after.length ? after.map(formatEntry).filter(Boolean).join('; ') : '(none)')
+                ]
+            };
+        }
+        return formatAdminProfileArrayChangeDetailed('Insurance', [], []);
+    }
+
+    function formatAdminPaymentMethodsSummary(live, pending) {
+        const labels = {
+            cash: 'Cash',
+            cheque: 'Cheque',
+            visa: 'Visa card',
+            mastercard: 'Mastercard',
+            paypal: 'Paypal',
+            americanExpress: 'American Express',
+            bankTransfer: 'Bank Transfer',
+            revolut: 'Revolut'
+        };
+        function enabledKeys(user) {
+            return Object.keys(labels).filter(function (key) {
+                if (user && user.paymentMethods && user.paymentMethods[key]) {
+                    return true;
+                }
+                return !!(user && user[key]);
+            }).map(function (key) { return labels[key]; });
+        }
+        const standard = formatAdminProfileArrayChangeDetailed(
+            'Payment methods',
+            enabledKeys(live),
+            enabledKeys(pending)
+        );
+        const custom = formatAdminProfileArrayChangeDetailed(
+            'Custom payment methods',
+            live && live.paymentMethodsCustom,
+            pending && pending.paymentMethodsCustom
+        );
+        if (standard && custom) {
+            return {
+                summary: standard.summary + '; ' + custom.summary.replace(/^Custom payment methods:\s*/, 'custom methods: '),
+                detailLines: standard.detailLines.concat(custom.detailLines)
+            };
+        }
+        return standard || custom;
+    }
+
     function providerProfileChangeGroups() {
         return [
             { key: 'business_name', label: 'Business name', fields: ['businessName', 'name'] },
@@ -2356,17 +2461,135 @@
     }
 
     function summarizeProviderProfileGroupChange(live, pending, group) {
-        const fields = group && Array.isArray(group.fields) ? group.fields : [];
-        const parts = [];
-        fields.forEach(function (field) {
-            const before = live && Object.prototype.hasOwnProperty.call(live, field) ? live[field] : null;
-            const after = pending && Object.prototype.hasOwnProperty.call(pending, field) ? pending[field] : null;
-            if (JSON.stringify(before) === JSON.stringify(after)) {
-                return;
+        const label = String(group && group.label || 'Change');
+        const key = String(group && group.key || '');
+        let result = null;
+
+        if (key === 'business_name') {
+            const line = formatAdminProfileTextChange(
+                label,
+                profileFieldText(live, ['businessName', 'name']),
+                profileFieldText(pending, ['businessName', 'name'])
+            );
+            result = line ? { summary: line, detailLines: [] } : null;
+        } else if (key === 'location') {
+            const parts = [];
+            const cityLine = formatAdminProfileTextChange(
+                'Town / city',
+                profileFieldText(live, ['serviceAreaCity', 'city', 'location', 'town']),
+                profileFieldText(pending, ['serviceAreaCity', 'city', 'location', 'town'])
+            );
+            const addressLine = formatAdminProfileTextChange(
+                'Service area address',
+                profileFieldText(live, ['serviceAreaAddress']),
+                profileFieldText(pending, ['serviceAreaAddress'])
+            );
+            const mapLine = formatAdminProfileBooleanChange(
+                'Show exact address on map',
+                live && live.showExactAddressOnMap,
+                pending && pending.showExactAddressOnMap
+            );
+            if (cityLine) parts.push(cityLine);
+            if (addressLine) parts.push(addressLine);
+            if (mapLine) parts.push(mapLine);
+            result = parts.length ? { summary: parts.join('; '), detailLines: [] } : null;
+        } else if (key === 'contact') {
+            const line = formatAdminProfileTextChange(
+                label,
+                profileFieldText(live, ['phone', 'contact']),
+                profileFieldText(pending, ['phone', 'contact'])
+            );
+            result = line ? { summary: line, detailLines: [] } : null;
+        } else if (key === 'company_type') {
+            const line = formatAdminProfileTextChange(
+                label,
+                profileFieldText(live, ['companyType']),
+                profileFieldText(pending, ['companyType'])
+            );
+            result = line ? { summary: line, detailLines: [] } : null;
+        } else if (key === 'description') {
+            const line = formatAdminProfileTextChange(
+                label,
+                profileFieldText(live, ['description', 'about', 'businessDescription', 'bio', 'summary']),
+                profileFieldText(pending, ['description', 'about', 'businessDescription', 'bio', 'summary'])
+            );
+            result = line ? { summary: line, detailLines: [] } : null;
+        } else if (key === 'services') {
+            result = formatAdminProfileArrayChangeDetailed(
+                label,
+                profileServicesList(live),
+                profileServicesList(pending)
+            );
+        } else if (key === 'vehicles') {
+            result = formatAdminProfileArrayChangeDetailed(
+                label,
+                formatAdminFleetSummary(live),
+                formatAdminFleetSummary(pending)
+            );
+        } else if (key === 'insurance') {
+            result = formatAdminInsuranceSummary(live, pending);
+        } else if (key === 'payment_methods') {
+            result = formatAdminPaymentMethodsSummary(live, pending);
+        } else if (key === 'website') {
+            const line = formatAdminProfileTextChange(
+                label,
+                profileFieldText(live, ['website']),
+                profileFieldText(pending, ['website'])
+            );
+            result = line ? { summary: line, detailLines: [] } : null;
+        } else if (key === 'social') {
+            const socialFields = ['instagram', 'facebook', 'x', 'twitter', 'tiktok', 'linkedin'];
+            const parts = [];
+            socialFields.forEach(function (field) {
+                const line = formatAdminProfileTextChange(
+                    field,
+                    profileFieldText(live, [field]),
+                    profileFieldText(pending, [field])
+                );
+                if (line) parts.push(line);
+            });
+            result = parts.length ? { summary: parts.join('; '), detailLines: [] } : null;
+        } else if (key === 'invites') {
+            const parts = [];
+            const inviteLine = formatAdminProfileBooleanChange('Stop job invitations', live && live.blockInvites, pending && pending.blockInvites);
+            const muteLine = formatAdminProfileBooleanChange('Mute invitation emails', live && live.muteInviteEmails, pending && pending.muteInviteEmails);
+            if (inviteLine) parts.push(inviteLine);
+            if (muteLine) parts.push(muteLine);
+            result = parts.length ? { summary: parts.join('; '), detailLines: [] } : null;
+        } else if (key === 'auto_bid') {
+            const line = formatAdminProfileBooleanChange(
+                label,
+                live && live.autoBidSubscriptionEnabled,
+                pending && pending.autoBidSubscriptionEnabled
+            );
+            result = line ? { summary: line, detailLines: [] } : null;
+        } else if (key === 'photos') {
+            const livePhotos = normalizeProfilePhotoList(live.photos);
+            const pendingPhotos = normalizeProfilePhotoList(pending.photos);
+            if (JSON.stringify(livePhotos) !== JSON.stringify(pendingPhotos)) {
+                const addedCount = pendingPhotos.filter(function (src) { return livePhotos.indexOf(src) === -1; }).length;
+                const removedCount = livePhotos.filter(function (src) { return pendingPhotos.indexOf(src) === -1; }).length;
+                const parts = [];
+                if (addedCount) parts.push('added ' + addedCount + ' photo(s)');
+                if (removedCount) parts.push('removed ' + removedCount + ' photo(s)');
+                if (!parts.length) parts.push('photos replaced');
+                result = {
+                    summary: label + ': ' + parts.join('; '),
+                    detailLines: [
+                        'Before: ' + livePhotos.length + ' photo(s)',
+                        'After: ' + pendingPhotos.length + ' photo(s)'
+                    ]
+                };
             }
-            parts.push(String(group.label || field) + ': updated');
-        });
-        return parts.length ? parts.join('; ') : String(group.label || 'Change') + ' updated';
+        }
+
+        if (!result || !result.summary) {
+            return { summary: label + ' updated', detailLines: [] };
+        }
+        return {
+            summary: result.summary,
+            detailLines: Array.isArray(result.detailLines) ? result.detailLines : []
+        };
     }
 
     function getProviderProfilePendingChangeItems(provider) {
@@ -2378,10 +2601,12 @@
         return providerProfileChangeGroups().filter(function (group) {
             return profileGroupHasChanges(live, pending, group.fields);
         }).map(function (group) {
+            const summaryInfo = summarizeProviderProfileGroupChange(live, pending, group);
             const item = {
                 key: String(group.key || ''),
                 label: String(group.label || 'Change'),
-                summary: summarizeProviderProfileGroupChange(live, pending, group),
+                summary: summaryInfo.summary,
+                detailLines: summaryInfo.detailLines || [],
                 fields: group.fields.slice()
             };
             if (group.key === 'photos') {
@@ -2439,18 +2664,6 @@
         if (servicesChange) {
             lines.push(servicesChange);
         }
-
-        const formatAdminFleetSummary = function (user) {
-            if (user && Array.isArray(user.providerVehicles) && user.providerVehicles.length) {
-                return user.providerVehicles.map(function (entry) {
-                    const qty = entry && entry.quantity != null ? entry.quantity : 1;
-                    const type = entry && entry.type ? entry.type : 'Vehicle';
-                    const capacity = entry && entry.capacity ? entry.capacity : '';
-                    return qty + '× ' + type + (capacity ? ' (' + capacity + ')' : '');
-                });
-            }
-            return Array.isArray(user && user.transportModes) ? user.transportModes.slice() : [];
-        };
 
         const transportChange = formatAdminProfileArrayChange(
             'Vehicles',
@@ -2646,6 +2859,11 @@
                                 '<span class="admin-profile-change-item-title">' + escapeHtml(item.label) + '</span>',
                                 '</div>',
                                 '<div class="admin-profile-change-item-summary">' + escapeHtml(item.summary) + '</div>',
+                                (item.detailLines && item.detailLines.length
+                                    ? '<ul class="admin-profile-change-item-details">' + item.detailLines.map(function (line) {
+                                        return '<li>' + escapeHtml(line) + '</li>';
+                                    }).join('') + '</ul>'
+                                    : ''),
                                 photosMarkup,
                                 '</label>'
                             ].join('');

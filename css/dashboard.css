@@ -411,6 +411,28 @@
     min-width: 180px;
 }
 
+.admin-user-password-row--set {
+    align-items: stretch;
+}
+
+.admin-user-password-field {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+    flex: 1 1 240px;
+    min-width: 200px;
+}
+
+.admin-user-password-field .admin-user-password-input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.admin-user-password-visibility-btn {
+    flex-shrink: 0;
+    align-self: stretch;
+}
+
 .admin-user-password-status {
     margin: 8px 0 0;
     font-size: 0.84rem;
@@ -451,9 +473,18 @@
 .admin-profile-change-item-summary {
     margin-top: 6px;
     margin-left: 24px;
-    font-size: 0.88rem;
-    color: #475569;
+    font-size: 0.9rem;
+    color: #0f172a;
+    font-weight: 600;
     line-height: 1.4;
+}
+
+.admin-profile-change-item-details {
+    margin: 6px 0 0 24px;
+    padding-left: 18px;
+    font-size: 0.84rem;
+    color: #475569;
+    line-height: 1.45;
 }
 
 .admin-profile-change-card .admin-profile-change-item figure {
