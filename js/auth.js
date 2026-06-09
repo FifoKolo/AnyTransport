@@ -447,6 +447,14 @@ window.anytransportApi = window.anytransportApi || (function () {
             }
             return user;
         },
+        moderateUser: function (userId, action, notes) {
+            const response = request('admin.user.moderate', 'POST', {
+                userId: userId ? String(userId) : '',
+                action: String(action || '').trim(),
+                notes: notes || ''
+            });
+            return response.user || null;
+        },
         replaceUsers: function (users) {
             const response = request('users.replaceAll', 'POST', { users: Array.isArray(users) ? users : [] });
             return Array.isArray(response.users) ? response.users : [];
@@ -865,6 +873,22 @@ class AuthManager {
         }
         if (!normalized.profileChangeReviewNotes) {
             normalized.profileChangeReviewNotes = '';
+        }
+
+        if (!normalized.accountStatus) {
+            normalized.accountStatus = 'active';
+        }
+        if (!normalized.bannedAt) {
+            normalized.bannedAt = '';
+        }
+        if (!normalized.bannedBy) {
+            normalized.bannedBy = '';
+        }
+        if (!normalized.banReason) {
+            normalized.banReason = '';
+        }
+        if (normalized.adminVerificationBypass === undefined) {
+            normalized.adminVerificationBypass = false;
         }
 
         const roleKey = String(normalized.role || 'customer').trim().toLowerCase();
@@ -1681,6 +1705,12 @@ class AuthManager {
 
     isAdmin() {
         return this.getNormalizedRoles().includes('admin');
+    }
+
+    isUserBanned(user) {
+        const record = user || this.currentUser;
+        if (!record) return false;
+        return String(record.accountStatus || '').trim().toLowerCase() === 'banned';
     }
 
     startProviderStripeOnboarding(returnPath) {

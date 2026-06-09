@@ -212,7 +212,10 @@
             getAllUsers: getAllUsersForAdmin,
             getAllQuotes: getAllQuotes,
             getAllMessages: getAllMessagesForAdmin,
-            renderOperations: renderAdminReviewQueue,
+            renderOperations: function (forceRefresh) {
+                renderAdminReviewQueue(!!forceRefresh);
+            },
+            invalidateAdminCache: invalidateAdminDataCache,
             ensureSiteContentAdmin: ensureSiteContentAdminInitialized
         });
         state.adminPanelInitialized = true;
@@ -1436,6 +1439,33 @@
                 return;
             }
 
+            const verifyTestBtn = event.target.closest('.admin-verify-test-btn');
+            if (verifyTestBtn) {
+                if (!(auth.isAdmin && auth.isAdmin())) {
+                    alert('Admin access required.');
+                    return;
+                }
+                const providerId = String(verifyTestBtn.getAttribute('data-provider-id') || '').trim();
+                if (!providerId) return;
+                if (!confirm('Verify this provider for testing? This skips Stripe verification and grants full provider access.')) {
+                    return;
+                }
+                try {
+                    if (window.anytransportApi && typeof window.anytransportApi.moderateUser === 'function') {
+                        window.anytransportApi.moderateUser(providerId, 'verify_test', 'Verified by admin for testing (Stripe bypass).');
+                        alert('Provider verified for testing.');
+                    } else {
+                        alert('Verification override is not available right now.');
+                        return;
+                    }
+                    invalidateAdminDataCache();
+                    renderAdminReviewQueue(true);
+                } catch (error) {
+                    alert(error && error.message ? error.message : 'Unable to verify this provider.');
+                }
+                return;
+            }
+
             const reviewBtn = event.target.closest('.review-provider-btn');
             if (reviewBtn) {
                 if (!(auth.isAdmin && auth.isAdmin())) {
@@ -2470,6 +2500,7 @@
                     '<input type="file" class="identity-reupload-input" data-provider-id="' + escapeHtml(provider.id) + '" accept="image/*" multiple style="display:none;">',
                     '<div class="actions review-actions" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-start;">',
                     '<button type="button" class="btn btn-outline reupload-identity-btn" data-provider-id="' + escapeHtml(provider.id) + '">Upload photos</button>',
+                    '<button type="button" class="btn btn-secondary admin-verify-test-btn" data-provider-id="' + escapeHtml(provider.id) + '">Verify for testing</button>',
                     '<button type="button" class="btn btn-primary review-provider-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="approved">Approve</button>',
                     '<button type="button" class="btn btn-danger review-provider-btn" data-provider-id="' + escapeHtml(provider.id) + '" data-status="rejected">Reject &amp; redo verification</button>',
                     '</div>',

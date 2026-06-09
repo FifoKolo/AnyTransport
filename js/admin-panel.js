@@ -62,6 +62,129 @@
         return String(user && user.role || '').trim().toLowerCase() === 'provider';
     }
 
+    function isUserBanned(user) {
+        return String(user && user.accountStatus || '').trim().toLowerCase() === 'banned';
+    }
+
+    function isProviderVerified(user) {
+        if (!isProviderUser(user)) return false;
+        var status = String(user.identityReviewStatus || '').trim().toLowerCase();
+        return status === 'approved' && !!user.verified;
+    }
+
+    function userStatusBadges(user) {
+        var badges = [];
+        if (isUserBanned(user)) {
+            badges.push('<span class="admin-user-badge admin-user-badge--banned">Banned</span>');
+        }
+        if (isProviderUser(user)) {
+            if (isProviderVerified(user)) {
+                badges.push('<span class="admin-user-badge admin-user-badge--verified">Verified' + (user.adminVerificationBypass ? ' (test)' : '') + '</span>');
+            } else {
+                badges.push('<span class="admin-user-badge admin-user-badge--pending">Not verified</span>');
+            }
+        }
+        return badges.length ? '<div class="admin-user-badges">' + badges.join('') + '</div>' : '';
+    }
+
+    function buildUserModerationActions(user) {
+        var id = String(user && user.id || '').trim();
+        if (!id) return '';
+        var role = String(user.role || '').trim().toLowerCase();
+        if (role === 'admin') {
+            return '<p class="admin-user-moderation-note">Admin accounts cannot be moderated here.</p>';
+        }
+
+        var parts = ['<div class="admin-user-moderation">', '<h4>Account controls</h4>'];
+        if (isProviderUser(user)) {
+            if (!isProviderVerified(user)) {
+                parts.push('<button type="button" class="btn btn-primary btn-sm" data-admin-moderate="' + escapeAttr(id) + '" data-admin-action="verify_test">Verify for testing (skip Stripe)</button>');
+            } else {
+                parts.push('<button type="button" class="btn btn-outline btn-sm" data-admin-moderate="' + escapeAttr(id) + '" data-admin-action="unverify">Remove verification</button>');
+            }
+        }
+        if (isUserBanned(user)) {
+            parts.push('<button type="button" class="btn btn-outline btn-sm" data-admin-moderate="' + escapeAttr(id) + '" data-admin-action="unban">Unban user</button>');
+        } else {
+            parts.push('<button type="button" class="btn btn-danger btn-sm" data-admin-moderate="' + escapeAttr(id) + '" data-admin-action="ban">Ban user</button>');
+        }
+        parts.push('</div>');
+        return parts.join('');
+    }
+
+    function runUserModeration(userId, action) {
+        if (!window.anytransportApi || typeof window.anytransportApi.moderateUser !== 'function') {
+            alert('Account moderation is not available right now.');
+            return Promise.reject(new Error('moderation unavailable'));
+        }
+
+        var notes = '';
+        if (action === 'ban') {
+            notes = String(window.prompt('Reason for banning this user (required):', '') || '').trim();
+            if (!notes) {
+                return Promise.resolve(false);
+            }
+            if (!window.confirm('Ban this user? They will be signed out and unable to log in until unbanned.')) {
+                return Promise.resolve(false);
+            }
+        } else if (action === 'verify_test') {
+            if (!window.confirm('Verify this provider for testing? This skips Stripe verification and grants full provider access.')) {
+                return Promise.resolve(false);
+            }
+            notes = 'Verified by admin for testing (Stripe bypass).';
+        } else if (action === 'unverify') {
+            if (!window.confirm('Remove verification from this provider? They will lose marketplace access until verified again.')) {
+                return Promise.resolve(false);
+            }
+            notes = 'Verification removed by admin.';
+        } else if (action === 'unban') {
+            if (!window.confirm('Unban this user and restore account access?')) {
+                return Promise.resolve(false);
+            }
+        }
+
+        return Promise.resolve(window.anytransportApi.moderateUser(userId, action, notes)).then(function (updated) {
+            if (!updated || !updated.id) {
+                throw new Error('Unable to update this account.');
+            }
+            if (depsRef && typeof depsRef.invalidateAdminCache === 'function') {
+                depsRef.invalidateAdminCache();
+            }
+            if (depsRef && typeof depsRef.renderOperations === 'function') {
+                depsRef.renderOperations(true);
+            }
+            renderUsersPanel();
+            var actionLabels = {
+                verify_test: 'Provider verified for testing.',
+                unverify: 'Provider verification removed.',
+                ban: 'User banned.',
+                unban: 'User unbanned.'
+            };
+            alert(actionLabels[action] || 'Account updated.');
+            return true;
+        }).catch(function (err) {
+            alert(err && err.message ? err.message : 'Unable to update this account.');
+            return false;
+        });
+    }
+
+    var userModerationBound = false;
+    function ensureUserModerationActions() {
+        if (userModerationBound) return;
+        userModerationBound = true;
+        document.addEventListener('click', function (event) {
+            var btn = event.target.closest('[data-admin-moderate]');
+            if (!btn) return;
+            var mount = document.getElementById('admin-users-content');
+            if (!mount || !mount.contains(btn)) return;
+            event.preventDefault();
+            var userId = btn.getAttribute('data-admin-moderate') || '';
+            var action = btn.getAttribute('data-admin-action') || '';
+            if (!userId || !action) return;
+            runUserModeration(userId, action);
+        });
+    }
+
     function sectionFromHash() {
         var hash = String(global.location.hash || '').replace(/^#/, '').trim().toLowerCase();
         if (hash === 'admin-section-editor' || hash === 'admin-editor') return 'editor';
@@ -502,11 +625,13 @@
             }).join('') : '<li class="admin-user-detail-empty">No messages for this account.</li>';
 
             return [
-                '<article class="admin-user-card">',
+                '<article class="admin-user-card' + (isUserBanned(user) ? ' admin-user-card--banned' : '') + '">',
                 '  <div class="admin-user-card-head">',
                 '    <div>',
                 '      <div class="admin-user-name">' + escapeHtml(userDisplayName(user)) + '</div>',
                 '      <div class="admin-user-meta">' + escapeHtml(firstText(user.email, 'No email')) + ' · ' + escapeHtml(userRoleLabel(user)) + '</div>',
+                userStatusBadges(user),
+                (isUserBanned(user) && user.banReason ? '<div class="admin-user-ban-reason">Ban reason: ' + escapeHtml(user.banReason) + '</div>' : ''),
                 '    </div>',
                 '    <div class="admin-user-stats">',
                 '      <span>' + entry.quotes.length + ' listing(s)</span>',
@@ -516,6 +641,7 @@
                 '  <div class="admin-user-card-actions">',
                 '    <button type="button" class="btn btn-outline btn-sm" data-admin-expand-user="' + escapeAttr(id) + '">' + (expanded ? 'Hide details' : 'Show listings &amp; messages') + '</button>',
                 profileBtn,
+                buildUserModerationActions(user),
                 '  </div>',
                 expanded ? [
                     '  <div class="admin-user-detail-grid">',
@@ -594,6 +720,7 @@
 
     function init(deps) {
         depsRef = deps || null;
+        ensureUserModerationActions();
         var section = sectionFromHash();
         renderShell(section);
         switchSection(section, false);

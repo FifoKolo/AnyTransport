@@ -399,6 +399,26 @@ function normalize_user($user) {
         $normalized['profileChangeReviewNotes'] = '';
     }
 
+    if (!isset($normalized['accountStatus']) || trim((string) $normalized['accountStatus']) === '') {
+        $normalized['accountStatus'] = 'active';
+    }
+
+    if (!isset($normalized['bannedAt'])) {
+        $normalized['bannedAt'] = '';
+    }
+
+    if (!isset($normalized['bannedBy'])) {
+        $normalized['bannedBy'] = '';
+    }
+
+    if (!isset($normalized['banReason'])) {
+        $normalized['banReason'] = '';
+    }
+
+    if (!isset($normalized['adminVerificationBypass'])) {
+        $normalized['adminVerificationBypass'] = false;
+    }
+
     if (!isset($normalized['paymentMethods']) || !is_array($normalized['paymentMethods'])) {
         $normalized['paymentMethods'] = array();
     }
@@ -4364,10 +4384,6 @@ function find_user_index($users, $predicate) {
     return -1;
 }
 
-function get_current_user_record($store) {
-    return get_session_user($store);
-}
-
 function is_admin_user($user) {
     if (!is_array($user)) {
         return false;
@@ -4381,6 +4397,21 @@ function is_admin_user($user) {
     }
 
     return false;
+}
+
+function is_user_banned($user) {
+    if (!is_array($user)) {
+        return false;
+    }
+    return strtolower(trim((string) ($user['accountStatus'] ?? 'active'))) === 'banned';
+}
+
+function get_current_user_record($store) {
+    $user = get_session_user($store);
+    if (is_array($user) && is_user_banned($user)) {
+        return null;
+    }
+    return $user;
 }
 
 $selected = choose_richest_store($preferredStoreFile, $storeFile);
@@ -4488,6 +4519,15 @@ switch ($action) {
             write_store($storeFile, $store);
         }
         $user = get_session_user($store);
+        if (is_array($user) && is_user_banned($user)) {
+            $bannedUserId = trim((string) ($user['id'] ?? ''));
+            if ($bannedUserId !== '') {
+                revoke_sessions_for_user($store, $bannedUserId);
+                write_store($storeFile, $store);
+            }
+            clear_session_cookie();
+            send_json(array('ok' => false, 'error' => 'This account has been suspended. Contact support if you believe this is a mistake.'), 403);
+        }
         if (is_array($user)) {
             $userId = trim((string) ($user['id'] ?? ''));
             $role = strtolower(trim((string) ($user['role'] ?? '')));
@@ -4683,6 +4723,9 @@ switch ($action) {
 
             if ($userIndex >= 0) {
                 $user = normalize_user($store['users'][$userIndex]);
+                if (is_user_banned($user)) {
+                    send_json(array('ok' => false, 'error' => 'This account has been suspended. Contact support if you believe this is a mistake.'), 403);
+                }
                 $store['users'][$userIndex] = $user;
             } else {
                 send_json(array('ok' => false, 'error' => 'Invalid email or password.'), 401);
@@ -5252,6 +5295,100 @@ switch ($action) {
                 // swallow email errors
             }
         }
+
+        exit;
+
+    case 'admin.user.moderate':
+        if ($method !== 'POST') {
+            send_json(array('ok' => false, 'error' => 'Method not allowed.'), 405);
+        }
+        $currentUser = get_current_user_record($store);
+        if (!is_admin_user($currentUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin access required.'), 403);
+        }
+
+        $targetUserId = trim((string) ($input['userId'] ?? ''));
+        $action = strtolower(trim((string) ($input['action'] ?? '')));
+        $notes = trim((string) ($input['notes'] ?? ''));
+        $currentUserId = trim((string) ($currentUser['id'] ?? ''));
+        if ($targetUserId === '' || $action === '') {
+            send_json(array('ok' => false, 'error' => 'User ID and action are required.'), 400);
+        }
+        if (!in_array($action, array('verify_test', 'unverify', 'ban', 'unban'), true)) {
+            send_json(array('ok' => false, 'error' => 'Unsupported moderation action.'), 400);
+        }
+
+        $index = find_user_index_by_id($store['users'], $targetUserId);
+        if ($index < 0) {
+            send_json(array('ok' => false, 'error' => 'User not found.'), 404);
+        }
+
+        $targetUser = normalize_user($store['users'][$index]);
+        if ($action === 'ban' && is_admin_user($targetUser)) {
+            send_json(array('ok' => false, 'error' => 'Admin accounts cannot be banned from this panel.'), 400);
+        }
+        if ($action === 'ban' && $targetUserId === $currentUserId) {
+            send_json(array('ok' => false, 'error' => 'You cannot ban your own account.'), 400);
+        }
+
+        if ($action === 'verify_test' || $action === 'unverify') {
+            if (!is_provider_account($targetUser)) {
+                send_json(array('ok' => false, 'error' => 'Only provider accounts can be verified or unverified.'), 400);
+            }
+        }
+
+        if ($action === 'verify_test') {
+            $store['users'][$index] = array_merge($store['users'][$index], array(
+                'identityReviewStatus' => 'approved',
+                'verified' => true,
+                'verifiedAt' => gmdate('c'),
+                'identityReviewedAt' => gmdate('c'),
+                'identityReviewedBy' => $currentUserId,
+                'identityReviewNotes' => $notes !== '' ? $notes : 'Verified by admin for testing (Stripe bypass).',
+                'stripeOnboardingStatus' => 'complete',
+                'stripeOnboardingUpdatedAt' => gmdate('c'),
+                'stripeOnboardingCompletedAt' => gmdate('c'),
+                'stripeIdentityStatus' => 'verified',
+                'adminVerificationBypass' => true
+            ));
+        } elseif ($action === 'unverify') {
+            $store['users'][$index] = array_merge($store['users'][$index], array(
+                'identityReviewStatus' => 'pending_review',
+                'verified' => false,
+                'verifiedAt' => '',
+                'identityReviewedAt' => gmdate('c'),
+                'identityReviewedBy' => $currentUserId,
+                'identityReviewNotes' => $notes !== '' ? $notes : 'Verification removed by admin.',
+                'adminVerificationBypass' => false
+            ));
+        } elseif ($action === 'ban') {
+            if ($notes === '') {
+                send_json(array('ok' => false, 'error' => 'A reason is required when banning a user.'), 400);
+            }
+            $store['users'][$index] = array_merge($store['users'][$index], array(
+                'accountStatus' => 'banned',
+                'bannedAt' => gmdate('c'),
+                'bannedBy' => $currentUserId,
+                'banReason' => $notes
+            ));
+            revoke_sessions_for_user($store, $targetUserId);
+        } elseif ($action === 'unban') {
+            $store['users'][$index] = array_merge($store['users'][$index], array(
+                'accountStatus' => 'active',
+                'bannedAt' => '',
+                'bannedBy' => '',
+                'banReason' => ''
+            ));
+        }
+
+        $updatedUser = normalize_user($store['users'][$index]);
+        $store['users'][$index] = $updatedUser;
+        write_store($storeFile, $store);
+        send_json(array(
+            'ok' => true,
+            'user' => sanitize_user_for_client($updatedUser),
+            'action' => $action
+        ));
 
         exit;
 
