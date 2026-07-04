@@ -30,7 +30,7 @@
     const STYLE_ID = 'anytransport-global-loader-style';
     const LINK_ID = 'anytransport-global-loader-link';
     const ROOT_ID = 'anytransport-global-loader';
-    const LOADER_CSS_HREF = 'css/page-loader.css?v=20260704-2';
+    const LOADER_CSS_HREF = 'css/page-loader.css?v=20260704-3';
     const MIN_VISIBLE_MS = 380;
 
     const LOADER_RING_HTML = [
@@ -71,16 +71,24 @@
         return ring;
     }
 
-    function startLoaderSpin() {
-        if (window.anytransportLoaderSpin && typeof window.anytransportLoaderSpin.start === 'function') {
-            window.anytransportLoaderSpin.start();
+    function ensureSpinStyles() {
+        const spinStyleId = 'anytransport-loader-spin-critical';
+        if (document.getElementById(spinStyleId)) {
+            return;
         }
-    }
-
-    function stopLoaderSpin() {
-        if (window.anytransportLoaderSpin && typeof window.anytransportLoaderSpin.stop === 'function') {
-            window.anytransportLoaderSpin.stop();
-        }
+        const style = document.createElement('style');
+        style.id = spinStyleId;
+        style.textContent = [
+            '#anytransport-global-loader.is-visible .anytransport-loader-ring{',
+            'animation-name:anytransportLoaderSpin!important;',
+            'animation-duration:.8s!important;',
+            'animation-timing-function:linear!important;',
+            'animation-iteration-count:infinite!important;',
+            'animation-play-state:running!important;',
+            '}',
+            '@keyframes anytransportLoaderSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}'
+        ].join('');
+        document.head.appendChild(style);
     }
 
     function ensureRoot() {
@@ -104,8 +112,9 @@
             return;
         }
         ensureStyle();
+        ensureSpinStyles();
         const root = ensureRoot();
-        const ring = ensureLoaderRing(root);
+        ensureLoaderRing(root);
         const show = shouldShowLoader();
 
         if (show) {
@@ -118,11 +127,8 @@
             root.setAttribute('aria-busy', 'true');
             root.setAttribute('aria-hidden', 'false');
             document.documentElement.classList.add('at-page-loading');
-            startLoaderSpin();
             return;
         }
-
-        stopLoaderSpin();
 
         const elapsed = visibleSince ? (Date.now() - visibleSince) : MIN_VISIBLE_MS;
         const wait = Math.max(MIN_VISIBLE_MS - elapsed, 0) + 40;

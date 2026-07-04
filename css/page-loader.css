@@ -29,11 +29,28 @@ html.at-page-loading body {
     display: block;
     flex-shrink: 0;
     transform-origin: 50% 50%;
-    will-change: transform;
+}
+
+#anytransport-global-loader.is-visible .anytransport-loader-ring {
+    animation-name: anytransportLoaderSpin !important;
+    animation-duration: 0.8s !important;
+    animation-timing-function: linear !important;
+    animation-iteration-count: infinite !important;
+    animation-play-state: running !important;
 }
 
 #anytransport-global-loader .anytransport-loader-ring svg {
     display: block;
     width: 100%;
     height: 100%;
+}
+
+@keyframes anytransportLoaderSpin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
