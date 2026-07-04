@@ -297,9 +297,9 @@ textarea,
         scroll-behavior: auto;
     }
 
-    *,
-    *::before,
-    *::after {
+    *:not(#anytransport-global-loader):not(#anytransport-global-loader *),
+    *:not(#anytransport-global-loader):not(#anytransport-global-loader *)::before,
+    *:not(#anytransport-global-loader):not(#anytransport-global-loader *)::after {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;

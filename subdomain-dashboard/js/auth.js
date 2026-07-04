@@ -28,9 +28,19 @@
 // Global page loader — stays up until DOM boot scripts and resources finish (no flicker).
 (function initAnyTransportGlobalPageLoader() {
     const STYLE_ID = 'anytransport-global-loader-style';
+    const LINK_ID = 'anytransport-global-loader-link';
     const ROOT_ID = 'anytransport-global-loader';
+    const LOADER_CSS_HREF = 'css/page-loader.css?v=20260704-2';
     const MIN_VISIBLE_MS = 380;
-    const FADE_MS = 220;
+
+    const LOADER_RING_HTML = [
+        '<div class="anytransport-loader-ring" aria-hidden="true">',
+        '<svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg" focusable="false">',
+        '<circle cx="25" cy="25" r="20" fill="none" stroke="rgba(37,99,235,0.22)" stroke-width="5"></circle>',
+        '<circle cx="25" cy="25" r="20" fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round" stroke-dasharray="31.4 94.2"></circle>',
+        '</svg>',
+        '</div>'
+    ].join('');
 
     let apiHoldCount = 0;
     let bootPending = true;
@@ -39,27 +49,49 @@
     let visibleSince = 0;
 
     function ensureStyle() {
-        if (document.getElementById(STYLE_ID)) return;
-        const style = document.createElement('style');
-        style.id = STYLE_ID;
-        style.textContent = [
-            'html.at-page-loading body{overflow:hidden;}',
-            '#' + ROOT_ID + '{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.88);backdrop-filter:blur(3px);z-index:99999;opacity:0;visibility:hidden;pointer-events:none;transition:opacity ' + (FADE_MS / 1000) + 's ease,visibility ' + (FADE_MS / 1000) + 's ease;}',
-            '#' + ROOT_ID + '.is-visible{opacity:1;visibility:visible;pointer-events:auto;}',
-            '#' + ROOT_ID + ' .anytransport-loader-ring{width:58px;height:58px;border-radius:999px;border:5px solid rgba(37,99,235,.22);border-top-color:#2563eb;animation:anytransportLoaderSpin .8s linear infinite;}',
-            '@keyframes anytransportLoaderSpin{to{transform:rotate(360deg);}}'
-        ].join('');
-        document.head.appendChild(style);
+        const legacyStyle = document.getElementById(STYLE_ID);
+        if (legacyStyle) {
+            legacyStyle.remove();
+        }
+        if (!document.getElementById(LINK_ID)) {
+            const link = document.createElement('link');
+            link.id = LINK_ID;
+            link.rel = 'stylesheet';
+            link.href = LOADER_CSS_HREF;
+            document.head.appendChild(link);
+        }
+    }
+
+    function ensureLoaderRing(root) {
+        let ring = root.querySelector('.anytransport-loader-ring');
+        if (!ring || !ring.querySelector('svg')) {
+            root.innerHTML = LOADER_RING_HTML;
+            ring = root.querySelector('.anytransport-loader-ring');
+        }
+        return ring;
+    }
+
+    function startLoaderSpin() {
+        if (window.anytransportLoaderSpin && typeof window.anytransportLoaderSpin.start === 'function') {
+            window.anytransportLoaderSpin.start();
+        }
+    }
+
+    function stopLoaderSpin() {
+        if (window.anytransportLoaderSpin && typeof window.anytransportLoaderSpin.stop === 'function') {
+            window.anytransportLoaderSpin.stop();
+        }
     }
 
     function ensureRoot() {
         let root = document.getElementById(ROOT_ID);
-        if (root) return root;
-        root = document.createElement('div');
-        root.id = ROOT_ID;
-        root.setAttribute('aria-hidden', 'true');
-        root.innerHTML = '<div class="anytransport-loader-ring"></div>';
-        (document.body || document.documentElement).appendChild(root);
+        if (!root) {
+            root = document.createElement('div');
+            root.id = ROOT_ID;
+            root.setAttribute('aria-hidden', 'true');
+            (document.body || document.documentElement).appendChild(root);
+        }
+        ensureLoaderRing(root);
         return root;
     }
 
@@ -73,6 +105,7 @@
         }
         ensureStyle();
         const root = ensureRoot();
+        const ring = ensureLoaderRing(root);
         const show = shouldShowLoader();
 
         if (show) {
@@ -85,8 +118,11 @@
             root.setAttribute('aria-busy', 'true');
             root.setAttribute('aria-hidden', 'false');
             document.documentElement.classList.add('at-page-loading');
+            startLoaderSpin();
             return;
         }
+
+        stopLoaderSpin();
 
         const elapsed = visibleSince ? (Date.now() - visibleSince) : MIN_VISIBLE_MS;
         const wait = Math.max(MIN_VISIBLE_MS - elapsed, 0) + 40;
