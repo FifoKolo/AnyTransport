@@ -1,0 +1,39 @@
+html.at-page-loading body {
+    overflow: hidden;
+}
+
+#anytransport-global-loader {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(3px);
+    z-index: 99999;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.22s ease, visibility 0.22s ease;
+}
+
+#anytransport-global-loader.is-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+#anytransport-global-loader .anytransport-loader-ring {
+    width: 58px;
+    height: 58px;
+    display: block;
+    flex-shrink: 0;
+    transform-origin: 50% 50%;
+    will-change: transform;
+}
+
+#anytransport-global-loader .anytransport-loader-ring svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
