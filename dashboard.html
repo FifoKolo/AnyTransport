@@ -15,14 +15,16 @@
     <link href="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css" rel="stylesheet">
     <script src="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js"></script>
     <style id="anytransport-global-loader-style">
-        #anytransport-global-loader{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.84);backdrop-filter:blur(2px);z-index:99999;opacity:1;visibility:visible}
-        #anytransport-global-loader:not(.is-visible){opacity:0;visibility:hidden;transition:opacity .18s ease,visibility .18s ease}
+        html.at-page-loading body{overflow:hidden;}
+        #anytransport-global-loader{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.88);backdrop-filter:blur(3px);z-index:99999;opacity:1;visibility:visible;pointer-events:auto}
+        #anytransport-global-loader:not(.is-visible){opacity:0;visibility:hidden;pointer-events:none;transition:opacity .22s ease,visibility .22s ease}
         #anytransport-global-loader .anytransport-loader-ring{width:58px;height:58px;border-radius:999px;border:5px solid rgba(37,99,235,.22);border-top-color:#2563eb;animation:anytransportLoaderSpin .8s linear infinite}
         @keyframes anytransportLoaderSpin{to{transform:rotate(360deg)}}
     </style>
+    <script>document.documentElement.classList.add('at-page-loading');</script>
 </head>
 <body>
-    <div id="anytransport-global-loader" class="is-visible" aria-hidden="true" aria-busy="true">
+    <div id="anytransport-global-loader" class="is-visible" aria-hidden="false" aria-busy="true">
         <div class="anytransport-loader-ring"></div>
     </div>
     <!-- Navigation Bar -->

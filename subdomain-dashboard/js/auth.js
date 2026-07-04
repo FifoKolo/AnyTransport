@@ -25,18 +25,27 @@
     }
 })();
 
-// Global page loader for slow refresh/navigation.
+// Global page loader — stays up until DOM boot scripts and resources finish (no flicker).
 (function initAnyTransportGlobalPageLoader() {
     const STYLE_ID = 'anytransport-global-loader-style';
     const ROOT_ID = 'anytransport-global-loader';
+    const MIN_VISIBLE_MS = 380;
+    const FADE_MS = 220;
+
+    let apiHoldCount = 0;
+    let bootPending = true;
+    let resourcesReady = false;
+    let hideTimer = null;
+    let visibleSince = 0;
 
     function ensureStyle() {
         if (document.getElementById(STYLE_ID)) return;
         const style = document.createElement('style');
         style.id = STYLE_ID;
         style.textContent = [
-            '#' + ROOT_ID + '{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.84);backdrop-filter:blur(2px);z-index:99999;opacity:0;visibility:hidden;transition:opacity .18s ease,visibility .18s ease;}',
-            '#' + ROOT_ID + '.is-visible{opacity:1;visibility:visible;}',
+            'html.at-page-loading body{overflow:hidden;}',
+            '#' + ROOT_ID + '{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.88);backdrop-filter:blur(3px);z-index:99999;opacity:0;visibility:hidden;pointer-events:none;transition:opacity ' + (FADE_MS / 1000) + 's ease,visibility ' + (FADE_MS / 1000) + 's ease;}',
+            '#' + ROOT_ID + '.is-visible{opacity:1;visibility:visible;pointer-events:auto;}',
             '#' + ROOT_ID + ' .anytransport-loader-ring{width:58px;height:58px;border-radius:999px;border:5px solid rgba(37,99,235,.22);border-top-color:#2563eb;animation:anytransportLoaderSpin .8s linear infinite;}',
             '@keyframes anytransportLoaderSpin{to{transform:rotate(360deg);}}'
         ].join('');
@@ -50,54 +59,115 @@
         root.id = ROOT_ID;
         root.setAttribute('aria-hidden', 'true');
         root.innerHTML = '<div class="anytransport-loader-ring"></div>';
-        document.body.appendChild(root);
+        (document.body || document.documentElement).appendChild(root);
         return root;
     }
 
-    let loaderDepth = 0;
+    function shouldShowLoader() {
+        return bootPending || !resourcesReady || apiHoldCount > 0;
+    }
 
-    function syncLoaderVisible() {
-        if (!document.body) {
+    function applyLoaderState() {
+        if (!document.body && !document.documentElement) {
             return;
         }
         ensureStyle();
         const root = ensureRoot();
-        const visible = loaderDepth > 0;
-        root.classList.toggle('is-visible', visible);
-        root.setAttribute('aria-busy', visible ? 'true' : 'false');
-    }
+        const show = shouldShowLoader();
 
-    function bootPageLoader() {
-        loaderDepth += 1;
-        syncLoaderVisible();
+        if (show) {
+            clearTimeout(hideTimer);
+            hideTimer = null;
+            if (!root.classList.contains('is-visible')) {
+                visibleSince = Date.now();
+            }
+            root.classList.add('is-visible');
+            root.setAttribute('aria-busy', 'true');
+            root.setAttribute('aria-hidden', 'false');
+            document.documentElement.classList.add('at-page-loading');
+            return;
+        }
+
+        const elapsed = visibleSince ? (Date.now() - visibleSince) : MIN_VISIBLE_MS;
+        const wait = Math.max(MIN_VISIBLE_MS - elapsed, 0) + 40;
+
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(function () {
+            if (shouldShowLoader()) {
+                return;
+            }
+            root.classList.remove('is-visible');
+            root.setAttribute('aria-busy', 'false');
+            root.setAttribute('aria-hidden', 'true');
+            document.documentElement.classList.remove('at-page-loading');
+            hideTimer = null;
+        }, wait);
     }
 
     window.anytransportShowPageLoader = function anytransportShowPageLoader() {
-        loaderDepth += 1;
-        syncLoaderVisible();
-    };
-    window.anytransportHidePageLoader = function anytransportHidePageLoader() {
-        loaderDepth = Math.max(0, loaderDepth - 1);
-        syncLoaderVisible();
+        apiHoldCount += 1;
+        applyLoaderState();
     };
 
-    if (document.body) {
-        bootPageLoader();
+    window.anytransportHidePageLoader = function anytransportHidePageLoader() {
+        apiHoldCount = Math.max(0, apiHoldCount - 1);
+        applyLoaderState();
+    };
+
+    window.anytransportForceHidePageLoader = function anytransportForceHidePageLoader() {
+        bootPending = false;
+        resourcesReady = true;
+        apiHoldCount = 0;
+        applyLoaderState();
+    };
+
+    function finishBootPending() {
+        bootPending = false;
+        applyLoaderState();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+            setTimeout(finishBootPending, 0);
+        }, { once: true });
     } else {
-        document.addEventListener('DOMContentLoaded', bootPageLoader, { once: true });
+        setTimeout(finishBootPending, 0);
     }
 
     window.addEventListener('load', function () {
-        if (loaderDepth > 0) {
-            loaderDepth -= 1;
-        }
-        syncLoaderVisible();
+        resourcesReady = true;
+        applyLoaderState();
     }, { once: true });
 
-    window.addEventListener('beforeunload', function () {
-        loaderDepth += 1;
-        syncLoaderVisible();
+    window.addEventListener('pageshow', function (event) {
+        if (!event.persisted) {
+            return;
+        }
+        bootPending = false;
+        resourcesReady = true;
+        apiHoldCount = 0;
+        clearTimeout(hideTimer);
+        hideTimer = null;
+        applyLoaderState();
     });
+
+    window.addEventListener('pagehide', function () {
+        const root = document.getElementById(ROOT_ID);
+        if (!root) {
+            return;
+        }
+        root.classList.add('is-visible');
+        document.documentElement.classList.add('at-page-loading');
+    });
+
+    if (document.documentElement) {
+        document.documentElement.classList.add('at-page-loading');
+    }
+    if (document.body) {
+        applyLoaderState();
+    } else {
+        document.addEventListener('DOMContentLoaded', applyLoaderState, { once: true });
+    }
 })();
 
 // Authentication Management
@@ -226,6 +296,8 @@ window.anytransportApi = window.anytransportApi || (function () {
         const shouldToggleLoader =
             action !== 'auth.me' &&
             action !== 'notifications.list' &&
+            action !== 'site.content.get' &&
+            action !== 'users.list' &&
             shouldShowLoaderForThisRequest &&
             typeof window.anytransportShowPageLoader === 'function' &&
             typeof window.anytransportHidePageLoader === 'function';
