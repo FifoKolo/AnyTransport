@@ -766,7 +766,7 @@ class AuthManager {
         this.currentUserStorageKey = 'anytransport_user';
         this.currentUser = this.loadUser();
         this.migrateStoredUsers();
-        this.initAuth();
+        this.scheduleInitAuth();
     }
 
     // Small UI helper to show a transient message (non-blocking)
@@ -1020,29 +1020,73 @@ class AuthManager {
         });
     }
 
+    scheduleInitAuth() {
+        const run = () => {
+            this.syncSessionBeforeAuthUI();
+            this.initAuth();
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', run, { once: true });
+        } else {
+            run();
+        }
+    }
+
+    syncSessionBeforeAuthUI() {
+        if (!window.anytransportApi || typeof window.anytransportApi.getCurrentUser !== 'function') {
+            return this.currentUser;
+        }
+        try {
+            const serverUser = window.anytransportApi.getCurrentUser();
+            if (serverUser && serverUser.id) {
+                const merged = this.normalizeUserRecord(serverUser, this.loadUsers());
+                this.mergeUserIntoLocalCache(merged);
+                this.currentUser = merged;
+                this.setStoredCurrentUser(merged);
+            }
+        } catch (_error) {
+            // Keep existing session if refresh fails.
+        }
+        return this.currentUser;
+    }
+
+    setAuthMenusVisibility(isLoggedIn) {
+        if (document.body) {
+            document.body.classList.toggle('at-auth-logged-in', isLoggedIn);
+            document.body.classList.toggle('at-auth-logged-out', !isLoggedIn);
+        }
+
+        document.querySelectorAll('#auth-menu').forEach((authMenu) => {
+            authMenu.hidden = isLoggedIn;
+            authMenu.style.display = isLoggedIn ? 'none' : 'flex';
+            authMenu.setAttribute('aria-hidden', isLoggedIn ? 'true' : 'false');
+            if (!isLoggedIn) {
+                authMenu.innerHTML = [
+                    '<button class="btn btn-outline" type="button" onclick="openLoginModal()">Login</button>',
+                    '<button class="btn btn-primary" type="button" onclick="openSignupModal(\'customer\')" style="margin-left: 8px;">Sign Up</button>'
+                ].join('');
+            }
+        });
+
+        document.querySelectorAll('#user-menu').forEach((userMenu) => {
+            userMenu.hidden = !isLoggedIn;
+            userMenu.style.display = isLoggedIn ? 'flex' : 'none';
+            userMenu.setAttribute('aria-hidden', isLoggedIn ? 'false' : 'true');
+        });
+    }
+
     // Initialize authentication UI based on login state
     initAuth() {
-        const authMenu = document.getElementById('auth-menu');
-        const userMenu = document.getElementById('user-menu');
+        const isLoggedIn = !!this.currentUser;
+        this.setAuthMenusVisibility(isLoggedIn);
 
-        if (this.currentUser) {
-            if (authMenu) authMenu.style.display = 'none';
-            if (userMenu) userMenu.style.display = 'flex';
+        if (isLoggedIn) {
             this.refreshSessionUserFromServer();
             this.ensureNavbarAvatarDropdown();
             this.ensureNavbarHubNav();
             this.updateUserDisplay();
             this.wireNavbarDropdown();
             this.scheduleSyncNavigationForRole();
-        } else {
-            if (authMenu) authMenu.style.display = 'flex';
-            if (authMenu) {
-                authMenu.innerHTML = [
-                    '<button class="btn btn-outline" type="button" onclick="openLoginModal()">Login</button>',
-                    '<button class="btn btn-primary" type="button" onclick="openSignupModal(\'customer\')" style="margin-left: 8px;">Sign Up</button>'
-                ].join('');
-            }
-            if (userMenu) userMenu.style.display = 'none';
         }
     }
 
@@ -1764,6 +1808,14 @@ class AuthManager {
 // Initialize auth manager
 const auth = new AuthManager();
 window.auth = auth;
+
+window.addEventListener('pageshow', function (event) {
+    if (!event.persisted || !window.auth || typeof window.auth.initAuth !== 'function') {
+        return;
+    }
+    window.auth.currentUser = window.auth.loadUser();
+    window.auth.initAuth();
+});
 
 // Modal Functions
 function markCustomerQuoteAuthContext() {

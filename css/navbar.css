@@ -243,6 +243,19 @@ html:has(body > .navbar) {
     flex-shrink: 0;
 }
 
+/* Keep login/signup and account menus mutually exclusive */
+body.at-auth-logged-in #auth-menu {
+    display: none !important;
+}
+
+body.at-auth-logged-in #user-menu {
+    display: flex !important;
+}
+
+body.at-auth-logged-out #user-menu {
+    display: none !important;
+}
+
 .navbar-right .navbar-notification-bell,
 .navbar-right .nav-dropdown,
 .navbar-right > .btn {

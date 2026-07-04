@@ -206,6 +206,27 @@ html:has(body > .navbar) {
     gap: 20px;
 }
 
+#user-menu {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+}
+
+/* Keep login/signup and account menus mutually exclusive */
+body.at-auth-logged-in #auth-menu {
+    display: none !important;
+}
+
+body.at-auth-logged-in #user-menu {
+    display: flex !important;
+}
+
+body.at-auth-logged-out #user-menu {
+    display: none !important;
+}
+
 .nav-contact {
     display: flex;
     align-items: center;
